@@ -143,6 +143,36 @@ test('preserves an independent typed line even when it matches the rescued suffi
   )
 })
 
+test('adds the rescued suffix once when the saved baseline ends with whitespace and blank lines', () => {
+  // Arrange
+  const current = 'base  \n\nnew typing'
+
+  // Act
+  const merged = mergeRescuedCategoryDraft(
+    current,
+    'base  \n\n',
+    'base\nrescued thought',
+  )
+
+  // Assert
+  expect(merged).toBe('base  \n\nnew typing\nrescued thought')
+})
+
+test('preserves an incoming edited line whole instead of splitting a matching text prefix', () => {
+  // Arrange
+  const current = 'buy milk\nnew typing'
+
+  // Act
+  const merged = mergeRescuedCategoryDraft(
+    current,
+    'buy milk',
+    'buy milk today\nrescued thought',
+  )
+
+  // Assert
+  expect(merged).toBe('buy milk\nnew typing\nbuy milk today\nrescued thought')
+})
+
 test('retains a pending rescue across another category until the destination finishes loading', async () => {
   // Arrange
   const rescue = {

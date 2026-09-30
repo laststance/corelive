@@ -82,6 +82,13 @@ type NoteDraftUpdateOptions = Readonly<{
   editRange?: TextEditRange
 }>
 
+/** Saved draft snapshot shared by persistence and peer-rescue reconciliation. */
+type PersistedNoteDraft = Readonly<{
+  categoryId: Category['id'] | null
+  text: string
+  loadedFromHost?: boolean
+}>
+
 /**
  * Undo memory for a line that clear-on-complete will tuck away. Distinct from
  * `CheckedRowMemory`: here the line may be briefly visible as `[x]`, then
@@ -533,6 +540,63 @@ function createLiveDraftFlusher(
 }
 
 /**
+ * Chooses peer-rescued writing while retaining independent local input.
+ *
+ * Called by {@link createLiveDraftRefresher} after its host read settles. Separates
+ * pure baseline selection from asynchronous persistence and category ownership checks.
+ * @param saved - Last loaded or persisted snapshot, including its input provenance.
+ * @param stored - Latest host text, which a queued peer save may have overwritten.
+ * @param keptDraft - Visible writing read after the host read to include new typing.
+ * @returns The reconciled text to display and persist when it differs from the host.
+ * @example
+ * reconcileLiveDraftRescue(1, { categoryId: 1, text: 'base' }, 'base\nrescued', 'base')
+ */
+function reconcileLiveDraftRescue(
+  categoryId: Category['id'],
+  saved: PersistedNoteDraft,
+  stored: string,
+  keptDraft: string,
+  rescue?: CategoryDraftRescue,
+): string {
+  // Carry the rescue itself: a queued peer save may already have overwritten the store.
+  const rescued = rescue
+    ? rescue.baseText
+      ? `${rescue.baseText.trimEnd()}\n${rescue.text}`
+      : rescue.text
+    : stored
+  // An intact copy can include newer saved writing after the sender's rescue.
+  const incoming =
+    stored === rescued || stored.startsWith(`${rescued}\n`) ? stored : rescued
+  let baseline =
+    rescue?.baseText ?? (saved.categoryId === categoryId ? saved.text : '')
+  const normalizedSaved = saved.text.trimEnd()
+  const normalizedSender = rescue?.baseText.trimEnd()
+  // Host-loaded history is shared; sender extensions must also end at a complete line.
+  if (
+    rescue &&
+    saved.categoryId === categoryId &&
+    (saved.loadedFromHost ||
+      !normalizedSaved ||
+      normalizedSender === normalizedSaved ||
+      normalizedSender?.startsWith(`${normalizedSaved}\n`))
+  ) {
+    baseline = saved.text
+  }
+  const preserveMatchingInput =
+    Boolean(rescue) && (!saved.loadedFromHost || saved.text !== keptDraft)
+  // An idle peer adopts sender edits, except a known independent matching input needs its own copy.
+  const unchanged = saved.categoryId === categoryId && keptDraft === saved.text
+  return unchanged && !(preserveMatchingInput && keptDraft === incoming)
+    ? incoming
+    : mergeRescuedCategoryDraft(
+        keptDraft,
+        baseline,
+        incoming,
+        preserveMatchingInput,
+      )
+}
+
+/**
  * Reconciles a draft rescue announced by {@link useCategorySync} from another window.
  *
  * Reads the latest typing after the asynchronous host read so a notification
@@ -552,11 +616,7 @@ function createLiveDraftRefresher(
   activeCategoryIdRef: React.RefObject<Category['id'] | null>,
   noteWritableCategoryRef: React.RefObject<Category['id'] | null>,
   noteTextRef: React.RefObject<string>,
-  lastPersistedRef: React.RefObject<{
-    categoryId: Category['id'] | null
-    text: string
-    loadedFromHost?: boolean
-  }>,
+  lastPersistedRef: React.RefObject<PersistedNoteDraft>,
   applyDraft: (text: string, options: NoteDraftUpdateOptions) => void,
 ): (
   categoryId: Category['id'],
@@ -566,31 +626,24 @@ function createLiveDraftRefresher(
     if (activeCategoryIdRef.current !== categoryId) return false
     if (noteWritableCategoryRef.current !== categoryId) return 'pending'
     const host = getLiveEditorHost()
-    // Carry the rescue itself: a queued peer save may already have overwritten the store.
-    const incoming = rescue
-      ? rescue.baseText
-        ? `${rescue.baseText.trimEnd()}\n${rescue.text}`
-        : rescue.text
-      : await host.note.get(categoryId)
+    const stored = await host.note.get(categoryId)
     // A route change during the read must not repaint the newly selected category.
     if (activeCategoryIdRef.current !== categoryId) return false
     if (noteWritableCategoryRef.current !== categoryId) return false
-    const saved = lastPersistedRef.current
-    const baseline =
-      rescue?.baseText ?? (saved.categoryId === categoryId ? saved.text : '')
     const keptDraft = noteTextRef.current
-    const merged = mergeRescuedCategoryDraft(
+    const merged = reconcileLiveDraftRescue(
+      categoryId,
+      lastPersistedRef.current,
+      stored,
       keptDraft,
-      baseline,
-      incoming,
-      Boolean(rescue) && (!saved.loadedFromHost || saved.text !== keptDraft),
+      rescue,
     )
     applyDraft(merged, {
       categoryId,
-      dirty: Boolean(rescue) || merged !== incoming,
+      dirty: merged !== stored,
     })
     try {
-      if (rescue || merged !== incoming) await host.note.set(categoryId, merged)
+      if (merged !== stored) await host.note.set(categoryId, merged)
     } catch (error) {
       // Preserve newer typing; otherwise restore the pre-rescue draft for a single-copy retry.
       if (
@@ -791,11 +844,10 @@ export const LiveEditor = function LiveEditor({
   const noteTextCategoryRef = useRef<Category['id'] | null>(null)
   // Last value persisted via `note.set` — guards against the load effect
   // re-emitting a write for content the renderer just received from main.
-  const lastPersistedRef = useRef<{
-    categoryId: Category['id'] | null
-    text: string
-    loadedFromHost?: boolean
-  }>({ categoryId: null, text: '' })
+  const lastPersistedRef = useRef<PersistedNoteDraft>({
+    categoryId: null,
+    text: '',
+  })
   // Category whose textarea value may be written back to disk. It flips on only
   // after the load attempt settles or direct user input; dirty guard blocks a
   // load-failure empty reset from writing "".

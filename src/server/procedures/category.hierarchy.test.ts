@@ -360,6 +360,168 @@ describeIfDb(
       expect(day.tasks[0]?.completedAt).toEqual(oldDate)
     })
 
+    test.each(['General', 'same-named child'] as const)(
+      'deletes a main category with a same-named child while preserving entries transferred to %s',
+      async (destination) => {
+        // Arrange — root and child names may match because uniqueness is scoped to siblings.
+        const { options, userId, work, corelive, client, general } =
+          await arrangeHierarchy()
+        const sameNamedChild = await call(
+          createCategory,
+          { name: 'Work', parentId: work.id },
+          options,
+        )
+        const date = new Date('2025-02-03T04:05:06.000Z')
+        const [direct] = await db
+          .insert(completedTable)
+          .values({
+            userId,
+            categoryId: work.id,
+            title: 'Parent entry',
+            createdAt: date,
+            updatedAt: date,
+            completedAt: date,
+          })
+          .returning()
+        const [childEntry] = await db
+          .insert(completedTable)
+          .values({
+            userId,
+            categoryId: sameNamedChild.id,
+            title: 'Child entry',
+            createdAt: date,
+            updatedAt: date,
+            completedAt: date,
+          })
+          .returning()
+        const targetId =
+          destination === 'General' ? general.id : sameNamedChild.id
+        // Act
+        const removed = await call(
+          deleteCategory,
+          {
+            id: work.id,
+            ...(destination === 'General'
+              ? {}
+              : { targetCategoryId: sameNamedChild.id }),
+          },
+          options,
+        )
+        // Assert
+        expect(removed).toEqual({
+          success: true,
+          movedToCategoryId: targetId,
+          promotedCategoryIds: [corelive.id, client.id, sameNamedChild.id],
+        })
+        const { categories } = await call(listCategories, undefined, options)
+        expect(categories.some((category) => category.id === work.id)).toBe(
+          false,
+        )
+        expect(
+          categories.find((category) => category.id === sameNamedChild.id),
+        ).toMatchObject({ name: 'Work', parentId: null })
+        expect(categories.every((category) => category.name.length <= 30)).toBe(
+          true,
+        )
+        const [storedDirect] = await db
+          .select()
+          .from(completedTable)
+          .where(eq(completedTable.id, direct!.id))
+        const [storedChild] = await db
+          .select()
+          .from(completedTable)
+          .where(eq(completedTable.id, childEntry!.id))
+        expect(storedDirect).toMatchObject({
+          id: direct!.id,
+          categoryId: targetId,
+          createdAt: date,
+          updatedAt: date,
+          completedAt: date,
+        })
+        expect(storedChild).toMatchObject({
+          id: childEntry!.id,
+          categoryId: sameNamedChild.id,
+          createdAt: date,
+          updatedAt: date,
+          completedAt: date,
+        })
+      },
+    )
+
+    test('restores a same-named parent and its children when record transfer fails after promotion', async () => {
+      // Arrange — a direct database deletion races the destination after API validation.
+      const { options, userId, work, general } = await arrangeHierarchy()
+      const child = await call(
+        createCategory,
+        { name: 'Work', parentId: work.id },
+        options,
+      )
+      const date = new Date('2025-02-03T04:05:06.000Z')
+      const [record] = await db
+        .insert(completedTable)
+        .values({
+          userId,
+          categoryId: work.id,
+          title: 'Retained entry',
+          createdAt: date,
+          updatedAt: date,
+          completedAt: date,
+        })
+        .returning()
+      const holder = await db.$client.connect()
+      let failed: Promise<unknown> | undefined
+      try {
+        const { rows } = await holder.query<{ pid: number }>(
+          'SELECT pg_backend_pid() AS pid',
+        )
+        const holderPid = rows[0]?.pid
+        if (holderPid === undefined) throw new Error('Lock holder PID missing')
+        await holder.query('BEGIN')
+        await holder.query('DELETE FROM "Category" WHERE id = $1', [general.id])
+        failed = call(
+          deleteCategory,
+          { id: work.id, targetCategoryId: general.id },
+          options,
+        ).then(
+          () => undefined,
+          (error: unknown) => error,
+        )
+        await vi.waitFor(async () => {
+          const result = await db.$client.query<{ count: number }>(
+            'SELECT count(*)::int AS count FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid))',
+            [holderPid],
+          )
+          expect(result.rows[0]?.count).toBe(1)
+        })
+        // Act — the transfer's FK fails only after the root name was freed and children promoted.
+        await holder.query('COMMIT')
+        expect(await failed).toMatchObject({ code: 'INTERNAL_SERVER_ERROR' })
+        // Assert — the entire category transaction rolls back, including its internal temporary name.
+        const { categories } = await call(listCategories, undefined, options)
+        expect(
+          categories.find((category) => category.id === work.id),
+        ).toMatchObject({ name: 'Work', parentId: null })
+        expect(
+          categories.find((category) => category.id === child.id),
+        ).toMatchObject({ name: 'Work', parentId: work.id })
+        const [retained] = await db
+          .select()
+          .from(completedTable)
+          .where(eq(completedTable.id, record!.id))
+        expect(retained).toMatchObject({
+          id: record!.id,
+          categoryId: work.id,
+          createdAt: date,
+          updatedAt: date,
+          completedAt: date,
+        })
+      } finally {
+        await holder.query('ROLLBACK')
+        holder.release()
+        await failed
+      }
+    })
+
     test('moves a deleted child into its parent or an explicitly selected surviving child', async () => {
       // Arrange
       const { options, userId, work, corelive, client } =
@@ -397,6 +559,11 @@ describeIfDb(
       // Arrange
       const { options, work, corelive } = await arrangeHierarchy()
       await call(createCategory, { name: 'CoreLive' }, options)
+      const sameNamedChild = await call(
+        createCategory,
+        { name: 'Work', parentId: work.id },
+        options,
+      )
       const entry = await call(
         createCompleted,
         { categoryId: work.id, title: 'Stay' },
@@ -410,6 +577,12 @@ describeIfDb(
       expect(
         categories.find((category) => category.id === corelive.id)?.parentId,
       ).toBe(work.id)
+      expect(
+        categories.find((category) => category.id === work.id),
+      ).toMatchObject({ name: 'Work', parentId: null })
+      expect(
+        categories.find((category) => category.id === sameNamedChild.id),
+      ).toMatchObject({ name: 'Work', parentId: work.id })
       const [record] = await db
         .select()
         .from(completedTable)

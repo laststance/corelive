@@ -3,7 +3,7 @@
 import { ORPCError } from '@orpc/client'
 import { useQuery } from '@tanstack/react-query'
 import { Check, Pencil, Plus, Trash2, X } from 'lucide-react'
-import { useRef, useState, type KeyboardEvent } from 'react'
+import { useId, useRef, useState, type KeyboardEvent } from 'react'
 
 import {
   AlertDialog,
@@ -556,6 +556,7 @@ function CategoryDeletion({
   categories: CategoryWithCount[]
   onClose: () => void
 }) {
+  const destinationSelectId = useId()
   const { deleteMutation } = useCategoryMutations()
   const defaultId =
     category.parentId ??
@@ -674,12 +675,18 @@ function CategoryDeletion({
     >
       <AlertDialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete “{category.name}”?</AlertDialogTitle>
+          <AlertDialogTitle>
+            Delete “{getCategoryPath(category, categories)}”?
+          </AlertDialogTitle>
           <AlertDialogDescription>
-            {category.recordCount} direct records will move to{' '}
-            {destination?.name ?? 'your selected category'}. Your entries will
-            be kept. Writing on this device will move too; drafts on other
-            devices are not moved.
+            {category.recordCount} direct{' '}
+            {category.recordCount === 1 ? 'entry' : 'entries'} will move to{' '}
+            {destination
+              ? getCategoryPath(destination, categories)
+              : 'your selected category'}
+            . Your entries will be kept. Writing saved in this app or browser
+            will move too; drafts in other apps, browsers, or devices are not
+            moved.
           </AlertDialogDescription>
         </AlertDialogHeader>
         {children.length > 0 && (
@@ -695,7 +702,7 @@ function CategoryDeletion({
             conflict with existing main categories.
           </p>
         )}
-        <Label>Move direct entries to</Label>
+        <Label htmlFor={destinationSelectId}>Move entries to</Label>
         <Select
           value={
             state.destinationId === null ? '' : String(state.destinationId)
@@ -710,6 +717,7 @@ function CategoryDeletion({
           disabled={busy}
         >
           <SelectTrigger
+            id={destinationSelectId}
             aria-label="Move entries to"
             className="min-h-11 w-full"
           >
@@ -728,9 +736,10 @@ function CategoryDeletion({
           </SelectContent>
         </Select>
         {state.error && (
-          <p role="alert" className="text-sm text-destructive">
-            {state.error} Your original draft is retained.
-          </p>
+          <div role="alert" className="space-y-1 text-sm text-destructive">
+            <p>{state.error}</p>
+            <p>Your original draft is retained.</p>
+          </div>
         )}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
@@ -740,7 +749,7 @@ function CategoryDeletion({
               void confirm()
             }}
             disabled={busy || !destination || conflicts.length > 0}
-            className="text-destructive-foreground bg-destructive" // eslint-disable-line dslint/token-only -- inherited shadcn destructive token
+            className="text-destructive-foreground hover:bg-destructive/90 bg-destructive" // eslint-disable-line dslint/token-only -- inherited shadcn destructive token
           >
             {state.rescuing
               ? 'Moving writing…'

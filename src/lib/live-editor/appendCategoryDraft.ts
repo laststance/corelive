@@ -162,10 +162,13 @@ export function mergeRescuedCategoryDraft(
     (current === incoming && !preserveMatchingLocalText)
   )
     return incoming
-  if (incoming === baseline) return current
-  const addition = incoming.startsWith(baseline)
-    ? incoming.slice(baseline.length).trimStart()
-    : incoming
+  // Appending trims the saved tail; compare and slice that same complete-line baseline.
+  const normalizedBaseline = baseline.trimEnd()
+  if (incoming === normalizedBaseline) return current
+  const addition =
+    !normalizedBaseline || incoming.startsWith(`${normalizedBaseline}\n`)
+      ? incoming.slice(normalizedBaseline.length).trimStart()
+      : incoming
   if (!addition) return current
   return current ? `${current.trimEnd()}\n${addition}` : addition
 }

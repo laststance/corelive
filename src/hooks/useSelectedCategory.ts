@@ -1,6 +1,9 @@
 'use client'
 
-import { useSyncExternalStore } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { useCallback, useRef, useSyncExternalStore } from 'react'
+
+import { orpc } from '@/lib/orpc/client-query'
 
 import { useCycleEffect } from './use-cycle-effect'
 
@@ -89,7 +92,7 @@ export function useSelectedCategory(): [
     getServerSnapshot,
   )
 
-  const setSelectedCategoryId = (id: number | null) => {
+  const setSelectedCategoryId = useCallback((id: number | null) => {
     try {
       if (id === null) {
         localStorage.removeItem(STORAGE_KEY)
@@ -100,14 +103,16 @@ export function useSelectedCategory(): [
       // localStorage unavailable (e.g. private browsing quota exceeded)
     }
     emitChange()
-  }
+  }, [])
 
   return [selectedCategoryId, setSelectedCategoryId]
 }
 
 /**
- * Auto-selects the default (isDefault=true) category when none is selected.
- * Extracts the shared auto-select logic used by the Category sidebar and LiveEditor.
+ * Selects General initially and verifies an unknown positive ID before replacing shared selection.
+ *
+ * Sidebar and {@link LiveEditor} observers can hold different category snapshots:
+ * a peer's old list must not undo a confirmed creation in another tab.
  *
  * @param selectedCategoryId - Current selected category ID from useSelectedCategory
  * @param setSelectedCategoryId - Setter from useSelectedCategory
@@ -123,18 +128,46 @@ export function useAutoSelectDefaultCategory(
   setSelectedCategoryId: (id: number | null) => void,
   categories: { id: number; isDefault: boolean }[],
 ) {
+  const queryClient = useQueryClient()
+  const latestSelection = useRef(selectedCategoryId)
+  useCycleEffect(() => {
+    latestSelection.current = selectedCategoryId
+  }, [selectedCategoryId])
+
   useCycleEffect(() => {
     if (categories.length === 0) return
+    if (categories.some((category) => category.id === selectedCategoryId))
+      return
 
-    const hasValidSelection =
-      selectedCategoryId !== null &&
-      categories.some((c) => c.id === selectedCategoryId)
-
-    if (!hasValidSelection) {
-      const defaultCategory = categories.find((c) => c.isDefault)
-      if (defaultCategory) {
-        setSelectedCategoryId(defaultCategory.id)
-      }
+    // First selection needs no verification; only confirmed defaults are writing destinations.
+    if (selectedCategoryId === null) {
+      const defaultCategory = categories.find(
+        (category) => category.isDefault && category.id > 0,
+      )
+      if (defaultCategory) setSelectedCategoryId(defaultCategory.id)
+      return
     }
-  }, [selectedCategoryId, categories, setSelectedCategoryId])
+
+    let cancelled = false
+    // A cached miss can mean a recent peer creation; force a fresh owned list before falling back.
+    void queryClient
+      .fetchQuery({ ...orpc.category.list.queryOptions({}), staleTime: 0 })
+      .then(({ categories: freshCategories }) => {
+        if (cancelled || latestSelection.current !== selectedCategoryId) return
+        if (
+          freshCategories.some((category) => category.id === selectedCategoryId)
+        )
+          return
+        const defaultCategory = freshCategories.find(
+          (category) => category.isDefault && category.id > 0,
+        )
+        if (defaultCategory) setSelectedCategoryId(defaultCategory.id)
+      })
+      .catch(() => {
+        // Offline or unauthenticated verification cannot prove deletion; preserve the writing selection.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selectedCategoryId, categories, setSelectedCategoryId, queryClient])
 }

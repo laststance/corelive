@@ -53,7 +53,7 @@ export function CategoryTotalChip({
           )}
           aria-expanded={expanded}
           aria-controls={controls}
-          aria-label={`${category.name}: ${category.count} entries, show breakdown`}
+          aria-label={`${category.name}: ${category.count} ${category.count === 1 ? 'entry' : 'entries'}, ${expanded ? 'hide' : 'show'} breakdown`}
           onClick={onToggle}
         >
           {content}

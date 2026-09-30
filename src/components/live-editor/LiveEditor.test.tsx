@@ -60,6 +60,7 @@ vi.mock('@tanstack/react-query', () => ({
   }),
   useQueryClient: () => ({
     invalidateQueries: vi.fn().mockResolvedValue(undefined),
+    fetchQuery: vi.fn(async () => ({ categories })),
     setQueryData: vi.fn(),
   }),
   useQuery: todayHeatmapQuery,
@@ -584,6 +585,168 @@ describe('LiveEditor web host (/write)', () => {
     expect(
       JSON.parse(localStorage.getItem(LOCAL_NOTE_STORAGE_KEY) ?? '{}'),
     ).toEqual({ '0': 'my own line\nnew typing\nrescued from Work' })
+  })
+
+  test('adopts newer saved lines and rescued writing when an idle peer still shows an older draft', async () => {
+    // Arrange — another window extends the draft after this editor loaded it.
+    localStorage.setItem(LOCAL_NOTE_STORAGE_KEY, JSON.stringify({ '0': 'd1' }))
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForLiveEditorReady(noteField)
+    expect(noteField).toHaveValue('d1')
+    localStorage.setItem(
+      LOCAL_NOTE_STORAGE_KEY,
+      JSON.stringify({ '0': 'd1\nd2\ns\nnewer saved line' }),
+    )
+
+    // Act
+    await act(async () => {
+      await refreshCategoryDraft(LOCAL_CATEGORY_ID, {
+        receipt: 'stale-idle-peer-sender-baseline',
+        baseText: 'd1\nd2',
+        text: 's',
+      })
+    })
+
+    // Assert — neither the sender's earlier line nor later host writing disappears.
+    expect(noteField).toHaveValue('d1\nd2\ns\nnewer saved line')
+    expect(
+      JSON.parse(localStorage.getItem(LOCAL_NOTE_STORAGE_KEY) ?? '{}'),
+    ).toEqual({ '0': 'd1\nd2\ns\nnewer saved line' })
+  })
+
+  test('retains local typing and the sender newer baseline when a stale peer receives rescued writing', async () => {
+    // Arrange
+    localStorage.setItem(LOCAL_NOTE_STORAGE_KEY, JSON.stringify({ '0': 'd1' }))
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForLiveEditorReady(noteField)
+    fireEvent.change(noteField, { target: { value: 'd1\nlocal typing' } })
+    localStorage.setItem(
+      LOCAL_NOTE_STORAGE_KEY,
+      JSON.stringify({ '0': 'd1\nd2\ns' }),
+    )
+
+    // Act
+    await act(async () => {
+      await refreshCategoryDraft(LOCAL_CATEGORY_ID, {
+        receipt: 'stale-dirty-peer-sender-baseline',
+        baseText: 'd1\nd2',
+        text: 's',
+      })
+    })
+
+    // Assert
+    expect(noteField).toHaveValue('d1\nlocal typing\nd2\ns')
+    expect(
+      JSON.parse(localStorage.getItem(LOCAL_NOTE_STORAGE_KEY) ?? '{}'),
+    ).toEqual({ '0': 'd1\nlocal typing\nd2\ns' })
+  })
+
+  test.each([
+    ['deleted', 'L1', 'L1\nT'],
+    ['completed', 'L2', 'L2\nT'],
+    ['edited', 'L1 revised\nL2', 'L1 revised\nL2\nT'],
+  ])(
+    'does not restore a %s line when an unchanged peer receives rescued writing',
+    async (change, baseText, expected) => {
+      // Arrange — this idle peer still shows the sender's previous two lines.
+      localStorage.setItem(
+        LOCAL_NOTE_STORAGE_KEY,
+        JSON.stringify({ '0': 'L1\nL2' }),
+      )
+      renderEditor()
+      const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+      await waitForLiveEditorReady(noteField)
+      expect(noteField).toHaveValue('L1\nL2')
+      localStorage.setItem(
+        LOCAL_NOTE_STORAGE_KEY,
+        JSON.stringify({ '0': expected }),
+      )
+
+      // Act
+      await act(async () => {
+        await refreshCategoryDraft(LOCAL_CATEGORY_ID, {
+          receipt: `idle-peer-${change}-sender-line`,
+          baseText,
+          text: 'T',
+        })
+      })
+
+      // Assert
+      expect(noteField).toHaveValue(expected)
+      expect(
+        JSON.parse(localStorage.getItem(LOCAL_NOTE_STORAGE_KEY) ?? '{}'),
+      ).toEqual({ '0': expected })
+    },
+  )
+
+  test('adds only rescued writing when a dirty peer saved baseline ends with blank lines', async () => {
+    // Arrange
+    localStorage.setItem(
+      LOCAL_NOTE_STORAGE_KEY,
+      JSON.stringify({ '0': 'base  \n\n' }),
+    )
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForLiveEditorReady(noteField)
+    fireEvent.change(noteField, {
+      target: { value: 'base  \n\nlocal typing' },
+    })
+    localStorage.setItem(
+      LOCAL_NOTE_STORAGE_KEY,
+      JSON.stringify({ '0': 'base\nrescued' }),
+    )
+
+    // Act
+    await act(async () => {
+      await refreshCategoryDraft(LOCAL_CATEGORY_ID, {
+        receipt: 'dirty-peer-trailing-blank-baseline',
+        baseText: 'base  \n\n',
+        text: 'rescued',
+      })
+    })
+
+    // Assert
+    expect(noteField).toHaveValue('base  \n\nlocal typing\nrescued')
+    expect(
+      JSON.parse(localStorage.getItem(LOCAL_NOTE_STORAGE_KEY) ?? '{}'),
+    ).toEqual({ '0': 'base  \n\nlocal typing\nrescued' })
+  })
+
+  test('preserves a sender edited line whole when a dirty peer shares only its text prefix', async () => {
+    // Arrange
+    localStorage.setItem(
+      LOCAL_NOTE_STORAGE_KEY,
+      JSON.stringify({ '0': 'buy milk' }),
+    )
+    renderEditor()
+    const noteField = await screen.findByRole<HTMLTextAreaElement>('textbox')
+    await waitForLiveEditorReady(noteField)
+    fireEvent.change(noteField, {
+      target: { value: 'buy milk\nlocal typing' },
+    })
+    localStorage.setItem(
+      LOCAL_NOTE_STORAGE_KEY,
+      JSON.stringify({ '0': 'buy milk today\nrescued' }),
+    )
+
+    // Act
+    await act(async () => {
+      await refreshCategoryDraft(LOCAL_CATEGORY_ID, {
+        receipt: 'dirty-peer-edited-line-boundary',
+        baseText: 'buy milk today',
+        text: 'rescued',
+      })
+    })
+
+    // Assert — an edited line must not become a detached "today" fragment.
+    expect(noteField).toHaveValue(
+      'buy milk\nlocal typing\nbuy milk today\nrescued',
+    )
+    expect(
+      JSON.parse(localStorage.getItem(LOCAL_NOTE_STORAGE_KEY) ?? '{}'),
+    ).toEqual({ '0': 'buy milk\nlocal typing\nbuy milk today\nrescued' })
   })
 
   test('recovers peer-rescued writing even when a queued save overwrites the store before notification', async () => {

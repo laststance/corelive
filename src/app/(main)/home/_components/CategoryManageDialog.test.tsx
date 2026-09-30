@@ -425,7 +425,7 @@ describe('CategoryManageDialog row actions', () => {
     // the confirmation: "Today" is also a row in the list behind it.
     const confirmation = await screen.findByRole('alertdialog')
     expect(
-      within(confirmation).getByText(/direct records will move to Today/),
+      within(confirmation).getByText(/direct entries will move to Today/),
     ).toBeVisible()
     expect(
       within(confirmation).getByRole('combobox', { name: 'Move entries to' }),
@@ -750,7 +750,7 @@ describe('two-level category organization', () => {
     // Assert
     const confirmation = screen.getByRole('alertdialog')
     expect(
-      within(confirmation).getByText(/1 direct records will move to General/),
+      within(confirmation).getByText(/1 direct entry will move to General/),
     ).toBeVisible()
     expect(
       within(confirmation).getByText(/CoreLive will become main categories/),

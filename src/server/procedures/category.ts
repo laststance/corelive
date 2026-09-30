@@ -410,6 +410,16 @@ export const deleteCategory = authMiddleware
           throw new ORPCError('CONFLICT', {
             message: `Rename these subcategories before deleting their main category: ${conflicts.map((child) => child.name).join(', ')}`,
           })
+        // Free the departing root's name before immediate uniqueness checks promote its same-named child.
+        if (children.some((child) => child.name === existing.name)) {
+          // The ID makes this name unique; its length exceeds the API's 30-character name limit.
+          await tx
+            .update(categoryTable)
+            .set({ name: `__corelive_internal_deleting_category_${id}__` })
+            .where(
+              and(eq(categoryTable.id, id), eq(categoryTable.userId, userId)),
+            )
+        }
         // Children retain their IDs; only the removed parent's direct records move.
         if (children.length)
           await tx
