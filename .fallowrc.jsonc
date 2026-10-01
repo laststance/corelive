@@ -46,7 +46,12 @@
     "./DeepLinkManager.cjs",
   ],
   // The documented shadcn component catalog intentionally exposes its composition primitives.
-  "ignoreExports": [{ "file": "src/components/ui/**", "exports": ["*"] }],
+  "ignoreExports": [
+    {
+      "file": "src/components/ui/**",
+      "exports": ["*"],
+    },
+  ],
   "duplicates": {
     // Test cases repeat setup and expected values so each scenario remains readable.
     "ignore": ["**/*.{test,spec}.{ts,tsx,mjs}", "**/__tests__/**"],
