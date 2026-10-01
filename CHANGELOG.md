@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.24.0] - 2026-10-02
+
+### Changed
+
+- Move the shared web and desktop API to oRPC v2 while preserving categories, completion history, settings, and Skill Tree actions.
+- Refresh older query caches once after the upgrade while keeping local writing and settings.
+
+### Fixed
+
+- Reuse the same Home cache entry when equivalent query inputs have different property ordering, while keeping dates and strings distinct.
+
 ## [0.23.0] - 2026-10-01
 
 ### Added

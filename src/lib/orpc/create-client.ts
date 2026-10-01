@@ -12,14 +12,16 @@ import { log } from '../logger'
  *
  * @returns RPCLink configured for the current origin's /api/orpc endpoint
  * @throws Error if called on the server side (SSR)
+ * @example `const link = createLink()`
  */
 function createLink() {
   return new RPCLink({
-    url: () => {
+    url: '/api/orpc',
+    origin: () => {
       if (typeof window === 'undefined') {
         throw new Error('RPCLink is not allowed on the server side.')
       }
-      return `${window.location.origin}/api/orpc`
+      return window.location.origin
     },
     headers: async () => {
       if (typeof window === 'undefined') {
@@ -71,6 +73,7 @@ function createLink() {
  * Uses Clerk authentication via RPCLink headers.
  *
  * @returns RouterClient instance typed to AppRouter
+ * @example `const client = createClient()`
  */
 export const createClient = (): RouterClient<AppRouter> => {
   return createORPCClient(createLink())

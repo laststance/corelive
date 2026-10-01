@@ -11,7 +11,7 @@ CoreLive is a personal task tracker and LiveEditor archive whose centerpiece is 
 
 ## Documentation
 
-The design system (typography, color, motion, voice) is in **[`DESIGN.md`](DESIGN.md)**. The product roadmap is in [`docs/ROADMAP.md`](docs/ROADMAP.md), and per-feature design notes live under [`docs/design/`](docs/design/). See [`docs/settings-audit.md`](docs/settings-audit.md) for settings consumers, [`TODOS.md`](TODOS.md) for deferred work, and the [design-system lint package](packages/eslint-plugin-dslint/README.md) for its rules.
+The design system (typography, color, motion, voice) is in **[`DESIGN.md`](DESIGN.md)**. The product roadmap is in [`docs/ROADMAP.md`](docs/ROADMAP.md), and per-feature design notes live under [`docs/design/`](docs/design/). See [`docs/settings-audit.md`](docs/settings-audit.md) for settings consumers, [`TODOS.md`](TODOS.md) for deferred work, and the [design-system lint package](packages/eslint-plugin-dslint/README.md) for its rules. Release changes are recorded in [`CHANGELOG.md`](CHANGELOG.md).
 
 Categories organize writing and completed history in two levels:
 

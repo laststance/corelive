@@ -11,8 +11,8 @@ import { orpc } from '@/lib/orpc/client-query'
 import { getViewerTimeZone } from '@/lib/utils/getViewerTimeZone'
 
 /**
- * Builds today's heatmap input in the property order the app's `queryKeyHashFn`
- * hashes, so reader and writer address the same cache entry.
+ * Builds today's heatmap input so {@link useTodayKeeps} and {@link useCompletionWriter}
+ * address the same account-total cache entry.
  * @returns `{ days: 1, timezone }` for the viewer's zone.
  * @example
  * buildTodayHeatmapInput() // => { days: 1, timezone: 'Asia/Tokyo' }
@@ -32,11 +32,9 @@ function buildTodayHeatmapInput() {
  * useQuery({ ...todayHeatmapQueryOptions('2026-09-05'), enabled: isSignedIn === true })
  */
 export function todayHeatmapQueryOptions(dayKey: string) {
-  const options = orpc.completed.heatmap.queryOptions({
-    input: buildTodayHeatmapInput(),
-  })
-  return {
-    ...options,
+  const input = buildTodayHeatmapInput()
+  return orpc.completed.heatmap.queryOptions({
+    input,
     // The one-day input carries no date, so an observer that stays mounted
     // across local midnight (the always-on-top panel, a `/write` tab left open)
     // would keep reading yesterday's entry. Making the day part of the KEY turns
@@ -45,9 +43,9 @@ export function todayHeatmapQueryOptions(dayKey: string) {
     // yesterday's number for a frame. An effect cannot do this — it runs after
     // that frame has already painted. Appended last so a prefix invalidation on
     // `orpc.completed.heatmap.key()` still matches.
-    queryKey: [...options.queryKey, dayKey],
+    queryKey: [...orpc.completed.heatmap.queryKey({ input }), dayKey],
     meta: { persist: false },
-  }
+  })
 }
 
 /**
@@ -57,7 +55,7 @@ export function todayHeatmapQueryOptions(dayKey: string) {
  * @param dayKey - The viewer's local `YYYY-MM-DD`, from `useLocalDayKey()`.
  * @returns The exact TanStack key {@link todayHeatmapQueryOptions} registers.
  * @example
- * getTodayHeatmapQueryKey('2026-09-05') // => ['completed', 'heatmap', { input: { days: 1, timezone: 'Asia/Tokyo' } }, …, '2026-09-05']
+ * getTodayHeatmapQueryKey('2026-09-05') // => [['completed', 'heatmap'], { input: { days: 1, timezone: 'Asia/Tokyo' }, type: 'query' }, '2026-09-05']
  */
 export function getTodayHeatmapQueryKey(dayKey: string) {
   return todayHeatmapQueryOptions(dayKey).queryKey

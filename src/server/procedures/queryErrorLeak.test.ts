@@ -1,14 +1,16 @@
 // @vitest-environment node
 import { randomUUID } from 'node:crypto'
 
-import { call } from '@orpc/server'
+import { createORPCClient } from '@orpc/client'
+import { RPCLink } from '@orpc/client/fetch'
+import { call, onError, type RouterClient } from '@orpc/server'
 import { RPCHandler } from '@orpc/server/fetch'
 import { eq } from 'drizzle-orm'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { db } from '@/db'
 import { categoryTable, userTable } from '@/db/schema'
-import { router } from '@/server/router'
+import { router, type AppRouter } from '@/server/router'
 
 import { getJournal } from './completed'
 import { describeIfDb } from './describeIfDb'
@@ -56,28 +58,58 @@ describeIfDb('query failure error surface (real PostgreSQL)', () => {
   test('answers INTERNAL_SERVER_ERROR without the SQL text or bound parameters in the HTTP body', async () => {
     // Arrange — the same handler shape the /api/orpc route builds.
     const clerkId = freshClerkId()
-    const handler = new RPCHandler(router)
-    const request = new Request('http://localhost/api/orpc/completed/journal', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${clerkId}`,
-      },
-      body: JSON.stringify({
-        json: { limit: 20, offset: 0, categoryId: OVERFLOWING_CATEGORY_ID },
-        meta: [],
-      }),
+    const serverErrors: unknown[] = []
+    const handler = new RPCHandler(router, {
+      clientInterceptors: [
+        onError((error) => {
+          serverErrors.push(error)
+        }),
+      ],
     })
+    let responseStatus: number | undefined
+    let responseBody = ''
+    const client: RouterClient<AppRouter> = createORPCClient(
+      new RPCLink({
+        url: '/api/orpc',
+        origin: 'http://localhost',
+        headers: { authorization: `Bearer ${clerkId}` },
+        fetch: async (url, init) => {
+          const request = new Request(url, init)
+          const { response } = await handler.handle(request, {
+            prefix: '/api/orpc',
+            context: { headers: request.headers },
+          })
+          if (!response)
+            throw new Error('The RPC request did not match a procedure')
+          responseStatus = response.status
+          responseBody = await response.clone().text()
+          return response
+        },
+      }),
+    )
 
     // Act
-    const { response } = await handler.handle(request, {
-      prefix: '/api/orpc',
-      context: { headers: request.headers },
+    const failure = client.completed.journal({
+      limit: 20,
+      offset: 0,
+      categoryId: OVERFLOWING_CATEGORY_ID,
     })
-    const body = await response!.text()
+    await expect(failure).rejects.toMatchObject({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'Failed to fetch completion journal',
+    })
+    const body = responseBody
 
     // Assert
-    expect(response!.status).toBe(500)
+    expect(serverErrors).toEqual([
+      expect.objectContaining({
+        code: 'INTERNAL_SERVER_ERROR',
+        cause: expect.objectContaining({
+          message: expect.stringContaining('Failed query'),
+        }),
+      }),
+    ])
+    expect(responseStatus).toBe(500)
     expect(body).toContain('INTERNAL_SERVER_ERROR')
     expect(body).not.toContain('Failed query')
     expect(body).not.toContain(String(OVERFLOWING_CATEGORY_ID))
