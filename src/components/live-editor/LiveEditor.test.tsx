@@ -140,9 +140,23 @@ vi.mock('@/lib/orpc/client-query', () => ({
       },
       heatmap: {
         key: vi.fn(() => ['completed', 'heatmap']),
-        queryOptions: vi.fn(() => ({
-          queryKey: ['completed', 'heatmap', { input: { days: 1 } }],
-        })),
+        queryKey: vi.fn(() => ['completed', 'heatmap', { input: { days: 1 } }]),
+        queryOptions: vi.fn(
+          ({
+            queryKey,
+            meta,
+          }: {
+            queryKey?: readonly unknown[]
+            meta?: Record<string, unknown>
+          }) => ({
+            queryKey: queryKey ?? [
+              'completed',
+              'heatmap',
+              { input: { days: 1 } },
+            ],
+            meta,
+          }),
+        ),
       },
     },
   },

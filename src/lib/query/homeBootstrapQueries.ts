@@ -7,15 +7,13 @@ import type { HomeBootstrapInput } from '@/server/schemas/home'
 /**
  * Shared input/key builders for the three critical Home queries.
  *
- * The SSR prefetch (`prefetchHomeBootstrap`) must write bootstrap data onto the
+ * {@link prefetchHomeBootstrap} must write bootstrap data onto the
  * EXACT cache keys the Home client hooks read on first mount, or hydration
- * silently misses and the client re-fetches. The app's `queryKeyHashFn`
- * serializes keys with the oRPC serializer, which preserves object property
- * order — so every input built here mirrors the client-side property order
- * character for character (e.g. `{ days, timezone }` in useHeatmapData).
+ * silently misses and the client re-fetches. Canonical query hashing ignores
+ * object property insertion order while preserving input values and types.
  */
 
-/** Builds the heatmap input `useHeatmapData` sends for the given zone, keeping SSR writes aligned with the client's `{ days, timezone }` property order. @param timezone - IANA zone the viewer buckets local days by. @returns The canonical heatmap query input. @example `buildHomeHeatmapInput('Asia/Tokyo') // => { days: 365, timezone: 'Asia/Tokyo' }` */
+/** Builds the heatmap input {@link useHeatmapData} sends for the given zone, keeping SSR writes aligned with client input values. @param timezone - IANA zone the viewer buckets local days by. @returns The canonical heatmap query input. @example `buildHomeHeatmapInput('Asia/Tokyo') // => { days: 365, timezone: 'Asia/Tokyo' }` */
 function buildHomeHeatmapInput(timezone: string) {
   return {
     days: HOME_HEATMAP_DAYS,
@@ -38,7 +36,7 @@ export function getHomeCategoryListQueryKey() {
   return orpc.category.list.queryOptions({}).queryKey
 }
 
-/** Returns the cache key `useHeatmapData` reads for the given zone, for SSR hydration writes. @param timezone - IANA zone the client reports via `Intl`. @returns The `completed.heatmap` query key. @example `getHomeHeatmapQueryKey('Asia/Tokyo') // => [['completed','heatmap'], { input: { days: 365, timezone: 'Asia/Tokyo' }, type: 'query' }]` */
+/** Returns the cache key {@link useHeatmapData} reads for the given zone, for SSR hydration writes. @param timezone - IANA zone the client reports via `Intl`. @returns The `completed.heatmap` query key. @example `getHomeHeatmapQueryKey('Asia/Tokyo') // => [['completed','heatmap'], { input: { days: 365, timezone: 'Asia/Tokyo' }, type: 'query' }]` */
 export function getHomeHeatmapQueryKey(timezone: string) {
   return orpc.completed.heatmap.queryOptions({
     input: buildHomeHeatmapInput(timezone),

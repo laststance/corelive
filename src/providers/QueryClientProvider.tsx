@@ -117,6 +117,8 @@ export const QueryClientProvider = function QueryClientProvider({
   const persistOptions = {
     persister,
     maxAge: PERSISTED_QUERY_MAX_AGE_MS,
+    // Reject v1 metadata before hydration without touching drafts or settings in other storage entries.
+    buster: 'orpc-v2',
   }
 
   return (

@@ -1,4 +1,8 @@
-import { defaultShouldDehydrateQuery, QueryClient } from '@tanstack/react-query'
+import {
+  defaultShouldDehydrateQuery,
+  hashKey,
+  QueryClient,
+} from '@tanstack/react-query'
 
 import {
   QUERY_CACHE_RETENTION_MS,
@@ -12,8 +16,12 @@ export function createQueryClient(): QueryClient {
     defaultOptions: {
       queries: {
         queryKeyHashFn(queryKey) {
-          const [json, meta] = serializer.serialize(queryKey)
-          return JSON.stringify({ json, meta })
+          const { json, meta } = serializer.serialize(queryKey)
+          // Canonicalize object keys and metadata so SSR/client insertion order cannot split the cache.
+          return hashKey([
+            json,
+            meta?.map((entry) => JSON.stringify(entry)).sort(),
+          ])
         },
         staleTime: QUERY_STALE_TIME_MS,
         gcTime: QUERY_CACHE_RETENTION_MS,
@@ -25,13 +33,12 @@ export function createQueryClient(): QueryClient {
         shouldDehydrateQuery: (query) =>
           defaultShouldDehydrateQuery(query) && query.meta?.persist !== false,
         serializeData(data) {
-          const [json, meta] = serializer.serialize(data)
-          return { json, meta }
+          return serializer.serialize(data)
         },
       },
       hydrate: {
         deserializeData(data) {
-          return serializer.deserialize(data.json, data.meta)
+          return serializer.deserialize(data)
         },
       },
     },

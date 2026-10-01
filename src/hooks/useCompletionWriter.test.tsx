@@ -51,8 +51,22 @@ vi.mock('@/lib/orpc/client-query', () => ({
         mutationOptions: () => ({ mutationFn: deleteCompletedFn }),
       },
       heatmap: {
-        queryOptions: ({ input }: { input: unknown }) => ({
-          queryKey: ['completed', 'heatmap', { input }],
+        queryKey: ({ input }: { input: unknown }) => [
+          'completed',
+          'heatmap',
+          { input },
+        ],
+        queryOptions: ({
+          input,
+          queryKey,
+          meta,
+        }: {
+          input: unknown
+          queryKey?: readonly unknown[]
+          meta?: Record<string, unknown>
+        }) => ({
+          queryKey: queryKey ?? ['completed', 'heatmap', { input }],
+          meta,
         }),
       },
     },
