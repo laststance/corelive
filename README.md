@@ -49,6 +49,14 @@ This project supports:
 
 The commands below assume mise is activated in your shell. After `mise install`, confirm that `node --version` prints `v24.20.0` before continuing.
 
+### Headless development and QA
+
+Use `pnpm dev` with `pnpm qa:browser open` for an isolated headless browser on
+the public LiveEditor. `pnpm qa:browser snapshot`, `screenshot`, `video-start`,
+and `close` operate without taking over the Mac's desktop. See
+[Headless development](docs/headless-development.md) for setup, CLI examples,
+Hammerspoon/accessory-mode limitations, and native QA isolation.
+
 ### Environment Variables
 
 1. Copy `.env.example` to `.env` in the root of the project
@@ -173,7 +181,7 @@ This project includes an Electron desktop application that wraps the Next.js web
 Beyond the web app, the macOS build adds native surfaces:
 
 - **LiveEditor** — a distraction-light freeform capture window
-- **Login window** — a small fixed-size sign-in shell (`/login-shell`) shown while signed out; after OAuth sign-in it closes and LiveEditor opens
+- **Login window** — a small fixed-size sign-in shell (`/login-shell`) shown while signed out; after OAuth sign-in it closes and LiveEditor opens. If the panel fails to load, use **Open LiveEditor** on the signed-in recovery screen to retry without signing in again.
 - **Startup** — the app opens LiveEditor at launch, or the login window while signed out; the first launch after upgrading removes retired keys (`window.floating`, `behavior.startup`, the retired `shortcuts.*` toggles, `liveEditor.syncMode` / `lastCategoryId`) from `config.json`
 - **Settings** — a native settings window
 - **System tray** — menu-bar access and quick toggles
@@ -183,7 +191,7 @@ Beyond the web app, the macOS build adds native surfaces:
 - **In-app shortcuts** — while any CoreLive window has focus, `⌘N` opens LiveEditor in the browser and `⌘M` minimizes; both release when the app loses focus
 - **Deep links** — `corelive://` URLs open the app
 - **Connection recovery** — if corelive.app can't be reached, or answers with an HTTP error, while the login window or LiveEditor loads, the app retries three times and then shows a native Retry / Close dialog
-- **Auto-update** — signed, notarized releases update in place
+- **Auto-update** — signed, notarized releases update in place. Choose **Download Now** or **Later** when prompted; Settings → Updates shows download progress and offers **Restart to Update** when ready. **Check for Updates** is available in Settings and the app menu.
 
 ### Electron Development
 
