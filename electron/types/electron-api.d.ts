@@ -9,14 +9,11 @@
  */
 
 import type {
-  AuthUserPayload,
-  OAuthProvider,
-  OAuthResult,
-  PendingSignInToken,
-  ConfigSection,
-  UpdaterStatus,
-  IPCResponse,
-} from './ipc'
+  createAuthBridge,
+  createOAuthBridge,
+} from '../preload-shared/auth-oauth-bridge'
+
+import type { ConfigSection, UpdaterStatus, IPCResponse } from './ipc'
 
 /**
  * Electron API exposed to renderer via contextBridge.
@@ -29,49 +26,17 @@ export interface ElectronAPI {
   /**
    * Authentication operations.
    */
-  auth: {
-    /** Get current user */
-    getUser: () => Promise<AuthUserPayload | null>
-    /** Set current user */
-    setUser: (user: AuthUserPayload) => Promise<AuthUserPayload>
-    /** Logout current user */
-    logout: () => Promise<boolean>
-    /** Check if authenticated */
-    isAuthenticated: () => Promise<boolean>
-    /** Sync auth state from web */
-    syncFromWeb: (user: AuthUserPayload) => Promise<boolean>
-  }
+  auth: ReturnType<typeof createAuthBridge>
 
-  /**
-   * OAuth browser-based authentication.
-   */
-  oauth: {
-    /** Start OAuth flow in external browser */
-    start: (provider: OAuthProvider) => Promise<OAuthResult>
-    /** Get supported OAuth providers */
-    getSupportedProviders: () => Promise<OAuthProvider[]>
-    /** Cancel pending OAuth flow */
-    cancel: () => Promise<void>
-    /** Listen for OAuth error */
-    onError: (
-      callback: (data: { provider: OAuthProvider; error: string }) => void,
-    ) => () => void
-    /** Listen for sign-in token */
-    onSignInToken: (
-      callback: (data: { token: string; provider: OAuthProvider }) => void,
-    ) => () => void
-    /** Get pending sign-in token */
-    getPendingToken: () => Promise<PendingSignInToken | null>
-    /** Clear pending sign-in token */
-    clearPendingToken: () => Promise<void>
-  }
+  /** OAuth methods share their exact return and callback shapes with the preload factory. */
+  oauth: ReturnType<typeof createOAuthBridge>
 
   /**
    * Configuration management.
    */
   config: {
     /** Get config value by path */
-    get: <T = unknown>(path: string) => Promise<T>
+    get: <T = unknown>(path: string, defaultValue?: T) => Promise<T>
     /** Set config value by path */
     set: <T = unknown>(path: string, value: T) => Promise<boolean>
     /** Get all config values */
@@ -83,9 +48,9 @@ export interface ElectronAPI {
     /** Update multiple config values */
     update: (updates: Record<string, unknown>) => Promise<boolean>
     /** Reset all config to defaults */
-    reset: () => Promise<boolean>
+    reset: () => Promise<void>
     /** Reset config section to defaults */
-    resetSection: (section: ConfigSection) => Promise<boolean>
+    resetSection: (section: ConfigSection) => Promise<void>
     /** Validate config values */
     validate: () => Promise<{ isValid: boolean; errors: string[] }>
     /** Export config — main process shows a save dialog; no path from renderer */

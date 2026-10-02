@@ -455,6 +455,7 @@ export class ShortcutManager {
         log.debug(
           `[registerShortcut] Successfully registered: ${id} = ${accelerator}`,
         )
+        this.failedShortcuts?.delete(id)
         return true
       } else {
         log.warn(
@@ -764,6 +765,14 @@ export class ShortcutManager {
 
     for (const [id, failedShortcut] of this.failedShortcuts) {
       const configuredAccelerator = this.shortcuts[id]
+      // App-local commands must never take over another app's keys during a retry.
+      if (
+        (id === 'newTask' || id === 'minimize') &&
+        !BrowserWindow.getFocusedWindow()
+      ) {
+        this.failedShortcuts.delete(id)
+        continue
+      }
       // Recovery must respect settings changed after the original registration failed.
       if (
         !this.isEnabled ||
@@ -788,6 +797,7 @@ export class ShortcutManager {
     }
 
     return {
+      // An empty queue is recovered: disabled or changed bindings need no retry.
       success: retryResults.every((result) => result.success),
       results: retryResults,
       message: `Retried ${retryResults.length} shortcuts, ${retryResults.filter((result) => result.success).length} successful`,

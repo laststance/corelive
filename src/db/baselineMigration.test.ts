@@ -173,17 +173,6 @@ async function readBookkeeping(
   return rows
 }
 
-/**
- * Removes the previous ORM's history table, if a test created it.
- * @param executor - Client for the scratch database.
- * @returns Resolves once it is gone.
- * @example
- * await dropPreviousOrmHistory(scratch.db)
- */
-async function dropPreviousOrmHistory(executor: SqlExecutor): Promise<void> {
-  await executor.execute(sql`DROP TABLE IF EXISTS public."_prisma_migrations"`)
-}
-
 /** Longest any single script run may take; above the script's own 45 s query backstop, so only a real hang reaches it. */
 const SCRIPT_RUN_LIMIT_MS = 60_000
 
@@ -245,7 +234,6 @@ describeIfDb(
     // no bookkeeping schema, and no previous-ORM history table.
     beforeEach(async () => {
       await dropBookkeeping(scratch.db)
-      await dropPreviousOrmHistory(scratch.db)
     })
 
     test('rejects the retired baseline write option without changing the database', async () => {

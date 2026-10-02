@@ -641,7 +641,7 @@ async function createWindow(): Promise<void> {
       // MenuManager always loads (works under xvfb)
       log.info('🔧 [DEFERRED] Loading MenuManager...')
       const MenuManagerCls = await lazyLoadManager.loadComponent('MenuManager')
-      menuManager = new MenuManagerCls()
+      menuManager = new MenuManagerCls(() => autoUpdater)
 
       // The menu bar is companion chrome after main-window retirement (T18):
       // View/Window roles target whatever window is focused; New Task opens

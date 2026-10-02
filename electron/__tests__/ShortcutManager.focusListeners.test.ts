@@ -76,6 +76,7 @@ describe('ShortcutManager contextual shortcuts follow app-level window focus', (
   beforeEach(() => {
     vi.clearAllMocks()
     getFocusedWindowMock.mockReturnValue(null)
+    registerMock.mockReturnValue(true)
   })
 
   test('registers the app focus/blur listeners once even when setup runs twice', () => {
@@ -95,6 +96,29 @@ describe('ShortcutManager contextual shortcuts follow app-level window focus', (
     )
     expect(focusRegistrations).toHaveLength(1)
     expect(blurRegistrations).toHaveLength(1)
+  })
+
+  test('does not recover app-local shortcuts while another app has focus', () => {
+    // Arrange
+    const shortcutManager = new ShortcutManager(createWindowManager(), null)
+    shortcutManager.setupFocusListeners()
+    getFocusedWindowMock.mockReturnValue(FOCUSED_WINDOW)
+    registerMock.mockReturnValue(false)
+    getAppListener('browser-window-focus')()
+    expect(shortcutManager.getFailedShortcuts()).toHaveProperty('newTask')
+    getFocusedWindowMock.mockReturnValue(null)
+    registerMock.mockReturnValue(true)
+    registerMock.mockClear()
+
+    // Act
+    shortcutManager.retryFailedShortcuts()
+
+    // Assert
+    expect(registerMock).not.toHaveBeenCalled()
+    expect(shortcutManager.getFailedShortcuts()).toEqual({})
+    expect(shortcutManager.getRegisteredShortcuts()).not.toHaveProperty(
+      'newTask',
+    )
   })
 
   test('binds Cmd+N when a CoreLive window gains focus and releases it when focus leaves the app', () => {

@@ -33,6 +33,7 @@ import {
   createOAuthBridge,
 } from './preload-shared/auth-oauth-bridge'
 import { sanitizeData } from './preload-shared/sanitize-data'
+import type { ElectronAPI } from './types/electron-api'
 import type { ConfigSection, IPCResponse } from './types/ipc'
 
 // `ElectronUserData` / `OAuthCallbackData` now live alongside the bridge
@@ -622,6 +623,9 @@ const electronAPI = {
     },
   },
 }
+
+// Keep the declared renderer contract assignable to the implemented bridge.
+electronAPI satisfies ElectronAPI
 
 contextBridge.exposeInMainWorld('electronAPI', {
   ...electronAPI,

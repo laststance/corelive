@@ -21,12 +21,10 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
-import type {
-  UpdaterDownloadProgress,
-  UpdaterStatus,
-} from '@/electron/types/ipc'
+import type { UpdaterStatus } from '@/electron/types/ipc'
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useMounted } from '@/hooks/use-mounted'
+import { useUpdateEffect } from '@/hooks/use-update-effect'
 import { UPDATE_DOWNLOAD_PROGRESS_MAX_PERCENT } from '@/lib/constants/appUpdate'
 import { log } from '@/lib/logger'
 import { cn } from '@/lib/utils'
@@ -43,6 +41,10 @@ function formatUpdaterStatus(rawMessage: string): string {
 
   if (rawMessage === 'Update available') {
     return 'A new version is available. Follow the prompt to download it.'
+  }
+
+  if (rawMessage === 'Update postponed') {
+    return "A new version is available. Check again when you're ready to download."
   }
 
   if (rawMessage === 'Update not available') {
@@ -66,21 +68,6 @@ function formatUpdaterStatus(rawMessage: string): string {
   }
 
   return rawMessage
-}
-
-/**
- * Converts a normalized progress payload into the existing updater status copy.
- * @param progress - Download progress emitted by the Electron main process.
- * @returns Human-readable status text with rounded percent.
- * @example
- * formatUpdaterDownloadProgress({ percent: 41.6, bytesPerSecond: 1, transferred: 2, total: 4 }) // => "Downloading update — 42%"
- */
-function formatUpdaterDownloadProgress(
-  progress: UpdaterDownloadProgress,
-): string {
-  return formatUpdaterStatus(
-    `Downloading update: ${Math.round(progress.percent)}%`,
-  )
 }
 
 /**
@@ -118,10 +105,18 @@ export const AppUpdateSettings = function AppUpdateSettings({
       : updateDownloaded
         ? formatUpdaterStatus('Update downloaded')
         : downloadProgress
-          ? formatUpdaterDownloadProgress(downloadProgress)
+          ? // Announce the phase once; the progress bar exposes changing percentages.
+            'Downloading update…'
           : updaterStatus.message
             ? formatUpdaterStatus(updaterStatus.message)
             : null
+
+  // Clear an old action error only when native update work advances, not on identical polls.
+  useUpdateEffect(() => {
+    if (updaterStatus.isChecking || downloadProgress || updateDownloaded) {
+      setActionError(null)
+    }
+  }, [updaterStatus.isChecking, downloadProgress?.percent, updateDownloaded])
 
   useCycleEffect(() => {
     const updaterApi = window.electronAPI?.updater
@@ -181,13 +176,13 @@ export const AppUpdateSettings = function AppUpdateSettings({
       setUpdaterStatus(await updaterApi.getStatus())
     } catch (error: unknown) {
       log.error('Failed to check for updates:', error)
-      setUpdaterStatus({
-        updateAvailable: false,
-        updateDownloaded: false,
-        downloadProgress: null,
+      // A successful status poll must not erase a failed manual request.
+      setActionError(formatUpdaterStatus('Error in auto-updater'))
+      setUpdaterStatus((current) => ({
+        ...current,
         isChecking: false,
         message: 'Error in auto-updater',
-      })
+      }))
     } finally {
       setManualCheckPending(false)
     }

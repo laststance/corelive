@@ -33,16 +33,18 @@ export async function POST() {
 
     // Create a sign-in token using Clerk's backend API
     const client = await clerkClient()
+    const expiresInSeconds = 60
     const signInToken = await client.signInTokens.createSignInToken({
       userId,
-      expiresInSeconds: 60, // 1 minute - very short-lived for security
+      expiresInSeconds,
     })
 
     return NextResponse.json({
       token: signInToken.token,
+      expiresInSeconds,
       expiresAt: signInToken.createdAt
-        ? signInToken.createdAt + 60 * 1000
-        : Date.now() + 60 * 1000,
+        ? signInToken.createdAt + expiresInSeconds * 1000
+        : Date.now() + expiresInSeconds * 1000,
     })
   } catch (error) {
     console.error('Failed to create sign-in token:', error)

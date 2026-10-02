@@ -1,8 +1,11 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
-import type { UpdaterDownloadProgress } from '@/electron/types/ipc'
+import type {
+  UpdaterDownloadProgress,
+  UpdaterStatus,
+} from '@/electron/types/ipc'
 
 import { AppUpdateSettings } from './AppUpdateSettings'
 
@@ -47,6 +50,11 @@ describe('AppUpdateSettings', () => {
     })
   })
 
+  afterEach(() => {
+    cleanup()
+    vi.useRealTimers()
+  })
+
   test('restores in-progress update download progress from updater status', async () => {
     // Arrange
     getStatusMock.mockResolvedValue({
@@ -67,7 +75,7 @@ describe('AppUpdateSettings', () => {
     render(<AppUpdateSettings />)
 
     // Assert
-    expect(await screen.findByText('Downloading update — 42%')).toBeVisible()
+    expect(await screen.findByText('Downloading update…')).toBeVisible()
     expect(screen.getByText('Download progress')).toBeVisible()
     expect(
       screen.getByRole('progressbar', { name: 'Update download progress' }),
@@ -196,6 +204,149 @@ describe('AppUpdateSettings', () => {
     ).toBeEnabled()
   })
 
+  // Value: protects=slow native status requests never overlap; fails_when=polling issues another request before the pending read settles; why_new=existing polling test resolves every request immediately; seam=none
+  test('waits for a slow status response before polling again and shows its progress', async () => {
+    // Arrange
+    vi.useFakeTimers()
+    let resolveStatus: (status: UpdaterStatus) => void = () => {}
+    const pendingStatus = new Promise<UpdaterStatus>((resolve) => {
+      resolveStatus = resolve
+    })
+    getStatusMock.mockResolvedValue({
+      updateAvailable: false,
+      updateDownloaded: false,
+      downloadProgress: null,
+      isChecking: false,
+      message: 'Update not available',
+    })
+    getStatusMock.mockReturnValueOnce(pendingStatus)
+    installElectronAPI({
+      app: { getVersion: getVersionMock },
+      updater: {
+        checkForUpdates: checkForUpdatesMock,
+        quitAndInstall: quitAndInstallMock,
+        getStatus: getStatusMock,
+      },
+    })
+    render(<AppUpdateSettings />)
+
+    // Act
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000)
+    })
+
+    // Assert
+    expect(getStatusMock).toHaveBeenCalledTimes(1)
+
+    // Act
+    await act(async () => {
+      resolveStatus({
+        updateAvailable: true,
+        updateDownloaded: false,
+        downloadProgress: downloadingHalfway,
+        isChecking: false,
+        message: 'Downloading update: 42%',
+      })
+    })
+
+    // Assert
+    expect(screen.getByText('Downloading update…')).toBeVisible()
+
+    // Act
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000)
+    })
+
+    // Assert
+    expect(getStatusMock).toHaveBeenCalledTimes(2)
+    expect(screen.getByText("You're on the latest version.")).toBeVisible()
+  })
+
+  // Value: protects=status polling recovers from a transient IPC rejection; fails_when=a failed read stops polling or hides the subsequent ready update; why_new=existing failures concern manual check and restart actions; seam=none
+  test('recovers a failed status poll and offers restart when the next read succeeds', async () => {
+    // Arrange
+    vi.useFakeTimers()
+    getStatusMock.mockRejectedValueOnce(
+      new Error('IPC temporarily unavailable'),
+    )
+    getStatusMock.mockResolvedValue({
+      updateAvailable: true,
+      updateDownloaded: true,
+      downloadProgress: null,
+      isChecking: false,
+      message: 'Update downloaded',
+    })
+    installElectronAPI({
+      app: { getVersion: getVersionMock },
+      updater: {
+        checkForUpdates: checkForUpdatesMock,
+        quitAndInstall: quitAndInstallMock,
+        getStatus: getStatusMock,
+      },
+    })
+
+    // Act
+    await act(async () => {
+      render(<AppUpdateSettings />)
+    })
+
+    // Assert
+    expect(
+      screen.getByText("Couldn't check for updates. Try again in a moment."),
+    ).toBeVisible()
+
+    // Act
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000)
+    })
+
+    // Assert
+    expect(getStatusMock).toHaveBeenCalledTimes(2)
+    expect(
+      screen.getByRole('button', { name: 'Restart to Update' }),
+    ).toBeVisible()
+    expect(
+      screen.queryByText("Couldn't check for updates. Try again in a moment."),
+    ).toBeNull()
+  })
+
+  // Value: protects=closing Settings stops a pending poll from starting more IPC reads; fails_when=a late response restarts polling after unmount; why_new=existing polling tests keep the Settings component mounted; seam=none
+  test('stops polling after Settings closes while a native status read is pending', async () => {
+    // Arrange
+    vi.useFakeTimers()
+    let resolveStatus: (status: UpdaterStatus) => void = () => {}
+    getStatusMock.mockReturnValueOnce(
+      new Promise<UpdaterStatus>((resolve) => {
+        resolveStatus = resolve
+      }),
+    )
+    installElectronAPI({
+      app: { getVersion: getVersionMock },
+      updater: {
+        checkForUpdates: checkForUpdatesMock,
+        quitAndInstall: quitAndInstallMock,
+        getStatus: getStatusMock,
+      },
+    })
+    const { unmount } = render(<AppUpdateSettings />)
+
+    // Act
+    unmount()
+    await act(async () => {
+      resolveStatus({
+        updateAvailable: true,
+        updateDownloaded: false,
+        downloadProgress: downloadingHalfway,
+        isChecking: false,
+        message: 'Downloading update: 42%',
+      })
+      await vi.advanceTimersByTimeAsync(5000)
+    })
+
+    // Assert
+    expect(getStatusMock).toHaveBeenCalledTimes(1)
+  })
+
   test('offers restart when an update has already been downloaded', async () => {
     // Arrange
     getStatusMock.mockResolvedValue({
@@ -252,6 +403,39 @@ describe('AppUpdateSettings', () => {
     })
   })
 
+  test('keeps a failed manual update request visible after the next native status poll', async () => {
+    // Arrange
+    checkForUpdatesMock.mockResolvedValue(false)
+    installElectronAPI({
+      app: { getVersion: getVersionMock },
+      updater: {
+        checkForUpdates: checkForUpdatesMock,
+        quitAndInstall: quitAndInstallMock,
+        getStatus: getStatusMock,
+      },
+    })
+    const user = userEvent.setup()
+    render(<AppUpdateSettings />)
+    await screen.findByText("You're running CoreLive 1.2.3.")
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Check for Updates' }))
+    await screen.findByText(
+      "Couldn't check for updates. Try again in a moment.",
+    )
+    await waitFor(() => expect(getStatusMock).toHaveBeenCalledTimes(2), {
+      timeout: 2500,
+    })
+
+    // Assert
+    expect(
+      screen.getByText("Couldn't check for updates. Try again in a moment."),
+    ).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'Check for Updates' }),
+    ).toBeEnabled()
+  })
+
   test('shows a retryable installation error when the native restart request fails', async () => {
     // Arrange
     getStatusMock.mockResolvedValue({
@@ -284,6 +468,77 @@ describe('AppUpdateSettings', () => {
     expect(
       screen.getByRole('button', { name: 'Restart to Update' }),
     ).toBeEnabled()
+  })
+
+  test('keeps a downloaded update ready to restart after a manual check fails', async () => {
+    // Arrange
+    getStatusMock.mockResolvedValue({
+      updateAvailable: true,
+      updateDownloaded: true,
+      downloadProgress: null,
+      isChecking: false,
+      message: 'Update downloaded',
+    })
+    checkForUpdatesMock.mockResolvedValue(false)
+    installElectronAPI({
+      app: { getVersion: getVersionMock },
+      updater: {
+        checkForUpdates: checkForUpdatesMock,
+        quitAndInstall: quitAndInstallMock,
+        getStatus: getStatusMock,
+      },
+    })
+    const user = userEvent.setup()
+    render(<AppUpdateSettings />)
+    await screen.findByRole('button', { name: 'Restart to Update' })
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Check for Updates' }))
+    await screen.findByText(
+      "Couldn't check for updates. Try again in a moment.",
+    )
+
+    // Assert
+    expect(
+      screen.getByRole('button', { name: 'Restart to Update' }),
+    ).toBeVisible()
+  })
+
+  test('replaces an earlier check error when native downloading begins', async () => {
+    // Arrange
+    checkForUpdatesMock.mockResolvedValue(false)
+    installElectronAPI({
+      app: { getVersion: getVersionMock },
+      updater: {
+        checkForUpdates: checkForUpdatesMock,
+        quitAndInstall: quitAndInstallMock,
+        getStatus: getStatusMock,
+      },
+    })
+    const user = userEvent.setup()
+    render(<AppUpdateSettings />)
+    await screen.findByText("You're running CoreLive 1.2.3.")
+    await user.click(screen.getByRole('button', { name: 'Check for Updates' }))
+    await screen.findByText(
+      "Couldn't check for updates. Try again in a moment.",
+    )
+
+    // Act
+    getStatusMock.mockResolvedValue({
+      updateAvailable: true,
+      updateDownloaded: false,
+      downloadProgress: downloadingHalfway,
+      isChecking: false,
+      message: 'Downloading update: 42%',
+    })
+
+    // Assert
+    expect(
+      await screen.findByText('Downloading update…', {}, { timeout: 2500 }),
+    ).toBeVisible()
+    expect(
+      screen.queryByText("Couldn't check for updates. Try again in a moment."),
+    ).toBeNull()
   })
 
   test('shows a desktop-only message when the updater bridge is absent', async () => {

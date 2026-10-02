@@ -108,6 +108,8 @@ export class AutoUpdater {
 
   private isChecking = false
 
+  private updatePromptPending = false
+
   private statusMessage: string | null = null
 
   /** Latest download progress, or null when no download is active */
@@ -138,6 +140,8 @@ export class AutoUpdater {
       debug: (...args) => (log.debug as LogMethod)(...args),
     }
     autoUpdater.logger = updaterLogger
+    // The native Download Now prompt owns consent; electron-updater defaults to downloading immediately.
+    autoUpdater.autoDownload = false
 
     this.setupAutoUpdater()
   }
@@ -175,9 +179,8 @@ export class AutoUpdater {
 
     autoUpdater.on('error', (err: Error) => {
       log.error('Error in auto-updater:', err)
-      // Reset status flags on error to allow retry
-      this.updateAvailable = false
-      this.updateDownloaded = false
+      // A failed check cannot invalidate a package that already finished downloading.
+      this.updateAvailable = this.updateDownloaded
       this.clearDownloadProgress()
       this.logUpdaterStatus('Error in auto-updater')
     })
@@ -229,6 +232,13 @@ export class AutoUpdater {
    * Checks for available updates.
    */
   checkForUpdates(): void {
+    // Keep an active or downloaded package until the user finishes this update.
+    if (
+      this.updateDownloaded ||
+      this.downloadProgress ||
+      this.updatePromptPending
+    )
+      return
     if (process.env.NODE_ENV === 'development') {
       log.info('Skipping update check in development mode')
       return
@@ -237,9 +247,8 @@ export class AutoUpdater {
     // Handle async rejection from electron-updater Promise
     void autoUpdater.checkForUpdatesAndNotify().catch((error) => {
       log.error('Failed to check for updates:', error)
-      // Reset state flags on error to allow retry
-      this.updateAvailable = false
-      this.updateDownloaded = false
+      // Preserve a package that finished while this check was in flight.
+      this.updateAvailable = this.updateDownloaded
       this.clearDownloadProgress()
       this.logUpdaterStatus('Error in auto-updater')
     })
@@ -270,30 +279,44 @@ export class AutoUpdater {
    * @param info - Update information including version
    */
   async showUpdateAvailableDialog(info: UpdateInfo): Promise<void> {
-    const result = await this.showUpdaterMessageBox({
-      type: 'info',
-      title: 'Update Available',
-      message: `A new version (${info.version}) is available!`,
-      detail:
-        'Would you like to download it now? The update will be installed when you restart the application.',
-      buttons: ['Download Now', 'Later'],
-      defaultId: 0,
-      cancelId: 1,
-    })
+    // Repeated checks must not stack consent dialogs or restart an existing transfer.
+    if (
+      this.updatePromptPending ||
+      this.updateDownloaded ||
+      this.downloadProgress
+    )
+      return
+    this.updatePromptPending = true
+    try {
+      const result = await this.showUpdaterMessageBox({
+        type: 'info',
+        title: 'Update Available',
+        message: `A new version (${info.version}) is available!`,
+        detail:
+          'Would you like to download it now? The update will be installed when you restart the application.',
+        buttons: ['Download Now', 'Later'],
+        defaultId: 0,
+        cancelId: 1,
+      })
 
-    if (result.response === 0) {
-      this.sendDownloadProgress({
-        percent: UPDATE_PROGRESS_PERCENT_MIN,
-        bytesPerSecond: 0,
-        transferred: 0,
-        total: 0,
-      })
-      // Handle async rejection from downloadUpdate Promise
-      void autoUpdater.downloadUpdate().catch((error) => {
-        log.error('Failed to download update:', error)
-        this.clearDownloadProgress()
-        this.logUpdaterStatus('Failed to download update')
-      })
+      if (result.response === 0) {
+        this.sendDownloadProgress({
+          percent: UPDATE_PROGRESS_PERCENT_MIN,
+          bytesPerSecond: 0,
+          transferred: 0,
+          total: 0,
+        })
+        // Handle async rejection from downloadUpdate Promise
+        void autoUpdater.downloadUpdate().catch((error) => {
+          log.error('Failed to download update:', error)
+          this.clearDownloadProgress()
+          this.logUpdaterStatus('Failed to download update')
+        })
+      } else {
+        this.logUpdaterStatus('Update postponed')
+      }
+    } finally {
+      this.updatePromptPending = false
     }
   }
 
@@ -317,12 +340,8 @@ export class AutoUpdater {
   }
 
   /**
-   * Named logging choke-point for updater status lines. Log-only by design: the
-   * transient "not available" / "error" TEXT lost its renderer with the retired
-   * main window, and the Settings popover was rejected as a replacement host
-   * (it hides on blur). The ACTIONABLE states still reach the user — the
-   * parentless dialogs from {@link AutoUpdater.showUpdaterMessageBox} and the
-   * native download-progress window.
+   * Stores native updater status for the Settings poll and writes the same line to the log.
+   * Called by update events and manual checks; actionable states also use native dialogs.
    *
    * @param text - Status message to log.
    */
@@ -341,9 +360,7 @@ export class AutoUpdater {
    */
   private sendDownloadProgress(progress: UpdaterDownloadProgress): void {
     this.downloadProgress = progress
-    // Native progress window is the only live UI this paints to now — the
-    // renderer mirror was retired with the main window in T18. `AppUpdateSettings`
-    // still reads `this.downloadProgress` on demand via `getUpdateStatus()`.
+    // Native progress paints immediately; Settings reads the same payload through its status poll.
     this.showUpdateProgressWindow(progress)
   }
 
@@ -457,6 +474,13 @@ export class AutoUpdater {
    * @example await updater.manualCheckForUpdates()
    */
   async manualCheckForUpdates(): Promise<void> {
+    // The renderer can continue showing progress or Restart without another network request.
+    if (
+      this.updateDownloaded ||
+      this.downloadProgress ||
+      this.updatePromptPending
+    )
+      return
     this.logUpdaterStatus('Checking for update...')
     try {
       const result = await autoUpdater.checkForUpdatesAndNotify()
@@ -468,8 +492,8 @@ export class AutoUpdater {
       }
     } catch (error) {
       log.error('Failed to manually check for updates:', error)
-      this.updateAvailable = false
-      this.updateDownloaded = false
+      // A concurrent completed download remains installable even when the check fails.
+      this.updateAvailable = this.updateDownloaded
       this.clearDownloadProgress()
       this.logUpdaterStatus('Error in auto-updater')
       throw error

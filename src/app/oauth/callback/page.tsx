@@ -1,9 +1,10 @@
 'use client'
 
 import { useSearchParams } from 'next/navigation'
-import { Suspense, useState } from 'react'
+import { Suspense, useRef, useState } from 'react'
 
 import { OAuthError } from '@/components/auth/OAuthError'
+import { Button } from '@/components/ui/button'
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
 
 /**
@@ -26,7 +27,82 @@ import { useCycleEffect } from '@/hooks/use-cycle-effect'
  */
 
 type CallbackStatus =
-  'loading' | 'creating-token' | 'redirecting' | 'success' | 'error'
+  | 'loading'
+  | 'creating-token'
+  | 'redirecting'
+  | 'success'
+  | 'error'
+  | 'return-error'
+
+/**
+ * Requests a fresh native sign-in ticket for the automatic callback or explicit browser retry.
+ * Keeps the short-lived return URL out of DOM attributes and logs.
+ * @param state - The native OAuth attempt that must receive this ticket.
+ * @returns A private state-bound URL and local deadlines for a synchronous native return.
+ * @throws When the server cannot issue a usable sign-in ticket.
+ * @example const returnUrl = await requestDesktopReturn('pending-oauth-state')
+ */
+async function requestDesktopReturn(
+  state: string,
+): Promise<{ url: string; validUntil: number; wallClockDeadline: number }> {
+  // Count network time against the ticket lifetime without comparing different machines' clocks.
+  const requestedAt = performance.now()
+  const requestedAtWallClock = Date.now()
+  const response = await fetch('/api/oauth/create-signin-token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  })
+  // Keep issuance failures visible as recoverable browser errors.
+  if (!response.ok) {
+    // An expired browser session needs a new sign-in, not repeated ticket requests.
+    if (response.status === 401) {
+      throw new Error(
+        'Your browser sign-in expired. Start sign-in again from CoreLive.',
+        { cause: 401 },
+      )
+    }
+    throw new Error(
+      'Could not prepare your return to CoreLive. Please try again.',
+    )
+  }
+  const payload: unknown = await response.json().catch(() => null)
+  if (!payload || typeof payload !== 'object') {
+    throw new Error(
+      'Could not prepare your return to CoreLive. Please try again.',
+    )
+  }
+  const token = 'token' in payload ? payload.token : undefined
+  const expiresInSeconds =
+    'expiresInSeconds' in payload ? payload.expiresInSeconds : undefined
+  // Reject malformed tickets before attempting the custom protocol.
+  if (
+    typeof token !== 'string' ||
+    token === '' ||
+    typeof expiresInSeconds !== 'number' ||
+    !Number.isFinite(expiresInSeconds) ||
+    expiresInSeconds <= 0 ||
+    expiresInSeconds > 60
+  ) {
+    throw new Error('No token received from server')
+  }
+  const validUntil = requestedAt + expiresInSeconds * 1000
+  // macOS browsers can pause the monotonic clock during sleep; either local clock may expire the ticket.
+  const wallClockDeadline = requestedAtWallClock + expiresInSeconds * 1000
+  // A very slow request can consume the ticket before it is safe to return to the app.
+  if (
+    validUntil <= performance.now() + 5000 ||
+    wallClockDeadline <= Date.now() + 5000
+  ) {
+    throw new Error('The return ticket expired. Please try again.')
+  }
+  // Desktop sign-in requires a short-lived ticket bound to the pending native OAuth attempt.
+  return {
+    // eslint-disable-next-line browser-security/no-credentials-in-query-params -- State-bound Clerk ticket is consumed only by the app's custom protocol.
+    url: `corelive://oauth/callback?state=${encodeURIComponent(state)}&token=${encodeURIComponent(token)}`,
+    validUntil,
+    wallClockDeadline,
+  }
+}
 
 const OAuthCallbackContent = function OAuthCallbackContent() {
   const searchParams = useSearchParams()
@@ -35,6 +111,23 @@ const OAuthCallbackContent = function OAuthCallbackContent() {
   const errorDescription = searchParams.get('error_description')
   const [status, setStatus] = useState<CallbackStatus>('loading')
   const [errorMessage, setErrorMessage] = useState<string>('')
+  const [returnRefreshed, setReturnRefreshed] = useState(false)
+  const recoveryContent = useRef<HTMLDivElement>(null)
+  const preparedReturn = useRef<Awaited<
+    ReturnType<typeof requestDesktopReturn>
+  > | null>(null)
+
+  // Restore keyboard position after a retry replaces the loading state.
+  useCycleEffect(() => {
+    if (
+      status === 'return-error' ||
+      (status === 'success' && returnRefreshed)
+    ) {
+      recoveryContent.current
+        ?.querySelector<HTMLButtonElement>('button')
+        ?.focus()
+    }
+  }, [status, returnRefreshed])
 
   useCycleEffect(() => {
     let isMounted = true
@@ -62,35 +155,17 @@ const OAuthCallbackContent = function OAuthCallbackContent() {
 
         setStatus('creating-token')
 
-        // Call server API to create a sign-in token
-        const response = await fetch('/api/oauth/create-signin-token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        })
-
-        if (!response.ok) {
-          const data = await response.json()
-          throw new Error(data.error || 'Failed to create authentication token')
-        }
-
-        const { token } = await response.json()
-
-        if (!token) {
-          throw new Error('No token received from server')
-        }
-
-        // Build deep link with both state (for validation) and token (for sign-in)
-        // eslint-disable-next-line browser-security/no-credentials-in-query-params -- Desktop sign-in uses a state-bound, short-lived Clerk token in its custom-protocol callback.
-        const deepLink = `corelive://oauth/callback?state=${encodeURIComponent(state)}&token=${encodeURIComponent(token)}`
+        const desktopReturn = await requestDesktopReturn(state)
 
         if (!isMounted) return
 
+        preparedReturn.current = desktopReturn
         setStatus('redirecting')
 
         // Redirect to Electron app via deep link
         // Small delay to show UI update
         redirectTimer = window.setTimeout(() => {
-          window.location.href = deepLink
+          window.location.assign(desktopReturn.url)
         }, 100)
 
         // After a short delay, show success message
@@ -103,7 +178,9 @@ const OAuthCallbackContent = function OAuthCallbackContent() {
         if (!isMounted) return
 
         console.error('OAuth callback error:', err)
-        setStatus('error')
+        setStatus(
+          err instanceof Error && err.cause === 401 ? 'error' : 'return-error',
+        )
         setErrorMessage(
           err instanceof Error
             ? err.message
@@ -121,9 +198,49 @@ const OAuthCallbackContent = function OAuthCallbackContent() {
     }
   }, [state, error, errorDescription])
 
+  // External-protocol navigation must happen directly inside the click gesture.
+  const reopenDesktopApp = () => {
+    if (!state) return
+    const desktopReturn = preparedReturn.current
+    // A still-valid ticket avoids awaiting network work before native navigation.
+    if (
+      desktopReturn &&
+      desktopReturn.validUntil > performance.now() + 5000 &&
+      desktopReturn.wallClockDeadline > Date.now() + 5000
+    ) {
+      window.location.assign(desktopReturn.url)
+      return
+    }
+
+    setStatus('creating-token')
+    // An expired ticket needs another explicit click after its replacement is ready.
+    void requestDesktopReturn(state)
+      .then((freshReturn) => {
+        preparedReturn.current = freshReturn
+        setReturnRefreshed(true)
+        setStatus('success')
+      })
+      .catch((retryError: unknown) => {
+        setErrorMessage(
+          retryError instanceof Error
+            ? retryError.message
+            : 'Failed to open CoreLive',
+        )
+        setStatus(
+          retryError instanceof Error && retryError.cause === 401
+            ? 'error'
+            : 'return-error',
+        )
+      })
+  }
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
-      <div className="w-full max-w-md rounded-lg bg-card p-8 shadow-lg">
+      <div
+        ref={recoveryContent}
+        aria-live="polite"
+        className="w-full max-w-md rounded-lg border border-border bg-card p-8"
+      >
         {(status === 'loading' || status === 'creating-token') && (
           <>
             <div className="mb-4 flex justify-center">
@@ -195,23 +312,32 @@ const OAuthCallbackContent = function OAuthCallbackContent() {
             <p className="mb-4 text-center text-muted-foreground">
               You can now return to the CoreLive desktop app.
             </p>
-            <p className="text-center text-sm text-muted-foreground">
-              If the app didn&apos;t open automatically, please switch to it
-              manually.
+            <p className="mb-4 text-center text-sm text-muted-foreground">
+              {returnRefreshed
+                ? 'A fresh secure return is ready. Select Open CoreLive.'
+                : "If CoreLive didn't open, try the button below."}
             </p>
+            <Button type="button" className="w-full" onClick={reopenDesktopApp}>
+              Open CoreLive
+            </Button>
           </>
         )}
 
-        {status === 'error' && (
+        {(status === 'error' || status === 'return-error') && (
           <OAuthError
-            title="Authentication Failed"
+            title={
+              status === 'return-error'
+                ? 'Could not return to CoreLive'
+                : 'Authentication Failed'
+            }
             errorMessage={errorMessage}
+            onRetry={status === 'return-error' ? reopenDesktopApp : undefined}
           />
         )}
       </div>
 
       <p className="mt-4 text-center text-xs text-muted-foreground">
-        CoreLive - Task Management for Productivity
+        CoreLive — Every small effort counts.
       </p>
     </div>
   )

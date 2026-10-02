@@ -83,6 +83,9 @@ describe('LoginShell', () => {
 
     // Assert
     expect(show).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'If LiveEditor does not open, check your connection and try again.',
+    )
     expect(screen.queryByTestId('oauth-buttons')).not.toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: 'Open LiveEditor' }),
