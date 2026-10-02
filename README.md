@@ -97,7 +97,7 @@ pnpm db:seed
 pnpm db:generate
 ```
 
-> **Local database built before the move to Drizzle?** It has the tables but no `drizzle.__drizzle_migrations` row, so `pnpm db:migrate` stops with `relation "Category" already exists` (your tables and data are left untouched). For a fresh local database, run `pnpm db:reset` once: it discards local data and replays every committed migration. The cutover script's `--apply` mode is historical tooling and refuses the current journal because it contains more than the initial migration; it is no longer a setup command. Its read-only inspection and `--expect-current` checks remain part of the deployment workflow. Retirement of the write mode is tracked in [`TODOS.md`](TODOS.md#retire-the-one-time-cutover-tooling-once-production-carries-the-baseline-row).
+> **Local database built before the move to Drizzle?** It has application tables without a migration ledger. For a disposable local database, run `pnpm db:reset` once to rebuild it from every committed migration; this discards local data. Preserve needed data first. The deployment guard is read-only and never reconstructs a missing ledger automatically.
 
 Set `POSTGRES_PRISMA_URL` in `.env` to use the host port:
 

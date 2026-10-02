@@ -39,7 +39,7 @@ describe('AppUpdateSettings', () => {
 
     getVersionMock.mockResolvedValue('1.2.3')
     checkForUpdatesMock.mockResolvedValue(true)
-    quitAndInstallMock.mockResolvedValue(undefined)
+    quitAndInstallMock.mockResolvedValue(true)
     getStatusMock.mockResolvedValue({
       updateAvailable: false,
       updateDownloaded: false,
@@ -67,10 +67,8 @@ describe('AppUpdateSettings', () => {
     render(<AppUpdateSettings />)
 
     // Assert
-    expect(
-      await screen.findByText('Downloading update — 42%'),
-    ).toBeInTheDocument()
-    expect(screen.getByText('Download progress')).toBeInTheDocument()
+    expect(await screen.findByText('Downloading update — 42%')).toBeVisible()
+    expect(screen.getByText('Download progress')).toBeVisible()
     expect(
       screen.getByRole('progressbar', { name: 'Update download progress' }),
     ).toHaveAttribute('aria-valuenow', '42')
@@ -93,11 +91,12 @@ describe('AppUpdateSettings', () => {
     // Assert
     expect(
       await screen.findByText("You're running CoreLive 1.2.3."),
-    ).toBeInTheDocument()
+    ).toBeVisible()
   })
 
   test('starts a manual update check when the button is clicked', async () => {
     // Arrange
+    checkForUpdatesMock.mockReturnValue(new Promise(() => {}))
     installElectronAPI({
       app: { getVersion: getVersionMock },
       updater: {
@@ -117,7 +116,84 @@ describe('AppUpdateSettings', () => {
     await waitFor(() => {
       expect(checkForUpdatesMock).toHaveBeenCalledTimes(1)
     })
-    expect(screen.getByText('Checking for updates…')).toBeInTheDocument()
+    expect(screen.getByText('Checking for updates…')).toBeVisible()
+  })
+
+  test('allows another update check after the installed app reports that no update is available', async () => {
+    // Arrange
+    getStatusMock.mockResolvedValue({
+      updateAvailable: false,
+      updateDownloaded: false,
+      downloadProgress: null,
+      isChecking: false,
+      message: 'Update not available',
+    })
+    installElectronAPI({
+      app: { getVersion: getVersionMock },
+      updater: {
+        checkForUpdates: checkForUpdatesMock,
+        quitAndInstall: quitAndInstallMock,
+        getStatus: getStatusMock,
+      },
+    })
+    const user = userEvent.setup()
+    render(<AppUpdateSettings />)
+    await screen.findByText("You're running CoreLive 1.2.3.")
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Check for Updates' }))
+
+    // Assert
+    expect(
+      await screen.findByText("You're on the latest version."),
+    ).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'Check for Updates' }),
+    ).toBeEnabled()
+    expect(screen.queryByText('Checking…')).toBeNull()
+  })
+
+  test('replaces a live download with the restart action without reopening Settings', async () => {
+    // Arrange
+    getStatusMock.mockResolvedValue({
+      updateAvailable: true,
+      updateDownloaded: false,
+      downloadProgress: downloadingHalfway,
+      isChecking: false,
+      message: 'Downloading update: 42%',
+    })
+    installElectronAPI({
+      app: { getVersion: getVersionMock },
+      updater: {
+        checkForUpdates: checkForUpdatesMock,
+        quitAndInstall: quitAndInstallMock,
+        getStatus: getStatusMock,
+      },
+    })
+    render(<AppUpdateSettings />)
+    await screen.findByRole('progressbar', { name: 'Update download progress' })
+
+    // Act
+    getStatusMock.mockResolvedValue({
+      updateAvailable: true,
+      updateDownloaded: true,
+      downloadProgress: null,
+      isChecking: false,
+      message: 'Update downloaded',
+    })
+
+    // Assert
+    expect(
+      await screen.findByRole(
+        'button',
+        { name: 'Restart to Update' },
+        { timeout: 2500 },
+      ),
+    ).toBeVisible()
+    expect(screen.queryByRole('progressbar')).toBeNull()
+    expect(
+      screen.getByRole('button', { name: 'Check for Updates' }),
+    ).toBeEnabled()
   })
 
   test('offers restart when an update has already been downloaded', async () => {
@@ -142,10 +218,10 @@ describe('AppUpdateSettings', () => {
     // Assert
     expect(
       await screen.findByRole('button', { name: 'Restart to Update' }),
-    ).toBeInTheDocument()
+    ).toBeVisible()
     expect(
       screen.getByText('Update ready. Restart CoreLive to finish installing.'),
-    ).toBeInTheDocument()
+    ).toBeVisible()
   })
 
   test('restarts the app when Restart to Update is clicked', async () => {
@@ -176,6 +252,40 @@ describe('AppUpdateSettings', () => {
     })
   })
 
+  test('shows a retryable installation error when the native restart request fails', async () => {
+    // Arrange
+    getStatusMock.mockResolvedValue({
+      updateAvailable: true,
+      updateDownloaded: true,
+      downloadProgress: null,
+      isChecking: false,
+      message: 'Update downloaded',
+    })
+    quitAndInstallMock.mockResolvedValue(false)
+    installElectronAPI({
+      app: { getVersion: getVersionMock },
+      updater: {
+        checkForUpdates: checkForUpdatesMock,
+        quitAndInstall: quitAndInstallMock,
+        getStatus: getStatusMock,
+      },
+    })
+    const user = userEvent.setup()
+    render(<AppUpdateSettings />)
+    await screen.findByRole('button', { name: 'Restart to Update' })
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Restart to Update' }))
+
+    // Assert
+    expect(
+      await screen.findByText("Couldn't restart CoreLive. Try again."),
+    ).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'Restart to Update' }),
+    ).toBeEnabled()
+  })
+
   test('shows a desktop-only message when the updater bridge is absent', async () => {
     // Arrange
     installElectronAPI(undefined)
@@ -188,9 +298,9 @@ describe('AppUpdateSettings', () => {
       await screen.findByText(
         'Update controls are only available in the desktop application.',
       ),
-    ).toBeInTheDocument()
+    ).toBeVisible()
     expect(
       screen.queryByRole('button', { name: 'Check for Updates' }),
-    ).not.toBeInTheDocument()
+    ).toBeNull()
   })
 })

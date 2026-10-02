@@ -39,7 +39,6 @@ describe('aggregateYearInReview', () => {
     expect(result).toMatchObject({
       totalCompleted: 0,
       activeDays: 0,
-      longestStreak: 0,
       topCategories: [],
       year: 2026,
       eligible: false,
@@ -103,11 +102,8 @@ describe('aggregateYearInReview', () => {
     expect(result.eligible).toBe(false)
   })
 
-  test('year-scopes the longest streak so a Dec→Jan run does NOT bleed into the YIR total', () => {
-    // 20-day cross-boundary streak: 10 in 2025 (Dec 22 → Dec 31) +
-    // 10 in 2026 (Jan 1 → Jan 10). The 2026 YIR should report the
-    // 10-day longest, NOT the full 20-day calendar streak — the modal
-    // recaps "your 2026", not "your longest ever".
+  test('keeps prior-year activity out of the current year review', () => {
+    // Arrange: ten days belong to each side of the year boundary.
     const map = new Map<string, HeatmapDay>()
     for (let dayOffset = 0; dayOffset < 10; dayOffset++) {
       const dec = shiftIsoDate('2025-12-31', -dayOffset)
@@ -124,7 +120,8 @@ describe('aggregateYearInReview', () => {
       })
     }
     const result = aggregateYearInReview(map, '2026-12-15')
-    expect(result.longestStreak).toBe(10)
+    expect(result.activeDays).toBe(10)
+    expect(result.totalCompleted).toBe(10)
   })
 
   test('caps topCategories at 3 and sorts by count desc, name asc', () => {
@@ -158,7 +155,6 @@ describe('shouldAutoOpenYir', () => {
     const eligibleSummary = {
       totalCompleted: 100,
       activeDays: YIR_MIN_ACTIVE_DAYS,
-      longestStreak: 7,
       topCategories: [],
       year: 2026,
       eligible: true,
@@ -170,7 +166,6 @@ describe('shouldAutoOpenYir', () => {
     const eligibleSummary = {
       totalCompleted: 100,
       activeDays: YIR_MIN_ACTIVE_DAYS,
-      longestStreak: 7,
       topCategories: [],
       year: 2026,
       eligible: true,
@@ -183,7 +178,6 @@ describe('shouldAutoOpenYir', () => {
     const ineligibleSummary = {
       totalCompleted: 5,
       activeDays: 5,
-      longestStreak: 2,
       topCategories: [],
       year: 2026,
       eligible: false,
@@ -208,7 +202,6 @@ describe('shouldAutoOpenYir (with fake timers — guards against real-clock leak
     const eligible = {
       totalCompleted: 100,
       activeDays: YIR_MIN_ACTIVE_DAYS,
-      longestStreak: 7,
       topCategories: [],
       year: 2026,
       eligible: true,

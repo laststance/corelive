@@ -114,6 +114,8 @@ export interface UpdaterStatus {
   updateAvailable: boolean
   updateDownloaded: boolean
   downloadProgress: UpdaterDownloadProgress | null
+  isChecking: boolean
+  message: string | null
 }
 
 /** Normalized auto-update download progress sent from main to renderer. */

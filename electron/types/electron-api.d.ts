@@ -146,16 +146,9 @@ export interface ElectronAPI {
     /** Check for updates */
     checkForUpdates: () => Promise<boolean>
     /** Quit and install update */
-    quitAndInstall: () => Promise<void>
+    quitAndInstall: () => Promise<boolean>
     /** Get current update status */
     getStatus: () => Promise<UpdaterStatus>
-    /** Listen for update messages */
-    onMessage: (
-      callback: (data: {
-        type: 'checking' | 'available' | 'downloaded' | 'error'
-        message?: string
-      }) => void,
-    ) => () => void
   }
 
   /**

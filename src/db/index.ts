@@ -1,5 +1,6 @@
 import 'dotenv/config'
 
+import { attachDatabasePool } from '@vercel/functions'
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'
 
@@ -17,7 +18,13 @@ const log = createModuleLogger('db')
 const pool = new Pool({
   connectionString: process.env.POSTGRES_PRISMA_URL,
   connectionTimeoutMillis: 10_000,
+  // Keep parallel procedure reads possible without retaining ten connections per warm instance.
+  max: 5,
+  idleTimeoutMillis: 5_000,
+  maxLifetimeSeconds: 300,
 })
+// Fluid Compute must finish idle cleanup before suspending the function instance.
+attachDatabasePool(pool)
 
 // An idle client can be dropped by the server or a proxy between requests. pg-pool re-emits that
 // on the pool, and an 'error' event with no listener is an uncaught exception that takes the whole

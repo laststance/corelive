@@ -19,7 +19,7 @@ import {
   UPDATE_PROGRESS_WINDOW_WIDTH_PX,
 } from './constants'
 import { log } from './logger'
-import type { UpdaterDownloadProgress } from './types/ipc'
+import type { UpdaterDownloadProgress, UpdaterStatus } from './types/ipc'
 import {
   buildUpdateProgressWindowHtml,
   buildUpdateProgressWindowUpdateScript,
@@ -28,13 +28,6 @@ import {
 // ============================================================================
 // Type Definitions
 // ============================================================================
-
-/** Update status */
-interface UpdateStatus {
-  updateAvailable: boolean
-  updateDownloaded: boolean
-  downloadProgress: UpdaterDownloadProgress | null
-}
 
 /**
  * Minimal logger interface expected by `electron-updater`.
@@ -112,6 +105,10 @@ export class AutoUpdater {
 
   /** Track if update is ready */
   private updateDownloaded: boolean
+
+  private isChecking = false
+
+  private statusMessage: string | null = null
 
   /** Latest download progress, or null when no download is active */
   private downloadProgress: UpdaterDownloadProgress | null
@@ -244,6 +241,7 @@ export class AutoUpdater {
       this.updateAvailable = false
       this.updateDownloaded = false
       this.clearDownloadProgress()
+      this.logUpdaterStatus('Error in auto-updater')
     })
   }
 
@@ -329,6 +327,8 @@ export class AutoUpdater {
    * @param text - Status message to log.
    */
   logUpdaterStatus(text: string): void {
+    this.statusMessage = text
+    this.isChecking = text.startsWith('Checking for update')
     log.info(text)
   }
 
@@ -451,17 +451,31 @@ export class AutoUpdater {
   }
 
   /**
-   * Manual update check (called from menu or UI).
+   * Completes a manual update check before the Settings IPC request resolves.
+   * The handler in main calls this when the user checks for updates.
+   * @throws When the update service fails, after restoring retryable status.
+   * @example await updater.manualCheckForUpdates()
    */
-  manualCheckForUpdates(): void {
-    // Handle async rejection from electron-updater Promise
-    void autoUpdater.checkForUpdatesAndNotify().catch((error) => {
+  async manualCheckForUpdates(): Promise<void> {
+    this.logUpdaterStatus('Checking for update...')
+    try {
+      const result = await autoUpdater.checkForUpdatesAndNotify()
+      // Unpackaged apps cannot perform the installed app's update check.
+      if (result === null) {
+        this.logUpdaterStatus(
+          'Update checks are available in the installed app.',
+        )
+      }
+    } catch (error) {
       log.error('Failed to manually check for updates:', error)
-      // Reset state flags on error to allow retry
       this.updateAvailable = false
       this.updateDownloaded = false
       this.clearDownloadProgress()
-    })
+      this.logUpdaterStatus('Error in auto-updater')
+      throw error
+    } finally {
+      this.isChecking = false
+    }
   }
 
   /**
@@ -478,11 +492,13 @@ export class AutoUpdater {
    *
    * @returns Current update status
    */
-  getUpdateStatus(): UpdateStatus {
+  getUpdateStatus(): UpdaterStatus {
     return {
       updateAvailable: this.updateAvailable,
       updateDownloaded: this.updateDownloaded,
       downloadProgress: this.downloadProgress,
+      isChecking: this.isChecking,
+      message: this.statusMessage,
     }
   }
 
@@ -516,6 +532,8 @@ export class AutoUpdater {
     this.updateAvailable = false
     this.updateDownloaded = false
     this.downloadProgress = null
+    this.isChecking = false
+    this.statusMessage = null
   }
 }
 

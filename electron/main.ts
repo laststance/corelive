@@ -1269,9 +1269,9 @@ function setupIPCHandlers(): void {
   })
 
   // Auto-updater IPC handlers (Zod-validated)
-  typedHandle('updater-check-for-updates', () => {
+  typedHandle('updater-check-for-updates', async () => {
     if (autoUpdater) {
-      autoUpdater.manualCheckForUpdates()
+      await autoUpdater.manualCheckForUpdates()
       return true
     }
     return false
@@ -1293,6 +1293,8 @@ function setupIPCHandlers(): void {
       updateAvailable: false,
       updateDownloaded: false,
       downloadProgress: null,
+      isChecking: false,
+      message: null,
     }
   })
 }

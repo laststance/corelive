@@ -23,7 +23,6 @@ import { isNativeBinding, parseNativeBinding } from './nativeBinding'
 import {
   createUnavailableNativeShortcutEngine,
   type NativeShortcutEngine,
-  type NativeTapStatus,
 } from './nativeShortcutEngine'
 import type { NotificationManager } from './NotificationManager'
 import {
@@ -125,9 +124,7 @@ export class ShortcutManager {
 
   /**
    * One-shot guard so a latch-blocked launch notifies the user ONCE, not on
-   * every `registerGlobalShortcuts()` retry while still blocked (codex #6). Reset
-   * by {@link reenableNativeTap} so a fresh block after a manual re-enable can
-   * notify again.
+   * every {@link registerGlobalShortcuts} retry while the engine remains blocked.
    */
   private hasNotifiedLatchBlock = false
 
@@ -509,13 +506,11 @@ export class ShortcutManager {
     // confirmed stability (it may have wedged the app during arming). Re-arming
     // would risk re-freezing on every launch — so do NOT register. A lone
     // modifier has no chord equivalent, so the binding is simply left INACTIVE
-    // (not "degraded to chord"). The block lasts the whole session: its only
-    // clear is {@link ShortcutManager.reenableNativeTap}, kept as the re-arm
-    // entry point but with no renderer caller since the Settings control and
-    // its IPC channel were retired — so in practice a restart is the reset.
+    // (not "degraded to chord"). A regular chord chosen in Settings remains
+    // available without clearing the persistent freeze-safety guard.
     if (this.nativeEngine.isLatchBlocked()) {
       log.warn(
-        `[registerNativeShortcut] Latch-blocked; leaving ${id} inactive (prior arming unconfirmed). Manual re-enable required.`,
+        `[registerNativeShortcut] Latch-blocked; leaving ${id} inactive (prior arming unconfirmed). Choose a regular shortcut in Settings.`,
       )
       // Notify ONCE per block (codex #6): registerGlobalShortcuts() can run many
       // times while still latch-blocked (startup, rebinds), and an OS toast on
@@ -524,7 +519,7 @@ export class ShortcutManager {
         this.hasNotifiedLatchBlock = true
         this.notificationManager.showNotification(
           'Native Shortcut Disabled',
-          `${this.getShortcutDisplayName(id)} was disabled after a failed start. Restart CoreLive to re-enable it.`,
+          `${this.getShortcutDisplayName(id)} was disabled after a failed start. Choose a regular shortcut in Settings.`,
           { silent: true },
         )
       }
@@ -562,49 +557,6 @@ export class ShortcutManager {
       `[registerNativeShortcut] Native engine rejected ${id} = ${nativeBinding}`,
     )
     return false
-  }
-
-  /**
-   * Reports the native tap's health for the renderer's re-enable affordance
-   * (#125) — was exposed over IPC so the UI could show a "disabled after a
-   * failed start — re-enable" control when a prior arming was left
-   * unconfirmed; the IPC channel is gone (no renderer caller), method kept
-   * for {@link reenableNativeTap}'s return value.
-   * @returns `{ available, latchBlocked, active }` — engine health plus whether a
-   *   lone-modifier binding is actually LIVE right now. `active` reads the engine's
-   *   RUNTIME state (codex review), not registration: after a failed re-enable/
-   *   re-arm the binding stays registered while the tap is down, and the renderer
-   *   must keep the recovery affordance, so registration intent is not the truth.
-   * @example
-   * getNativeTapStatus() // => { available: true, latchBlocked: true, active: false }
-   */
-  getNativeTapStatus(): NativeTapStatus {
-    return {
-      available: this.nativeEngine.isAvailable(),
-      latchBlocked: this.nativeEngine.isLatchBlocked(),
-      active: this.nativeEngine.isActive(),
-    }
-  }
-
-  /**
-   * Manual "re-enable" path after a latch-blocked launch (#125): clears the
-   * engine's stale-latch block, then re-runs registration so the lone-modifier
-   * binding re-arms the tap (a fresh arm overwrites the stale marker, which then
-   * clears after the stability window). Was triggered by the renderer's
-   * re-enable control via IPC; that channel is gone (no renderer caller).
-   * @returns the post-re-enable status so the caller can confirm the block cleared.
-   * @example
-   * reenableNativeTap() // => { available: true, latchBlocked: false }
-   */
-  reenableNativeTap(): NativeTapStatus {
-    // Re-arm the one-shot toast guard so a fresh block (re-arm fails again) can
-    // re-notify the user (codex #6).
-    this.hasNotifiedLatchBlock = false
-    this.nativeEngine.clearLatchBlock()
-    // Re-run the global registration chokepoint; with the block cleared, the
-    // lone-modifier binding now arms the tap instead of being left inactive.
-    this.registerGlobalShortcuts()
-    return this.getNativeTapStatus()
   }
 
   /**
@@ -811,27 +763,34 @@ export class ShortcutManager {
     const retryResults: ShortcutRegistrationResult[] = []
 
     for (const [id, failedShortcut] of this.failedShortcuts) {
-      const handler = this.getHandlerForShortcut(id)
-      if (handler) {
-        const success = this.registerShortcut(
-          failedShortcut.accelerator,
-          id,
-          handler,
-        )
-
-        if (success) {
-          this.failedShortcuts.delete(id)
-          retryResults.push({ id, success: true })
-        } else {
-          retryResults.push({ id, success: false })
-        }
+      const configuredAccelerator = this.shortcuts[id]
+      // Recovery must respect settings changed after the original registration failed.
+      if (
+        !this.isEnabled ||
+        typeof configuredAccelerator !== 'string' ||
+        configuredAccelerator === '' ||
+        configuredAccelerator !== failedShortcut.accelerator
+      ) {
+        this.failedShortcuts.delete(id)
+        continue
       }
+
+      const handler = this.getHandlerForShortcut(id)
+      // Retired actions have no recovery path and must leave the retry queue.
+      if (!handler) {
+        this.failedShortcuts.delete(id)
+        continue
+      }
+
+      const success = this.registerShortcut(configuredAccelerator, id, handler)
+      if (success) this.failedShortcuts.delete(id)
+      retryResults.push({ id, success })
     }
 
     return {
-      success: retryResults.some((r) => r.success),
+      success: retryResults.every((result) => result.success),
       results: retryResults,
-      message: `Retried ${retryResults.length} shortcuts, ${retryResults.filter((r) => r.success).length} successful`,
+      message: `Retried ${retryResults.length} shortcuts, ${retryResults.filter((result) => result.success).length} successful`,
     }
   }
 

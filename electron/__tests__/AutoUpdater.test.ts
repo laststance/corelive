@@ -134,6 +134,64 @@ describe('AutoUpdater download progress', () => {
     vi.useRealTimers()
   })
 
+  test('keeps the manual update request pending until checking has finished', async () => {
+    // Arrange
+    const updater = new AutoUpdater()
+    let resolveCheck: (value: undefined) => void = () => {}
+    electronMocks.mockAutoUpdater.checkForUpdatesAndNotify.mockReturnValueOnce(
+      new Promise<undefined>((resolve) => {
+        resolveCheck = resolve
+      }),
+    )
+    let completed = false
+
+    // Act
+    const checking = updater.manualCheckForUpdates().then(() => {
+      completed = true
+    })
+    await Promise.resolve()
+
+    // Assert
+    expect(completed).toBe(false)
+    expect(updater.getUpdateStatus().isChecking).toBe(true)
+    electronMocks.mockAutoUpdater.emit('update-not-available', {
+      version: '0.24.0',
+    })
+    resolveCheck(undefined)
+    await checking
+    expect(updater.getUpdateStatus()).toEqual({
+      updateAvailable: false,
+      updateDownloaded: false,
+      downloadProgress: null,
+      isChecking: false,
+      message: 'Update not available',
+    })
+    updater.cleanup()
+  })
+
+  test('leaves the update check retryable after a rejected check without an error event', async () => {
+    // Arrange
+    const updater = new AutoUpdater()
+    electronMocks.mockAutoUpdater.checkForUpdatesAndNotify.mockRejectedValueOnce(
+      new Error('Update endpoint unavailable'),
+    )
+
+    // Act
+    await expect(updater.manualCheckForUpdates()).rejects.toThrow(
+      'Update endpoint unavailable',
+    )
+
+    // Assert
+    expect(updater.getUpdateStatus()).toEqual({
+      updateAvailable: false,
+      updateDownloaded: false,
+      downloadProgress: null,
+      isChecking: false,
+      message: 'Error in auto-updater',
+    })
+    updater.cleanup()
+  })
+
   test('clamps raw electron-updater progress into the renderer payload range', () => {
     // Arrange + Act
     const overMax = normalizeDownloadProgress({

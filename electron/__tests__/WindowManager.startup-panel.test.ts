@@ -772,6 +772,32 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(showLiveEditor).toHaveBeenCalledTimes(1)
     })
 
+    test('recovers a failed login handoff through manual LiveEditor opening without repeating sign-in', () => {
+      // Arrange
+      const windowManager = new WindowManager(SERVER_URL)
+      windowManager.showLoginWindow()
+      const loginWindow = getWindow(0)
+      windowManager.completeLogin(senderOf(loginWindow))
+      const liveEditorWindow = getWindow(1)
+      fireNetworkLoadFailure(liveEditorWindow, LIVE_EDITOR_URL)
+      liveEditorWindow.win.loadURL.mockClear()
+      liveEditorWindow.win.show.mockClear()
+      loginWindow.win.close.mockClear()
+
+      // Act: a repeated auth report must stay inert; the recovery button uses showLiveEditor.
+      windowManager.completeLogin(senderOf(loginWindow))
+      expect(liveEditorWindow.win.loadURL).not.toHaveBeenCalled()
+      windowManager.showLiveEditor()
+      liveEditorWindow.fireWebContents('did-navigate', {}, LIVE_EDITOR_URL)
+      liveEditorWindow.fireWebContents('did-finish-load')
+
+      // Assert
+      expect(liveEditorWindow.win.loadURL).toHaveBeenCalledOnce()
+      expect(liveEditorWindow.win.loadURL).toHaveBeenCalledWith(LIVE_EDITOR_URL)
+      expect(liveEditorWindow.win.show).toHaveBeenCalledOnce()
+      expect(loginWindow.win.close).toHaveBeenCalledOnce()
+    })
+
     test('reuses the existing login window when showLoginWindow runs twice', () => {
       // Arrange
       const windowManager = new WindowManager(SERVER_URL)

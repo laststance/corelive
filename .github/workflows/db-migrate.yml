@@ -9,20 +9,9 @@
 # Required GitHub Secrets:
 #   - POSTGRES_PRISMA_URL: Production PostgreSQL connection string
 #
-# One-off baseline (the cutover from the previous ORM):
-#   Production's tables were built by the previous ORM's migrations, so `drizzle-kit migrate` would
-#   try to CREATE them again. Before the first run of this workflow, record `0000_init` as applied
-#   with ONE row, from a machine that holds the production URL:
-#     POSTGRES_PRISMA_URL=<prod> node scripts/baseline-drizzle-migrations.mjs           # read-only report
-#     POSTGRES_PRISMA_URL=<prod> node scripts/baseline-drizzle-migrations.mjs --apply   # writes the row
-#   The "Check baseline" step below refuses to migrate a database that has tables but no row, so a
-#   forgotten baseline fails here without touching anything. Merging the cutover PR to main triggers
-#   this workflow (drizzle/** changed), so the baseline must be recorded BEFORE that merge.
-#   Two cautions: run `--apply` with the same role as the POSTGRES_PRISMA_URL secret (the migrator
-#   runs CREATE SCHEMA IF NOT EXISTS on every deploy, and PostgreSQL checks CREATE on the database
-#   before honoring IF NOT EXISTS), and merge nothing else to main between `--apply` and the cutover
-#   merge (`--apply` verified the schema as it was then; later checks only look at the bookkeeping).
-#   This paragraph is cutover-only: it goes away together with `--apply` (see TODOS.md).
+# The one-time previous-ORM cutover is complete. Read-only ledger/schema checks
+# run before and after each migration; a missing or inconsistent ledger fails
+# safely before application tables can be recreated.
 #
 # Recommended Setup:
 #   1. Create a "production" environment in GitHub repository settings

@@ -14,6 +14,7 @@
  *   pnpm test -- LoginShell
  */
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import { LoginShell } from './LoginShell'
@@ -67,6 +68,47 @@ describe('LoginShell', () => {
     // the browser-tab case genuinely sees NO electronAPI.
     Reflect.deleteProperty(window, 'electronAPI')
     clerkUserRef.current = { isLoaded: true, isSignedIn: false }
+  })
+
+  test('opens LiveEditor again from the signed-in recovery screen without starting OAuth again', async () => {
+    // Arrange
+    const show = vi.fn().mockResolvedValue(undefined)
+    exposeElectronAPI({ oauth: {}, liveEditor: { show } })
+    clerkUserRef.current = { isLoaded: true, isSignedIn: true }
+    const user = userEvent.setup()
+    render(<LoginShell />)
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Open LiveEditor' }))
+
+    // Assert
+    expect(show).toHaveBeenCalledTimes(1)
+    expect(screen.queryByTestId('oauth-buttons')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Open LiveEditor' }),
+    ).toBeEnabled()
+  })
+
+  test('keeps recovery available when the native reveal request fails', async () => {
+    // Arrange
+    const show = vi
+      .fn()
+      .mockRejectedValue(new Error('Native window unavailable'))
+    exposeElectronAPI({ oauth: {}, liveEditor: { show } })
+    clerkUserRef.current = { isLoaded: true, isSignedIn: true }
+    const user = userEvent.setup()
+    render(<LoginShell />)
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Open LiveEditor' }))
+
+    // Assert
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      "Couldn't open LiveEditor. Try again.",
+    )
+    expect(
+      screen.getByRole('button', { name: 'Open LiveEditor' }),
+    ).toBeEnabled()
   })
 
   test('tells a plain browser tab the shell is desktop-only instead of showing the card', () => {

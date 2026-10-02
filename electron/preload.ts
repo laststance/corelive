@@ -615,6 +615,8 @@ const electronAPI = {
           updateAvailable: false,
           updateDownloaded: false,
           downloadProgress: null,
+          isChecking: false,
+          message: 'Error in auto-updater',
         }
       }
     },

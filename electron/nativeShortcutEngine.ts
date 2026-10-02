@@ -17,27 +17,6 @@
 import type { LoneModifierId } from './nativeBinding'
 
 /**
- * The observable health of the native tap, surfaced to the renderer so a
- * latch-blocked launch can show a "re-enable" affordance (#125). `available`
- * mirrors {@link NativeShortcutEngine.isAvailable}; `latchBlocked` mirrors
- * {@link NativeShortcutEngine.isLatchBlocked}. Kept here (next to the engine)
- * so `ShortcutManager`'s status method and the IPC layer share one shape.
- */
-export interface NativeTapStatus {
-  /** Whether the tap can run right now (module loaded + permission). */
-  available: boolean
-  /** Whether a prior unconfirmed arming is blocking a re-arm (needs manual re-enable). */
-  latchBlocked: boolean
-  /**
-   * Whether a lone-modifier binding is actually registered and live in the tap
-   * right now (codex #5). Distinct from `!latchBlocked`: a manual re-enable can
-   * clear the block yet still fail to arm/start, leaving the binding inactive —
-   * the renderer must not hide the recovery affordance in that case.
-   */
-  active: boolean
-}
-
-/**
  * A swappable recognizer for lone-modifier key taps. A concrete implementation
  * (uiohook adapter / signed helper) holds the OS-level event tap and invokes the
  * stored callback when its modifier is pressed alone; `ShortcutManager` treats it
