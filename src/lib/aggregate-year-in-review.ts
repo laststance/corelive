@@ -1,6 +1,5 @@
 import type { HeatmapCategory, HeatmapDay } from '@/hooks/useHeatmapData'
 
-import { calcStreak } from './calc-streak'
 import {
   rollupCategoryTotals,
   type RootCategoryTotal,
@@ -25,7 +24,6 @@ export const YIR_MIN_ACTIVE_DAYS = 30
  * {
  *   totalCompleted: 412,
  *   activeDays: 178,
- *   longestStreak: 31,
  *   topCategories: [
  *     { id: 1, name: 'writing', color: 'blue', count: 92 },
  *     { id: 2, name: 'reading', color: 'green', count: 71 },
@@ -38,7 +36,6 @@ export const YIR_MIN_ACTIVE_DAYS = 30
 export type YearInReview = {
   totalCompleted: number
   activeDays: number
-  longestStreak: number
   topCategories: RootCategoryTotal[]
   /** Calendar year the review is anchored on (year of the local `todayIso`). */
   year: number
@@ -75,7 +72,7 @@ const TOP_CATEGORIES_COUNT = 3
  * - `YearInReview` summary for `todayIso`'s calendar year
  * @example
  * aggregateYearInReview(new Map(), '2026-12-15')
- * // => { totalCompleted: 0, activeDays: 0, longestStreak: 0, topCategories: [], year: 2026, eligible: false }
+ * // => { totalCompleted: 0, activeDays: 0, topCategories: [], year: 2026, eligible: false }
  */
 export function aggregateYearInReview(
   dataByDate: Map<string, HeatmapDay>,
@@ -102,19 +99,9 @@ export function aggregateYearInReview(
     TOP_CATEGORIES_COUNT,
   )
 
-  // Year-scoped streak: filter dataByDate to the review year before passing
-  // to calcStreak so a streak spanning Dec→Jan doesn't inflate the YIR
-  // longest. The modal recaps "your <year>", not "your longest ever".
-  const yearScopedData = new Map<string, HeatmapDay>()
-  for (const [isoDate, day] of dataByDate) {
-    if (isoDate.startsWith(yearPrefix)) yearScopedData.set(isoDate, day)
-  }
-  const { longestStreak } = calcStreak(yearScopedData, todayIso)
-
   return {
     totalCompleted,
     activeDays,
-    longestStreak,
     topCategories,
     year,
     eligible: activeDays >= YIR_MIN_ACTIVE_DAYS,

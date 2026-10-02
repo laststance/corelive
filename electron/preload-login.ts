@@ -5,13 +5,14 @@
  * sign the user in: it exposes the auth + OAuth slice of `electronAPI` so the
  * renderer's {@link ElectronAuthProvider} can start a native OAuth flow and receive
  * its sign-in ticket. Window chrome is native (title-bar traffic lights) and
- * data goes through oRPC, so nothing else is bridged.
+ * data goes through oRPC. The signed-in failure screen can retry opening LiveEditor.
  *
  * @module electron/preload-login
  */
 
 import { contextBridge } from 'electron'
 
+import { typedInvoke } from './ipc/typedInvoke'
 import {
   createAuthBridge,
   createOAuthBridge,
@@ -28,7 +29,7 @@ import {
  * provider's `auth-set-user` is what triggers the main-process handoff that
  * closes this window and shows LiveEditor.
  *
- * Deliberately SCOPED to { auth, oauth }: omitting `settings`/`menu`/etc. keeps
+ * Deliberately scoped to auth, oauth and additive LiveEditor reveal: omitting `settings`/`menu`/etc. keeps
  * {@link ElectronStartupSync}'s method guards a clean no-op here (it only touches
  * `electronAPI.settings`), so activating the provider has zero native side
  * effects in the login window.
@@ -36,4 +37,12 @@ import {
 contextBridge.exposeInMainWorld('electronAPI', {
   auth: createAuthBridge(),
   oauth: createOAuthBridge(),
+  liveEditor: {
+    /** Opens the protected panel when {@link LoginShell} retries a failed post-login handoff.
+     * The main-process auth gate retains its latch until the panel loads successfully.
+     * @throws Propagates IPC failures so the recovery screen can offer another attempt.
+     * @example await window.electronAPI?.liveEditor.show()
+     */
+    show: async () => typedInvoke('live-editor-window-show'),
+  },
 })

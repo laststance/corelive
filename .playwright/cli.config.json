@@ -1,0 +1,15 @@
+{
+  "browser": {
+    "browserName": "chromium",
+    "isolated": true,
+    "launchOptions": {
+      "headless": true,
+      "channel": "chromium"
+    },
+    "contextOptions": {
+      "viewport": { "width": 1280, "height": 800 }
+    }
+  },
+  "outputDir": ".gstack/headless-browser",
+  "timeouts": { "action": 10000, "navigation": 30000 }
+}

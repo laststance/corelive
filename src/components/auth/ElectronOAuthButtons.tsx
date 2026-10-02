@@ -97,7 +97,11 @@ export const ElectronOAuthButtons = function ElectronOAuthButtons() {
     // loading state is cleared instead by `isLoading = user ? false : ...`
     // above, the instant Clerk reports the newly signed-in user.
     const unsubscribeError = window.electronAPI?.oauth?.onError?.((data) => {
-      dispatch({ type: 'ERROR', error: data.error || 'Authentication failed' })
+      dispatch({
+        type: 'ERROR',
+        error:
+          typeof data.error === 'string' ? data.error : 'Authentication failed',
+      })
     })
 
     // The renderer-side provider re-dispatches token-exchange failures through

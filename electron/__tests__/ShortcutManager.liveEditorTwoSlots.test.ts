@@ -80,6 +80,34 @@ describe('LiveEditor two-slot toggle shortcuts', () => {
     heldAccelerators.clear()
   })
 
+  test('keeps a disabled LiveEditor shortcut unbound when integration recovery retries an earlier failure', () => {
+    // Arrange
+    const { windowManager } = createWindowManagerHarness()
+    const shortcutManager = new ShortcutManager(
+      windowManager,
+      null,
+      createConfigManagerStub({
+        toggleLiveEditor: 'Alt+Space',
+        toggleLiveEditorSecondary: '',
+      }),
+    )
+    const originalRegister = globalRegisterMock.getMockImplementation()
+    if (!originalRegister) throw new Error('Expected a stateful shortcut mock')
+    globalRegisterMock.mockImplementation(() => false)
+    shortcutManager.registerGlobalShortcuts()
+    globalRegisterMock.mockImplementation(originalRegister)
+    shortcutManager.updateShortcuts({ toggleLiveEditor: '' })
+    globalRegisterMock.mockClear()
+
+    // Act
+    shortcutManager.retryFailedShortcuts()
+
+    // Assert
+    expect(globalRegisterMock).not.toHaveBeenCalled()
+    expect(heldAccelerators.has('Alt+Space')).toBe(false)
+    expect(shortcutManager.getFailedShortcuts()).toEqual({})
+  })
+
   test('opens LiveEditor from either of the two configured toggle keys', () => {
     // Arrange
     const { windowManager, toggleLiveEditor } = createWindowManagerHarness()

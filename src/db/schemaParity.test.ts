@@ -16,7 +16,7 @@ import { createScratchDatabase } from '@/test/scratchDatabase'
  * foreign-key actions, read with {@link fingerprintPublicSchema}). This test builds a scratch database from
  * `drizzle/0000_init.sql` ALONE and proves its schema is identical to the fixture.
  *
- * The fixture is a FROZEN record of the previous ORM's schema, also read by `scripts/baseline-drizzle-migrations.mjs`:
+ * The fixture is a FROZEN record of the previous ORM's schema:
  * never edit it to make this test pass. Later migrations do not touch this test, because the scratch database only
  * ever receives the first file. It fails only when `0000_init.sql` itself was changed, which must not happen: that file
  * describes what production already runs, so a schema change belongs in a new migration.

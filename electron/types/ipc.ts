@@ -82,9 +82,6 @@ export interface NotificationSettingsState {
   position: 'topRight' | 'topLeft' | 'bottomRight' | 'bottomLeft'
 }
 
-/** OAuth provider types */
-export type OAuthProvider = 'google' | 'github' | 'apple'
-
 /** OAuth flow result from main-process initiated flow */
 export interface OAuthResult {
   state: string | null
@@ -114,6 +111,8 @@ export interface UpdaterStatus {
   updateAvailable: boolean
   updateDownloaded: boolean
   downloadProgress: UpdaterDownloadProgress | null
+  isChecking: boolean
+  message: string | null
 }
 
 /** Normalized auto-update download progress sent from main to renderer. */

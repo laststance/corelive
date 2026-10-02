@@ -44,8 +44,7 @@ const NEW_TASK_ACCELERATOR = 'CommandOrControl+N'
  * can assert the lone-modifier binding reached the engine with the right id.
  * `isLatchBlocked` is a spy defaulting to `false` (healthy) so routing tests are
  * unchanged; a latch-block test overrides it to drive the inactive path (#125).
- * `isActive` is a spy defaulting to `false` (no live tap); the "tap is live" test
- * drives it `true` to prove `getNativeTapStatus` surfaces engine RUNTIME state.
+ * `isActive` defaults to false because this routing harness never arms an OS tap.
  * @returns the engine plus its register/unregister/unregisterAll/isLatchBlocked/isActive spies.
  */
 function createAvailableNativeEngineHarness() {
@@ -256,30 +255,6 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
     expect(register).not.toHaveBeenCalled()
   })
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // Freeze-safety recovery surface (#125): status + power-event + manual re-arm
-  // ──────────────────────────────────────────────────────────────────────────
-
-  test('reports the native tap status straight from the engine for the renderer affordance', () => {
-    // Arrange: a latch-blocked engine (a prior arming never confirmed).
-    const { engine, isLatchBlocked } = createAvailableNativeEngineHarness()
-    isLatchBlocked.mockReturnValue(true)
-    const shortcutManager = new ShortcutManager(
-      createWindowManagerStub(),
-      null,
-      null,
-      engine,
-    )
-
-    // Act + Assert: latch-blocked, and no lone-modifier binding registered, so
-    // the tap is not active — the renderer keeps the recovery affordance (#125).
-    expect(shortcutManager.getNativeTapStatus()).toEqual({
-      available: true,
-      latchBlocked: true,
-      active: false,
-    })
-  })
-
   test('revives the tap on reArmNativeTap (wired to powerMonitor resume/unlock)', () => {
     // Arrange
     const { engine, reArm } = createAvailableNativeEngineHarness()
@@ -314,29 +289,33 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
     expect(resetPressedState).toHaveBeenCalledTimes(1)
   })
 
-  test('clears the latch block and returns status on manual reenableNativeTap', () => {
+  test('opens LiveEditor through a regular chord while the native tap remains safely blocked', () => {
     // Arrange
-    const { engine, clearLatchBlock } = createAvailableNativeEngineHarness()
-    const shortcutManager = new ShortcutManager(
+    const { engine, isLatchBlocked, register } =
+      createAvailableNativeEngineHarness()
+    isLatchBlocked.mockReturnValue(true)
+    const configManager = {
+      getSection: vi.fn(() => ({ toggleLiveEditor: RIGHT_OPTION_BINDING })),
+      get: vi.fn(),
+      set: vi.fn(),
+    } as unknown as ConfigManager
+    const manager = new ShortcutManager(
       createWindowManagerStub(),
       null,
-      null,
+      configManager,
       engine,
     )
 
     // Act
-    const status = shortcutManager.reenableNativeTap()
+    manager.updateShortcuts({ toggleLiveEditor: 'Alt+Space' })
 
-    // Assert: the block is cleared (so the next register re-arms) and the
-    // post-action status is surfaced back to the caller. With only default chord
-    // shortcuts (no lone-modifier binding) nothing arms the tap, so active stays
-    // false — the status honestly reflects no live native binding (#125, codex #5).
-    expect(clearLatchBlock).toHaveBeenCalledTimes(1)
-    expect(status).toEqual({
-      available: true,
-      latchBlocked: false,
-      active: false,
-    })
+    // Assert
+    expect(globalRegisterMock).toHaveBeenCalledWith(
+      'Alt+Space',
+      expect.any(Function),
+    )
+    expect(register).not.toHaveBeenCalled()
+    expect(engine.isLatchBlocked()).toBe(true)
   })
 
   test('notifies the user only once while the tap stays latch-blocked', () => {
@@ -372,67 +351,5 @@ describe('ShortcutManager routing of native lone-modifier bindings', () => {
 
     // Assert: exactly one toast across all attempts.
     expect(showNotification).toHaveBeenCalledTimes(1)
-  })
-
-  test('marks the native tap active once a lone-modifier binding is live', () => {
-    // Arrange: an available tap that registers the bind AND reports itself live
-    // at runtime (#125 codex review). `active` must come from the engine's
-    // RUNTIME state, so the harness drives isActive() true here.
-    const { engine, isActive } = createAvailableNativeEngineHarness()
-    isActive.mockReturnValue(true)
-    const shortcutManager = new ShortcutManager(
-      createWindowManagerStub(),
-      null,
-      null,
-      engine,
-    )
-
-    // Act: a successful native registration with a live tap.
-    shortcutManager.registerShortcut(
-      RIGHT_OPTION_BINDING,
-      'toggleLiveEditor',
-      vi.fn(),
-    )
-
-    // Assert: getNativeTapStatus surfaces the engine's live runtime state.
-    expect(shortcutManager.getNativeTapStatus().active).toBe(true)
-  })
-
-  test('keeps the tap INACTIVE after a re-enable whose re-arm still fails', () => {
-    // Arrange: a lone-modifier binding is configured, but the engine refuses to
-    // register it even once the block is cleared (the tap won't start). The
-    // status must NOT claim a healthy tap — the renderer keeps the recovery
-    // control because active is false despite latchBlocked clearing (codex #5).
-    const { engine, register, clearLatchBlock } =
-      createAvailableNativeEngineHarness()
-    register.mockReturnValue(false)
-    const configManager = {
-      getSection: vi.fn((section: string) =>
-        section === 'shortcuts'
-          ? { toggleLiveEditor: 'lone-modifier:rightOption' }
-          : {},
-      ),
-      get: vi.fn(),
-      set: vi.fn(),
-    } as unknown as ConfigManager
-    const shortcutManager = new ShortcutManager(
-      createWindowManagerStub(),
-      null,
-      configManager,
-      engine,
-    )
-
-    // Act
-    const status = shortcutManager.reenableNativeTap()
-
-    // Assert: block cleared and a re-register was attempted, but it failed so the
-    // tap is honestly reported inactive.
-    expect(clearLatchBlock).toHaveBeenCalledTimes(1)
-    expect(register).toHaveBeenCalled()
-    expect(status).toEqual({
-      available: true,
-      latchBlocked: false,
-      active: false,
-    })
   })
 })

@@ -9,8 +9,8 @@
 
 import { app, BrowserWindow, dialog, Menu, shell } from 'electron'
 import type { MenuItemConstructorOptions, MessageBoxOptions } from 'electron'
-import { autoUpdater } from 'electron-updater'
 
+import type { AutoUpdater } from './AutoUpdater'
 import type { ConfigManager } from './ConfigManager'
 import { log } from './logger'
 import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
@@ -34,7 +34,12 @@ export class MenuManager {
   /** Platform is macOS */
   private isMac: boolean
 
-  constructor() {
+  constructor(
+    private readonly getUpdater: () => Pick<
+      AutoUpdater,
+      'manualCheckForUpdates' | 'getUpdateStatus' | 'showUpdateDownloadedDialog'
+    > | null = () => null,
+  ) {
     this.windowManager = null
     this._configManager = null
     this.isMac = process.platform === 'darwin'
@@ -349,9 +354,23 @@ export class MenuManager {
     }
   }
 
+  /** Checks through the shared updater when the native menu action runs.
+   * The getter resolves deferred startup without bypassing {@link AutoUpdater}'s download guards.
+   * @returns Resolves after the check or its error dialog is requested.
+   * @example await menuManager.checkForUpdates()
+   */
   async checkForUpdates(): Promise<void> {
     try {
-      await autoUpdater.checkForUpdatesAndNotify()
+      const updater = this.getUpdater()
+      // Development and incomplete startup have no installed-app updater.
+      if (!updater)
+        throw new Error('Update checks are available in the installed app.')
+      // A completed download already has a useful action; preserve it and reopen its prompt.
+      if (updater.getUpdateStatus().updateDownloaded) {
+        await updater.showUpdateDownloadedDialog()
+      } else {
+        await updater.manualCheckForUpdates()
+      }
     } catch (error) {
       log.error('Failed to check for updates:', error)
 

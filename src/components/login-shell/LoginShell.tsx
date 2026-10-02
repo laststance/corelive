@@ -2,12 +2,17 @@
 
 import { useUser } from '@clerk/nextjs'
 import { Heart } from 'lucide-react'
+import { useState, useTransition } from 'react'
 
 import {
   ElectronOAuthButtons,
   useShowElectronOAuth,
 } from '@/components/auth/ElectronOAuthButtons'
-import { isElectronEnvironment } from '@/electron/utils/electron-client'
+import { Button } from '@/components/ui/button'
+import {
+  getLiveEditorSettingsAPI,
+  isElectronEnvironment,
+} from '@/electron/utils/electron-client'
 import { useMounted } from '@/hooks/use-mounted'
 import { HEATMAP_LEVEL_TOKENS } from '@/lib/heatmap-intensity'
 
@@ -35,7 +40,7 @@ const HEATMAP_RIBBON_CELLS = [
 /**
  * The Electron login window's whole UI: a Clerk gate in front of the signed-out native-OAuth
  * front door. After sign-in the current main process closes the window
- * ({@link WindowManager.completeLogin}); older installs keep showing the signed-in placeholder.
+ * ({@link WindowManager.completeLogin}); a failed LiveEditor load reopens the signed-in recovery screen.
  * @returns
  * - A desktop-only notice in a plain browser tab
  * - "Loading…" until Clerk resolves
@@ -46,6 +51,9 @@ const HEATMAP_RIBBON_CELLS = [
  */
 export const LoginShell = function LoginShell() {
   const isMounted = useMounted()
+  const [isOpening, startOpening] = useTransition()
+  const [openingError, setOpeningError] = useState<string | null>(null)
+  const [hasRequestedOpen, setHasRequestedOpen] = useState(false)
   // Clerk auth gate: drives the signed-out front door vs the signed-in placeholder.
   const { isLoaded: isAuthLoaded, isSignedIn } = useUser()
   // Render-time skew guard (DT3/F4): decide the affordance by CAPABILITY, not a
@@ -55,6 +63,25 @@ export const LoginShell = function LoginShell() {
   // Preload wiring is what makes this the login window; without it the page is
   // being viewed in a plain browser tab.
   const isLoginWindow = isMounted && isElectronEnvironment()
+  const canOpenLiveEditor =
+    isLoginWindow && typeof getLiveEditorSettingsAPI()?.show === 'function'
+
+  /** Retries the existing native reveal path from the signed-in recovery screen without restarting sign-in.
+   * @example openLiveEditor()
+   */
+  const openLiveEditor = () => {
+    const api = getLiveEditorSettingsAPI()
+    if (!api?.show) return
+    setOpeningError(null)
+    setHasRequestedOpen(true)
+    startOpening(async () => {
+      try {
+        await api.show()
+      } catch {
+        setOpeningError("Couldn't open LiveEditor. Try again.")
+      }
+    })
+  }
 
   if (!isLoginWindow) {
     return (
@@ -76,14 +103,31 @@ export const LoginShell = function LoginShell() {
     )
   }
 
-  // Signed in: the current main process closes this window right away; an
-  // older install (no handoff) keeps it open, so say what to do next.
+  // A failed panel load keeps sign-in latched; manual recovery opens the panel without another auth handoff.
   if (isSignedIn) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-background p-4">
+      <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-background p-4">
         <p className="text-center text-sm text-muted-foreground">
           Signed in. Open LiveEditor to log your wins.
         </p>
+        {canOpenLiveEditor && (
+          <Button type="button" onClick={openLiveEditor} disabled={isOpening}>
+            {isOpening ? 'Opening LiveEditor…' : 'Open LiveEditor'}
+          </Button>
+        )}
+        {openingError && (
+          <p role="alert" className="text-center text-sm text-muted-foreground">
+            {openingError}
+          </p>
+        )}
+        {hasRequestedOpen && !openingError && (
+          <p
+            role="status"
+            className="text-center text-sm text-muted-foreground"
+          >
+            If LiveEditor does not open, check your connection and try again.
+          </p>
+        )}
       </div>
     )
   }

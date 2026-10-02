@@ -1,6 +1,6 @@
 {
   "name": "corelive",
-  "version": "0.24.0",
+  "version": "0.24.1",
   "description": "A comprehensive design system and web application built with Next.js, featuring authentication, database integration, and desktop support",
   "author": "Ryota Murakami <dojce1048@gmail.com> (https://github.com/ryota-murakami)",
   "private": true,
@@ -60,7 +60,8 @@
     "preelectron:publish": "pnpm typecheck && pnpm test:electron --run",
     "fallow:dead-code": "fallow dead-code --fail-on-issues --no-cache",
     "fallow:dupes": "fallow dupes --fail-on-issues --no-cache",
-    "fallow:health": "fallow health --complexity --fail-on-issues --no-cache"
+    "fallow:health": "fallow health --complexity --fail-on-issues --no-cache",
+    "qa:browser": "node scripts/qa-browser.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.9.1",
@@ -102,6 +103,7 @@
     "@tanstack/react-query": "^5.102.8",
     "@tanstack/react-query-persist-client": "^5.102.8",
     "@uiw/react-heat-map": "^2.3.4",
+    "@vercel/functions": "^3.9.9",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -158,6 +160,7 @@
     ]
   },
   "devDependencies": {
+    "@playwright/cli": "0.1.22",
     "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^7.0.1",

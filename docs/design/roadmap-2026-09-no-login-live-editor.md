@@ -9,6 +9,14 @@ Supersedes: ryotamurakami-main-design-20260617-132129.md
 
 > **Superseded in part 2026-09-05 (PR #178):** Floating Navigator was retired. Below, the "Floating OAuth front door" / "/floating-navigator" references (:34-35, :84-85, :139, :244) point to the login window (`/login-shell`, `LoginShell.tsx`, `WindowManager.createLoginWindow`). The `/write` design is unaffected.
 
+> **Maintenance update (2026-10-02):** The year-in-review longest-streak line and
+> unused `calc-streak.ts` calculation are removed; the live server
+> `calculateStreaks` path remains. The conditional signed-out E2E TODO (D13) was
+> dropped because its second-user trigger remains unmet. These supersede the
+> corresponding Later/TODOS references below. Current QA uses the
+> [isolated headless browser and dedicated macOS VM](../headless-development.md);
+> no login E2E suite is added. The remaining review text is historical.
+
 ## Problem Statement
 
 Raphtalia is stuck on the CoreLive product roadmap ("ロードマップについて悩んでいる") and asked where to consult and where to record it. Diagnosis from the session: this is not an idea shortage, it is the absence of a sorting criterion. Deliverable = one criterion, a short Now / Next / Later list, and a fixed place to keep it (`docs/ROADMAP.md` + GitHub Issues via `/spec`).

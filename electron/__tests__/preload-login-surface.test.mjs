@@ -4,7 +4,7 @@
  * Pins the exact `contextBridge` surface {@link preload-login} hands to the login
  * window. That window loads a REMOTE page while the user is still signed out, so
  * every namespace bridged here is native reach granted before authentication —
- * and the scoping to `{ auth, oauth }` is what keeps
+ * and the scoping to auth, oauth and additive LiveEditor recovery keeps
  * {@link ElectronStartupSync}'s method guards a no-op there (it only touches
  * `electronAPI.settings`). Asserted as a WHITELIST, not a subset, so spreading
  * the full main-window surface in fails instead of passing silently.
@@ -38,7 +38,7 @@ vi.mock('electron', () => ({
 }))
 
 describe('login window preload surface', () => {
-  test('bridges only the auth and oauth namespaces into the signed-out login window', async () => {
+  test('lets the signed-in login window retry LiveEditor without exposing settings or note mutation', async () => {
     // Arrange
     vi.resetModules()
 
@@ -46,11 +46,25 @@ describe('login window preload surface', () => {
     // Import after Vitest clears mocks so the preload's bridge call remains observable.
     await import('../preload-login.ts')
 
-    // Assert: one world, named electronAPI, carrying exactly two namespaces.
+    // Assert: one scoped world; recovery opens only the existing panel.
     expect(mockContextBridge.exposeInMainWorld).toHaveBeenCalledTimes(1)
     const [exposedWorldName, exposedApi] =
       mockContextBridge.exposeInMainWorld.mock.calls[0]
     expect(exposedWorldName).toBe('electronAPI')
-    expect(Object.keys(exposedApi).sort()).toEqual(['auth', 'oauth'])
+    expect(Object.keys(exposedApi).sort()).toEqual([
+      'auth',
+      'liveEditor',
+      'oauth',
+    ])
+    expect(Object.keys(exposedApi.liveEditor)).toEqual(['show'])
+    mockIpcRenderer.invoke.mockResolvedValueOnce(undefined)
+    await exposedApi.liveEditor.show()
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith(
+      'live-editor-window-show',
+    )
+    mockIpcRenderer.invoke.mockRejectedValueOnce(new Error('IPC unavailable'))
+    await expect(exposedApi.liveEditor.show()).rejects.toThrow(
+      'IPC unavailable',
+    )
   })
 })

@@ -4,11 +4,8 @@
  * @fileoverview Manual app-update controls for the Electron Settings page.
  *
  * Surfaces a "Check for Updates" action when auto-update does not fire on its
- * own. Status text comes from a one-time `updater.getStatus()` fetch on mount
- * plus the optimistic message set locally when the user presses the button —
- * the main process stopped sending live `updater-message` /
- * `updater-download-progress` events in PR #178, when the retired main window
- * (T18) that received them was cleaned up. When a download finishes, a
+ * own. The mounted Settings page polls the main process's current status;
+ * update checks resolve only after the native check settles. When a download finishes, a
  * "Restart to Update" button calls `updater.quitAndInstall()`.
  *
  * @module components/electron/AppUpdateSettings
@@ -24,9 +21,10 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
-import type { UpdaterDownloadProgress } from '@/electron/types/ipc'
+import type { UpdaterStatus } from '@/electron/types/ipc'
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useMounted } from '@/hooks/use-mounted'
+import { useUpdateEffect } from '@/hooks/use-update-effect'
 import { UPDATE_DOWNLOAD_PROGRESS_MAX_PERCENT } from '@/lib/constants/appUpdate'
 import { log } from '@/lib/logger'
 import { cn } from '@/lib/utils'
@@ -43,6 +41,10 @@ function formatUpdaterStatus(rawMessage: string): string {
 
   if (rawMessage === 'Update available') {
     return 'A new version is available. Follow the prompt to download it.'
+  }
+
+  if (rawMessage === 'Update postponed') {
+    return "A new version is available. Check again when you're ready to download."
   }
 
   if (rawMessage === 'Update not available') {
@@ -69,21 +71,6 @@ function formatUpdaterStatus(rawMessage: string): string {
 }
 
 /**
- * Converts a normalized progress payload into the existing updater status copy.
- * @param progress - Download progress emitted by the Electron main process.
- * @returns Human-readable status text with rounded percent.
- * @example
- * formatUpdaterDownloadProgress({ percent: 41.6, bytesPerSecond: 1, transferred: 2, total: 4 }) // => "Downloading update — 42%"
- */
-function formatUpdaterDownloadProgress(
-  progress: UpdaterDownloadProgress,
-): string {
-  return formatUpdaterStatus(
-    `Downloading update: ${Math.round(progress.percent)}%`,
-  )
-}
-
-/**
  * Settings card for manually checking and installing desktop app updates.
  *
  * @param props - Component props
@@ -97,74 +84,107 @@ export const AppUpdateSettings = function AppUpdateSettings({
 }: AppUpdateSettingsProps): ReactElement {
   const hasMounted = useMounted()
   const [appVersion, setAppVersion] = useState<string | null>(null)
-  const [statusMessage, setStatusMessage] = useState<string | null>(null)
-  const [isChecking, setIsChecking] = useState(false)
-  const [updateDownloaded, setUpdateDownloaded] = useState(false)
-  const [downloadProgress, setDownloadProgress] =
-    useState<UpdaterDownloadProgress | null>(null)
+  const [manualCheckPending, setManualCheckPending] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [updaterStatus, setUpdaterStatus] = useState<UpdaterStatus>({
+    updateAvailable: false,
+    updateDownloaded: false,
+    downloadProgress: null,
+    isChecking: false,
+    message: null,
+  })
+  const isChecking = manualCheckPending || updaterStatus.isChecking === true
+  const updateDownloaded = updaterStatus.updateDownloaded
+  const downloadProgress = updateDownloaded
+    ? null
+    : updaterStatus.downloadProgress
+  const statusMessage = isChecking
+    ? formatUpdaterStatus('Checking for update...')
+    : actionError
+      ? actionError
+      : updateDownloaded
+        ? formatUpdaterStatus('Update downloaded')
+        : downloadProgress
+          ? // Announce the phase once; the progress bar exposes changing percentages.
+            'Downloading update…'
+          : updaterStatus.message
+            ? formatUpdaterStatus(updaterStatus.message)
+            : null
+
+  // Clear an old action error only when native update work advances, not on identical polls.
+  useUpdateEffect(() => {
+    if (updaterStatus.isChecking || downloadProgress || updateDownloaded) {
+      setActionError(null)
+    }
+  }, [updaterStatus.isChecking, downloadProgress?.percent, updateDownloaded])
 
   useCycleEffect(() => {
     const updaterApi = window.electronAPI?.updater
     const appApi = window.electronAPI?.app
-
     if (!updaterApi || !appApi) return
 
     let cancelled = false
-
+    let timer: ReturnType<typeof setTimeout> | undefined
     void appApi
       .getVersion()
       .then((version) => {
         if (!cancelled) setAppVersion(version)
       })
-      .catch((versionError: unknown) => {
-        log.error('Failed to load app version:', versionError)
+      .catch((error: unknown) => {
+        log.error('Failed to load app version:', error)
       })
 
-    void updaterApi
-      .getStatus()
-      .then((status) => {
-        if (cancelled) return
-        setUpdateDownloaded(status.updateDownloaded)
-        if (status.updateDownloaded) {
-          setStatusMessage(formatUpdaterStatus('Update downloaded'))
-          setDownloadProgress(null)
-          return
+    // Schedule the next read after this one settles, so IPC polls never overlap.
+    const refreshStatus = async () => {
+      try {
+        const status = await updaterApi.getStatus()
+        if (!cancelled) setUpdaterStatus(status)
+      } catch (error: unknown) {
+        log.error('Failed to load updater status:', error)
+        if (!cancelled) {
+          setUpdaterStatus({
+            updateAvailable: false,
+            updateDownloaded: false,
+            downloadProgress: null,
+            isChecking: false,
+            message: 'Error in auto-updater',
+          })
         }
-        if (status.downloadProgress) {
-          setDownloadProgress(status.downloadProgress)
-          setStatusMessage(
-            formatUpdaterDownloadProgress(status.downloadProgress),
-          )
-          setIsChecking(true)
-        }
-      })
-      .catch((statusError: unknown) => {
-        log.error('Failed to load updater status:', statusError)
-      })
-
+      } finally {
+        if (!cancelled) timer = setTimeout(() => void refreshStatus(), 1000)
+      }
+    }
+    void refreshStatus()
     return () => {
       cancelled = true
+      clearTimeout(timer)
     }
   }, [])
 
-  /**
-   * Triggers a manual update check through the main-process AutoUpdater.
+  /** Checks for an update when the Settings action runs, then reads its terminal native status.
+   * @example await handleCheckForUpdates()
    */
   const handleCheckForUpdates = async (): Promise<void> => {
     const updaterApi = window.electronAPI?.updater
     if (!updaterApi) return
-
-    setIsChecking(true)
-    setStatusMessage(formatUpdaterStatus('Checking for update...'))
-    setDownloadProgress(null)
-
+    setActionError(null)
+    setManualCheckPending(true)
     try {
-      await updaterApi.checkForUpdates()
-    } catch (checkError: unknown) {
-      log.error('Failed to check for updates:', checkError)
-      setStatusMessage(formatUpdaterStatus('Error in auto-updater'))
-      setIsChecking(false)
-      setDownloadProgress(null)
+      const succeeded = await updaterApi.checkForUpdates()
+      // Preload returns false on IPC failure instead of rejecting.
+      if (!succeeded) throw new Error('Update check failed')
+      setUpdaterStatus(await updaterApi.getStatus())
+    } catch (error: unknown) {
+      log.error('Failed to check for updates:', error)
+      // A successful status poll must not erase a failed manual request.
+      setActionError(formatUpdaterStatus('Error in auto-updater'))
+      setUpdaterStatus((current) => ({
+        ...current,
+        isChecking: false,
+        message: 'Error in auto-updater',
+      }))
+    } finally {
+      setManualCheckPending(false)
     }
   }
 
@@ -175,12 +195,15 @@ export const AppUpdateSettings = function AppUpdateSettings({
     const updaterApi = window.electronAPI?.updater
     if (!updaterApi) return
 
+    setActionError(null)
     try {
-      await updaterApi.quitAndInstall()
+      if (!(await updaterApi.quitAndInstall())) {
+        throw new Error('Update installation failed')
+      }
     } catch (installError: unknown) {
       log.error('Failed to restart for update:', installError)
-      setStatusMessage(formatUpdaterStatus('Failed to download update'))
-      setDownloadProgress(null)
+      // Keep the ready update available while reporting a failed restart attempt.
+      setActionError("Couldn't restart CoreLive. Try again.")
     }
   }
 
@@ -215,7 +238,7 @@ export const AppUpdateSettings = function AppUpdateSettings({
           variant="secondary"
           size="sm"
           onClick={handleCheckForUpdates}
-          disabled={isChecking}
+          disabled={isChecking || downloadProgress !== null}
           aria-busy={isChecking}
         >
           <RefreshCw
@@ -223,7 +246,11 @@ export const AppUpdateSettings = function AppUpdateSettings({
             aria-hidden
           />
 
-          {isChecking ? 'Checking…' : 'Check for Updates'}
+          {isChecking
+            ? 'Checking…'
+            : downloadProgress
+              ? 'Downloading…'
+              : 'Check for Updates'}
         </Button>
 
         {updateDownloaded ? (

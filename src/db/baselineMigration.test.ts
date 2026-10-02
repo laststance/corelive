@@ -30,28 +30,11 @@ import { userTable } from './schema'
 import type { db } from './index'
 
 /**
- * Real-database guard for the production rollout. Production's application tables
- * were built by the previous ORM's migrations, so `drizzle-kit migrate` must be told
- * `drizzle/0000_init.sql` is already applied by inserting ONE bookkeeping row (the
- * migrator only compares the newest `created_at` with each file's `when`). The
- * committed `scripts/baseline-drizzle-migrations.mjs` writes that row and
- * `.github/workflows/db-migrate.yml` runs its read-only checks around the migrator.
- * These tests recreate the "tables exist, no bookkeeping" state and prove (1) why the
- * row is required, (2) that with it the migrator changes nothing, and (3) what the
- * script does and refuses to do.
- *
- * Every test runs on a scratch database (see {@link createScratchDatabase}), never on the
- * shared test database: the tests drop the bookkeeping schema and the schema itself, which
- * would race the other suites and, if a run were interrupted, leave a developer's database
- * without its bookkeeping row.
- *
- * Lifecycle: the `--apply` tests (`refuses to record a baseline …`, `records exactly one baseline
- * row …`) belong to the one-time cutover and are deleted together with `--apply` once production
- * carries the baseline row; see the header of `scripts/baseline-drizzle-migrations.mjs`. The rest
- * cover the read-only checks the deploy workflow runs every time and stay, BUT the tests that call
- * {@link recordBaseline} or hard-code `0000_init`'s timestamp only hold while the journal lists exactly
- * ONE migration (the baseline is `readMigrationFiles()[0]`, and `pending migrations: none` assumes nothing
- * newer exists). Adding the next migration makes them fail: update them in that same change.
+ * Read-only deployment-guard regressions against isolated PostgreSQL databases.
+ * Legacy-ledger cases intentionally use a frozen first-migration fixture; they
+ * do not assume the repository journal still contains one migration. The
+ * current-journal cases exercise the actual multi-migration deployment guard.
+ * The previous ORM fingerprint remains frozen and owned by schemaParity.test.ts.
  */
 vi.setConfig({ testTimeout: 30_000 })
 
@@ -60,16 +43,6 @@ let MIGRATIONS_FOLDER: string
 
 /** SQLSTATE `duplicate_table`: what CREATE TABLE raises when the relation already exists. */
 const PG_DUPLICATE_TABLE = '42P07'
-
-/** Journal `when` of `0000_init`, as the migrator compares it with `created_at`. */
-const BASELINE_MILLIS = '1790679206746'
-
-/** Newest migration the previous ORM applied to production; the script insists on it. */
-const PREVIOUS_ORM_LAST_MIGRATION =
-  '20260924120000_default_category_named_general'
-
-/** How many migrations the previous ORM had applied to production. */
-const PREVIOUS_ORM_MIGRATION_COUNT = 16
 
 /** One row of the migrator's bookkeeping table, as read back through SQL. */
 type BookkeepingRow = { hash: string; created_at: string }
@@ -89,13 +62,13 @@ async function createScratchDatabase() {
   return scratch
 }
 
-/** Copies the current guard into a first-migration-only fixture so historical --apply evidence remains meaningful.
+/** Isolates the first-migration ledger scenarios from later repository migrations.
  * @example prepareHistoricalMigrationFixture()
  */
 function prepareHistoricalMigrationFixture() {
   historicalRoot = mkdtempSync(path.join(tmpdir(), 'corelive-baseline-'))
   MIGRATIONS_FOLDER = path.join(historicalRoot, 'drizzle')
-  for (const directory of ['scripts', 'drizzle/meta', 'src/db/__fixtures__'])
+  for (const directory of ['scripts', 'drizzle/meta'])
     mkdirSync(path.join(historicalRoot, directory), { recursive: true })
   symlinkSync(
     path.join(process.cwd(), 'node_modules'),
@@ -104,8 +77,6 @@ function prepareHistoricalMigrationFixture() {
   )
   for (const file of [
     'scripts/baseline-drizzle-migrations.mjs',
-    'scripts/schema-fingerprint.sql',
-    'src/db/__fixtures__/previousOrmSchemaFingerprint.txt',
     'drizzle/0000_init.sql',
     'drizzle/meta/0000_snapshot.json',
   ])
@@ -136,7 +107,7 @@ async function dropBookkeeping(executor: SqlExecutor): Promise<void> {
 }
 
 /**
- * Records `0000_init` as applied, exactly as the one-off production baseline does.
+ * Records `0000_init` in the isolated historical fixture so read-only ledger checks can run.
  * Idempotent: does nothing when a bookkeeping row already exists.
  * @param executor - Client for the scratch database.
  * @returns Resolves once the row is present.
@@ -202,59 +173,12 @@ async function readBookkeeping(
   return rows
 }
 
-/**
- * Creates the previous ORM's history table with a given number of finished migrations, the newest being the real last one.
- * @param migrationCount - How many rows to insert.
- * @param executor - Client for the scratch database.
- * @returns Resolves once `public."_prisma_migrations"` exists.
- * @example
- * await createPreviousOrmHistory(16, scratch.db) // what production carries
- */
-async function createPreviousOrmHistory(
-  migrationCount: number,
-  executor: SqlExecutor,
-): Promise<void> {
-  await executor.execute(sql`
-    CREATE TABLE public."_prisma_migrations" (
-      id varchar(36) PRIMARY KEY,
-      checksum varchar(64) NOT NULL,
-      finished_at timestamptz,
-      migration_name varchar(255) NOT NULL,
-      logs text,
-      rolled_back_at timestamptz,
-      started_at timestamptz NOT NULL DEFAULT now(),
-      applied_steps_count integer NOT NULL DEFAULT 0
-    )
-  `)
-  for (let position = 1; position <= migrationCount; position++) {
-    const migrationName =
-      position === migrationCount
-        ? PREVIOUS_ORM_LAST_MIGRATION
-        : `20260101${String(position).padStart(6, '0')}_step`
-    await executor.execute(sql`
-      INSERT INTO public."_prisma_migrations" (id, checksum, finished_at, migration_name)
-      VALUES (${randomUUID()}, 'checksum', now(), ${migrationName})
-    `)
-  }
-}
-
-/**
- * Removes the previous ORM's history table, if a test created it.
- * @param executor - Client for the scratch database.
- * @returns Resolves once it is gone.
- * @example
- * await dropPreviousOrmHistory(scratch.db)
- */
-async function dropPreviousOrmHistory(executor: SqlExecutor): Promise<void> {
-  await executor.execute(sql`DROP TABLE IF EXISTS public."_prisma_migrations"`)
-}
-
 /** Longest any single script run may take; above the script's own 45 s query backstop, so only a real hang reaches it. */
 const SCRIPT_RUN_LIMIT_MS = 60_000
 
 /**
  * Runs the committed baseline script against a database, the way the deploy workflow and the operator do.
- * @param flags - Command-line flags, e.g. `['--apply']`.
+ * @param flags - Read-only flags, such as `['--expect-current']`.
  * @param connectionUrl - Database to target; always a scratch database in this suite.
  * @param extraEnv - Environment variables added for this run, e.g. `GITHUB_ACTIONS`.
  * @returns The exit code and everything the script printed.
@@ -265,6 +189,7 @@ function runBaselineScript(
   flags: string[],
   connectionUrl: string,
   extraEnv: Record<string, string> = {},
+  projectRoot = historicalRoot,
 ): {
   status: number | null
   output: string
@@ -272,7 +197,7 @@ function runBaselineScript(
   const result = spawnSync(
     process.execPath,
     [
-      path.join(historicalRoot, 'scripts/baseline-drizzle-migrations.mjs'),
+      path.join(projectRoot, 'scripts/baseline-drizzle-migrations.mjs'),
       ...flags,
     ],
     {
@@ -306,10 +231,71 @@ describeIfDb(
     })
 
     // Every test starts from the shape the previous ORM left in production: application tables,
-    // no bookkeeping schema, no history table (the `--apply` tests add what they need).
+    // no bookkeeping schema, and no previous-ORM history table.
     beforeEach(async () => {
       await dropBookkeeping(scratch.db)
-      await dropPreviousOrmHistory(scratch.db)
+    })
+
+    test('rejects the retired baseline write option without changing the database', async () => {
+      // Arrange
+      const before = await fingerprintPublicSchema(scratch.db)
+
+      // Act
+      const result = runBaselineScript(['--apply'], scratch.url)
+
+      // Assert
+      expect(result.status).toBe(1)
+      expect(result.output).toContain('This guard is read-only')
+      expect(await readBookkeeping(scratch.db)).toEqual([])
+      expect(await fingerprintPublicSchema(scratch.db)).toBe(before)
+    })
+
+    test('verifies the current migration ledger after feature migrations without assuming one baseline row', async () => {
+      // Arrange
+      const current = await createBaseScratchDatabase()
+
+      try {
+        // Act
+        const result = runBaselineScript(
+          ['--expect-current'],
+          current.url,
+          {},
+          process.cwd(),
+        )
+
+        // Assert
+        expect((await readBookkeeping(current.db)).length).toBeGreaterThan(1)
+        expect(result.status).toBe(0)
+        expect(result.output).toContain('pending migrations: none')
+      } finally {
+        await current.drop()
+      }
+    })
+
+    test('stops deployment when the latest feature migration is absent from the ledger', async () => {
+      // Arrange
+      const current = await createBaseScratchDatabase()
+
+      try {
+        await current.db.execute(
+          sql`DELETE FROM drizzle.__drizzle_migrations WHERE created_at = (SELECT max(created_at) FROM drizzle.__drizzle_migrations)`,
+        )
+
+        // Act
+        const result = runBaselineScript(
+          ['--expect-current'],
+          current.url,
+          {},
+          process.cwd(),
+        )
+
+        // Assert
+        expect(result.status).toBe(1)
+        expect(result.output).toContain('newest applied migration is')
+        expect(result.output).toContain('journal expects')
+      } finally {
+        await current.drop()
+      }
     })
 
     test('refuses to recreate existing tables when no baseline row was recorded, which is why production needs one', async () => {
@@ -564,88 +550,6 @@ describeIfDb(
       expect(lines[0]).toBe(`::add-mask::${hostname}`)
       expect(lines[1]).toContain('target: host=')
       expect(onDeveloperMachine.output).not.toContain('::add-mask::')
-    })
-
-    test('refuses to record a baseline on a database the previous ORM never built, writing nothing', async () => {
-      // Arrange — no history table (see beforeEach).
-
-      // Act
-      const verdict = runBaselineScript(['--apply'], scratch.url)
-
-      // Assert
-      expect(verdict.status).toBe(1)
-      expect(verdict.output).toContain('_prisma_migrations" not found')
-      expect(await readBookkeeping(scratch.db)).toEqual([])
-    })
-
-    test('refuses to record a baseline when the previous ORM history is incomplete', async () => {
-      // Arrange
-      await createPreviousOrmHistory(
-        PREVIOUS_ORM_MIGRATION_COUNT - 1,
-        scratch.db,
-      )
-
-      // Act
-      const verdict = runBaselineScript(['--apply'], scratch.url)
-
-      // Assert
-      expect(verdict.status).toBe(1)
-      expect(verdict.output).toContain('previous ORM history mismatch')
-      expect(await readBookkeeping(scratch.db)).toEqual([])
-    })
-
-    test('records exactly one baseline row at the journal timestamp for the previous ORM history, then refuses a second run', async () => {
-      // Arrange
-      await createPreviousOrmHistory(PREVIOUS_ORM_MIGRATION_COUNT, scratch.db)
-      const [migration] = readMigrationFiles({
-        migrationsFolder: MIGRATIONS_FOLDER,
-      })
-
-      // Act
-      const firstRun = runBaselineScript(['--apply'], scratch.url)
-      const secondRun = runBaselineScript(['--apply'], scratch.url)
-
-      // Assert
-      expect(firstRun.status).toBe(0)
-      expect(firstRun.output).toContain('schema verified')
-      expect(await readBookkeeping(scratch.db)).toEqual([
-        { hash: migration?.hash, created_at: BASELINE_MILLIS },
-      ])
-      expect(secondRun.status).toBe(1)
-      expect(secondRun.output).toContain(
-        'bookkeeping table already has 1 row(s); refusing',
-      )
-    })
-
-    test('refuses to record a baseline when the live schema differs from the one drizzle describes, even by a single column type modifier, writing nothing', async () => {
-      // Arrange — a database of its own, because the schema is altered: built by 0000_init, carrying the
-      // previous ORM history, with Category.name narrowed from text to varchar(50).
-      const drifted = await createScratchDatabase()
-
-      try {
-        await dropBookkeeping(drifted.db)
-        await createPreviousOrmHistory(PREVIOUS_ORM_MIGRATION_COUNT, drifted.db)
-        await drifted.db.execute(
-          sql`ALTER TABLE "Category" ALTER COLUMN "name" TYPE varchar(50)`,
-        )
-
-        // Act
-        const verdict = runBaselineScript(['--apply'], drifted.url)
-
-        // Assert
-        expect(verdict.status).toBe(1)
-        expect(verdict.output).toContain(
-          'the live schema differs from the schema `drizzle/0000_init.sql` builds',
-        )
-        expect(verdict.output).toContain(
-          'column Category.name pos=2 character varying udt=varchar len=50',
-        )
-        expect(
-          await relationExists(drifted.db, 'drizzle.__drizzle_migrations'),
-        ).toBe(false)
-      } finally {
-        await drifted.drop()
-      }
     })
 
     test('the deploy checks fail when the bookkeeping row survived but the application tables are gone, because the migrator would skip 0000_init and report a green deploy on an empty database', async () => {

@@ -52,6 +52,8 @@ test('year review displays Work six and overall seven without ranking children a
   )
   // Assert
   expect(screen.getByLabelText('7 completed')).toBeVisible()
+  expect(screen.getByLabelText('1 days shown up')).toBeVisible()
+  expect(screen.queryByText(/streak/i)).not.toBeInTheDocument()
   const breakdown = screen.getByRole('region', { name: 'Work breakdown' })
   expect(within(breakdown).getByText('Directly in Work')).toBeVisible()
   expect(within(breakdown).getByText('CoreLive')).toBeVisible()

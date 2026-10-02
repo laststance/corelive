@@ -212,7 +212,7 @@ export const YearInReviewModal = function YearInReviewModal({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          <div className="grid grid-cols-3 gap-3 text-center">
+          <div className="grid grid-cols-2 gap-3 text-center">
             <Stat
               label="completed"
               value={summary.totalCompleted}
@@ -222,12 +222,6 @@ export const YearInReviewModal = function YearInReviewModal({
             <Stat
               label="days shown up"
               value={summary.activeDays}
-              isLoading={isLoading}
-            />
-
-            <Stat
-              label="longest streak"
-              value={summary.longestStreak}
               isLoading={isLoading}
             />
           </div>

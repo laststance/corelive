@@ -1,14 +1,18 @@
+import { Button } from '@/components/ui/button'
+
 /** Shows the browser OAuth failure state shared by start and callback routes.
  * @param props - Flow-specific title and the existing error message.
- * @returns The error message and window-close action.
+ * @returns The error message, optional recovery action, and window-close action.
  * @example <OAuthError title="Authentication Failed" errorMessage="Please retry." />
  */
 export function OAuthError({
   title,
   errorMessage,
+  onRetry,
 }: {
   title: string
   errorMessage: string
+  onRetry?: () => void
 }) {
   return (
     <>
@@ -32,7 +36,14 @@ export function OAuthError({
       <h1 className="mb-2 text-center text-xl font-semibold text-foreground">
         {title}
       </h1>
-      <p className="mb-4 text-center text-muted-foreground">{errorMessage}</p>
+      <p role="alert" className="mb-4 text-center text-muted-foreground">
+        {errorMessage}
+      </p>
+      {onRetry && (
+        <Button type="button" className="mb-3 w-full" onClick={onRetry}>
+          Try again
+        </Button>
+      )}
       <div className="flex justify-center">
         <button
           onClick={() => window.close()}

@@ -52,6 +52,10 @@ screenshots
 .claude
 !.cursor
 .playwright-mcp
+# Keep the headless CLI configuration while ignoring generated Playwright state.
+!/.playwright/
+/.playwright/*
+!/.playwright/cli.config.json
 
 # Electron
 dist/

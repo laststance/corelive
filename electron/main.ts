@@ -641,7 +641,7 @@ async function createWindow(): Promise<void> {
       // MenuManager always loads (works under xvfb)
       log.info('🔧 [DEFERRED] Loading MenuManager...')
       const MenuManagerCls = await lazyLoadManager.loadComponent('MenuManager')
-      menuManager = new MenuManagerCls()
+      menuManager = new MenuManagerCls(() => autoUpdater)
 
       // The menu bar is companion chrome after main-window retirement (T18):
       // View/Window roles target whatever window is focused; New Task opens
@@ -1269,9 +1269,9 @@ function setupIPCHandlers(): void {
   })
 
   // Auto-updater IPC handlers (Zod-validated)
-  typedHandle('updater-check-for-updates', () => {
+  typedHandle('updater-check-for-updates', async () => {
     if (autoUpdater) {
-      autoUpdater.manualCheckForUpdates()
+      await autoUpdater.manualCheckForUpdates()
       return true
     }
     return false
@@ -1293,6 +1293,8 @@ function setupIPCHandlers(): void {
       updateAvailable: false,
       updateDownloaded: false,
       downloadProgress: null,
+      isChecking: false,
+      message: null,
     }
   })
 }

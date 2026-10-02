@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest'
 import { calculateStreaks } from './calculateStreaks'
 
 // The server's heatmap streak math is its OWN implementation (distinct from the
-// client `calc-streak.ts`), so the timezone grace boundary — "is the streak
+// retired client calculation), so the timezone grace boundary — "is the streak
 // still alive if the user hasn't logged today yet?" — must be locked here. If
 // the today/yesterday gate regresses, a user who kept a 12-day streak would see
 // it silently reset to 0 the morning before their first task of the day.
