@@ -1,0 +1,23 @@
+diff --git a/src/sprintf.js b/src/sprintf.js
+index 65d6324645ef1d0133614a71497751009dc5c912..1e6256a813fd9db475755f5b9987f69917cea1ff 100644
+--- a/src/sprintf.js
++++ b/src/sprintf.js
+@@ -80,14 +80,15 @@
+                     case 'j':
+                         arg = JSON.stringify(arg, null, ph.width ? parseInt(ph.width) : 0)
+                         break
++                    // Bound untrusted numeric precision to Node's supported range (GHSA-hp3w-g68c-fv3c).
+                     case 'e':
+-                        arg = ph.precision ? parseFloat(arg).toExponential(ph.precision) : parseFloat(arg).toExponential()
++                        arg = ph.precision ? parseFloat(arg).toExponential(Math.min(100, Number(ph.precision))) : parseFloat(arg).toExponential()
+                         break
+                     case 'f':
+-                        arg = ph.precision ? parseFloat(arg).toFixed(ph.precision) : parseFloat(arg)
++                        arg = ph.precision ? parseFloat(arg).toFixed(Math.min(100, Number(ph.precision))) : parseFloat(arg)
+                         break
+                     case 'g':
+-                        arg = ph.precision ? String(Number(arg.toPrecision(ph.precision))) : parseFloat(arg)
++                        arg = ph.precision ? String(Number(arg.toPrecision(Math.max(1, Math.min(100, Number(ph.precision)))))) : parseFloat(arg)
+                         break
+                     case 'o':
+                         arg = (parseInt(arg, 10) >>> 0).toString(8)

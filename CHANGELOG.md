@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Update vulnerable build/runtime dependencies and patch excessive numeric precision in the desktop build logger's formatter.
 - Expose native preload capabilities only on the configured CoreLive origin, including canonical redirects; allow the bounded Clerk handshake without exposing a desktop bridge.
 - Keep update checks responsive, show live download progress in Settings, and preserve a prepared update when checks fail or run from the native menu. Downloads wait for consent without stacking prompts.
 - Reopen LiveEditor from a signed-in login window, and retry a failed browser return without repeating authentication. Return tickets account for clock skew and network time.
