@@ -32,6 +32,6 @@ jobs:
             printf 'CLERK_SECRET_KEY=%s\n' "$CLERK_SECRET_KEY"
             printf 'WEBHOOK_SECRET=%s\n' "$WEBHOOK_SECRET"
             printf 'POSTGRES_PRISMA_URL=%s\n' 'postgresql://user:pass@localhost:5491/db'
-          } > .env
+          } > apps/web/.env
       - name: Build
         run: pnpm build

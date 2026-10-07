@@ -1,0 +1,544 @@
+'use client'
+
+import HeatMap, { type HeatMapValue } from '@uiw/react-heat-map'
+import { useSearchParams } from 'next/navigation'
+import * as React from 'react'
+import { useRef, useState } from 'react'
+import { toast } from 'sonner'
+
+import { Badge } from '@/components/ui/badge'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { useCycleEffect } from '@/hooks/use-cycle-effect'
+import { useUpdateEffect } from '@/hooks/use-update-effect'
+import { useHeatmapData } from '@/hooks/useHeatmapData'
+import type { HeatmapDay } from '@/hooks/useHeatmapData'
+import { buildDateSyncUrl } from '@/lib/buildDateSyncUrl'
+import { calcMonthlyMaxDates } from '@/lib/calcMonthlyMaxDates'
+import { HEATMAP_TOP_PAD_PX } from '@/lib/constants/heatmap'
+import {
+  HEATMAP_CATHEDRAL_MIN,
+  HEATMAP_FULL_DAY_MIN,
+  HEATMAP_GOOD_DAY_MIN,
+  HEATMAP_LEVEL_TOKENS,
+} from '@/lib/heatmap-intensity'
+import { shiftIsoDate } from '@/lib/shiftIsoDate'
+import { DayDetailInputSchema } from '@/server/schemas/completed'
+
+import { DayDetailDialog } from './DayDetailDialog'
+
+/** Milliseconds in a single day. */
+const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000
+
+/** Number of days displayed in a week column. */
+const DAYS_IN_WEEK = 7
+
+/** Reserved width for week-day labels inside the SVG. */
+const HEATMAP_LEFT_PAD = 28
+
+/** Minimum cell size — DESIGN.md heatmap cell-sizing lock (Heatmap Cathedral D6). */
+const HEATMAP_MIN_RECT_SIZE = 12
+
+/** Maximum cell size — DESIGN.md heatmap cell-sizing lock (Heatmap Cathedral D6). */
+const HEATMAP_MAX_RECT_SIZE = 32
+
+/** Gap between heatmap cells. */
+const HEATMAP_SPACE = 2
+
+/**
+ * @uiw/react-heat-map upper-bound sentinel: a key larger than any realistic
+ * daily count, so every count ≥ HEATMAP_CATHEDRAL_MIN lands in the top (L4)
+ * bucket. Defined here, not in heatmap-intensity.ts, because it encodes the
+ * library's panelColors format rather than a domain threshold.
+ */
+const HEATMAP_PANEL_OVERFLOW = 1000
+
+/**
+ * Heatmap cell gradient in @uiw/react-heat-map `existColor` form: keys are
+ * threshold *upper bounds* — the library returns the value of the smallest key
+ * strictly greater than the day's count, so count 1–3 → L1, 4–9 → L2, 10–19 →
+ * L3, 20+ → L4 (matching getHeatmapIntensityFromCount and DESIGN.md's bands).
+ * Built from the shared thresholds + tokens in heatmap-intensity.ts so cells,
+ * the dialog band, and these buckets share one source of truth. The tokens
+ * resolve to the same colors as the former `--heatmap-level-N` aliases (which
+ * were `var(--hm-N)` underneath), so this is a pure refactor — zero visual change.
+ */
+const PANEL_COLORS: Record<number, string> = {
+  0: HEATMAP_LEVEL_TOKENS[0],
+  [HEATMAP_GOOD_DAY_MIN]: HEATMAP_LEVEL_TOKENS[1],
+  [HEATMAP_FULL_DAY_MIN]: HEATMAP_LEVEL_TOKENS[2],
+  [HEATMAP_CATHEDRAL_MIN]: HEATMAP_LEVEL_TOKENS[3],
+  [HEATMAP_PANEL_OVERFLOW]: HEATMAP_LEVEL_TOKENS[4],
+}
+
+/** Legend color squares, one per intensity band, matching the cell gradient. */
+const LEGEND_COLORS = [...HEATMAP_LEVEL_TOKENS]
+
+/** Week day labels for the heatmap Y-axis. */
+const WEEK_LABELS = ['', 'Mon', '', 'Wed', '', 'Fri', '']
+
+type HeatmapRectProps = React.SVGProps<SVGRectElement>
+
+type HeatmapRectValue = HeatMapValue & {
+  column: number
+  row: number
+  index: number
+}
+
+/**
+ * Formats a YYYY/MM/DD or YYYY-MM-DD date string to a human-readable format.
+ * @param dateStr - Date string
+ * @returns Formatted date like "March 24, 2026"
+ * @example
+ * formatDate("2026/03/24") // => "March 24, 2026"
+ */
+function formatDate(dateStr: string): string {
+  const normalized = dateStr.replace(/\//g, '-')
+  const date = new Date(normalized + 'T00:00:00')
+  return date.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+/**
+ * Tooltip content showing category breakdown for a specific day.
+ */
+const CategoryBreakdown = function CategoryBreakdown({
+  day,
+}: {
+  day: HeatmapDay
+}) {
+  return (
+    <div className="space-y-1">
+      <p className="text-xs font-medium">{formatDate(day.date)}</p>
+      <p className="border-t pt-1 text-xs text-muted-foreground">
+        {day.count} thing{day.count !== 1 ? 's' : ''} done — good day
+      </p>
+    </div>
+  )
+}
+
+/**
+ * Shows a full year of kept work with the active theme heatmap tokens.
+ * Hover affirms completed work and names empty days as rest.
+ *
+ * @example
+ * <ContributionGraph />
+ */
+export const ContributionGraph = function ContributionGraph() {
+  const { heatmapValues, dataByDate, total, isLoading } = useHeatmapData()
+  const containerRef = useRef<HTMLDivElement>(null)
+  const containerWidth = useObservedElementWidth(containerRef, !isLoading)
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  // `?date=YYYY-MM-DD` deep-link (INBOUND): validated via the same Zod schema
+  // the server uses for `getDayDetail`, so invalid input is rejected with the
+  // identical contract. The dep `[dateParam]` keeps the effect a one-shot per
+  // URL change. The OUTBOUND mirror below now writes day-nav / open / close back
+  // to `?date=`, which feeds a fresh `dateParam` here — but setSelectedDate to
+  // the same value bails, so the two effects settle in one extra render, no loop.
+  const searchParams = useSearchParams()
+  const dateParam = searchParams.get('date')
+
+  useCycleEffect(() => {
+    // Closing the dialog when `?date=` is removed or invalidated keeps URL
+    // and dialog state coupled. Without this, navigating from `?date=valid`
+    // → `?date=` (or `?date=garbage`) would leave a stale dialog open even
+    // though the deep-link contract says invalid input keeps the dialog
+    // closed (CodeRabbit review on PR #38).
+    if (!dateParam) {
+      setSelectedDate(null)
+      return
+    }
+    const parsed = DayDetailInputSchema.safeParse({ date: dateParam })
+    if (parsed.success) {
+      setSelectedDate(parsed.data.date)
+    } else {
+      setSelectedDate(null)
+      // Sonner `id` dedupes the toast across React reconciliation passes so
+      // SSR→hydrate or Suspense fallback→resolution cycles can't stack two
+      // identical "invalid date" toasts for the same URL value.
+      toast.error('Invalid date in URL — showing your activity instead.', {
+        id: `invalid-date-${dateParam}`,
+      })
+    }
+  }, [dateParam])
+
+  // OUTBOUND `?date=` sync: mirror the open day (cell click / ← → nav / close)
+  // into the address bar so it stays shareable and back-button-navigable.
+  // `history.replaceState` (Next 16 keeps `useSearchParams` in sync) updates the
+  // URL WITHOUT an RSC refetch — the "thrash" the old one-way design feared.
+  // `useUpdateEffect` SKIPS mount so this can't clobber an inbound deep-link
+  // before the effect above reads it; the `!==` guard makes the redundant write
+  // (e.g. right after that inbound read set the same value) a no-op.
+  useUpdateEffect(() => {
+    const nextUrl = buildDateSyncUrl(
+      window.location.search,
+      window.location.pathname,
+      selectedDate,
+    )
+    if (nextUrl !== window.location.pathname + window.location.search) {
+      window.history.replaceState(null, '', nextUrl)
+    }
+  }, [selectedDate])
+
+  const endDate = normalizeDate(new Date())
+  const startDate = getAlignedHeatmapStartDate(endDate)
+
+  const weekCount = getHeatmapWeekCount(startDate, endDate)
+
+  const heatmapLayout = calculateHeatmapLayout(containerWidth, weekCount)
+
+  // Set of YYYY-MM-DD strings for each month's peak day. The ◎ overlay below
+  // reads `monthlyMaxDates.has(dateKey)` on every rect render, so memoizing
+  // the Set keeps that O(1) lookup stable across re-renders triggered by
+  // hover/tooltip state.
+  const monthlyMaxDates = calcMonthlyMaxDates(dataByDate)
+
+  // Functional setState lets us avoid depending on `selectedDate`, so the
+  // callback identity stays stable across renders. PR2 will reuse this exact
+  // handler for j/k keyboard navigation — keeping it stable matters because
+  // `useKeyboardNav` will attach it to a window event listener.
+  const handleNavigate = (dayOffset: -1 | 1) => {
+    setSelectedDate((currentDate) =>
+      currentDate ? shiftIsoDate(currentDate, dayOffset) : currentDate,
+    )
+  }
+  const heatmapStyle = {
+    color: 'var(--muted-foreground)',
+    fontSize: '10px',
+  }
+
+  const renderHeatmapRect = (
+    props: HeatmapRectProps,
+    data: HeatmapRectValue,
+  ) => {
+    const dateKey = toIsoDateKey(data.date)
+    const dayData = dataByDate.get(dateKey)
+    function handleSelect() {
+      if (dateKey) setSelectedDate(dateKey)
+    }
+    const isMonthlyPeak = monthlyMaxDates.has(dateKey)
+
+    if (!dayData || dayData.count === 0) {
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <rect
+              {...props}
+              onClick={handleSelect}
+              style={{ ...props.style, cursor: 'pointer' }}
+            />
+          </TooltipTrigger>
+          <TooltipContent>rest day</TooltipContent>
+        </Tooltip>
+      )
+    }
+
+    // The peak mark is decorative; the rect keeps click and tooltip behavior.
+    const monthlyPeakMark = isMonthlyPeak ? (
+      <text
+        x={Number(props.x) + Number(props.width) / 2}
+        y={Number(props.y) + Number(props.height) / 2}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize={Math.floor(heatmapLayout.rectSize * 0.5)}
+        fill="var(--primary-foreground)"
+        aria-hidden
+        style={{ pointerEvents: 'none' }}
+      >
+        ◎
+      </text>
+    ) : null
+
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <g>
+            <rect
+              {...props}
+              onClick={handleSelect}
+              style={{ ...props.style, cursor: 'pointer' }}
+            />
+
+            {monthlyPeakMark}
+          </g>
+        </TooltipTrigger>
+        <TooltipContent>
+          <CategoryBreakdown day={dayData} />
+        </TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  const handleDayDetailOpenChange = (open: boolean) => {
+    if (!open) setSelectedDate(null)
+  }
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            Activity
+          </CardTitle>
+          <CardDescription>Loading activity data...</CardDescription>
+        </CardHeader>
+      </Card>
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          Activity
+          <Badge variant="secondary">{total} completed</Badge>
+        </CardTitle>
+        <CardDescription>Task completions in the last year</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div ref={containerRef} className="overflow-x-auto pb-1">
+          <TooltipProvider delayDuration={100}>
+            <HeatMap
+              value={heatmapValues}
+              startDate={startDate}
+              endDate={endDate}
+              weekLabels={WEEK_LABELS}
+              panelColors={PANEL_COLORS}
+              legendCellSize={0}
+              rectSize={heatmapLayout.rectSize}
+              space={HEATMAP_SPACE}
+              height={heatmapLayout.height}
+              width={heatmapLayout.width}
+              style={heatmapStyle}
+              rectRender={renderHeatmapRect}
+            />
+          </TooltipProvider>
+        </div>
+        {/* Legend */}
+        <div className="mt-2 flex items-center justify-end gap-1 text-xs">
+          <span className="mr-1 text-muted-foreground">Less</span>
+          {LEGEND_COLORS.map((color) => (
+            <span
+              key={color}
+              className="inline-block size-2.5 rounded-sm"
+              style={{ backgroundColor: color }}
+            />
+          ))}
+          <span className="ml-1 text-muted-foreground">More</span>
+        </div>
+        <DayDetailDialog
+          date={selectedDate}
+          onOpenChange={handleDayDetailOpenChange}
+          onNavigate={handleNavigate}
+        />
+      </CardContent>
+    </Card>
+  )
+}
+
+/**
+ * Observes an element and returns its current content width.
+ * @param elementRef - Reference to the container element
+ * @param enabled - Starts measurement after the element can be rendered.
+ * @returns
+ * - The measured width in pixels after mount
+ * - `null` before the first measurement completes
+ * @example
+ * const containerRef = useRef<HTMLDivElement>(null)
+ * const width = useObservedElementWidth(containerRef)
+ */
+function useObservedElementWidth<T extends HTMLElement>(
+  elementRef: React.RefObject<T | null>,
+  enabled: boolean,
+): number | null {
+  const [elementWidth, setElementWidth] = useState<number | null>(null)
+
+  useCycleEffect(() => {
+    if (!enabled) {
+      return
+    }
+
+    const element = elementRef.current
+
+    if (!element) {
+      return
+    }
+
+    const updateWidth = (nextWidth: number) => {
+      setElementWidth(Math.floor(nextWidth))
+    }
+
+    updateWidth(element.clientWidth)
+
+    if (typeof ResizeObserver === 'undefined') {
+      const handleResize = () => updateWidth(element.clientWidth)
+      window.addEventListener('resize', handleResize)
+      return () => window.removeEventListener('resize', handleResize)
+    }
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      const nextWidth = entries[0]?.contentRect.width ?? element.clientWidth
+      updateWidth(nextWidth)
+    })
+
+    resizeObserver.observe(element)
+
+    return () => resizeObserver.disconnect()
+  }, [enabled, elementRef])
+
+  return elementWidth
+}
+
+type HeatmapLayout = {
+  height: number
+  rectSize: number
+  width: number
+}
+
+/**
+ * Calculates the SVG dimensions whenever ContributionGraph resizes so every day remains visible.
+ * @param containerWidth - Measured width of the card content area
+ * @param weekCount - Number of week columns that must be rendered
+ * @returns
+ * - `height`: SVG height containing month labels and all seven weekday rows
+ * - `rectSize`: Cell size that best uses the current width
+ * - `width`: SVG width, allowing horizontal scroll only when the card is too narrow
+ * @example
+ * calculateHeatmapLayout(1180, 53) // => { height: 167, rectSize: 19, width: 1141 }
+ * calculateHeatmapLayout(578, 53) // => { height: 118, rectSize: 12, width: 770 }
+ */
+export function calculateHeatmapLayout(
+  containerWidth: number | null,
+  weekCount: number,
+): HeatmapLayout {
+  const minimumWidth =
+    HEATMAP_LEFT_PAD + weekCount * (HEATMAP_MIN_RECT_SIZE + HEATMAP_SPACE)
+
+  // Narrow or unmeasured cards hold the minimum; wider cards enlarge every cell evenly.
+  const rectSize =
+    !containerWidth || containerWidth <= minimumWidth
+      ? HEATMAP_MIN_RECT_SIZE
+      : clampNumber(
+          Math.floor((containerWidth - HEATMAP_LEFT_PAD) / weekCount) -
+            HEATMAP_SPACE,
+          HEATMAP_MIN_RECT_SIZE,
+          HEATMAP_MAX_RECT_SIZE,
+        )
+  const width = HEATMAP_LEFT_PAD + weekCount * (rectSize + HEATMAP_SPACE)
+  const height = HEATMAP_TOP_PAD_PX + DAYS_IN_WEEK * (rectSize + HEATMAP_SPACE)
+
+  return {
+    height,
+    rectSize,
+    width,
+  }
+}
+
+/**
+ * Returns the Sunday-aligned starting point for the trailing one-year heatmap.
+ * @param endDate - Last visible date in the heatmap
+ * @returns
+ * - A normalized date exactly one year back
+ * - Shifted to the previous Sunday so week columns stay aligned
+ * @example
+ * getAlignedHeatmapStartDate(new Date('2026-04-08T00:00:00')) // => Sunday-aligned date near 2025-04-08
+ */
+function getAlignedHeatmapStartDate(endDate: Date): Date {
+  const startDate = new Date(endDate)
+  startDate.setFullYear(startDate.getFullYear() - 1)
+  const dayOfWeek = startDate.getDay()
+
+  if (dayOfWeek === 0) {
+    return startDate
+  }
+
+  startDate.setDate(startDate.getDate() - dayOfWeek)
+  return startDate
+}
+
+/**
+ * Counts how many week columns are needed between two dates, inclusive.
+ * @param startDate - First visible date in the heatmap
+ * @param endDate - Last visible date in the heatmap
+ * @returns
+ * - Number of week columns required to render the full date range
+ * @example
+ * getHeatmapWeekCount(new Date('2025-04-06T00:00:00'), new Date('2026-04-08T00:00:00')) // => 53
+ */
+function getHeatmapWeekCount(startDate: Date, endDate: Date): number {
+  const totalDayCount =
+    Math.floor((endDate.getTime() - startDate.getTime()) / ONE_DAY_IN_MS) + 1
+
+  return Math.ceil(totalDayCount / DAYS_IN_WEEK)
+}
+
+/**
+ * Normalizes a date to local midnight so layout math stays stable across renders.
+ * @param date - Date to normalize
+ * @returns
+ * - A new date at 00:00:00 local time
+ * @example
+ * normalizeDate(new Date('2026-04-08T15:30:00')) // => 2026-04-08T00:00:00 local
+ */
+function normalizeDate(date: Date): Date {
+  const normalizedDate = new Date(date)
+  normalizedDate.setHours(0, 0, 0, 0)
+  return normalizedDate
+}
+
+/**
+ * Restricts a numeric value to an inclusive range.
+ * @param value - Value to clamp
+ * @param min - Smallest allowed value
+ * @param max - Largest allowed value
+ * @returns
+ * - `min` when the value is too small
+ * - `max` when the value is too large
+ * - The original value when it already fits the range
+ * @example
+ * clampNumber(4, 8, 28) // => 8
+ * clampNumber(18, 8, 28) // => 18
+ */
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max)
+}
+
+/**
+ * Converts a heatmap rect's raw `data.date` (the library emits `YYYY/M/D` with
+ * no zero-padding) into the canonical `YYYY-MM-DD` form used by the server
+ * aggregation (`updatedAt.toISOString().split('T')[0]`) and by `dataByDate`.
+ *
+ * Without this, the click handler passed `2026-5-10` to `getDayDetail`, which
+ * never matches the server's `2026-05-10` bucket — so the dialog returned
+ * count=0 ("rest day") for cells the heatmap painted as L1+. Also unblocks
+ * `formatDate`, which falls back to "INVALID DATE" when given non-padded ISO.
+ *
+ * @param rawDate - The `data.date` value from @uiw/react-heat-map (`YYYY/M/D`)
+ * @returns A zero-padded `YYYY-MM-DD` string, or empty string when unparseable
+ * @example
+ * toIsoDateKey("2026/5/10")  // => "2026-05-10"
+ * toIsoDateKey("2026/12/3")  // => "2026-12-03"
+ * toIsoDateKey(undefined)    // => ""
+ */
+function toIsoDateKey(rawDate: string | undefined): string {
+  if (!rawDate) return ''
+  const parts = rawDate.split('/')
+  if (parts.length !== 3) return ''
+  const [year, month, day] = parts
+  if (!year || !month || !day) return ''
+  return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+}

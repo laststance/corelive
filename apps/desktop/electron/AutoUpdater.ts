@@ -1,0 +1,567 @@
+/**
+ * @fileoverview Auto-Update Manager for Electron Application
+ *
+ * Manages automatic application updates using electron-updater.
+ *
+ * @module electron/AutoUpdater
+ */
+
+import {
+  UPDATE_PROGRESS_PERCENT_MAX,
+  UPDATE_PROGRESS_PERCENT_MIN,
+  UPDATE_PROGRESS_WINDOW_BOTTOM_OFFSET_PX,
+  UPDATE_PROGRESS_WINDOW_HEIGHT_PX,
+  UPDATE_PROGRESS_WINDOW_WIDTH_PX,
+} from '@corelive/desktop-contract/constants'
+import type {
+  UpdaterDownloadProgress,
+  UpdaterStatus,
+} from '@corelive/desktop-contract/ipc'
+import { BrowserWindow, dialog, screen } from 'electron'
+import type { MessageBoxOptions, MessageBoxReturnValue } from 'electron'
+import { autoUpdater } from 'electron-updater'
+import type { ProgressInfo, UpdateInfo } from 'electron-updater'
+
+import { log } from './logger'
+import {
+  buildUpdateProgressWindowHtml,
+  buildUpdateProgressWindowUpdateScript,
+} from './update-progress-window-html'
+
+// ============================================================================
+// Type Definitions
+// ============================================================================
+
+/**
+ * Minimal logger interface expected by `electron-updater`.
+ * We use our own `pino`-based logger to avoid relying on `electron-log` at runtime.
+ */
+interface UpdaterLogger {
+  info: (...args: unknown[]) => void
+  warn: (...args: unknown[]) => void
+  error: (...args: unknown[]) => void
+  debug: (...args: unknown[]) => void
+}
+
+/**
+ * Keeps update progress values finite before they reach UI surfaces.
+ * @param value - Raw numeric value from electron-updater.
+ * @param min - Inclusive lower bound.
+ * @param max - Inclusive upper bound.
+ * @returns Finite number clamped between min and max.
+ * @example
+ * clampFiniteProgressValue(Number.NaN, 0, 100) // => 0
+ */
+function clampFiniteProgressValue(
+  value: number,
+  min: number,
+  max: number,
+): number {
+  if (!Number.isFinite(value)) return min
+  return Math.min(max, Math.max(min, value))
+}
+
+/**
+ * Keeps byte metrics non-negative before renderer IPC receives them.
+ * @param value - Raw byte or speed metric from electron-updater.
+ * @returns Finite non-negative metric, or 0 when the source is invalid.
+ * @example
+ * normalizeProgressMetric(-1) // => 0
+ */
+function normalizeProgressMetric(value: number): number {
+  if (!Number.isFinite(value)) return 0
+  return Math.max(0, value)
+}
+
+/**
+ * Converts electron-updater progress into the stable renderer/native shape.
+ * @param progress - Raw electron-updater ProgressInfo payload.
+ * @returns Clamped progress where percent is always in the inclusive 0-100 range.
+ * @example
+ * normalizeDownloadProgress({ percent: 140, bytesPerSecond: 1, transferred: 2, total: 3, delta: 0 })
+ */
+export function normalizeDownloadProgress(
+  progress: ProgressInfo,
+): UpdaterDownloadProgress {
+  return {
+    percent: clampFiniteProgressValue(
+      progress.percent,
+      UPDATE_PROGRESS_PERCENT_MIN,
+      UPDATE_PROGRESS_PERCENT_MAX,
+    ),
+    bytesPerSecond: normalizeProgressMetric(progress.bytesPerSecond),
+    transferred: normalizeProgressMetric(progress.transferred),
+    total: normalizeProgressMetric(progress.total),
+  }
+}
+
+// ============================================================================
+// Auto Updater Class
+// ============================================================================
+
+/**
+ * Manages automatic application updates.
+ */
+export class AutoUpdater {
+  /** Track if update is available */
+  private updateAvailable: boolean
+
+  /** Track if update is ready */
+  private updateDownloaded: boolean
+
+  private isChecking = false
+
+  private updatePromptPending = false
+
+  private statusMessage: string | null = null
+
+  /** Latest download progress, or null when no download is active */
+  private downloadProgress: UpdaterDownloadProgress | null
+
+  /** Native passive window that shows update download progress */
+  private updateProgressWindow: BrowserWindow | null
+
+  /** Initial check timeout reference for cleanup */
+  private initialCheckTimeout: ReturnType<typeof setTimeout> | null = null
+
+  /** Periodic check interval reference for cleanup */
+  private periodicCheckInterval: ReturnType<typeof setInterval> | null = null
+
+  constructor() {
+    this.updateAvailable = false
+    this.updateDownloaded = false
+    this.downloadProgress = null
+    this.updateProgressWindow = null
+
+    // Type for pino logger methods that accept rest parameters
+    type LogMethod = (...args: unknown[]) => void
+
+    const updaterLogger: UpdaterLogger = {
+      info: (...args) => (log.info as LogMethod)(...args),
+      warn: (...args) => (log.warn as LogMethod)(...args),
+      error: (...args) => (log.error as LogMethod)(...args),
+      debug: (...args) => (log.debug as LogMethod)(...args),
+    }
+    autoUpdater.logger = updaterLogger
+    // The native Download Now prompt owns consent; electron-updater defaults to downloading immediately.
+    autoUpdater.autoDownload = false
+
+    this.setupAutoUpdater()
+  }
+
+  /**
+   * Configures auto-updater event handlers and scheduling.
+   */
+  setupAutoUpdater(): void {
+    autoUpdater.on('checking-for-update', () => {
+      log.info('Checking for update...')
+      // Reset state flags at the start of each check to ensure consistency
+      this.updateAvailable = false
+      this.updateDownloaded = false
+      this.clearDownloadProgress()
+      this.logUpdaterStatus('Checking for update...')
+    })
+
+    autoUpdater.on('update-available', (info: UpdateInfo) => {
+      log.info('Update available', info)
+      this.updateAvailable = true
+      this.logUpdaterStatus('Update available')
+      this.showUpdateAvailableDialog(info).catch((err) => {
+        log.error('Failed to show update available dialog:', err)
+      })
+    })
+
+    autoUpdater.on('update-not-available', (info: UpdateInfo) => {
+      log.info('Update not available', info)
+      // Reset status flags when no update is available
+      this.updateAvailable = false
+      this.updateDownloaded = false
+      this.clearDownloadProgress()
+      this.logUpdaterStatus('Update not available')
+    })
+
+    autoUpdater.on('error', (err: Error) => {
+      log.error('Error in auto-updater:', err)
+      // A failed check cannot invalidate a package that already finished downloading.
+      this.updateAvailable = this.updateDownloaded
+      this.clearDownloadProgress()
+      this.logUpdaterStatus('Error in auto-updater')
+    })
+
+    autoUpdater.on('download-progress', (progressObj: ProgressInfo) => {
+      const progress = normalizeDownloadProgress(progressObj)
+      let logMessage = `Download speed: ${progressObj.bytesPerSecond}`
+      logMessage += ` - Downloaded ${progressObj.percent}%`
+      logMessage += ` (${progressObj.transferred}/${progressObj.total})`
+      log.info(logMessage)
+      this.sendDownloadProgress(progress)
+      this.logUpdaterStatus(
+        `Downloading update: ${Math.round(progress.percent)}%`,
+      )
+    })
+
+    autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
+      log.info('Update downloaded', info)
+      this.updateDownloaded = true
+      this.sendDownloadProgress({
+        percent: UPDATE_PROGRESS_PERCENT_MAX,
+        bytesPerSecond: this.downloadProgress?.bytesPerSecond ?? 0,
+        transferred: this.downloadProgress?.total ?? 0,
+        total: this.downloadProgress?.total ?? 0,
+      })
+      this.closeUpdateProgressWindow()
+      this.downloadProgress = null
+      this.logUpdaterStatus('Update downloaded')
+      this.showUpdateDownloadedDialog().catch((err) => {
+        log.error('Failed to show update downloaded dialog:', err)
+      })
+    })
+
+    // Initial check after startup
+    this.initialCheckTimeout = setTimeout(() => {
+      this.checkForUpdates()
+    }, 3000)
+
+    // Periodic checks every 4 hours
+    this.periodicCheckInterval = setInterval(
+      () => {
+        this.checkForUpdates()
+      },
+      4 * 60 * 60 * 1000,
+    )
+  }
+
+  /**
+   * Checks for available updates.
+   */
+  checkForUpdates(): void {
+    // Keep an active or downloaded package until the user finishes this update.
+    if (
+      this.updateDownloaded ||
+      this.downloadProgress ||
+      this.updatePromptPending
+    )
+      return
+    if (process.env.NODE_ENV === 'development') {
+      log.info('Skipping update check in development mode')
+      return
+    }
+
+    // Handle async rejection from electron-updater Promise
+    void autoUpdater.checkForUpdatesAndNotify().catch((error) => {
+      log.error('Failed to check for updates:', error)
+      // Preserve a package that finished while this check was in flight.
+      this.updateAvailable = this.updateDownloaded
+      this.clearDownloadProgress()
+      this.logUpdaterStatus('Error in auto-updater')
+    })
+  }
+
+  /**
+   * Anchors an updater dialog to the main window when one is up, else shows it
+   * parentless — companion-mode update prompts (available / downloaded) must
+   * surface even with no main window (post-T18 the main window is gone).
+   * Mirrors `MenuManager.showMenuMessageBox`'s parent-or-parentless dispatch but
+   * returns the result so the caller can act on the clicked button.
+   * @param options - Electron message-box options (type/title/message/detail/buttons).
+   * @returns The dismissed-button result (`response` is the clicked button index).
+   * @example
+   * const { response } = await this.showUpdaterMessageBox({ type: 'info', message: 'Update Ready', buttons: ['Restart Now', 'Later'] })
+   */
+  private async showUpdaterMessageBox(
+    options: MessageBoxOptions,
+  ): Promise<MessageBoxReturnValue> {
+    // Always the app-modal (parentless) overload — there is no main window to
+    // anchor to (retired T18); this keeps update prompts reachable regardless.
+    return dialog.showMessageBox(options)
+  }
+
+  /**
+   * Shows dialog when update is available.
+   *
+   * @param info - Update information including version
+   */
+  async showUpdateAvailableDialog(info: UpdateInfo): Promise<void> {
+    // Repeated checks must not stack consent dialogs or restart an existing transfer.
+    if (
+      this.updatePromptPending ||
+      this.updateDownloaded ||
+      this.downloadProgress
+    )
+      return
+    this.updatePromptPending = true
+    try {
+      const result = await this.showUpdaterMessageBox({
+        type: 'info',
+        title: 'Update Available',
+        message: `A new version (${info.version}) is available!`,
+        detail:
+          'Would you like to download it now? The update will be installed when you restart the application.',
+        buttons: ['Download Now', 'Later'],
+        defaultId: 0,
+        cancelId: 1,
+      })
+
+      if (result.response === 0) {
+        this.sendDownloadProgress({
+          percent: UPDATE_PROGRESS_PERCENT_MIN,
+          bytesPerSecond: 0,
+          transferred: 0,
+          total: 0,
+        })
+        // Handle async rejection from downloadUpdate Promise
+        void autoUpdater.downloadUpdate().catch((error) => {
+          log.error('Failed to download update:', error)
+          this.clearDownloadProgress()
+          this.logUpdaterStatus('Failed to download update')
+        })
+      } else {
+        this.logUpdaterStatus('Update postponed')
+      }
+    } finally {
+      this.updatePromptPending = false
+    }
+  }
+
+  /**
+   * Shows dialog when update has been downloaded.
+   */
+  async showUpdateDownloadedDialog(): Promise<void> {
+    const result = await this.showUpdaterMessageBox({
+      type: 'info',
+      title: 'Update Ready',
+      message: 'Update downloaded successfully!',
+      detail: 'The application will restart to apply the update.',
+      buttons: ['Restart Now', 'Later'],
+      defaultId: 0,
+      cancelId: 1,
+    })
+
+    if (result.response === 0) {
+      autoUpdater.quitAndInstall()
+    }
+  }
+
+  /**
+   * Stores native updater status for the Settings poll and writes the same line to the log.
+   * Called by update events and manual checks; actionable states also use native dialogs.
+   *
+   * @param text - Status message to log.
+   */
+  logUpdaterStatus(text: string): void {
+    this.statusMessage = text
+    this.isChecking = text.startsWith('Checking for update')
+    log.info(text)
+  }
+
+  /**
+   * Broadcasts and displays update download progress while a package downloads.
+   * @param progress - Normalized progress payload to show in native + renderer UI.
+   * @returns Nothing; lost renderer/window updates are logged and ignored.
+   * @example
+   * updater.sendDownloadProgress({ percent: 42, bytesPerSecond: 1, transferred: 2, total: 4 })
+   */
+  private sendDownloadProgress(progress: UpdaterDownloadProgress): void {
+    this.downloadProgress = progress
+    // Native progress paints immediately; Settings reads the same payload through its status poll.
+    this.showUpdateProgressWindow(progress)
+  }
+
+  /**
+   * Opens or updates the passive native progress window.
+   * @param progress - Normalized progress payload to paint.
+   * @returns Nothing; window creation is skipped only when Electron cannot build it.
+   * @example
+   * updater.showUpdateProgressWindow({ percent: 10, bytesPerSecond: 1, transferred: 1, total: 10 })
+   */
+  private showUpdateProgressWindow(progress: UpdaterDownloadProgress): void {
+    if (!this.updateProgressWindow || this.updateProgressWindow.isDestroyed()) {
+      // No main window to match a display to (retired T18) — the primary
+      // display is the only anchor left.
+      const { workArea } = screen.getPrimaryDisplay()
+      const x = Math.round(
+        workArea.x + (workArea.width - UPDATE_PROGRESS_WINDOW_WIDTH_PX) / 2,
+      )
+      const y = Math.round(
+        workArea.y +
+          workArea.height -
+          UPDATE_PROGRESS_WINDOW_HEIGHT_PX -
+          UPDATE_PROGRESS_WINDOW_BOTTOM_OFFSET_PX,
+      )
+
+      this.updateProgressWindow = new BrowserWindow({
+        width: UPDATE_PROGRESS_WINDOW_WIDTH_PX,
+        height: UPDATE_PROGRESS_WINDOW_HEIGHT_PX,
+        x,
+        y,
+        show: false,
+        frame: false,
+        transparent: true,
+        hasShadow: false,
+        resizable: false,
+        movable: false,
+        minimizable: false,
+        maximizable: false,
+        fullscreenable: false,
+        skipTaskbar: true,
+        focusable: false,
+        alwaysOnTop: true,
+        acceptFirstMouse: false,
+        backgroundColor: '#00000000',
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+          devTools: false,
+        },
+      })
+      this.updateProgressWindow.setIgnoreMouseEvents(true)
+      this.updateProgressWindow.on('closed', () => {
+        this.updateProgressWindow = null
+      })
+      this.updateProgressWindow.once('ready-to-show', () => {
+        if (
+          this.updateProgressWindow &&
+          !this.updateProgressWindow.isDestroyed()
+        ) {
+          this.updateProgressWindow.showInactive()
+        }
+      })
+      void this.updateProgressWindow
+        .loadURL(
+          `data:text/html;charset=utf-8,${encodeURIComponent(
+            buildUpdateProgressWindowHtml(progress),
+          )}`,
+        )
+        .catch((error: unknown) => {
+          log.debug('Failed to load native update progress window:', error)
+        })
+      return
+    }
+
+    void this.updateProgressWindow.webContents
+      .executeJavaScript(buildUpdateProgressWindowUpdateScript(progress))
+      .catch((error: unknown) => {
+        log.debug('Failed to update native update progress window:', error)
+      })
+  }
+
+  /**
+   * Destroys the passive native progress window if it exists.
+   * @returns Nothing; safe to call repeatedly.
+   * @example
+   * updater.closeUpdateProgressWindow()
+   */
+  private closeUpdateProgressWindow(): void {
+    if (!this.updateProgressWindow) return
+    if (!this.updateProgressWindow.isDestroyed()) {
+      this.updateProgressWindow.destroy()
+    }
+    this.updateProgressWindow = null
+  }
+
+  /**
+   * Clears active download state and removes the passive native progress UI.
+   * @returns Nothing; used by no-update, error, failed-download, and cleanup paths.
+   * @example
+   * updater.clearDownloadProgress()
+   */
+  private clearDownloadProgress(): void {
+    this.downloadProgress = null
+    this.closeUpdateProgressWindow()
+  }
+
+  /**
+   * Completes a manual update check before the Settings IPC request resolves.
+   * The handler in main calls this when the user checks for updates.
+   * @throws When the update service fails, after restoring retryable status.
+   * @example await updater.manualCheckForUpdates()
+   */
+  async manualCheckForUpdates(): Promise<void> {
+    // The renderer can continue showing progress or Restart without another network request.
+    if (
+      this.updateDownloaded ||
+      this.downloadProgress ||
+      this.updatePromptPending
+    )
+      return
+    this.logUpdaterStatus('Checking for update...')
+    try {
+      const result = await autoUpdater.checkForUpdatesAndNotify()
+      // Unpackaged apps cannot perform the installed app's update check.
+      if (result === null) {
+        this.logUpdaterStatus(
+          'Update checks are available in the installed app.',
+        )
+      }
+    } catch (error) {
+      log.error('Failed to manually check for updates:', error)
+      // A concurrent completed download remains installable even when the check fails.
+      this.updateAvailable = this.updateDownloaded
+      this.clearDownloadProgress()
+      this.logUpdaterStatus('Error in auto-updater')
+      throw error
+    } finally {
+      this.isChecking = false
+    }
+  }
+
+  /**
+   * Force update installation.
+   */
+  quitAndInstall(): void {
+    if (this.updateDownloaded) {
+      autoUpdater.quitAndInstall()
+    }
+  }
+
+  /**
+   * Get update status.
+   *
+   * @returns Current update status
+   */
+  getUpdateStatus(): UpdaterStatus {
+    return {
+      updateAvailable: this.updateAvailable,
+      updateDownloaded: this.updateDownloaded,
+      downloadProgress: this.downloadProgress,
+      isChecking: this.isChecking,
+      message: this.statusMessage,
+    }
+  }
+
+  /**
+   * Cleans up timers, event listeners, and resources.
+   *
+   * Call this when disposing the AutoUpdater to prevent memory leaks.
+   */
+  cleanup(): void {
+    // Clear timers
+    if (this.initialCheckTimeout) {
+      clearTimeout(this.initialCheckTimeout)
+      this.initialCheckTimeout = null
+    }
+    if (this.periodicCheckInterval) {
+      clearInterval(this.periodicCheckInterval)
+      this.periodicCheckInterval = null
+    }
+
+    // Remove all event listeners registered on autoUpdater
+    autoUpdater.removeAllListeners('checking-for-update')
+    autoUpdater.removeAllListeners('update-available')
+    autoUpdater.removeAllListeners('update-not-available')
+    autoUpdater.removeAllListeners('error')
+    autoUpdater.removeAllListeners('download-progress')
+    autoUpdater.removeAllListeners('update-downloaded')
+
+    this.closeUpdateProgressWindow()
+
+    // Reset status flags
+    this.updateAvailable = false
+    this.updateDownloaded = false
+    this.downloadProgress = null
+    this.isChecking = false
+    this.statusMessage = null
+  }
+}
+
+export default AutoUpdater

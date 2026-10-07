@@ -39,8 +39,8 @@ on:
     branches:
       - main
     paths:
-      - 'drizzle/**'
-      - 'src/db/schema.ts'
+      - 'apps/web/drizzle/**'
+      - 'apps/web/src/db/schema.ts'
 
 permissions:
   contents: read
@@ -77,7 +77,7 @@ jobs:
       # drizzle-kit has no `migrate status`. `check` validates the committed migration
       # folder (journal, snapshots, no collisions) without touching the database.
       - name: Check migration files
-        run: pnpm exec drizzle-kit check
+        run: pnpm --filter @corelive/web exec drizzle-kit check
 
       # `check` compares the migration folder with itself, not with src/db/schema.ts. A schema change
       # pushed without `pnpm db:generate` would apply nothing and still pass every step below, while
@@ -85,7 +85,7 @@ jobs:
       # gate allows it) and fails on any difference, including a column or table rename, which
       # drizzle-kit cannot resolve without a terminal. The same script runs in the CI workflow.
       - name: Check schema.ts matches the committed migrations
-        run: bash scripts/check-schema-drift.sh
+        run: bash apps/web/scripts/check-schema-drift.sh
 
       # Read-only: fails when application tables exist but drizzle.__drizzle_migrations has no row
       # (the baseline was never recorded), which would make the migrator re-create them; when the
@@ -96,7 +96,7 @@ jobs:
       - name: Check baseline
         env:
           POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
-        run: node scripts/baseline-drizzle-migrations.mjs
+        run: node apps/web/scripts/baseline-drizzle-migrations.mjs
 
       # The migrator applies every file newer than the newest row in
       # drizzle.__drizzle_migrations, all inside one transaction. A database that is
@@ -110,7 +110,7 @@ jobs:
           DRIZZLE_ALLOW_REMOTE: '1'
         run: |
           echo "🚀 Deploying migrations to production database..."
-          pnpm exec drizzle-kit migrate
+          pnpm --filter @corelive/web exec drizzle-kit migrate
           echo "✅ Migrations deployed successfully!"
 
       # Read-only: after the migrator, the newest recorded migration must equal the newest file in the
@@ -120,7 +120,7 @@ jobs:
         if: ${{ github.event.inputs.dry_run != 'true' }}
         env:
           POSTGRES_PRISMA_URL: ${{ secrets.POSTGRES_PRISMA_URL }}
-        run: node scripts/baseline-drizzle-migrations.mjs --expect-current
+        run: node apps/web/scripts/baseline-drizzle-migrations.mjs --expect-current
 
       - name: Dry run notice
         if: ${{ github.event.inputs.dry_run == 'true' }}

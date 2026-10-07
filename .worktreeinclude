@@ -5,6 +5,9 @@
 # secrets / local config — a worktree can't build or run without these
 .env
 .env*.local
+apps/web/.env
+apps/web/.env*.local
+apps/desktop/.env
 .mcp.json
 
 # agent instructions (root CLAUDE.md holds prod test-account creds; nested

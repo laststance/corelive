@@ -1,5 +1,9 @@
 # Design Doc — #112 Hide App Icon holds across a Mac restart
 
+> Historical feature design: source paths below refer to the original layout.
+> Web now lives in `apps/web`, desktop in `apps/desktop`; current QA follows
+> [the isolated development guide](../headless-development.md).
+
 > Design doc for issue **#112** ("Hide App Icon: CoreLive icon reappears in Dock
 > and App Switcher after a Mac restart"). With **Hide App Icon: ON** and **Start
 > at Login: ON**, the Dock icon and Cmd+Tab App Switcher entry come back after a

@@ -1,9 +1,11 @@
 # Maintenance closure and non-interfering QA — 2026-10-02
 
-The twelve entries in `TODOS.md` were evaluated individually. Ten are resolved;
+The twelve entries in the former `TODOS.md` were evaluated individually. Ten are resolved;
 two low-value or conditional items are intentionally dropped. No login E2E suite
 was added. Routine renderer QA uses the isolated headless CLI; native operations
-use a dedicated macOS VM.
+use a dedicated macOS VM. The owner subsequently requested deletion of `TODOS.md`;
+`AGENTS.md` now requires any newly discovered TODO to be resolved in the current
+PR, even outside its original scope, without deferral to memory or issues.
 
 ## Dispositions
 
@@ -33,6 +35,9 @@ use a dedicated macOS VM.
 
 ## Verification
 
+These results are the 2026-10-02 maintenance snapshot before the monorepo migration.
+They do not establish validation or deployment of the subsequent workspace changes.
+
 - `pnpm validate`: 1,037 web tests and 30 package tests passed after the final repairs; lint, types, production build, theme, dead-code, duplicate and complexity checks passed. The normal run skips 177 database integration tests.
 - Electron: 51 files, 428 tests passed.
 - Focused real database guards: 22 tests passed against isolated local scratch databases. The earlier full database-enabled run passed 1,181 tests; it is separate evidence from the latest normal validation.
@@ -57,7 +62,9 @@ crash-report window behind the running app; it is not a crash during the checks.
 The VM checks do not establish physical display/Spaces, sleep/wake, signing,
 notarization, real package installation, or Production Clerk acceptance. Those
 surfaces are unchanged or require their own release-specific verification.
-No release or production deployment is performed by this maintenance PR. Main-process
+No release or production deployment had been performed at this maintenance snapshot.
+The combined PR subsequently includes the monorepo migration and Web deployment;
+its current validation and deployment evidence is recorded separately. Main-process
 and preload fixes reach installed apps only with a later Electron release.
 
 See [the development guide](../headless-development.md) for the persistent VM,

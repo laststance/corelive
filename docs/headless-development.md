@@ -5,13 +5,31 @@ development and renderer QA. The CLI is a development tool, not a login E2E suit
 Do not repeatedly authenticate real accounts to test local rendering, IPC contracts,
 or error handling. Development Clerk results do not prove Production Clerk behavior.
 
+## Current QA authorization — 2026-10-07
+
+The owner authorized completing this migration without a VM. Use Headless browser
+QA, CLI checks, native contract/integration tests, and unsigned packaging. Do not
+start or recreate a VM for this task, and do not substitute host GUI operation.
+The VM instructions and dated native results below remain historical setup and
+verification records; they are not current requirements or proof of new changes.
+
 ## Start the environment
 
+For a fresh checkout, copy `.env.example` to `apps/web/.env` and provide the Web
+configuration. For an existing root `.env`, the setup helper below copies it
+without overwriting app files and keeps signing credentials in desktop only.
+
 ```sh
-pnpm install
+pnpm install --frozen-lockfile
+pnpm setup:env
 pnpm exec playwright-cli install-browser chromium
 pnpm dev
 ```
+
+Web configuration lives in `apps/web/.env`; the root env helper copies an existing
+root `.env` without overwriting app configuration. Generated assets come from
+`assets/` and are written to each app by its prebuild hook. Desktop packaging uses
+`apps/desktop/.env` and emits `apps/desktop/dist/`.
 
 In a second terminal:
 
@@ -188,7 +206,7 @@ keep that URL private and use a programmatic VNC client rather than opening a
 host viewer. Guest System Events/AX and guest screen recording were exercised
 through `tart exec`. Permission dialogs were handled inside the guest.
 
-The final native source build passed show/hide checks through the actual Window
+The 2026-10-02 maintenance source build passed show/hide checks through the actual Window
 menu, tray menu and Alt+Space: six native operations, with a 20-second guest
 recording whose frames were inspected. It also passed native updater checks for
 Later postponement, preserving active progress, and reopening the Restart prompt

@@ -67,7 +67,7 @@ jobs:
             printf 'CLERK_SECRET_KEY=%s\n' "$CLERK_SECRET_KEY"
             printf 'WEBHOOK_SECRET=%s\n' "$WEBHOOK_SECRET"
             printf 'POSTGRES_PRISMA_URL=%s\n' "$POSTGRES_PRISMA_URL"
-          } > .env
+          } > apps/web/.env
 
       - name: Build Next.js app
         run: pnpm build
@@ -98,11 +98,11 @@ jobs:
         with:
           name: electron-app-macos
           path: |
-            dist/*.dmg
-            dist/*.zip
-            dist/*.blockmap
-            dist/latest-mac.yml
-            dist/checksums.json
+            apps/desktop/dist/*.dmg
+            apps/desktop/dist/*.zip
+            apps/desktop/dist/*.blockmap
+            apps/desktop/dist/latest-mac.yml
+            apps/desktop/dist/checksums.json
           retention-days: 30
 
   release:

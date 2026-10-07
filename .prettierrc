@@ -3,6 +3,6 @@
   "singleQuote": true,
   "semi": false,
   "plugins": ["prettier-plugin-tailwindcss"],
-  "tailwindConfig": "./tailwind.config.ts",
+  "tailwindConfig": "./apps/web/tailwind.config.ts",
   "tailwindFunctions": ["cn"]
 }

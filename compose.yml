@@ -9,7 +9,7 @@ services:
       POSTGRES_DB: corelive
       POSTGRES_INITDB_ARGS: '--auth-host=scram-sha-256 --auth-local=scram-sha-256'
     ports:
-      # Host 5491 avoids clashing with other projects on the default 5432 (see scripts/local-db-port.cjs)
+      # Host 5491 avoids clashing with other projects on the default 5432 (see apps/web/scripts/local-db-port.cjs)
       - '5491:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
