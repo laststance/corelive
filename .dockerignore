@@ -1,16 +1,19 @@
 # Dependencies
-node_modules/
+**/node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
 # Build outputs
-.next/
-build/
-dist/
+**/.next/
+apps/desktop/build/icons/
+**/dist/
+**/dist-electron/
 
 # Environment files
+**/.env*
+!.env.example
 .env
 .env.local
 .env.development.local
@@ -42,7 +45,7 @@ Dockerfile*
 docker-compose*.yml
 
 # Testing
-coverage/
+**/coverage/
 .nyc_output
 
 # Logs

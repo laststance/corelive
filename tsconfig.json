@@ -1,52 +1,22 @@
 {
-  "$shema": "https://json.schemastore.org/tsconfig.json",
   "compilerOptions": {
-    /* Base Options: */
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "target": "es2022",
-    "allowJs": true,
-    "resolveJsonModule": true,
-    "moduleDetection": "force",
-    "isolatedModules": true,
-    "verbatimModuleSyntax": true,
-    "jsx": "react-jsx",
-    /* Strictness */
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "noImplicitOverride": true,
-    /* If NOT transpiling with TypeScript: */
+    "target": "ES2022",
     "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "allowJs": true,
+    "checkJs": false,
     "noEmit": true,
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
-    "paths": {
-      "@/*": ["./src/*"],
-      "@/electron/*": ["./electron/*"]
-    },
-    "lib": ["dom", "dom.iterable", "esnext"],
-    "incremental": true,
-    "types": ["vitest/globals", "@testing-library/jest-dom"]
+    "skipLibCheck": true,
+    "resolveJsonModule": true
   },
   "include": [
-    "./*.js",
-    "./*.ts",
-    "./*.cjs",
-    "./*.mjs",
-    "./*.mts",
-    "./**/*.js",
-    "./**/*.ts",
-    "./**/*.tsx",
-    "./**/*.jsx",
-    "./**/*.cjs",
-    "./**/*.mjs",
-    "./**/*.mts",
-    "next-env.d.ts",
-    ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
-  ],
-  "exclude": ["node_modules", ".next", "next", "examples-with-next", "_trials"]
+    "scripts/**/*.ts",
+    "*.ts",
+    "*.js",
+    "*.mjs",
+    "scripts/**/*.js",
+    "scripts/**/*.mjs",
+    "scripts/**/*.cjs"
+  ]
 }

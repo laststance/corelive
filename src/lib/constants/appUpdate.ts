@@ -1,1 +1,0 @@
-export { UPDATE_PROGRESS_PERCENT_MAX as UPDATE_DOWNLOAD_PROGRESS_MAX_PERCENT } from '@/electron/constants'

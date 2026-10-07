@@ -4,26 +4,30 @@
   // The shadcn catalog stays installed even when the app does not import every primitive.
   // Wallaby reads wallaby.conf.js outside the app module graph.
   "entry": [
-    "electron/dev-runner.ts",
-    "scripts/after-build.js",
+    "apps/desktop/electron/dev-runner.ts",
+    "apps/desktop/scripts/after-build.js",
     // Run by .github/workflows/db-migrate.yml around `drizzle-kit migrate`, not by a package script.
-    "scripts/baseline-drizzle-migrations.mjs",
-    "src/components/ui/**/*.tsx",
-    "wallaby.conf.js",
+    "apps/web/scripts/baseline-drizzle-migrations.mjs",
+    "apps/web/src/components/ui/**/*.tsx",
+    "apps/web/wallaby.conf.js",
   ],
   "framework": [
     {
       "name": "corelive-electron-tests",
       "enablers": ["vitest"],
       "entryPoints": [
-        "electron/**/*.{test,spec}.{ts,mjs}",
+        "apps/desktop/electron/**/*.{test,spec}.{ts,mjs}",
         "scripts/**/*.{test,spec}.{ts,mjs}",
+        "apps/web/scripts/**/*.{test,spec}.{ts,mjs}",
       ],
       "entryPointRole": "test",
     },
   ],
   // Next.js generates route declarations; theme:generate owns the repeated theme CSS.
-  "ignorePatterns": ["next-env.d.ts", "src/lib/themes/generated.css"],
+  "ignorePatterns": [
+    "apps/web/next-env.d.ts",
+    "apps/web/src/lib/themes/generated.css",
+  ],
   "ignoreDependencies": [
     // Next.js loads the CSS optimizer by name.
     "critters",
@@ -48,7 +52,7 @@
   // The documented shadcn component catalog intentionally exposes its composition primitives.
   "ignoreExports": [
     {
-      "file": "src/components/ui/**",
+      "file": "apps/web/src/components/ui/**",
       "exports": ["*"],
     },
   ],
@@ -65,7 +69,8 @@
       "**/*.{test,spec}.{ts,tsx,mjs}",
       "**/__tests__/**",
       "scripts/**",
-      "src/db/seed/*.ts",
+      "apps/*/scripts/**",
+      "apps/web/src/db/seed/*.ts",
     ],
   },
 }

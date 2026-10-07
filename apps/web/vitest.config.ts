@@ -1,0 +1,44 @@
+/// <reference types="vitest/config" />
+import path from 'node:path'
+
+import { defineConfig } from 'vitest/config'
+
+// Unit tests configuration only
+export default defineConfig({
+  test: {
+    name: 'unit',
+    environment: 'happy-dom',
+    globals: true,
+    include: [
+      'src/**/*.{spec,test}.{js,jsx,ts,tsx}',
+      'src/**/__tests__/**/*.{js,jsx,ts,tsx}',
+    ],
+    exclude: ['src/types/__tests__'],
+    setupFiles: ['setupTests.ts'],
+    // Coverage (#127): v8 provider, per-surface repo-relative reportsDirectory;
+    // `all: true` so untested files (incl. 0% ones) appear in the baseline.
+    coverage: {
+      provider: 'v8',
+      reporter: ['text-summary', 'json', 'lcov'],
+      reportsDirectory: 'coverage/unit-web',
+      // `include` is the explicit allowlist; in vitest 4 this also pulls in
+      // untested files (reported at 0%), which is the old `all: true` behavior.
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: [
+        'src/**/*.{test,spec}.{ts,tsx}',
+        'src/**/__tests__/**',
+        // Test-only helpers that live under src/ because specs import them by
+        // alias; counting the MSW fake server as app code understates coverage.
+        'src/test/**',
+        'src/types/**',
+        '**/*.d.ts',
+      ],
+    },
+  },
+  resolve: {
+    // Web aliases stay app-local; shared code resolves through workspace exports.
+    alias: {
+      '@': path.resolve(import.meta.dirname, './src'),
+    },
+  },
+})

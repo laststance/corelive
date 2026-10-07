@@ -1,3 +1,6 @@
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
 import { defineConfig } from 'eslint/config'
 import tsPrefixer from 'eslint-config-ts-prefixer'
 import reactHooks from 'eslint-plugin-react-hooks'
@@ -5,27 +8,38 @@ import reactYouMightNotNeedAnEffect from 'eslint-plugin-react-you-might-not-need
 
 import dslint from './packages/eslint-plugin-dslint/dist/index.js'
 
-export default defineConfig([
+const rootDirectory = path.dirname(fileURLToPath(import.meta.url))
+
+const config = [
   reactHooks.configs.flat.recommended,
   reactYouMightNotNeedAnEffect.configs.recommended,
   {
     ignores: [
-      '.next/**',
-      'html/**',
-      'dist/**',
-      'out/**',
-      'build/**',
+      '**/.next/**',
+      '**/html/**',
+      '**/dist/**',
+      '**/out/**',
+      '**/build/**',
       // Vitest coverage writes generated assets that are outside lint scope.
-      'coverage/**',
-      'next-env.d.ts',
-      'dist-electron/**',
-      'public/**',
-      '.playwright-mcp/**',
-      'packages/**',
+      '**/coverage/**',
+      '**/next-env.d.ts',
+      '**/dist-electron/**',
+      '**/public/**',
+      '**/.playwright-mcp/**',
+      'packages/eslint-plugin-dslint/**',
       '_trials/**',
     ],
   },
   ...tsPrefixer,
+  {
+    settings: {
+      'import-x/resolver': {
+        typescript: {
+          project: path.join(rootDirectory, 'apps/web/tsconfig.json'),
+        },
+      },
+    },
+  },
   {
     rules: {
       'no-console': ['error', { allow: ['warn', 'error'] }],
@@ -39,12 +53,12 @@ export default defineConfig([
   // Zod runtime validation, which together are how we enforce that any value
   // crossing the main/renderer boundary is typed + sanitized.
   {
-    files: ['electron/**/*.ts', 'electron/**/*.tsx'],
+    files: ['apps/desktop/electron/**/*.ts', 'apps/desktop/electron/**/*.tsx'],
     ignores: [
-      'electron/ipc/typedHandle.ts',
-      'electron/ipc/typedInvoke.ts',
-      'electron/ipc/typedSend.ts',
-      'electron/__tests__/**',
+      'apps/desktop/electron/ipc/typedHandle.ts',
+      'apps/desktop/electron/ipc/typedInvoke.ts',
+      'apps/desktop/electron/ipc/typedSend.ts',
+      'apps/desktop/electron/__tests__/**',
     ],
     rules: {
       'no-restricted-syntax': [
@@ -77,7 +91,7 @@ export default defineConfig([
       'dslint/token-only': [
         'warn',
         {
-          tokenSource: './tailwind.config.ts',
+          tokenSource: path.join(rootDirectory, 'apps/web/tailwind.config.ts'),
           ignore: [
             // Tailwind modifiers & pseudo-classes
             'animate-*',
@@ -145,10 +159,15 @@ export default defineConfig([
     },
     // shadcn/ui, packages, tests は除外
     ignores: [
-      'src/components/ui/**',
-      'packages/**',
+      'apps/web/src/components/ui/**',
+      'packages/eslint-plugin-dslint/**',
       '**/*.test.ts',
       '**/*.test.tsx',
     ],
   },
-])
+]
+
+// All app entry configs share repository-relative rule and ignore semantics.
+export default defineConfig(
+  config.map((item) => ({ ...item, basePath: rootDirectory })),
+)

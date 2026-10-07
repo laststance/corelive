@@ -48,7 +48,7 @@ jobs:
             printf 'CLERK_SECRET_KEY=%s\n' "$CLERK_SECRET_KEY"
             printf 'WEBHOOK_SECRET=%s\n' "$WEBHOOK_SECRET"
             printf 'POSTGRES_PRISMA_URL=%s\n' 'postgresql://postgres:password@localhost:5491/corelive'
-          } > .env
+          } > apps/web/.env
 
       - name: Start Postgres via Docker Compose 🐳
         run: |
@@ -75,7 +75,7 @@ jobs:
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage/unit-web/lcov.info,./coverage/unit-electron/lcov.info
+          files: ./apps/web/coverage/unit-web/lcov.info,./apps/desktop/coverage/unit-electron/lcov.info
           flags: unit
           fail_ci_if_error: false
 
@@ -85,8 +85,8 @@ jobs:
         with:
           name: coverage-unit
           path: |
-            coverage/unit-web/
-            coverage/unit-electron/
+            apps/web/coverage/unit-web/
+            apps/desktop/coverage/unit-electron/
           retention-days: 30
 
       - name: Show Postgres logs on failure 🪵

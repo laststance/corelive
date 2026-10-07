@@ -1,5 +1,9 @@
 # #128 — LiveEditor hides spellcheck red underlines
 
+> Historical feature design: source paths below refer to the original layout.
+> Web now lives in `apps/web`, desktop in `apps/desktop`; current QA follows
+> [the isolated development guide](../headless-development.md).
+
 ## Context
 
 LiveEditor is the quick, messy-capture surface. The native browser spellchecker draws

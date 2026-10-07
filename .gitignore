@@ -8,16 +8,16 @@ public/favicon-*.png
 public/favicon.ico
 
 # dependencies
-/node_modules
+node_modules/
 /.pnp
 .pnp.js
 .yarn/install-state.gz
 
 # testing
-/coverage
+coverage/
 
 # next.js
-/.next/
+.next/
 /out/
 next-env.d.ts
 
@@ -52,6 +52,10 @@ screenshots
 .claude
 !.cursor
 .playwright-mcp
+# Keep the headless CLI configuration while ignoring generated Playwright state.
+!/.playwright/
+/.playwright/*
+!/.playwright/cli.config.json
 
 # Electron
 dist/
@@ -74,10 +78,10 @@ _trials/
 .superpowers/
 # Project CLAUDE.md is kept local-only (holds prod test-account creds) — never commit
 /CLAUDE.md
-# AGENTS.md is a local symlink → CLAUDE.md (gitignored). A tracked symlink to a
-# gitignored target dangles on a fresh CI checkout, and electron-builder's signed
-# `--mac` file walk stat()s it → ENOENT, breaking the release build. Keep local-only.
-/AGENTS.md
+# AGENTS.md is a tracked, standalone policy file. Never link it to the private
+# CLAUDE.md: that target is absent in fresh checkouts and contains credentials.
+!/AGENTS.md
+!/apps/web/AGENTS.md
 
 # Cursor
 .cursor
@@ -90,3 +94,10 @@ _trials/
 
 # Fallow analysis cache
 .fallow/
+
+# Workspace-generated resources and local signing/configuration files
+apps/web/public/favicon*.png
+apps/web/public/favicon.ico
+apps/web/public/sounds/
+apps/desktop/public/
+apps/desktop/build/icons/

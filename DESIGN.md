@@ -138,10 +138,10 @@ This is the project's most consequential color decision. Departs from GitHub's g
 
 Warm Cathedral is the soul of the product; the colored families are optional self-expression layered _on top of_ it without ever touching it. The ten rules below govern how themes are added, derived, and applied.
 
-1. **The default is sacred.** Warm Cathedral light + dark are the untouched default, byte-for-byte. Every other theme is derived, static, or layered; none may alter the cathedral tokens. The cathedral pair stays **hand-authored in `src/globals.css`** (never machine-generated) — brand safety over DRY.
+1. **The default is sacred.** Warm Cathedral light + dark are the untouched default, byte-for-byte. Every other theme is derived, static, or layered; none may alter the cathedral tokens. The cathedral pair stays **hand-authored in `apps/web/src/globals.css`** (never machine-generated) — brand safety over DRY.
 2. **14 themes, 7 families.** The stock shadcn **Default** (neutral, listed first in the picker) + Warm Cathedral (the applied default) + five colored families — **Harbor** (calm blue), **Grove** (forest green), **Rose Tea** (dusty rose), **Iris** (soft violet), **Graphite** (near-neutral slate) — each in `{light, dark}`.
-3. **The registry is the single source of truth.** `src/lib/themes/registry.ts` holds every theme as a discriminated union: `PreservedTheme` (cathedral — metadata only), `StaticTheme` (the stock shadcn Default pair — literal tokens emitted verbatim), or `DerivedTheme` (a colored family's accent L/C/H, a neutral tint, and a 5-stop heatmap hue path). `THEMES`, the picker, and `useThemeAxis` all derive from it — never edit them directly.
-4. **Colored families are generated, the default is not.** A build-time generator (`scripts/generate-theme-css.ts`) reads the registry and emits static CSS to `src/lib/themes/generated.css`, one `:root[data-theme='id']` block per derived or static theme (specificity `0,2,0`, so it beats the cathedral `:root` regardless of `@import` order). The generator **skips every `preserve` theme** — cathedral is never emitted. WCAG math (`culori`) runs at **build/test time only**; it is never shipped in the client bundle. `pnpm theme:generate` regenerates; `theme:check` fails CI if the committed CSS is stale.
+3. **The registry is the single source of truth.** `apps/web/src/lib/themes/registry.ts` holds every theme as a discriminated union: `PreservedTheme` (cathedral — metadata only), `StaticTheme` (the stock shadcn Default pair — literal tokens emitted verbatim), or `DerivedTheme` (a colored family's accent L/C/H, a neutral tint, and a 5-stop heatmap hue path). `THEMES`, the picker, and `useThemeAxis` all derive from it — never edit them directly.
+4. **Colored families are generated, the default is not.** A build-time generator (`apps/web/scripts/generate-theme-css.ts`) reads the registry and emits static CSS to `apps/web/src/lib/themes/generated.css`, one `:root[data-theme='id']` block per derived or static theme (specificity `0,2,0`, so it beats the cathedral `:root` regardless of `@import` order). The generator **skips every `preserve` theme** — cathedral is never emitted. WCAG math (`culori`) runs at **build/test time only**; it is never shipped in the client bundle. `pnpm theme:generate` regenerates; `theme:check` fails CI if the committed CSS is stale.
 5. **Derivation is systematic, identity is preserved.** A derived family tints its neutral surfaces toward the family hue at the **cathedral lightness ladder** (so AA is L-driven and always holds); the accent is the family's own L/C/H; **fixed-identity tokens — `--destructive`, `--chart-1…5` — are emitted as the cathedral value unchanged for every theme**; foregrounds are contrast-computed for WCAG AA, never hand-picked.
 6. **Graphite is the temperature=pride proof.** Its accent is nearly desaturated (chroma ~0.02), so the **only real chroma on screen is the heatmap bloom**. A near-monochrome chrome with a glowing heatmap is the purest statement of the north star: the year you accumulated is the color.
 7. **The picker is two-axis.** Settings and the sidebar quick-switch both pick a **family** and a **mode** independently. Each family card previews the family's _real_ tokens (surface · accent · text · heatmap ramp) as a **composite swatch reconstructed at runtime from the registry** — never a single hex dot, never the culori library.
@@ -166,7 +166,7 @@ Warm Cathedral is the soul of the product; the colored families are optional sel
 
 > **The heatmap's temperature = pride. The hot end blooms warm on every theme, forever — it is a CI-enforced invariant, not a guideline.**
 
-Adding a colored family must never let the heatmap's payoff drift back toward a "GitHub-green work-grid." The guarantee has three tiers, strongest first. For **every** registered theme, `src/lib/themes/generate-theme-css.test.ts` asserts the five heatmap stops (`--hm-0` rest → `--hm-4` apex):
+Adding a colored family must never let the heatmap's payoff drift back toward a "GitHub-green work-grid." The guarantee has three tiers, strongest first. For **every** registered theme, `apps/web/src/lib/themes/generate-theme-css.test.ts` asserts the five heatmap stops (`--hm-0` rest → `--hm-4` apex):
 
 1. **The two hottest stops bloom warm** _(CI-locked seed constraint — the load-bearing gate)_. `--hm-3` **and** `--hm-4` hue ∈ **[20, 70]**, regardless of where the family rests. Per-stop hue is the only thing a `heatmapHues` seed actually controls, so this is what makes "more completions = hotter" read the same across families. A seed that keeps a cool body all the way up (e.g. green `[145, 145, 145, 145, 42]`) **fails the build** — the cool rest with a single warm apex _is_ the GitHub-green failure mode.
 2. **Lightness moves monotonically and chroma intensifies toward the apex** _(structural — holds by construction)_. Light mode rests palest and deepens to the apex; dark mode rests darkest and brightens to it; the fullest day is the most saturated cell. The generator reuses the cathedral L/C ladder verbatim for every family, so the test here guards against a _generator_ regression, not a bad seed — a seed cannot move L or C.
@@ -293,14 +293,14 @@ Instead of "5-day streak" (creates fragility), display **"shown up 18 days this 
 
 ## Component Behavior Notes (CSS-variable-compatible)
 
-The full color system maps onto the existing shadcn/ui tokens. Migration is per-token, not per-component. Every shadcn primitive in `src/components/ui/` keeps working — only the underlying CSS variables change.
+The full color system maps onto the existing shadcn/ui tokens. Migration is per-token, not per-component. Every shadcn primitive in `apps/web/src/components/ui/` keeps working — only the underlying CSS variables change.
 
 - **Button (primary):** amber bg, paper-white text, 8px radius, hover lifts 1px
 - **Card:** surface bg, 1px soft border, 12px radius, no shadow by default (shadow only when elevated/dragging)
 - **Input:** transparent bg in light mode, white-on-white feel; focus ring uses `--ring` (amber)
 - **Badge:** pill (full radius), Caption typography (12px / 500 uppercase)
 - **Tooltip:** popover bg, 4px slide-up entrance, 13px sans; max 2 lines, no markdown
-- **Heatmap cell:** `<rect>` with explicit fill from `--hm-0…--hm-4` (resolved per active theme; the component reads them via the `HEATMAP_LEVEL_TOKENS` source-of-truth in `src/lib/heatmap-intensity.ts`), role=button when count>0, focus ring identical to other interactive elements
+- **Heatmap cell:** `<rect>` with explicit fill from `--hm-0…--hm-4` (resolved per active theme; the component reads them via the `HEATMAP_LEVEL_TOKENS` source-of-truth in `apps/web/src/lib/heatmap-intensity.ts`), role=button when count>0, focus ring identical to other interactive elements
 
 ## Decisions Log
 
@@ -338,10 +338,8 @@ The full color system maps onto the existing shadcn/ui tokens. Migration is per-
 
 ## Implementation Migration Notes
 
-This DESIGN.md describes the target system. Migration from current state (cold-neutral oklch + GitHub green Heatmap) is per-token in `src/globals.css`. No component code changes are required for the color/spacing migration. Typography loads nothing: the stock Tailwind `font-sans` / `font-mono` stacks are the defaults (no `next/font`, no `@theme` font override). Still open:
+This DESIGN.md describes the target system. Migration from current state (cold-neutral oklch + GitHub green Heatmap) is per-token in `apps/web/src/globals.css`. No component code changes are required for the color/spacing migration. Typography loads nothing: the stock Tailwind `font-sans` / `font-mono` stacks are the defaults (no `next/font`, no `@theme` font override). The eight named tiers are available through `type-hero`, `type-h1`, `type-h2`, `type-h3`, `type-body`, `type-small`, `type-caption`, and `type-data` in `apps/web/src/lib/themes/typography.css`. Caption applies uppercase tracking; Data uses tabular numerals.
 
-1. A type-scale utility component or CSS layer for the Hero / H1 / H2 / H3 / Body / Small / Caption / Data tiers
+The Heatmap palette is defined by the `--hm-0…--hm-4` tokens. The stock **Default** family carries the Warm Cathedral ramp verbatim in its registry `tokens` (shadcn ships no heatmap). For the **default Warm Cathedral**, edit them directly in `apps/web/src/globals.css` (light and dark). For a **colored family**, change its `heatmapHues` seed in `apps/web/src/lib/themes/registry.ts` and run `pnpm theme:generate` (the generator rewrites `apps/web/src/lib/themes/generated.css`). Either way **no `ContributionGraph.tsx` change is required** — the component resolves the tokens through the `HEATMAP_LEVEL_TOKENS` source-of-truth.
 
-The Heatmap palette is defined by the `--hm-0…--hm-4` tokens. The stock **Default** family carries the Warm Cathedral ramp verbatim in its registry `tokens` (shadcn ships no heatmap). For the **default Warm Cathedral**, edit them directly in `src/globals.css` (light and dark). For a **colored family**, change its `heatmapHues` seed in `src/lib/themes/registry.ts` and run `pnpm theme:generate` (the generator rewrites `src/lib/themes/generated.css`). Either way **no `ContributionGraph.tsx` change is required** — the component resolves the tokens through the `HEATMAP_LEVEL_TOKENS` source-of-truth.
-
-Streak and tooltip copy changes are scoped to `ContributionGraph.tsx` and any future StreakBadge component (deferred to the Heatmap Cathedral plan, decision D12 / Electron-only).
+The heatmap tooltip uses “N things done — good day” for positive days and “rest day” for empty days. No streak badge is displayed. Server streak fields remain available to preserve the API contract.

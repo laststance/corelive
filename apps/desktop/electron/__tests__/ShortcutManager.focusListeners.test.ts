@@ -1,0 +1,275 @@
+import { app, BrowserWindow, globalShortcut } from 'electron'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
+
+import ShortcutManager from '../ShortcutManager'
+import type { WindowManager } from '../WindowManager'
+
+/**
+ * Contextual shortcuts (Cmd+N / Cmd+M) follow app-level focus: they are
+ * registered while ANY CoreLive window is focused and released when none is.
+ * `browser-window-focus` / `browser-window-blur` are app events whose order is
+ * not guaranteed on a window-to-window switch, so both handlers resolve the
+ * truth from `BrowserWindow.getFocusedWindow()` instead of trusting the event.
+ *
+ * `vi.mock` is hoisted above these imports by Vitest, so `app`, `BrowserWindow`
+ * and `globalShortcut` resolve to the mocks below.
+ */
+
+/** `app.on` mock typed on the event NAME so `mock.calls` can be filtered by it. */
+const { appOnMock } = vi.hoisted(() => ({
+  appOnMock: vi.fn<(eventName: string, listener: () => void) => void>(),
+}))
+
+vi.mock('electron', () => ({
+  app: {
+    on: appOnMock,
+    removeListener: vi.fn(),
+  },
+  BrowserWindow: {
+    getFocusedWindow: vi.fn(() => null),
+  },
+  globalShortcut: {
+    isRegistered: vi.fn(() => false),
+    register: vi.fn(() => true),
+    unregister: vi.fn(),
+    unregisterAll: vi.fn(),
+  },
+}))
+
+const registerMock = vi.mocked(globalShortcut.register)
+const unregisterMock = vi.mocked(globalShortcut.unregister)
+const getFocusedWindowMock = vi.mocked(BrowserWindow.getFocusedWindow)
+
+/** Default contextual accelerators — the observable proof a focus bound. */
+const NEW_TASK_ACCELERATOR = 'CommandOrControl+N'
+const MINIMIZE_ACCELERATOR = 'CommandOrControl+M'
+
+/** A stand-in for whatever CoreLive window currently has focus. */
+const FOCUSED_WINDOW = {} as unknown as BrowserWindow
+
+/**
+ * Finds the app-level listener ShortcutManager registered for an event.
+ * @param eventName - `browser-window-focus` or `browser-window-blur`.
+ * @returns The registered handler.
+ * @example
+ * getAppListener('browser-window-focus')()
+ */
+function getAppListener(eventName: string): () => void {
+  const registration = appOnMock.mock.calls.find(
+    ([registeredEvent]) => registeredEvent === eventName,
+  )
+  if (!registration) {
+    throw new Error(`Expected an app listener for ${eventName}`)
+  }
+  return registration[1]
+}
+
+/** WindowManager stand-in: contextual shortcuts no longer read any window from it. */
+function createWindowManager(): WindowManager {
+  return {
+    toggleLiveEditor: vi.fn(() => true),
+    getWebAppOrigin: vi.fn(() => 'https://corelive.app'),
+  } as unknown as WindowManager
+}
+
+describe('ShortcutManager contextual shortcuts follow app-level window focus', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getFocusedWindowMock.mockReturnValue(null)
+    registerMock.mockReturnValue(true)
+  })
+
+  test('registers the app focus/blur listeners once even when setup runs twice', () => {
+    // Arrange
+    const shortcutManager = new ShortcutManager(createWindowManager(), null)
+
+    // Act: initialize() and enable() both call setup.
+    shortcutManager.setupFocusListeners()
+    shortcutManager.setupFocusListeners()
+
+    // Assert: exactly one listener per app event.
+    const focusRegistrations = appOnMock.mock.calls.filter(
+      ([eventName]) => eventName === 'browser-window-focus',
+    )
+    const blurRegistrations = appOnMock.mock.calls.filter(
+      ([eventName]) => eventName === 'browser-window-blur',
+    )
+    expect(focusRegistrations).toHaveLength(1)
+    expect(blurRegistrations).toHaveLength(1)
+  })
+
+  test('does not recover app-local shortcuts while another app has focus', () => {
+    // Arrange
+    const shortcutManager = new ShortcutManager(createWindowManager(), null)
+    shortcutManager.setupFocusListeners()
+    getFocusedWindowMock.mockReturnValue(FOCUSED_WINDOW)
+    registerMock.mockReturnValue(false)
+    getAppListener('browser-window-focus')()
+    expect(shortcutManager.getFailedShortcuts()).toHaveProperty('newTask')
+    getFocusedWindowMock.mockReturnValue(null)
+    registerMock.mockReturnValue(true)
+    registerMock.mockClear()
+
+    // Act
+    shortcutManager.retryFailedShortcuts()
+
+    // Assert
+    expect(registerMock).not.toHaveBeenCalled()
+    expect(shortcutManager.getFailedShortcuts()).toEqual({})
+    expect(shortcutManager.getRegisteredShortcuts()).not.toHaveProperty(
+      'newTask',
+    )
+  })
+
+  test('binds Cmd+N when a CoreLive window gains focus and releases it when focus leaves the app', () => {
+    // Arrange
+    const shortcutManager = new ShortcutManager(createWindowManager(), null)
+    shortcutManager.setupFocusListeners()
+
+    // Act: LiveEditor (or Settings, or the login window) gains focus.
+    getFocusedWindowMock.mockReturnValue(FOCUSED_WINDOW)
+    getAppListener('browser-window-focus')()
+
+    // Assert
+    expect(registerMock).toHaveBeenCalledWith(
+      NEW_TASK_ACCELERATOR,
+      expect.any(Function),
+    )
+
+    // Act: the user switches to another app — no CoreLive window is focused.
+    getFocusedWindowMock.mockReturnValue(null)
+    getAppListener('browser-window-blur')()
+
+    // Assert: Cmd+N is no longer hijacked system-wide.
+    expect(unregisterMock).toHaveBeenCalledWith(NEW_TASK_ACCELERATOR)
+    expect(shortcutManager.getRegisteredShortcuts()).not.toHaveProperty(
+      'newTask',
+    )
+  })
+
+  test('stays registered across a LiveEditor → Settings switch whether focus fires before or after blur', () => {
+    // Arrange: LiveEditor is focused and bound.
+    const shortcutManager = new ShortcutManager(createWindowManager(), null)
+    shortcutManager.setupFocusListeners()
+    getFocusedWindowMock.mockReturnValue(FOCUSED_WINDOW)
+    getAppListener('browser-window-focus')()
+
+    // Act: order 1 — Settings' focus arrives before LiveEditor's blur; by the
+    // time blur runs, Settings already holds focus.
+    getAppListener('browser-window-focus')()
+    getAppListener('browser-window-blur')()
+
+    // Assert
+    expect(shortcutManager.getRegisteredShortcuts()).toHaveProperty(
+      'newTask',
+      NEW_TASK_ACCELERATOR,
+    )
+
+    // Act: order 2 — blur first (nothing focused for a moment), then focus.
+    getFocusedWindowMock.mockReturnValue(null)
+    getAppListener('browser-window-blur')()
+    getFocusedWindowMock.mockReturnValue(FOCUSED_WINDOW)
+    getAppListener('browser-window-focus')()
+
+    // Assert: the final state is registered either way.
+    expect(shortcutManager.getRegisteredShortcuts()).toHaveProperty(
+      'newTask',
+      NEW_TASK_ACCELERATOR,
+    )
+  })
+
+  test('binds contextual shortcuts immediately on enable() when a window is already focused', () => {
+    // Arrange: a window is focused before shortcuts are enabled.
+    const shortcutManager = new ShortcutManager(createWindowManager(), null)
+    getFocusedWindowMock.mockReturnValue(FOCUSED_WINDOW)
+
+    // Act
+    shortcutManager.enable()
+
+    // Assert
+    expect(registerMock).toHaveBeenCalledWith(
+      MINIMIZE_ACCELERATOR,
+      expect.any(Function),
+    )
+  })
+
+  test('binds Cmd+N at boot when a CoreLive window is already focused before shortcuts initialize', () => {
+    // Arrange: the startup panel (or the login window) took focus before the
+    // deferred ShortcutManager.initialize() ran, so no focus event is coming.
+    const shortcutManager = new ShortcutManager(createWindowManager(), null)
+    getFocusedWindowMock.mockReturnValue(FOCUSED_WINDOW)
+
+    // Act
+    shortcutManager.initialize()
+
+    // Assert: bound now, not only after the next focus-away-and-back.
+    expect(registerMock).toHaveBeenCalledWith(
+      NEW_TASK_ACCELERATOR,
+      expect.any(Function),
+    )
+  })
+
+  test('re-binds Cmd+M after disable() → enable() while a window stays focused, and ignores focus while disabled', () => {
+    // Arrange: focused and bound.
+    const shortcutManager = new ShortcutManager(createWindowManager(), null)
+    shortcutManager.setupFocusListeners()
+    getFocusedWindowMock.mockReturnValue(FOCUSED_WINDOW)
+    getAppListener('browser-window-focus')()
+    expect(shortcutManager.getRegisteredShortcuts()).toHaveProperty('minimize')
+
+    // Act: the user turns shortcuts off, then a focus event arrives.
+    shortcutManager.disable()
+    registerMock.mockClear()
+    getAppListener('browser-window-focus')()
+
+    // Assert: nothing is bound while disabled.
+    expect(registerMock).not.toHaveBeenCalled()
+    expect(shortcutManager.getRegisteredShortcuts()).not.toHaveProperty(
+      'minimize',
+    )
+
+    // Act: shortcuts are turned back on without any focus change.
+    shortcutManager.enable()
+
+    // Assert: Cmd+M is live again — registration truth is the map, not a flag.
+    expect(shortcutManager.getRegisteredShortcuts()).toHaveProperty(
+      'minimize',
+      MINIMIZE_ACCELERATOR,
+    )
+  })
+
+  test('removes both app listeners on cleanup', () => {
+    // Arrange
+    const shortcutManager = new ShortcutManager(createWindowManager(), null)
+    shortcutManager.setupFocusListeners()
+    const focusListener = getAppListener('browser-window-focus')
+    const blurListener = getAppListener('browser-window-blur')
+
+    // Act
+    shortcutManager.cleanup()
+
+    // Assert: the exact handlers that were added are removed.
+    expect(app.removeListener).toHaveBeenCalledWith(
+      'browser-window-focus',
+      focusListener,
+    )
+    expect(app.removeListener).toHaveBeenCalledWith(
+      'browser-window-blur',
+      blurListener,
+    )
+  })
+
+  test('minimizes whichever CoreLive window is focused on Cmd+M', () => {
+    // Arrange
+    const minimize = vi.fn()
+    const focusedWindow = { minimize } as unknown as BrowserWindow
+    const shortcutManager = new ShortcutManager(createWindowManager(), null)
+    getFocusedWindowMock.mockReturnValue(focusedWindow)
+
+    // Act
+    shortcutManager.handleMinimizeWindow()
+
+    // Assert
+    expect(minimize).toHaveBeenCalledTimes(1)
+  })
+})

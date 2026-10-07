@@ -1,0 +1,149 @@
+#!/usr/bin/env node
+
+import { spawn } from 'child_process'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+// const isDev = process.env.NODE_ENV !== 'production'
+const port = process.env.PORT || 4991
+
+/**
+ * Development server script for CoreLive Electron app
+ *
+ * This script:
+ * 1. Builds Electron code with electron-vite
+ * 2. Starts the Next.js development server
+ * 3. Starts the Electron runner, which waits for Next.js
+ * 4. Handles graceful shutdown
+ */
+
+let nextProcess = null
+let electronProcess = null
+let buildProcess = null
+
+// Cleanup function
+function cleanup() {
+  if (buildProcess) {
+    buildProcess.kill('SIGTERM')
+    buildProcess = null
+  }
+
+  if (electronProcess) {
+    electronProcess.kill('SIGTERM')
+    electronProcess = null
+  }
+
+  if (nextProcess) {
+    nextProcess.kill('SIGTERM')
+    nextProcess = null
+  }
+
+  process.exit(0)
+}
+
+// Handle process termination
+process.on('SIGINT', cleanup)
+process.on('SIGTERM', cleanup)
+process.on('exit', cleanup)
+
+async function startDevelopment() {
+  try {
+    // Build Electron code first (required for lazy loading to work)
+    // eslint-disable-next-line no-console
+    console.log('🔨 Building Electron code...')
+    buildProcess = spawn('pnpm', ['electron:build:ts'], {
+      stdio: 'inherit',
+      shell: true,
+      env: {
+        ...process.env,
+        NODE_ENV: 'development',
+      },
+    })
+
+    await new Promise((resolve, reject) => {
+      buildProcess.on('exit', (code) => {
+        // Clear tracked reference after build completes
+        buildProcess = null
+        if (code !== 0 && code !== null) {
+          reject(new Error(`Electron build failed with code ${code}`))
+        } else {
+          resolve()
+        }
+      })
+      buildProcess.on('error', (err) => {
+        buildProcess = null
+        reject(err)
+      })
+    })
+
+    // eslint-disable-next-line no-console
+    console.log('✅ Electron build complete')
+
+    // Start Next.js development server
+
+    nextProcess = spawn('pnpm', ['--filter', '@corelive/web', 'dev'], {
+      stdio: 'pipe',
+      shell: true,
+      env: {
+        ...process.env,
+        NODE_ENV: 'development',
+        PORT: port.toString(),
+      },
+    })
+
+    // Handle Next.js output
+    nextProcess.stdout.on('data', (data) => {
+      const output = data.toString()
+      if (output.includes('Ready') || output.includes('compiled')) {
+      }
+    })
+
+    nextProcess.stderr.on('data', (data) => {
+      console.error(`📦 Next.js Error: ${data.toString().trim()}`)
+    })
+
+    nextProcess.on('exit', (code) => {
+      if (code !== 0 && code !== null) {
+        console.error(`📦 Next.js process exited with code ${code}`)
+        cleanup()
+      }
+    })
+
+    // Start Electron
+
+    electronProcess = spawn(
+      'pnpm',
+      ['tsx', path.join(__dirname, '..', 'electron', 'dev-runner.ts')],
+      {
+        stdio: 'inherit',
+        shell: true,
+        env: {
+          ...process.env,
+          NODE_ENV: 'development',
+          CORELIVE_DEBUG: '1', // Enable DevTools and CDP for local tooling
+          CORELIVE_REMOTE_DEBUGGING_PORT: '9222',
+        },
+      },
+    )
+
+    electronProcess.on('exit', (code) => {
+      if (code !== 0 && code !== null) {
+        console.error(`⚡ Electron process exited with code ${code}`)
+      }
+      cleanup()
+    })
+  } catch (error) {
+    console.error('❌ Failed to start development environment:', error.message)
+    cleanup()
+  }
+}
+
+// Start development if this script is run directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  startDevelopment()
+}
+
+export { startDevelopment, cleanup }

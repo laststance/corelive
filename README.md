@@ -7,11 +7,11 @@
 
 CoreLive is a personal task tracker and LiveEditor archive whose centerpiece is an **Activity Heatmap** — every completed task accumulates as warm density across a year, so you close the app feeling validated, not graded. Built with [Next.js](https://nextjs.org/), available as a web app and a macOS desktop app (Electron).
 
-> **⚠️ Pre-launch — there are no users yet.** Breaking changes are fine, anywhere. Reshape the database, Drizzle schema, APIs, or any other element freely and abruptly — there is **no need to keep existing data or maintain backward compatibility**. Every schema change still ships as a generated migration (CI fails when `src/db/schema.ts` and `drizzle/` disagree): run `pnpm db:generate`, commit the SQL, then reset the database (`pnpm db:reset`) — a reset only replays the committed migrations.
+> **⚠️ Pre-launch — there are no users yet.** Breaking changes are fine, anywhere. Reshape the database, Drizzle schema, APIs, or any other element freely and abruptly — there is **no need to keep existing data or maintain backward compatibility**. Every schema change still ships as a generated migration (CI fails when `apps/web/src/db/schema.ts` and `apps/web/drizzle/` disagree): run `pnpm db:generate`, commit the SQL, then reset the database (`pnpm db:reset`) — a reset only replays the committed migrations.
 
 ## Documentation
 
-The design system (typography, color, motion, voice) is in **[`DESIGN.md`](DESIGN.md)**. The product roadmap is in [`docs/ROADMAP.md`](docs/ROADMAP.md), and per-feature design notes live under [`docs/design/`](docs/design/). See [`docs/settings-audit.md`](docs/settings-audit.md) for settings consumers, [`TODOS.md`](TODOS.md) for deferred work, and the [design-system lint package](packages/eslint-plugin-dslint/README.md) for its rules. Release changes are recorded in [`CHANGELOG.md`](CHANGELOG.md).
+The design system (typography, color, motion, voice) is in **[`DESIGN.md`](DESIGN.md)**. The product roadmap is in [`docs/ROADMAP.md`](docs/ROADMAP.md), and per-feature design notes live under [`docs/design/`](docs/design/). See [`docs/settings-audit.md`](docs/settings-audit.md) for settings consumers, [`AGENTS.md`](AGENTS.md) for development and same-PR resolution rules, and the [design-system lint package](packages/eslint-plugin-dslint/README.md) for its rules. Release changes are recorded in [`CHANGELOG.md`](CHANGELOG.md).
 
 Categories organize writing and completed history in two levels:
 
@@ -19,7 +19,7 @@ Categories organize writing and completed history in two levels:
 - In the signed-in LiveEditor picker, search by the main or subcategory name, select the full displayed path, or use **Create category…** and **Manage categories…** without leaving the editor.
 - Completed-history filters include a main category's direct entries and its subcategories. Weekly summaries, daily detail, and year in review group totals by main category with an optional subcategory breakdown. Moving a subcategory changes the grouping of past entries under the current hierarchy; their dates stay the same.
 - Deleting a category moves its direct entries to the destination shown in the confirmation, preserving the entries and their dates. The initial destination is the parent for a subcategory and `General` for a main category. Children of a deleted main category become main categories with their entries still attached; rename any child that conflicts with another main category before deleting.
-- Deletion also preserves unsaved writing in the app or browser that performs it, and refreshes peers in that same browser context. It does not move drafts in other apps, browsers, or devices. The browser and Electron keep separate local draft stores; see the [cross-host boundary](docs/ROADMAP.md#later).
+- Deletion also preserves unsaved writing in the app or browser that performs it. Other signed-in browsers and native editors rescue their own local drafts into the selected destination when they next refresh while visible, including on focus and every 15 seconds. Draft text stays in each host's local store; failed rescue keeps the source and offers **Retry**. See the [completed maintenance record](docs/ROADMAP.md#completed-maintenance--2026-10-05).
 
 ## Platform Support
 
@@ -49,12 +49,46 @@ This project supports:
 
 The commands below assume mise is activated in your shell. After `mise install`, confirm that `node --version` prints `v24.20.0` before continuing.
 
+### Headless development and QA
+
+Use `pnpm dev` with `pnpm qa:browser open` for an isolated headless browser on
+the public LiveEditor. `pnpm qa:browser snapshot`, `screenshot`, `video-start`,
+and `close` operate without taking over the Mac's desktop. See
+[Headless development](docs/headless-development.md) for setup, CLI examples,
+Hammerspoon/accessory-mode limitations, and native QA isolation.
+
+### Workspace layout
+
+One root pnpm lockfile owns all workspaces. Root commands delegate to their app;
+`pnpm dev` starts only Web, and `pnpm electron:dev` starts Web plus desktop.
+Web-specific framework instructions are in [`apps/web/AGENTS.md`](apps/web/AGENTS.md).
+
+| Directory                       | Responsibility                                                            |
+| ------------------------------- | ------------------------------------------------------------------------- |
+| `apps/web`                      | Next.js, oRPC, Drizzle schema/migrations, renderer and DB tests           |
+| `apps/desktop`                  | Electron main/preload, macOS packaging and native unit tests              |
+| `packages/desktop-contract`     | Browser-safe IPC/preload contracts and native constants used by both apps |
+| `packages/eslint-plugin-dslint` | Design-system ESLint rules                                                |
+| `assets`                        | Canonical icons and shortcut sounds; app outputs are generated            |
+| `scripts`                       | Workspace, asset, environment and Headless QA orchestration               |
+
+Run `pnpm install --frozen-lockfile` from the root. App prebuild hooks generate
+icons/sounds even in a clean checkout. `pnpm clean` removes compiled outputs;
+`pnpm check:workspace` rejects old app paths and nested lockfiles. Desktop release
+version, `main`, build resources and artifacts belong to `apps/desktop`; release
+outputs are under `apps/desktop/dist`. Web does not require a new desktop release.
+
+Configure Vercel's project Root Directory as `apps/web`, with files outside the root enabled
+for the shared contracts and asset generator. Run Vercel commands with
+`--scope laststance`; Preview protection remains enabled.
+
 ### Environment Variables
 
-1. Copy `.env.example` to `.env` in the root of the project
-2. Fill in your actual values in the `.env` file
+1. Copy `.env.example` to `apps/web/.env` and fill in your values.
+2. For an existing root `.env`, run `pnpm setup:env` once; it preserves the root file and never overwrites existing app files.
+3. Keep desktop signing configuration in `apps/desktop/.env`. No environment files are committed.
 
-All Next.js environment variables are loaded and validated via `src/env.mjs` using `@t3-oss/env-nextjs`. The app will fail to start if required variables are missing or invalid.
+All Next.js environment variables are loaded and validated via `apps/web/src/env.mjs` using `@t3-oss/env-nextjs`. The app will fail to start if required variables are missing or invalid.
 
 #### Next.js (Required)
 
@@ -87,19 +121,19 @@ The Docker Compose service maps **host port `5491`** to the container's default 
 # Start the PostgreSQL database
 docker compose up -d postgres
 
-# Apply migrations (SQL lives in drizzle/, schema in src/db/schema.ts)
+# Apply migrations (SQL lives in apps/web/drizzle/, schema in apps/web/src/db/schema.ts)
 pnpm db:migrate
 
 # Seed initial data (optional)
 pnpm db:seed
 
-# After editing src/db/schema.ts, generate the next migration
+# After editing apps/web/src/db/schema.ts, generate the next migration
 pnpm db:generate
 ```
 
-> **Local database built before the move to Drizzle?** It has the tables but no `drizzle.__drizzle_migrations` row, so `pnpm db:migrate` stops with `relation "Category" already exists` (your tables and data are left untouched). For a fresh local database, run `pnpm db:reset` once: it discards local data and replays every committed migration. The cutover script's `--apply` mode is historical tooling and refuses the current journal because it contains more than the initial migration; it is no longer a setup command. Its read-only inspection and `--expect-current` checks remain part of the deployment workflow. Retirement of the write mode is tracked in [`TODOS.md`](TODOS.md#retire-the-one-time-cutover-tooling-once-production-carries-the-baseline-row).
+> **Local database built before the move to Drizzle?** It has application tables without a migration ledger. For a disposable local database, run `pnpm db:reset` once to rebuild it from every committed migration; this discards local data. Preserve needed data first. The deployment guard is read-only and never reconstructs a missing ledger automatically.
 
-Set `POSTGRES_PRISMA_URL` in `.env` to use the host port:
+Set `POSTGRES_PRISMA_URL` in `apps/web/.env` to use the host port:
 
 ```
 POSTGRES_PRISMA_URL="postgresql://postgres:password@localhost:5491/corelive"
@@ -107,7 +141,7 @@ POSTGRES_PRISMA_URL="postgresql://postgres:password@localhost:5491/corelive"
 
 #### Database Management
 
-**Schema changes go through migrations only.** Edit `src/db/schema.ts`, run `pnpm db:generate`, review and commit the SQL, then `pnpm db:migrate`. Never use `drizzle-kit push` or `pull` here: their live-database introspection cannot see `SkillNode_skillTreeId_id_key` (the index both composite `NodeEdge` foreign keys point at), so they always plan to drop and re-add those keys and then fail halfway through. `drizzle.config.ts` also refuses any drizzle-kit command that could connect to a non-local database when the URL comes from the environment or `.env`; only the deploy workflow opts out (`DRIZZLE_ALLOW_REMOTE=1`, honored only on a GitHub Actions runner). Credential flags typed on the command line (`--url`, `--host`, …) make drizzle-kit skip the config, so that gate does not cover them.
+**Schema changes go through migrations only.** Edit `apps/web/src/db/schema.ts`, run `pnpm db:generate`, review and commit the SQL, then `pnpm db:migrate`. Never use `drizzle-kit push` or `pull` here: their live-database introspection cannot see `SkillNode_skillTreeId_id_key` (the index both composite `NodeEdge` foreign keys point at), so they always plan to drop and re-add those keys and then fail halfway through. `apps/web/drizzle.config.ts` also refuses any drizzle-kit command that could connect to a non-local database when the URL comes from the environment or `.env`; only the deploy workflow opts out (`DRIZZLE_ALLOW_REMOTE=1`, honored only on a GitHub Actions runner). Credential flags typed on the command line (`--url`, `--host`, …) make drizzle-kit skip the config, so that gate does not cover them.
 
 **Basic Commands:**
 
@@ -131,17 +165,11 @@ After setting up the database, run the development server:
 
 ```bash
 pnpm dev
-# or
-npm run dev
-# or
-yarn dev
-# or
-bun dev
 ```
 
 Open [http://localhost:4991](http://localhost:4991) with your browser to see the result.
 
-You can start editing the page by modifying files under `src/app/`. The page auto-updates as you edit.
+You can start editing the page by modifying files under `apps/web/src/app/`. The page auto-updates as you edit.
 
 This project loads no web fonts: text renders in the stock shadcn/ui + Tailwind system font stacks (`font-sans` for UI, `font-mono` for data).
 
@@ -173,7 +201,7 @@ This project includes an Electron desktop application that wraps the Next.js web
 Beyond the web app, the macOS build adds native surfaces:
 
 - **LiveEditor** — a distraction-light freeform capture window
-- **Login window** — a small fixed-size sign-in shell (`/login-shell`) shown while signed out; after OAuth sign-in it closes and LiveEditor opens
+- **Login window** — a small fixed-size sign-in shell (`/login-shell`) shown while signed out; after OAuth sign-in it closes and LiveEditor opens. If the panel fails to load, use **Open LiveEditor** on the signed-in recovery screen to retry without signing in again.
 - **Startup** — the app opens LiveEditor at launch, or the login window while signed out; the first launch after upgrading removes retired keys (`window.floating`, `behavior.startup`, the retired `shortcuts.*` toggles, `liveEditor.syncMode` / `lastCategoryId`) from `config.json`
 - **Settings** — a native settings window
 - **System tray** — menu-bar access and quick toggles
@@ -183,7 +211,7 @@ Beyond the web app, the macOS build adds native surfaces:
 - **In-app shortcuts** — while any CoreLive window has focus, `⌘N` opens LiveEditor in the browser and `⌘M` minimizes; both release when the app loses focus
 - **Deep links** — `corelive://` URLs open the app
 - **Connection recovery** — if corelive.app can't be reached, or answers with an HTTP error, while the login window or LiveEditor loads, the app retries three times and then shows a native Retry / Close dialog
-- **Auto-update** — signed, notarized releases update in place
+- **Auto-update** — signed, notarized releases update in place. Choose **Download Now** or **Later** when prompted; Settings → Updates shows download progress and offers **Restart to Update** when ready. **Check for Updates** is available in Settings and the app menu.
 
 ### Electron Development
 
@@ -205,12 +233,19 @@ pnpm electron
 ```bash
 # Local production testing (connects to corelive.app)
 pnpm electron:build:dir
-open dist/mac-arm64/CoreLive.app  # Apple Silicon; dist/mac/ on Intel
+# Transfer apps/desktop/dist/mac-arm64/CoreLive.app to the QA VM (dist/mac/ on Intel).
+# Launch and exercise it inside the guest; see docs/headless-development.md.
 
 # Production release
 pnpm electron:build:mac
 ```
 
-The built macOS applications (DMG and ZIP) will be available in the `dist/` directory.
+The built macOS applications (DMG and ZIP) will be available in `apps/desktop/dist/`.
 
 > **Note**: Only macOS builds are supported. Windows and Linux builds have been removed.
+
+### Migration verification
+
+See [monorepo QA and deployment ordering](docs/qa/monorepo-2026-10-07.md) for the
+current migration, its Headless verification boundaries, and the additive
+category-deletion receipt migration.

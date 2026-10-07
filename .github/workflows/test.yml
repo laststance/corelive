@@ -38,7 +38,7 @@ jobs:
             printf 'CLERK_SECRET_KEY=%s\n' "$CLERK_SECRET_KEY"
             printf 'WEBHOOK_SECRET=%s\n' "$WEBHOOK_SECRET"
             printf 'POSTGRES_PRISMA_URL=%s\n' 'postgresql://postgres:password@localhost:5491/corelive'
-          } > .env
+          } > apps/web/.env
       # Provision Postgres for real-DB integration tests. They are gated behind
       # RUN_DB_INTEGRATION_TESTS; mocked and pure unit tests are unaffected.
       - name: Start Postgres via Docker Compose 🐳
@@ -59,7 +59,7 @@ jobs:
       # up after deploy, so regenerate here and fail on any difference (the script also catches a rename,
       # which drizzle-kit cannot resolve without a terminal and would otherwise pass silently).
       - name: Check schema.ts matches the committed migrations 🧬
-        run: bash scripts/check-schema-drift.sh
+        run: bash apps/web/scripts/check-schema-drift.sh
       - name: Generate Icons 🎨
         run: pnpm build:icons
       # Coverage lives in the dedicated `coverage.yml` workflow so this gate

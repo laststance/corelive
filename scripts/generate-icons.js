@@ -178,21 +178,24 @@ async function generateMacTemplateTrayIcons(outputDir, logger = log) {
 
 class IconGenerator {
   constructor() {
-    this.outputDir = path.join(__dirname, '../build/icons')
+    this.outputDir = path.join(__dirname, '../apps/desktop/build/icons')
     this.trayDir = path.join(this.outputDir, 'tray')
     // Raw photographic source (1254×1254 RGB) — the artist asset, untouched.
-    this.rawAppSourceIcon = path.join(__dirname, '../build/icon-source.png')
+    this.rawAppSourceIcon = path.join(
+      __dirname,
+      '../assets/icons/icon-source.png',
+    )
     // Squircle mask vendored from iconsur (MIT) — 1024×1024 RGBA template
     // including the natural Big Sur drop-shadow band. dest-in compositing
     // gives us Apple-compliant rounded-rect alpha + subtle shadow in one pass.
-    this.bigSurMask = path.join(__dirname, '../build/bigsur-mask.png')
+    this.bigSurMask = path.join(__dirname, '../assets/icons/bigsur-mask.png')
     // Normalized master (1024×1024, padded + squircle-cut) is produced at
     // runtime by normalizeBigSurMaster() and consumed by every downstream
     // app/icns/favicon step. Tray pipeline ignores it (see traySourceIcon).
     this.appSourceIcon = path.join(this.outputDir, 'normalized-master.png')
     // Tray icon source: kept on the original simplified SVG so menubar
     // glyphs stay readable at 16-32px. Replacing this would degrade tray UX.
-    this.traySourceIcon = path.join(__dirname, '../build/icon.svg')
+    this.traySourceIcon = path.join(__dirname, '../assets/icons/icon.svg')
   }
 
   async initialize() {
@@ -304,6 +307,7 @@ class IconGenerator {
         `  ❌ Failed to generate ${size}x${size} ${label}:`,
         error.message,
       )
+      throw error
     }
   }
 
@@ -376,6 +380,7 @@ class IconGenerator {
             `  ❌ Failed to generate ${size}x${size} tray icon (${state}):`,
             error.message,
           )
+          throw error
         }
       }
     }
@@ -386,7 +391,7 @@ class IconGenerator {
   async generateFavicons() {
     log.warn('\n🌐 Generating web favicons...')
     const faviconSizes = [16, 32, 48, 64, 128, 192, 512]
-    const webDir = path.join(__dirname, '../public')
+    const webDir = path.join(__dirname, '../apps/web/public')
 
     // Ensure web directory exists
     await fs.mkdir(webDir, { recursive: true })
@@ -414,6 +419,7 @@ class IconGenerator {
       log.warn(`  ✅ Generated favicon.ico`)
     } catch (error) {
       log.error(`  ❌ Failed to generate favicon.ico:`, error.message)
+      throw error
     }
   }
 
@@ -579,6 +585,7 @@ class IconGenerator {
       log.warn(`  ✅ Generated icon manifest: ${manifestPath}`)
     } catch (error) {
       log.error(`  ❌ Failed to generate icon manifest:`, error.message)
+      throw error
     }
   }
 
@@ -616,4 +623,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   generator.generateAll()
 }
 
-export { IconGenerator, generateMacTemplateTrayIcons }
+export { generateMacTemplateTrayIcons }

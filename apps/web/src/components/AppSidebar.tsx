@@ -1,0 +1,284 @@
+'use client'
+
+import { useUser } from '@clerk/nextjs'
+import {
+  Search,
+  Home as HomeIcon,
+  Sparkles,
+  PenLine,
+  Plus,
+  Settings,
+  ChevronDown,
+  Edit,
+  MoreHorizontal,
+  FileText,
+  Trash2,
+  Download,
+} from 'lucide-react'
+import Link from 'next/link'
+import { usePathname, useRouter } from 'next/navigation'
+import { useState } from 'react'
+
+import { Category } from '@/app/(main)/home/_components/Category'
+import { CategoryManageDialog } from '@/app/(main)/home/_components/CategoryManageDialog'
+import { LogoutButton } from '@/app/(main)/home/_components/LogoutButton'
+import { useIsElectron } from '@/components/auth/ElectronLoginForm'
+import { ThemeSelectorMenuItem } from '@/components/ThemeSelectorMenuItem'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Input } from '@/components/ui/input'
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarSeparator,
+} from '@/components/ui/sidebar'
+
+const GITHUB_REPO = 'laststance/corelive'
+
+/**
+ * The shared application sidebar used across all `(main)` routes.
+ * Renders user profile, navigation links, categories, and bottom actions.
+ * Uses `usePathname()` to highlight the active route.
+ */
+export const AppSidebar = function AppSidebar() {
+  const { user } = useUser()
+  const isElectron = useIsElectron()
+  const router = useRouter()
+  const pathname = usePathname()
+  const [manageDialogOpen, setManageDialogOpen] = useState(false)
+
+  // Web deployment versions can precede a desktop release; the release page always points to published installers.
+  const macDownloadUrl = `https://github.com/${GITHUB_REPO}/releases/latest`
+
+  const handleOpenSettings = () => {
+    router.push('/settings')
+  }
+  const handleOpenCategoryManager = () => {
+    setManageDialogOpen(true)
+  }
+  const handleCategoryManagerOpenChange = (open: boolean) => {
+    setManageDialogOpen(open)
+  }
+
+  return (
+    <>
+      <Sidebar className="border-r">
+        <SidebarHeader className="px-4 pb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex flex-1 items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="group h-auto flex-1 justify-start gap-2 p-2 hover:bg-sidebar-accent"
+                  >
+                    <Avatar className="h-6 w-6">
+                      <AvatarImage src={user?.imageUrl} alt="User" />
+                      <AvatarFallback className="bg-primary text-xs text-primary-foreground">
+                        {user?.firstName?.charAt(0)?.toUpperCase() ||
+                          user?.emailAddresses?.[0]?.emailAddress
+                            ?.charAt(0)
+                            ?.toUpperCase() ||
+                          'U'}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 text-left">
+                      <div className="text-sm font-medium">
+                        {user?.firstName ||
+                          user?.emailAddresses?.[0]?.emailAddress ||
+                          'User'}
+                      </div>
+                    </div>
+                    <ChevronDown className="h-4 w-4 opacity-50" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-64" align="start">
+                  <div className="p-3">
+                    <div className="mb-2 flex items-center gap-2">
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src={user?.imageUrl} alt="User" />
+                        <AvatarFallback className="bg-primary text-primary-foreground">
+                          {user?.firstName?.charAt(0)?.toUpperCase() ||
+                            user?.emailAddresses?.[0]?.emailAddress
+                              ?.charAt(0)
+                              ?.toUpperCase() ||
+                            'U'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <div className="font-medium">
+                          {user?.firstName ||
+                            user?.emailAddresses?.[0]?.emailAddress ||
+                            'User'}
+                          's Todo
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Free Plan • 1 member
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem>
+                    <span className="text-sm">
+                      {user?.emailAddresses?.[0]?.emailAddress || 'No email'}
+                    </span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem>
+                    <Plus className="mr-2 h-4 w-4" />
+                    <span className="text-sm">New workspace</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <ThemeSelectorMenuItem />
+                  <LogoutButton />
+                  {!isElectron && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild>
+                        <a
+                          href={macDownloadUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2"
+                        >
+                          <Download className="h-4 w-4" />
+                          <span>Get Mac app</span>
+                        </a>
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+        </SidebarHeader>
+
+        <SidebarContent className="px-2">
+          <div className="mb-2 px-2">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search"
+                className="h-8 border-0 bg-sidebar-accent pl-8 focus-visible:ring-1"
+              />
+            </div>
+          </div>
+
+          {/* Main Navigation — now Link-based with active state */}
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname === '/home'}>
+                    <Link href="/home">
+                      <HomeIcon className="h-4 w-4" />
+                      <span>Home</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  {/* LiveEditor is the only surface that creates keeps, so the
+                       web needs a way in — Home is a read-only dashboard. /write
+                       is the public web host; /live-editor stays the Electron
+                       panel's protected route. */}
+                  <SidebarMenuButton asChild isActive={pathname === '/write'}>
+                    <Link href="/write">
+                      <PenLine className="h-4 w-4" />
+                      <span>LiveEditor</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname === '/skill-tree'}
+                  >
+                    <Link href="/skill-tree">
+                      <Sparkles className="h-4 w-4" />
+                      <span>Skill Tree</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+
+          <SidebarSeparator />
+
+          <Category onOpenManageAction={handleOpenCategoryManager} />
+
+          <div className="flex-1" />
+
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {/* Settings is web-reachable (D15): the shared Settings
+                     section is shown to everyone; Electron window-chrome settings
+                     self-gate to the desktop app. */}
+                <SidebarMenuItem>
+                  <SidebarMenuButton onClick={handleOpenSettings}>
+                    <Settings className="h-4 w-4" />
+                    <span>Settings</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton>
+                    <Trash2 className="h-4 w-4" />
+                    <span>Trash</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
+
+        <SidebarFooter className="border-t p-2">
+          <div className="flex items-center justify-between px-2 pt-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-9"
+              aria-label="Documents"
+            >
+              <FileText className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-9"
+              aria-label="Edit"
+            >
+              <Edit className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-9"
+              aria-label="More options"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </div>
+        </SidebarFooter>
+      </Sidebar>
+      <CategoryManageDialog
+        open={manageDialogOpen}
+        onOpenChange={handleCategoryManagerOpenChange}
+      />
+    </>
+  )
+}
