@@ -130,7 +130,7 @@ describeIfDb('runTransaction (real PostgreSQL)', () => {
     const removed: PoolClient[] = []
     const recordRemoved = (client: PoolClient) => removed.push(client)
     db.$client.on('remove', recordRemoved)
-    const stallAfterBegin = (client: PoolClient) => {
+    const stallAfterBegin = (client: PoolClient): void => {
       stalled = client
       const realQuery = client.query.bind(client) as (
         ...args: unknown[]

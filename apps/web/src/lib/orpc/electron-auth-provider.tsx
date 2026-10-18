@@ -59,7 +59,7 @@ export const ElectronAuthProvider = function ElectronAuthProvider({
      * @example
      * dispatchOAuthError('Google sign-in failed')
      */
-    const dispatchOAuthError = (message: string) => {
+    const dispatchOAuthError = (message: string): void => {
       isProcessingToken.current = false
       window.dispatchEvent(
         new CustomEvent('electron-oauth-error', { detail: message }),
@@ -74,7 +74,9 @@ export const ElectronAuthProvider = function ElectronAuthProvider({
      * @example
      * await activateOAuthSession('sess_123')
      */
-    const activateOAuthSession = async (createdSessionId: string) => {
+    const activateOAuthSession = async (
+      createdSessionId: string,
+    ): Promise<void> => {
       try {
         log.info('[OAuth] Activating Electron session after ticket exchange', {
           createdSessionId,
@@ -110,7 +112,7 @@ export const ElectronAuthProvider = function ElectronAuthProvider({
     }
 
     // Process any pending token that arrived before signIn was ready
-    const processPendingToken = async () => {
+    const processPendingToken = async (): Promise<void> => {
       log.debug('[OAuth] Checking for pending token (local ref)', {
         hasPending: !!pendingToken.current,
         isProcessing: isProcessingToken.current,
@@ -162,7 +164,10 @@ export const ElectronAuthProvider = function ElectronAuthProvider({
      * // Token arrives via deep link → client.signIn.create({ strategy: 'ticket', ticket })
      * // → complete attempt returns createdSessionId → setActive() activates session
      */
-    const processSignInToken = async (token: string, provider: string) => {
+    const processSignInToken = async (
+      token: string,
+      provider: string,
+    ): Promise<void> => {
       if (isProcessingToken.current) {
         log.debug('[OAuth] Sign-in token already being processed, skipping')
         return
@@ -245,7 +250,7 @@ export const ElectronAuthProvider = function ElectronAuthProvider({
     log.debug('[OAuth] About to process pending token (if any)')
     void processPendingToken()
 
-    return () => {
+    return (): void => {
       log.debug('[OAuth] Cleaning up main listener')
       cleanup?.()
     }
@@ -270,7 +275,7 @@ export const ElectronAuthProvider = function ElectronAuthProvider({
       },
     )
 
-    return () => {
+    return (): void => {
       log.debug('[OAuth] Cleaning up temporary listener')
       tempCleanup?.()
     }
@@ -288,7 +293,7 @@ export const ElectronAuthProvider = function ElectronAuthProvider({
       return
     }
 
-    const syncAuthState = async () => {
+    const syncAuthState = async (): Promise<void> => {
       try {
         if (user) {
           // User is authenticated, sync with Electron

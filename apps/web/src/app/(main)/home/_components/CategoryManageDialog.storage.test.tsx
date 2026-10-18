@@ -77,7 +77,7 @@ afterEach(() => {
  * @example
  * await renderStorageGuardManager()
  */
-async function renderStorageGuardManager() {
+async function renderStorageGuardManager(): Promise<void> {
   const { CategoryManageDialog } = await import('./CategoryManageDialog')
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },

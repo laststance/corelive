@@ -75,7 +75,7 @@ function SidebarProvider({
   // We use openProp and setOpenProp for control from outside the component.
   const [_open, _setOpen] = React.useState(defaultOpen)
   const open = openProp ?? _open
-  const setOpen = (value: boolean | ((value: boolean) => boolean)) => {
+  const setOpen = (value: boolean | ((value: boolean) => boolean)): void => {
     const openState = typeof value === 'function' ? value(open) : value
     if (setOpenProp) {
       setOpenProp(openState)
@@ -88,13 +88,13 @@ function SidebarProvider({
   }
 
   // Helper to toggle the sidebar.
-  const toggleSidebar = () => {
+  const toggleSidebar = (): void => {
     return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open)
   }
 
   // Adds a keyboard shortcut to toggle the sidebar.
   useCycleEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
+    const handleKeyDown = (event: KeyboardEvent): void => {
       if (
         event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
         (event.metaKey || event.ctrlKey)
@@ -105,7 +105,7 @@ function SidebarProvider({
     }
 
     window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    return (): void => window.removeEventListener('keydown', handleKeyDown)
   }, [toggleSidebar])
 
   // We add a state so that we can do data-state="expanded" or "collapsed".

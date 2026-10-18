@@ -32,7 +32,7 @@ export function CategoryChangeSync() {
     const slot = createLocalStorageSlot(`corelive.category-changes.${userId}`)
     let stopped = false
     const progress = { running: false }
-    const refresh = async () => {
+    const refresh = async (): Promise<void> => {
       if (stopped || progress.running || document.visibilityState === 'hidden')
         return
       progress.running = true
@@ -111,14 +111,14 @@ export function CategoryChangeSync() {
         progress.running = false
       }
     }
-    const wake = () => {
+    const wake = (): void => {
       void refresh()
     }
     const interval = window.setInterval(wake, 15_000)
     window.addEventListener('focus', wake)
     document.addEventListener('visibilitychange', wake)
     wake()
-    return () => {
+    return (): void => {
       stopped = true
       window.clearInterval(interval)
       window.removeEventListener('focus', wake)

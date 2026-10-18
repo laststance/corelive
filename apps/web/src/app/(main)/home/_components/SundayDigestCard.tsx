@@ -211,7 +211,7 @@ export const SundayDigestCard = function SundayDigestCard({
   const weekStats = aggregateLastSevenDays(dataByDate, sundayIso)
   const bestDay = pickBestDay(dataByDate, sundayIso)
 
-  const handleDismiss = () => {
+  const handleDismiss = (): void => {
     writeDismissed(weekKey)
     setDismissedAt(weekKey)
   }

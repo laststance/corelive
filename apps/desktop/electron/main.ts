@@ -1561,7 +1561,7 @@ app.on('web-contents-created', (_event, contents: WebContents) => {
     navigationUrl: string,
     _isInPlace?: boolean,
     isMainFrame?: boolean,
-  ) => {
+  ): void => {
     // Redirect events include iframe requests; Clerk's isolated frames do not receive preload APIs.
     if (isMainFrame === false) return
     const appOrigin =

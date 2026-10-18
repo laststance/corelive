@@ -27,7 +27,7 @@ export function createClassVisitors(
 
   return {
     // Handle className="..."
-    'JSXAttribute[name.name="className"] > Literal'(node: Rule.Node) {
+    'JSXAttribute[name.name="className"] > Literal'(node: Rule.Node): void {
       if (isStringLiteral(node)) {
         checkClassString(node, node.value)
       }
@@ -36,7 +36,7 @@ export function createClassVisitors(
     // Handle className={`...`}
     'JSXAttribute[name.name="className"] > JSXExpressionContainer > TemplateLiteral'(
       node: Rule.Node,
-    ) {
+    ): void {
       if (isTemplateLiteral(node)) {
         const tl = node
         for (const quasi of tl.quasis) {
@@ -50,7 +50,7 @@ export function createClassVisitors(
     // One selector covers JSX and ordinary utility calls, including cva, without double reporting.
     [`CallExpression[callee.name=/^(${CLASS_UTILITY_NAMES.join('|')})$/]`](
       node: Rule.Node,
-    ) {
+    ): void {
       checkNode(node)
     },
   }

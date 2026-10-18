@@ -185,7 +185,7 @@ export const ElectronSettingsPage =
      * Resets the Settings popover to 360×380 via IPC. Guards on method existence
      * so older preloads (version-skew) do not throw.
      */
-    const handleResetPopoverSize = () => {
+    const handleResetPopoverSize = (): void => {
       const resetFn = window.electronAPI?.settings?.resetPopoverSize
       if (!resetFn) return
       startResetSizeTransition(async () => {

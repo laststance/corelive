@@ -174,7 +174,7 @@ export const ShortcutOpeningSoundSetting =
           }))
         })
 
-      return () => {
+      return (): void => {
         cancelled = true
       }
     })

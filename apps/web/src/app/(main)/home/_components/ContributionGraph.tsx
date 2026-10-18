@@ -211,7 +211,7 @@ export const ContributionGraph = function ContributionGraph() {
   // callback identity stays stable across renders. PR2 will reuse this exact
   // handler for j/k keyboard navigation — keeping it stable matters because
   // `useKeyboardNav` will attach it to a window event listener.
-  const handleNavigate = (dayOffset: -1 | 1) => {
+  const handleNavigate = (dayOffset: -1 | 1): void => {
     setSelectedDate((currentDate) =>
       currentDate ? shiftIsoDate(currentDate, dayOffset) : currentDate,
     )
@@ -227,7 +227,7 @@ export const ContributionGraph = function ContributionGraph() {
   ) => {
     const dateKey = toIsoDateKey(data.date)
     const dayData = dataByDate.get(dateKey)
-    function handleSelect() {
+    function handleSelect(): void {
       if (dateKey) setSelectedDate(dateKey)
     }
     const isMonthlyPeak = monthlyMaxDates.has(dateKey)
@@ -283,7 +283,7 @@ export const ContributionGraph = function ContributionGraph() {
     )
   }
 
-  const handleDayDetailOpenChange = (open: boolean) => {
+  const handleDayDetailOpenChange = (open: boolean): void => {
     if (!open) setSelectedDate(null)
   }
 
@@ -378,16 +378,16 @@ function useObservedElementWidth<T extends HTMLElement>(
       return
     }
 
-    const updateWidth = (nextWidth: number) => {
+    const updateWidth = (nextWidth: number): void => {
       setElementWidth(Math.floor(nextWidth))
     }
 
     updateWidth(element.clientWidth)
 
     if (typeof ResizeObserver === 'undefined') {
-      const handleResize = () => updateWidth(element.clientWidth)
+      const handleResize = (): void => updateWidth(element.clientWidth)
       window.addEventListener('resize', handleResize)
-      return () => window.removeEventListener('resize', handleResize)
+      return (): void => window.removeEventListener('resize', handleResize)
     }
 
     const resizeObserver = new ResizeObserver((entries) => {
@@ -397,7 +397,7 @@ function useObservedElementWidth<T extends HTMLElement>(
 
     resizeObserver.observe(element)
 
-    return () => resizeObserver.disconnect()
+    return (): void => resizeObserver.disconnect()
   }, [enabled, elementRef])
 
   return elementWidth

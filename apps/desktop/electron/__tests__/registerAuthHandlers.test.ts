@@ -114,7 +114,7 @@ describe('registerAuthHandlers', () => {
     setActiveUser.mockImplementationOnce(
       async () =>
         new Promise<AuthUserPayload>((resolve) => {
-          releaseStore = () => resolve(USER)
+          releaseStore = (): void => resolve(USER)
         }),
     )
     registerAuthHandlers(deps)

@@ -696,7 +696,7 @@ function reportRescueRefreshFailure(
   error: unknown,
 ): void {
   log.error('LiveEditor moved-writing refresh failed', error)
-  const retry = () => {
+  const retry = (): void => {
     void refreshCategoryDraft(categoryId, rescue)
       .then(() => toast.dismiss(`category-rescue-${categoryId}`))
       .catch((failure: unknown) => {
@@ -1156,7 +1156,7 @@ export const LiveEditor = function LiveEditor({
   // survive ordinary typing within a category.
   useLayoutEffect(() => {
     const pendingTimers = completionMemoryRef.current.pendingClearTimers
-    return () => {
+    return (): void => {
       for (const trackedEntry of pendingTimers.values()) {
         if (trackedEntry.removalTimerId !== undefined) {
           window.clearTimeout(trackedEntry.removalTimerId)
@@ -1183,7 +1183,7 @@ export const LiveEditor = function LiveEditor({
       activeCategoryId !== null &&
       noteReadyCategoryId === activeCategoryId &&
       !isLoadingNote
-    const focusNoteEditor = () => {
+    const focusNoteEditor = (): void => {
       if (!canFocusNoteEditor) return
       const textarea = textareaRef.current
       if (!textarea || textarea.disabled) return
@@ -1196,11 +1196,11 @@ export const LiveEditor = function LiveEditor({
     // First open: show() already fired before this effect subscribed, so the
     // visibilitychange we would catch has passed — focus directly.
     focusNoteEditor()
-    const handleVisibilityChange = () => {
+    const handleVisibilityChange = (): void => {
       if (document.visibilityState === 'visible') focusNoteEditor()
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => {
+    return (): void => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [activeCategoryId, isLoadingNote, isMounted, noteReadyCategoryId])
@@ -1252,7 +1252,7 @@ export const LiveEditor = function LiveEditor({
         if (cancelled) return
         setIsLoadingNote(false)
       })
-    return () => {
+    return (): void => {
       cancelled = true
     }
   }, [activeCategoryId, isMounted])
@@ -1279,7 +1279,7 @@ export const LiveEditor = function LiveEditor({
     const timeoutId = window.setTimeout(() => {
       persistNoteDraft(activeCategoryId, noteText)
     }, NOTE_DEBOUNCE_MS)
-    return () => {
+    return (): void => {
       window.clearTimeout(timeoutId)
     }
   }, [activeCategoryId, isLoadingNote, isMounted, noteText, persistNoteDraft])
@@ -1289,7 +1289,7 @@ export const LiveEditor = function LiveEditor({
   useCycleEffect(() => {
     if (!isMounted || activeCategoryId === null) return
     const flushCategoryId = activeCategoryId
-    return () => {
+    return (): void => {
       const text = noteTextRef.current
       const persisted = lastPersistedRef.current
       // If note.get never resolved for this category, `text` is only the local
@@ -1304,7 +1304,7 @@ export const LiveEditor = function LiveEditor({
     }
   }, [activeCategoryId, isMounted, persistNoteDraft])
 
-  const handleCategoryValueChange = (value: string) => {
+  const handleCategoryValueChange = (value: string): void => {
     // The picker writes the shared selection the sidebar reads, so the panel,
     // /write and /home never disagree about the category.
     setSelectedCategoryId(Number(value))
@@ -1404,7 +1404,7 @@ export const LiveEditor = function LiveEditor({
     lineIndex: LiveEditorLineIndex,
     title: LiveEditorCompletedTitle,
     rollbackLineText?: string,
-  ) => {
+  ): Promise<void> => {
     if (activeCategoryId === null) {
       toast.error('Pick a category before checking items')
       return
@@ -1543,7 +1543,7 @@ export const LiveEditor = function LiveEditor({
       // ✕-closed completion is never cleared here; the ✕ just hides the toast
       // early (this site's clear is toast-tied, so dismissing simply skips it).
       onAutoClose: effectiveClearOnComplete
-        ? () => {
+        ? (): void => {
             // Tie the clear to THIS completion via its completedId entry in
             // checkedRowsRef. If the entry is gone, the completion was already
             // reverted or edited — skip, so we never strip a same-title line
@@ -1600,7 +1600,7 @@ export const LiveEditor = function LiveEditor({
     originalText: string,
     fallbackLineIndex: LiveEditorLineIndex,
     categoryId: Category['id'],
-  ) => {
+  ): Promise<void> => {
     const checkedRows = getTrackedRowsForCategory(
       completionMemoryRef.current.checkedRows,
       categoryId,
@@ -2195,7 +2195,9 @@ export const LiveEditor = function LiveEditor({
    * @example
    * <textarea onKeyDown={handleKeyDown} />
    */
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (
+    event: React.KeyboardEvent<HTMLTextAreaElement>,
+  ): void => {
     if (event.key !== 'Enter' || !(event.metaKey || event.ctrlKey)) {
       // Keyboard edits expose their pre-change selection here; beforeinput covers paste/IME.
       pendingTextareaEditRef.current = {
@@ -2223,7 +2225,7 @@ export const LiveEditor = function LiveEditor({
     textareaRef.current?.focus()
   }
 
-  const closeWindow = () => {
+  const closeWindow = (): void => {
     void getLiveEditorHost().window.close()
   }
 
@@ -2252,16 +2254,16 @@ export const LiveEditor = function LiveEditor({
     value: noteText,
     onPaste: captureTextareaSelection,
     onCut: captureTextareaSelection,
-    onDrop: () => {
+    onDrop: (): void => {
       pendingTextareaEditRef.current = null
     },
-    onBeforeInput: (event: React.InputEvent<HTMLTextAreaElement>) => {
+    onBeforeInput: (event: React.InputEvent<HTMLTextAreaElement>): void => {
       pendingTextareaEditRef.current = {
         start: event.currentTarget.selectionStart,
         end: event.currentTarget.selectionEnd,
       }
     },
-    onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    onChange: (event: React.ChangeEvent<HTMLTextAreaElement>): void => {
       const editRange = pendingTextareaEditRef.current ?? undefined
       pendingTextareaEditRef.current = null
       handleDraftChange(event.target.value, editRange)

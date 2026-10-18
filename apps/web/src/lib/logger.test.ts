@@ -108,7 +108,7 @@ describe('createLogger', () => {
     }
 
     // Act
-    const logging = () => logger.error(logged, 'Operation failed')
+    const logging = (): void => logger.error(logged, 'Operation failed')
 
     // Assert
     expect(logging).not.toThrow()

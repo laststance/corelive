@@ -207,7 +207,7 @@ Beyond the web app, the macOS build adds native surfaces:
 - **System tray** — menu-bar access and quick toggles
 - **Always-on-top** — keep LiveEditor above other windows (off by default)
 - **Hide dock icon** — run as a menu-bar-only accessory; the choice persists across restarts
-- **Global keyboard shortcuts** — optional system-wide hotkeys, including lone-modifier keys (opt-in, off by default)
+- **Global keyboard shortcuts** — optional system-wide hotkeys, including lone-modifier keys (opt-in, off by default). If a single-modifier shortcut such as Right Option stops after an unfinished start, open Settings and select that shortcut again to retry. Startup keeps the crash guard.
 - **In-app shortcuts** — while any CoreLive window has focus, `⌘N` opens LiveEditor in the browser and `⌘M` minimizes; both release when the app loses focus
 - **Deep links** — `corelive://` URLs open the app
 - **Connection recovery** — if corelive.app can't be reached, or answers with an HTTP error, while the login window or LiveEditor loads, the app retries three times and then shows a native Retry / Close dialog

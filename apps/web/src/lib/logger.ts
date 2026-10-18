@@ -149,35 +149,35 @@ export const createModuleLogger = (module: string): pino.Logger => {
  * This wrapper merges extra args into an object context when provided.
  */
 export const log = {
-  error: (message: string, ...args: unknown[]) => {
+  error: (message: string, ...args: unknown[]): void => {
     if (args.length > 0) {
       logger.error({ context: args }, message)
     } else {
       logger.error(message)
     }
   },
-  warn: (message: string, ...args: unknown[]) => {
+  warn: (message: string, ...args: unknown[]): void => {
     if (args.length > 0) {
       logger.warn({ context: args }, message)
     } else {
       logger.warn(message)
     }
   },
-  info: (message: string, ...args: unknown[]) => {
+  info: (message: string, ...args: unknown[]): void => {
     if (args.length > 0) {
       logger.info({ context: args }, message)
     } else {
       logger.info(message)
     }
   },
-  debug: (message: string, ...args: unknown[]) => {
+  debug: (message: string, ...args: unknown[]): void => {
     if (args.length > 0) {
       logger.debug({ context: args }, message)
     } else {
       logger.debug(message)
     }
   },
-  trace: (message: string, ...args: unknown[]) => {
+  trace: (message: string, ...args: unknown[]): void => {
     if (args.length > 0) {
       logger.trace({ context: args }, message)
     } else {

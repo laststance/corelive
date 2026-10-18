@@ -60,13 +60,13 @@ function Carousel({
   )
   const subscribeToScrollState = (onStoreChange: () => void) => {
     if (!api) {
-      return () => {}
+      return (): void => {}
     }
 
     api.on('reInit', onStoreChange)
     api.on('select', onStoreChange)
 
-    return () => {
+    return (): void => {
       api.off('reInit', onStoreChange)
       api.off('select', onStoreChange)
     }
@@ -84,15 +84,15 @@ function Carousel({
     () => false,
   )
 
-  const scrollPrev = () => {
+  const scrollPrev = (): void => {
     api?.scrollPrev()
   }
 
-  const scrollNext = () => {
+  const scrollNext = (): void => {
     api?.scrollNext()
   }
 
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
     if (event.key === 'ArrowLeft') {
       event.preventDefault()
       scrollPrev()

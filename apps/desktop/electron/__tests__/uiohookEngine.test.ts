@@ -1,5 +1,14 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
+// Every test injects a memory latch; importing Electron must not download a binary.
+vi.mock('electron', () => ({
+  app: {
+    getPath: vi.fn(() => {
+      throw new Error('Engine tests must use their injected memory latch')
+    }),
+  },
+}))
+
 // Silence the real pino logger so tap start/re-arm info lines never spew here.
 vi.mock('../logger', () => ({
   log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
@@ -43,9 +52,9 @@ function createFakeUiohook() {
     stop,
     /** How many keydown listeners are attached — proves attach-once on reArm. */
     keydownListenerCount: () => keydownListeners.length,
-    pressKey: (keycode: number) =>
+    pressKey: (keycode: number): void =>
       keydownListeners.forEach((listener) => listener({ keycode })),
-    releaseKey: (keycode: number) =>
+    releaseKey: (keycode: number): void =>
       keyupListeners.forEach((listener) => listener({ keycode })),
   }
 }

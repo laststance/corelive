@@ -38,7 +38,7 @@ export function CategoryTotals({
             controls={`${regionId}-${category.id}`}
             onToggle={
               category.children?.length
-                ? () =>
+                ? (): void =>
                     setOpenCategoryId(
                       opened?.id === category.id ? null : category.id,
                     )

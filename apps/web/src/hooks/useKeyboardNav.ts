@@ -78,6 +78,6 @@ export function useKeyboardNav({
     }
 
     window.addEventListener('keydown', handleKey)
-    return () => window.removeEventListener('keydown', handleKey)
+    return (): void => window.removeEventListener('keydown', handleKey)
   }, [isOpen])
 }

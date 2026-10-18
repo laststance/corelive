@@ -37,9 +37,9 @@
     "@types/eslint": "^9.6.1",
     "@types/estree": "1.0.9",
     "@types/node": "catalog:",
-    "eslint-config-ts-prefixer": "5.0.0",
+    "eslint-config-ts-prefixer": "catalog:",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.0",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {

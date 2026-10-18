@@ -18,7 +18,7 @@ const listeners = new Set<() => void>()
 /**
  * Notifies all subscribed components that the selected category changed.
  */
-const emitChange = () => {
+const emitChange = (): void => {
   for (const listener of listeners) {
     listener()
   }
@@ -53,14 +53,14 @@ const subscribe = (callback: () => void): (() => void) => {
   listeners.add(callback)
 
   // Also listen for cross-tab changes via StorageEvent
-  const handleStorage = (event: StorageEvent) => {
+  const handleStorage = (event: StorageEvent): void => {
     if (event.key === STORAGE_KEY) {
       callback()
     }
   }
   window.addEventListener('storage', handleStorage)
 
-  return () => {
+  return (): void => {
     listeners.delete(callback)
     window.removeEventListener('storage', handleStorage)
   }
@@ -127,7 +127,7 @@ export function useAutoSelectDefaultCategory(
   selectedCategoryId: number | null,
   setSelectedCategoryId: (id: number | null) => void,
   categories: { id: number; isDefault: boolean }[],
-) {
+): void {
   const queryClient = useQueryClient()
   const latestSelection = useRef(selectedCategoryId)
   useCycleEffect(() => {
@@ -166,7 +166,7 @@ export function useAutoSelectDefaultCategory(
       .catch(() => {
         // Offline or unauthenticated verification cannot prove deletion; preserve the writing selection.
       })
-    return () => {
+    return (): void => {
       cancelled = true
     }
   }, [selectedCategoryId, categories, setSelectedCategoryId, queryClient])

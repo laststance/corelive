@@ -119,7 +119,7 @@ describe('MenuManager builds the application menu without a main window', () => 
     const stubConfigManager = {} as unknown as ConfigManager
 
     // Act: the menu must still build (post-main-retirement / signed-out launch).
-    const buildMenu = () =>
+    const buildMenu = (): void =>
       menuManager.initialize(createStubWindowManager(), stubConfigManager)
 
     // Assert: it builds and installs a real menu.

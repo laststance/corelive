@@ -19,7 +19,7 @@ function subscribeToHistory(callback: () => void): () => void {
   if (typeof window !== 'undefined') {
     queueMicrotask(callback)
   }
-  return () => {}
+  return (): void => {}
 }
 
 /**

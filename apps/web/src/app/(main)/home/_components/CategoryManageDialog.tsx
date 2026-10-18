@@ -217,7 +217,7 @@ function CategoryCreationForm({
       (form.name.trim()
         ? categoryNameError(form.name, form.parentId, categories)
         : null)
-  const submit = async () => {
+  const submit = async (): Promise<void> => {
     const validation = categoryNameError(form.name, form.parentId, categories)
     if (validation || createMutation.isPending) {
       if (validation) setForm((current) => ({ ...current, error: validation }))
@@ -404,7 +404,7 @@ function CategoryEditor({
   const hasChildren = categories.some(
     (candidate) => candidate.parentId === category.id,
   )
-  const save = async () => {
+  const save = async (): Promise<void> => {
     const validation = categoryNameError(
       form.name,
       form.parentId,
@@ -574,7 +574,7 @@ function CategoryDeletion({
       candidate.id !== category.id &&
       candidate.id > 0,
   )
-  const confirm = async () => {
+  const confirm = async (): Promise<void> => {
     if (isSubmitting.current || !destination || conflicts.length) return
     isSubmitting.current = true
     let didRequestDelete = false

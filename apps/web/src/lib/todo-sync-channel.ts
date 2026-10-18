@@ -82,10 +82,10 @@ export const broadcastTodoSync = (): boolean => {
 export const subscribeToTodoSync = (onSync: () => void): (() => void) => {
   const channel = createTodoSyncChannel()
   if (!channel) {
-    return () => {}
+    return (): void => {}
   }
 
-  const handleMessage = (event: MessageEvent) => {
+  const handleMessage = (event: MessageEvent): void => {
     if (isTodoSyncMessage(event.data)) {
       onSync()
     }
@@ -93,7 +93,7 @@ export const subscribeToTodoSync = (onSync: () => void): (() => void) => {
 
   channel.addEventListener('message', handleMessage)
 
-  return () => {
+  return (): void => {
     channel.removeEventListener('message', handleMessage)
     channel.close()
   }

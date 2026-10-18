@@ -107,18 +107,18 @@ export const KeybindingCaptureInput = function KeybindingCaptureInput({
   // both of which fire the button's onClick. Deliberately NOT on focus: auto-
   // recording on focus would trap keyboard users, because a recording box
   // preventDefaults Tab (Escape is the only keyboard exit).
-  const startRecording = () => {
+  const startRecording = (): void => {
     if (disabled) return
     loneModifierCandidateRef.current = null
     setIsRecording(true)
   }
 
-  const stopRecording = () => {
+  const stopRecording = (): void => {
     loneModifierCandidateRef.current = null
     setIsRecording(false)
   }
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+  const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>): void => {
     const nativeEvent = event.nativeEvent
     // Mirror useKeyboardNav: never swallow a key while an IME is composing —
     // the JP voice-input flow needs the composition to reach the OS.
@@ -172,7 +172,7 @@ export const KeybindingCaptureInput = function KeybindingCaptureInput({
       : null
   }
 
-  const handleKeyUp = (event: KeyboardEvent<HTMLButtonElement>) => {
+  const handleKeyUp = (event: KeyboardEvent<HTMLButtonElement>): void => {
     // Only commit a lone modifier while recording; ignore the Enter/Space key-up
     // that activated the button (its code is never a modifier, so candidate is null).
     if (!isRecording) return

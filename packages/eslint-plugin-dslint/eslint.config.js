@@ -9,6 +9,17 @@ export default defineConfig([
   { ignores: ['dist/**'] },
   ...tsPrefixer,
   {
+    files: ['tsup.config.ts', 'eslint.config.js'],
+    languageOptions: {
+      parserOptions: {
+        // Keep the build config typed without expanding the package's emit root.
+        projectService: false,
+        project: './tsconfig.eslint.json',
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+  {
     // This workspace package is a CLI + ESLint plugin, not app code:
     // - the `cli/` commands print results to stdout, so console output is the
     //   tool's intended interface, not a stray debug log

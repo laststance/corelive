@@ -68,7 +68,7 @@ export function createLocalRecordStore(legacyKey: string) {
     },
     subscribe: (listener: () => void): (() => void) => {
       listeners.add(listener)
-      const onStorage = (event: StorageEvent) => {
+      const onStorage = (event: StorageEvent): void => {
         if (
           event.key === null ||
           event.key === legacyKey ||
@@ -77,7 +77,7 @@ export function createLocalRecordStore(legacyKey: string) {
           listener()
       }
       window.addEventListener('storage', onStorage)
-      return () => {
+      return (): void => {
         listeners.delete(listener)
         window.removeEventListener('storage', onStorage)
       }

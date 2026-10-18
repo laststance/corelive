@@ -57,7 +57,7 @@ const RouteError = function RouteError({
   }, [error])
 
   // Hard nav to home — stable ref so the memo'd Button never re-renders for it.
-  const goHome = () => {
+  const goHome = (): void => {
     window.location.assign('/')
   }
 

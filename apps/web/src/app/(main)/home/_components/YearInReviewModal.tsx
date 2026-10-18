@@ -183,11 +183,11 @@ export const YearInReviewModal = function YearInReviewModal({
     writeStoredYear(storageKey, summary.year)
   }, [dataByDate, isLoading, isRestoring, userId, forcedToday, forceParam])
 
-  const handleOpenChange = (nextOpen: boolean) => {
+  const handleOpenChange = (nextOpen: boolean): void => {
     setOpen(nextOpen)
   }
 
-  const handleClose = () => {
+  const handleClose = (): void => {
     setOpen(false)
   }
 

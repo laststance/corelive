@@ -43,8 +43,8 @@ test('switching a parent history to direct entries starts a fresh first page wit
       constructor(callback: IntersectionObserverCallback) {
         observerCallbacks.push(callback)
       }
-      observe() {}
-      disconnect() {}
+      observe(): void {}
+      disconnect(): void {}
     },
   )
   journal.mockImplementation(

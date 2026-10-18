@@ -83,7 +83,7 @@ const OAuthStartContent = function OAuthStartContent() {
     }
 
     // Start OAuth flow
-    const startOAuth = async () => {
+    const startOAuth = async (): Promise<void> => {
       setStatus('starting')
       hasStartedOAuth.current = true
 

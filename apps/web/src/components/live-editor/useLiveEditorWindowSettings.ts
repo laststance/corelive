@@ -55,7 +55,7 @@ export function useLiveEditorWindowSettings(isMounted: boolean) {
         log.error('LiveEditor settings load failed', error)
         setIsLiveEditorConfigReady(true)
       })
-    return () => {
+    return (): void => {
       cancelled = true
     }
   }, [isMounted, preferencesVersion])
@@ -80,7 +80,7 @@ export function useLiveEditorWindowSettings(isMounted: boolean) {
     }
   }
 
-  const handleOpacityValueChange = (values: number[]) => {
+  const handleOpacityValueChange = (values: number[]): void => {
     const next = values[0]
     if (next !== undefined) void handleOpacityChange(next)
   }

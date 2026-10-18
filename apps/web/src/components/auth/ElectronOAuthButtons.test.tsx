@@ -46,7 +46,7 @@ function plantOAuthBridge(result: OAuthStartResult) {
     value: {
       oauth: {
         start,
-        onError: vi.fn(() => () => {}),
+        onError: vi.fn(() => (): void => {}),
       },
     },
   })

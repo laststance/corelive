@@ -84,7 +84,9 @@ export const NodePopover = function NodePopover({
   onUnassign,
   children,
 }: NodePopoverProps) {
-  const handleUnassignClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+  const handleUnassignClick = (
+    event: React.MouseEvent<HTMLButtonElement>,
+  ): void => {
     const todoId = Number(event.currentTarget.dataset.todoId)
     if (Number.isInteger(todoId)) {
       onUnassign(todoId)

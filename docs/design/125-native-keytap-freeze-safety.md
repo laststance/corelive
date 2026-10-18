@@ -5,13 +5,15 @@
 > shared preload contracts in `packages/desktop-contract`. Current native QA
 > follows [the isolated development guide](../headless-development.md).
 
-> **Implementation update (2026-10-02):** PR #178 retired the renderer's manual
+> **Implementation update (2026-10-18):** PR #178 retired the renderer's separate
 > re-enable control and its IPC channels. The unused ShortcutManager recovery
-> methods and renderer status shape have now been removed. A blocked native
-> binding stays inactive; users can choose a regular chord in Settings without
-> clearing the freeze-safety latch. Power-event re-arm, pressed-state reset,
+> methods and renderer status shape were later removed. A blocked native binding
+> stays inactive at startup. Selecting that shortcut again in Settings now retries
+> the listener, with the on-disk guard armed before it starts. A failed retry
+> restores the block, so rollback cannot silently restart the prior native key.
+> Regular chords do not clear the block. Power-event re-arm, pressed-state reset,
 > launch-latch and stability guards remain. The manual-control sections below
-> describe the historical design, not the currently exposed UI or IPC contract.
+> describe the historical design, not the current UI or IPC contract.
 
 > Design doc for issue **#125**. Follow-up to #111 / PR #126 (merged `eab43fd`).
 > **v2 — rewritten after the Phase 0 probe.** v1 proposed isolating the tap in a

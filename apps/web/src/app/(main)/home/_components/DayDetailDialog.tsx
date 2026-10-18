@@ -219,7 +219,7 @@ export const DayDetailDialog = function DayDetailDialog({
    * is in flight so a double-click doesn't spawn parallel toPng calls
    * (each of which would append its own off-screen card).
    */
-  const handleShare = async () => {
+  const handleShare = async (): Promise<void> => {
     if (!date || dayCount === 0 || isSaving) return
     setIsSaving(true)
     try {
@@ -244,11 +244,11 @@ export const DayDetailDialog = function DayDetailDialog({
     }
   }
 
-  const handlePreviousDay = () => {
+  const handlePreviousDay = (): void => {
     onNavigate?.(-1)
   }
 
-  const handleNextDay = () => {
+  const handleNextDay = (): void => {
     onNavigate?.(1)
   }
 

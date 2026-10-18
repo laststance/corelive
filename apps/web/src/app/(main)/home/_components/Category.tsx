@@ -115,7 +115,7 @@ export const Category = function Category({
    * Handles selecting a category and closing mobile sidebar.
    * @param categoryId - Category ID to select.
    */
-  const handleSelect = (categoryId: number) => {
+  const handleSelect = (categoryId: number): void => {
     setSelectedCategoryId(categoryId)
     if (isMobile) {
       setOpenMobile(false)
@@ -125,7 +125,7 @@ export const Category = function Category({
   /**
    * Handles creating a new category from the popover form.
    */
-  const handleCreateCategory = () => {
+  const handleCreateCategory = (): void => {
     const trimmedName = newName.trim()
     // A peer may remove or move the selected parent while this form stays open.
     if (!trimmedName || createMutation.isPending || !isParentAvailable) return
@@ -144,15 +144,17 @@ export const Category = function Category({
     )
   }
 
-  const handleAddOpenChange = (open: boolean) => {
+  const handleAddOpenChange = (open: boolean): void => {
     setAddOpen(open)
   }
 
-  const handleNewNameChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleNewNameChange = (event: ChangeEvent<HTMLInputElement>): void => {
     setNewName(event.target.value)
   }
 
-  const handleNewNameKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+  const handleNewNameKeyDown = (
+    event: KeyboardEvent<HTMLInputElement>,
+  ): void => {
     if (
       event.key === 'Enter' &&
       !event.nativeEvent.isComposing &&
@@ -161,7 +163,7 @@ export const Category = function Category({
       handleCreateCategory()
   }
 
-  const handleCategoryClick = (event: MouseEvent<HTMLButtonElement>) => {
+  const handleCategoryClick = (event: MouseEvent<HTMLButtonElement>): void => {
     const categoryId = Number(event.currentTarget.dataset.categoryId)
     if (Number.isInteger(categoryId)) {
       handleSelect(categoryId)

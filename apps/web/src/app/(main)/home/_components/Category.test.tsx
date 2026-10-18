@@ -54,13 +54,13 @@ vi.mock('@/hooks/useCategoryMutations', () => ({
     createMutation: { mutate: create, isPending: false },
   }),
 }))
-vi.mock('@/hooks/useCategorySync', () => ({ useCategorySync: () => {} }))
+vi.mock('@/hooks/useCategorySync', () => ({ useCategorySync: (): void => {} }))
 vi.mock('@/hooks/useClerkQueryReady', () => ({
   useClerkQueryReady: () => true,
 }))
 vi.mock('@/hooks/useSelectedCategory', () => ({
   useSelectedCategory: () => [1, select],
-  useAutoSelectDefaultCategory: () => {},
+  useAutoSelectDefaultCategory: (): void => {},
 }))
 
 afterEach(() => {

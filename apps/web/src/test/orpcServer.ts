@@ -86,7 +86,7 @@ export function holdRequests(): () => void {
   writeGate = new Promise<void>((resolve) => {
     releaseWriteGate = resolve
   })
-  return () => {
+  return (): void => {
     releaseWriteGate?.()
     writeGate = null
     releaseWriteGate = null

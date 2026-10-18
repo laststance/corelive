@@ -66,7 +66,7 @@ async function createScratchDatabase() {
 /** Isolates the first-migration ledger scenarios from later repository migrations.
  * @example prepareHistoricalMigrationFixture()
  */
-function prepareHistoricalMigrationFixture() {
+function prepareHistoricalMigrationFixture(): void {
   historicalRoot = mkdtempSync(path.join(tmpdir(), 'corelive-baseline-'))
   MIGRATIONS_FOLDER = path.join(historicalRoot, 'drizzle')
   for (const directory of ['scripts', 'drizzle/meta'])

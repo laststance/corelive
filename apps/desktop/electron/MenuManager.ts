@@ -118,16 +118,16 @@ export class MenuManager {
       submenu: [
         {
           label: `About ${app.getName()}`,
-          click: () => this.showAboutDialog(),
+          click: (): void => this.showAboutDialog(),
         },
         { type: 'separator' },
         {
           label: 'Settings...',
-          click: () => this.openSettings(),
+          click: (): void => this.openSettings(),
         },
         {
           label: 'Check for Updates...',
-          click: async () => this.checkForUpdates(),
+          click: async (): Promise<void> => this.checkForUpdates(),
         },
         { type: 'separator' },
         {
@@ -154,7 +154,7 @@ export class MenuManager {
         {
           label: `Quit ${app.getName()}`,
           accelerator: 'Command+Q',
-          click: () => app.quit(),
+          click: (): void => app.quit(),
         },
       ],
     }
@@ -169,7 +169,7 @@ export class MenuManager {
       submenu: [
         {
           label: 'New Task',
-          click: () => this.createNewTask(),
+          click: (): void => this.createNewTask(),
         },
       ],
     }
@@ -246,7 +246,7 @@ export class MenuManager {
       { type: 'separator' },
       {
         label: 'LiveEditor Note',
-        click: () => this.toggleLiveEditor(),
+        click: (): void => this.toggleLiveEditor(),
       },
     ]
 
@@ -273,19 +273,19 @@ export class MenuManager {
     const submenu: MenuItemConstructorOptions[] = [
       {
         label: 'Learn More',
-        click: () => {
+        click: (): void => {
           shell.openExternal('https://github.com/laststance/corelive')
         },
       },
       {
         label: 'Documentation',
-        click: () => {
+        click: (): void => {
           shell.openExternal('https://github.com/laststance/corelive#readme')
         },
       },
       {
         label: 'Report Issue',
-        click: () => {
+        click: (): void => {
           shell.openExternal('https://github.com/laststance/corelive/issues')
         },
       },
@@ -293,7 +293,7 @@ export class MenuManager {
       {
         label: 'Keyboard Shortcuts',
         accelerator: 'CmdOrCtrl+/',
-        click: () => this.showKeyboardShortcuts(),
+        click: (): void => this.showKeyboardShortcuts(),
       },
     ]
 

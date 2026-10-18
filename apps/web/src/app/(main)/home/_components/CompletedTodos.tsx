@@ -173,7 +173,7 @@ export const CompletedTodos = function CompletedTodos({
       observer.observe(observerRef.current)
     }
 
-    return () => observer.disconnect()
+    return (): void => observer.disconnect()
   }, [fetchNextPage, hasNextPage, isFetchingNextPage])
 
   /**

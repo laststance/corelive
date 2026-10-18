@@ -27,7 +27,7 @@ export function useCategorySync(): void {
     return subscribeToCategorySync((draftCategoryId, draftRescue) => {
       void invalidateCategoryViews(queryClient)
       if (draftCategoryId !== undefined) {
-        const refresh = () => {
+        const refresh = (): void => {
           void refreshCategoryDraft(draftCategoryId, draftRescue)
             .then(() => toast.dismiss(`category-rescue-${draftCategoryId}`))
             .catch(() => {

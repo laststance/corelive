@@ -46,9 +46,10 @@ describe('applyShortcutRebind', () => {
     // Assert — success, and we never rolled back to the previous binding.
     expect(didApply).toBe(true)
     expect(rebinder.updateShortcuts).toHaveBeenCalledTimes(1)
-    expect(rebinder.updateShortcuts).toHaveBeenCalledWith({
-      toggleLiveEditor: 'Alt+Space',
-    })
+    expect(rebinder.updateShortcuts).toHaveBeenCalledWith(
+      { toggleLiveEditor: 'Alt+Space' },
+      { retryNativeTap: true },
+    )
   })
 
   test('restores the previous binding when nothing could register', () => {

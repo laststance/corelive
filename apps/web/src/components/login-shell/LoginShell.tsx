@@ -69,7 +69,7 @@ export const LoginShell = function LoginShell() {
   /** Retries the existing native reveal path from the signed-in recovery screen without restarting sign-in.
    * @example openLiveEditor()
    */
-  const openLiveEditor = () => {
+  const openLiveEditor = (): void => {
     const api = getLiveEditorSettingsAPI()
     if (!api?.show) return
     setOpeningError(null)

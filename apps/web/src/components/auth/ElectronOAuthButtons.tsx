@@ -105,7 +105,7 @@ export const ElectronOAuthButtons = function ElectronOAuthButtons() {
 
     // The renderer-side provider re-dispatches token-exchange failures through
     // this custom event (D2's second error source).
-    const handleCustomError = (event: Event) => {
+    const handleCustomError = (event: Event): void => {
       const customEvent = event as CustomEvent<string>
       dispatch({
         type: 'ERROR',
@@ -114,7 +114,7 @@ export const ElectronOAuthButtons = function ElectronOAuthButtons() {
     }
     window.addEventListener('electron-oauth-error', handleCustomError)
 
-    return () => {
+    return (): void => {
       unsubscribeError?.()
       window.removeEventListener('electron-oauth-error', handleCustomError)
     }
@@ -132,12 +132,12 @@ export const ElectronOAuthButtons = function ElectronOAuthButtons() {
     const recoveryTimer = setTimeout(() => {
       dispatch({ type: 'RESET' })
     }, OAUTH_OPENING_BROWSER_TIMEOUT_MS)
-    return () => clearTimeout(recoveryTimer)
+    return (): void => clearTimeout(recoveryTimer)
   }, [isLoading])
 
   // Sync, stable click handler (the Button needs a stable useCallback ref) that
   // fires the async native-OAuth start as fire-and-forget.
-  const handleGoogleClick = () => {
+  const handleGoogleClick = (): void => {
     void (async () => {
       if (!window.electronAPI?.oauth) {
         dispatch({ type: 'ERROR', error: 'OAuth not available' })
@@ -249,7 +249,7 @@ function subscribeToElectronOAuth(callback: () => void): () => void {
   if (typeof window !== 'undefined') {
     queueMicrotask(callback)
   }
-  return () => {}
+  return (): void => {}
 }
 
 function getElectronOAuthSnapshot(): boolean {

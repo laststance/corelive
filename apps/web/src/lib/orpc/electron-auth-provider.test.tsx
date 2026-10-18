@@ -81,7 +81,7 @@ describe('ElectronAuthProvider', () => {
     mockClearPendingToken.mockResolvedValue(true)
     mockOnSignInToken.mockImplementation((callback) => {
       signInTokenListener = callback
-      return () => {
+      return (): void => {
         signInTokenListener = null
       }
     })

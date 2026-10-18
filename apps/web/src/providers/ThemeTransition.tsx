@@ -42,7 +42,7 @@ export function ThemeTransition(): null {
       attributeFilter: ['data-theme'],
     })
 
-    return () => {
+    return (): void => {
       themeChangeObserver.disconnect()
       if (removeClassTimer !== undefined) clearTimeout(removeClassTimer)
       htmlElement.classList.remove(THEME_TRANSITION_CLASS)

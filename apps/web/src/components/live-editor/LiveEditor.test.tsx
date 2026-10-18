@@ -1813,7 +1813,7 @@ describe('LiveEditor focus on window show', () => {
 function fireCompleteCommandOnFirstLine(
   noteField: HTMLTextAreaElement,
   value: string,
-) {
+): void {
   fireEvent.change(noteField, { target: { value } })
   const caret = value.split('\n')[0]?.length ?? 0
   noteField.selectionStart = caret
@@ -1863,7 +1863,9 @@ function replaceTextareaRange(
  * @example
  * await waitForLiveEditorReady(noteField)
  */
-async function waitForLiveEditorReady(noteField: HTMLTextAreaElement) {
+async function waitForLiveEditorReady(
+  noteField: HTMLTextAreaElement,
+): Promise<void> {
   await waitFor(() => {
     expect(noteField).toBeEnabled()
   })
