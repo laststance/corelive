@@ -47,14 +47,14 @@ export const ThemeSelectorMenuItem = function ThemeSelectorMenuItem() {
   const modeHandlers = Object.fromEntries(
     THEME_MODE_CHOICES.map((modeChoice) => [
       modeChoice,
-      () => setMode(modeChoice),
+      (): void => setMode(modeChoice),
     ]),
   ) as Record<ThemeModeChoice, () => void>
 
   const familyHandlers = Object.fromEntries(
     families.map(({ family: familyId }) => [
       familyId,
-      () => setFamily(familyId),
+      (): void => setFamily(familyId),
     ]),
   ) as Record<ThemeFamilyId, () => void>
 

@@ -71,7 +71,7 @@ export function registerLiveDraftAppender(
       },
     )
   }
-  return () => {
+  return (): void => {
     // An older renderer cleanup must not remove a newer editor's registration.
     if (liveDraftAppender === appender) {
       liveDraftAppender = null

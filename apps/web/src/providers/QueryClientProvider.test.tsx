@@ -281,7 +281,7 @@ describe('QueryClientProvider persistence', () => {
       finishWrite = resolve
     })
     let currentClient!: QueryClient
-    const capture = (client: QueryClient) => {
+    const capture = (client: QueryClient): void => {
       currentClient = client
     }
     localStorage.setItem(LOCAL_NOTE_STORAGE_KEY, '{"0":"Preserved draft"}')

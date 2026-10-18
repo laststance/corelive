@@ -149,7 +149,7 @@ const OAuthCallbackContent = function OAuthCallbackContent() {
     }
 
     // Fetch sign-in token and redirect to Electron
-    const createTokenAndRedirect = async () => {
+    const createTokenAndRedirect = async (): Promise<void> => {
       try {
         if (!isMounted) return
 
@@ -191,7 +191,7 @@ const OAuthCallbackContent = function OAuthCallbackContent() {
 
     void createTokenAndRedirect()
 
-    return () => {
+    return (): void => {
       isMounted = false
       if (redirectTimer !== undefined) window.clearTimeout(redirectTimer)
       if (successTimer !== undefined) window.clearTimeout(successTimer)
@@ -199,7 +199,7 @@ const OAuthCallbackContent = function OAuthCallbackContent() {
   }, [state, error, errorDescription])
 
   // External-protocol navigation must happen directly inside the click gesture.
-  const reopenDesktopApp = () => {
+  const reopenDesktopApp = (): void => {
     if (!state) return
     const desktopReturn = preparedReturn.current
     // A still-valid ticket avoids awaiting network work before native navigation.

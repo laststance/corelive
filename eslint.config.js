@@ -28,6 +28,8 @@ const config = [
       '**/.playwright-mcp/**',
       'packages/eslint-plugin-dslint/**',
       '_trials/**',
+      // Local release and QA artifacts are not application source.
+      'tmp/**',
     ],
   },
   ...tsPrefixer,

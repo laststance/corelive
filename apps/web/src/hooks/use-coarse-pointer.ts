@@ -11,10 +11,10 @@ const COARSE_POINTER_QUERY = '(pointer: coarse)'
  * const unsubscribe = subscribeToPointerChange(() => {})
  */
 function subscribeToPointerChange(callback: () => void): () => void {
-  if (typeof window.matchMedia !== 'function') return () => {}
+  if (typeof window.matchMedia !== 'function') return (): void => {}
   const mediaQueryList = window.matchMedia(COARSE_POINTER_QUERY)
   mediaQueryList.addEventListener('change', callback)
-  return () => mediaQueryList.removeEventListener('change', callback)
+  return (): void => mediaQueryList.removeEventListener('change', callback)
 }
 
 /**

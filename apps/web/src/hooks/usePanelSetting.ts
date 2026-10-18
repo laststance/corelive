@@ -99,7 +99,7 @@ export function usePanelSetting(config: PanelSettingConfig): PanelSetting {
         if (!cancelled) setIsReady(true)
       })
 
-    return () => {
+    return (): void => {
       cancelled = true
     }
   }, [config, preferencesVersion])

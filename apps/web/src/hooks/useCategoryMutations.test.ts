@@ -308,17 +308,17 @@ describe('category writes the server accepts', () => {
   test.each([
     [
       'create',
-      (m: ReturnType<typeof useCategoryMutations>) =>
+      (m: ReturnType<typeof useCategoryMutations>): void =>
         m.createMutation.mutate({ name: 'Reading' }),
     ],
     [
       'rename',
-      (m: ReturnType<typeof useCategoryMutations>) =>
+      (m: ReturnType<typeof useCategoryMutations>): void =>
         m.updateMutation.mutate({ id: 12, data: { name: 'Errands' } }),
     ],
     [
       'delete',
-      (m: ReturnType<typeof useCategoryMutations>) =>
+      (m: ReturnType<typeof useCategoryMutations>): void =>
         m.deleteMutation.mutate({ id: 12 }),
     ],
   ])('tells other windows about a %s', async (_label, fire) => {

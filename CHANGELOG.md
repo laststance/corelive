@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.24.2] - 2026-10-18
+
+### Fixed
+
+- Restore Right Option and other single-modifier shortcuts after a failed start by selecting the shortcut again in Settings. Automatic startup keeps the crash guard.
+- Align workspace test packages and use TypeScript 6 so tests and lint checks run with supported tools.
+
 ## [0.24.1] - 2026-10-07
 
 ### Fixed

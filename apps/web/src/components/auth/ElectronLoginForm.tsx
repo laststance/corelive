@@ -85,7 +85,7 @@ export const ElectronLoginForm = function ElectronLoginForm() {
 
   // Listen for OAuth errors from ElectronAuthProvider to reset loading state
   useCycleEffect(() => {
-    const handleOAuthError = (e: Event) => {
+    const handleOAuthError = (e: Event): void => {
       const detail = (e as CustomEvent<string>).detail
       dispatch({
         type: 'SET_ERROR',
@@ -94,7 +94,7 @@ export const ElectronLoginForm = function ElectronLoginForm() {
     }
 
     window.addEventListener('electron-oauth-error', handleOAuthError)
-    return () => {
+    return (): void => {
       window.removeEventListener('electron-oauth-error', handleOAuthError)
     }
   }, [])
@@ -113,7 +113,7 @@ export const ElectronLoginForm = function ElectronLoginForm() {
       googleLoadingTimeoutRef.current = null
     }
 
-    return () => {
+    return (): void => {
       if (googleLoadingTimeoutRef.current) {
         clearTimeout(googleLoadingTimeoutRef.current)
       }
@@ -138,7 +138,7 @@ export const ElectronLoginForm = function ElectronLoginForm() {
    * @example
    * // User submits form → signIn.password() → finalize() → redirect to /home
    */
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault()
 
     if (!signIn) {
@@ -219,7 +219,7 @@ export const ElectronLoginForm = function ElectronLoginForm() {
    * Handle Google OAuth click.
    * Opens system browser for OAuth flow (required by Google).
    */
-  const handleGoogleClick = async () => {
+  const handleGoogleClick = async (): Promise<void> => {
     if (!window.electronAPI?.oauth) {
       dispatch({ type: 'SET_ERROR', error: 'OAuth not available' })
       return
@@ -275,7 +275,7 @@ function subscribeToElectron(callback: () => void): () => void {
   if (typeof window !== 'undefined') {
     queueMicrotask(callback)
   }
-  return () => {}
+  return (): void => {}
 }
 
 function getElectronSnapshot(): boolean {

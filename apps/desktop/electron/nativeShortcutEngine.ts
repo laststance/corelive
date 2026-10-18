@@ -109,11 +109,11 @@ export function createUnavailableNativeShortcutEngine(): NativeShortcutEngine {
     isAvailable: () => false,
     register: () => false,
     unregister: () => false,
-    unregisterAll: () => {},
+    unregisterAll: (): void => {},
     isLatchBlocked: () => false,
-    clearLatchBlock: () => {},
-    reArm: () => {},
-    resetPressedState: () => {},
+    clearLatchBlock: (): void => {},
+    reArm: (): void => {},
+    resetPressedState: (): void => {},
     isActive: () => false,
   }
 }

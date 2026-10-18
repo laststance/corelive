@@ -28,7 +28,7 @@ afterEach(() => unregister?.())
 
 test('does not finish rescuing a visible draft before the editor confirms its save', async () => {
   // Arrange
-  let finishSave = () => {}
+  let finishSave = (): void => {}
   const save = new Promise<void>((resolve) => {
     finishSave = resolve
   })

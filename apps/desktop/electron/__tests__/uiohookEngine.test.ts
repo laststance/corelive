@@ -43,9 +43,9 @@ function createFakeUiohook() {
     stop,
     /** How many keydown listeners are attached — proves attach-once on reArm. */
     keydownListenerCount: () => keydownListeners.length,
-    pressKey: (keycode: number) =>
+    pressKey: (keycode: number): void =>
       keydownListeners.forEach((listener) => listener({ keycode })),
-    releaseKey: (keycode: number) =>
+    releaseKey: (keycode: number): void =>
       keyupListeners.forEach((listener) => listener({ keycode })),
   }
 }

@@ -135,7 +135,7 @@ export const AppUpdateSettings = function AppUpdateSettings({
       })
 
     // Schedule the next read after this one settles, so IPC polls never overlap.
-    const refreshStatus = async () => {
+    const refreshStatus = async (): Promise<void> => {
       try {
         const status = await updaterApi.getStatus()
         if (!cancelled) setUpdaterStatus(status)
@@ -154,7 +154,7 @@ export const AppUpdateSettings = function AppUpdateSettings({
       }
     }
     void refreshStatus()
-    return () => {
+    return (): void => {
       cancelled = true
       clearTimeout(timer)
     }

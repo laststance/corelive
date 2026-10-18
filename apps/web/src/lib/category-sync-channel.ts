@@ -114,10 +114,10 @@ export const subscribeToCategorySync = (
 ): (() => void) => {
   const channel = createCategorySyncChannel()
   if (!channel) {
-    return () => {}
+    return (): void => {}
   }
 
-  const handleMessage = (event: MessageEvent) => {
+  const handleMessage = (event: MessageEvent): void => {
     if (isCategorySyncMessage(event.data)) {
       // The deleting window already applied its append; only peers reconcile the payload.
       onSync(
@@ -133,7 +133,7 @@ export const subscribeToCategorySync = (
 
   channel.addEventListener('message', handleMessage)
 
-  return () => {
+  return (): void => {
     channel.removeEventListener('message', handleMessage)
     channel.close()
   }

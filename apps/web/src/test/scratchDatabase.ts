@@ -50,7 +50,7 @@ export async function createScratchDatabase(
   // that fails the whole run even when every test passed. A listener on the individual client does not help.
   pool.on('error', () => {})
   const scratchDb = drizzle({ client: pool })
-  const drop = async () => {
+  const drop = async (): Promise<void> => {
     await pool.end()
     await db.execute(sql.raw(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`))
   }

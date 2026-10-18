@@ -107,18 +107,18 @@ function installFailingLiveEditorBridge(
   const notes = new Map<number, string>([[12, 'half a thought']])
   window.liveEditorAPI = {
     window: {
-      close: async () => {},
-      setOpacity: async () => {},
+      close: async (): Promise<void> => {},
+      setOpacity: async (): Promise<void> => {},
       getOpacity: async () => 1,
       getBounds: async () => null,
-      setBounds: async () => {},
+      setBounds: async (): Promise<void> => {},
     },
     note: {
       get: async (categoryId) => {
         if (failingCall === 'read') throw new Error('Failed to read note')
         return notes.get(categoryId) ?? ''
       },
-      set: async (categoryId, text) => {
+      set: async (categoryId, text): Promise<void> => {
         if (failingCall === 'write') throw new Error('Failed to write note')
         notes.set(categoryId, text)
       },
@@ -151,11 +151,11 @@ function installHeldReadLiveEditorBridge(): {
   const heldReads: Array<(text: string) => void> = []
   window.liveEditorAPI = {
     window: {
-      close: async () => {},
-      setOpacity: async () => {},
+      close: async (): Promise<void> => {},
+      setOpacity: async (): Promise<void> => {},
       getOpacity: async () => 1,
       getBounds: async () => null,
-      setBounds: async () => {},
+      setBounds: async (): Promise<void> => {},
     },
     note: {
       // Only the doomed category hangs; the default still reads normally, so
@@ -166,7 +166,7 @@ function installHeldReadLiveEditorBridge(): {
               heldReads.push(resolve)
             })
           : Promise.resolve(notes.get(categoryId) ?? ''),
-      set: async (categoryId, text) => {
+      set: async (categoryId, text): Promise<void> => {
         notes.set(categoryId, text)
       },
     },

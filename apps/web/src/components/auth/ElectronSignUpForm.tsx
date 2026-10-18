@@ -90,7 +90,7 @@ export const ElectronSignUpForm = function ElectronSignUpForm() {
    * Handle sign-up form submission.
    * Creates account with email, sets password, and sends email verification.
    */
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault()
 
     if (!signUp) {
@@ -149,7 +149,7 @@ export const ElectronSignUpForm = function ElectronSignUpForm() {
   /**
    * Handle email verification code submission.
    */
-  const handleVerification = async (e: React.FormEvent) => {
+  const handleVerification = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault()
 
     if (!signUp) {
@@ -199,7 +199,7 @@ export const ElectronSignUpForm = function ElectronSignUpForm() {
   /**
    * Handle Google OAuth click.
    */
-  const handleGoogleClick = async () => {
+  const handleGoogleClick = async (): Promise<void> => {
     if (!window.electronAPI?.oauth) {
       dispatch({ type: 'SET_ERROR', error: 'OAuth not available' })
       return
@@ -225,7 +225,9 @@ export const ElectronSignUpForm = function ElectronSignUpForm() {
   const isFormDisabled =
     isLoading || isGoogleLoading || fetchStatus === 'fetching'
 
-  const handleCodeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCodeChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ): void => {
     dispatch({ type: 'SET_CODE', code: event.target.value })
   }
 

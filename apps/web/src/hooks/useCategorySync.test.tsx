@@ -73,7 +73,7 @@ const defaultCategory = buildCategory({
  * @example
  * renderCategoryListWithSync()
  */
-function renderCategoryListWithSync() {
+function renderCategoryListWithSync(): void {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   })

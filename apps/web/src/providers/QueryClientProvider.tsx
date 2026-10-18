@@ -87,7 +87,7 @@ export const QueryClientProvider = function QueryClientProvider({
   const [persister, setPersister] = useState(createPersister)
 
   /** Wipes the prior user's persisted and live Query state only when the Clerk sign-out guard fires. @returns Nothing after replacing the provider generation. @example `handleSessionReset()` */
-  const handleSessionReset = () => {
+  const handleSessionReset = (): void => {
     // 1. Wipe the persisted localStorage entry first so the hydrate pass
     //    on the next mount cannot momentarily flash user A's data.
     persister?.removeClient()

@@ -9,7 +9,7 @@ import { log } from '@/lib/logger'
 export const LogoutButton = function LogoutButton() {
   const { signOut } = useClerk()
 
-  const handleLogout = async () => {
+  const handleLogout = async (): Promise<void> => {
     try {
       await signOut()
     } catch (error) {

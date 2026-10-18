@@ -82,7 +82,7 @@ export function LiveEditorCategoryPicker({
   useUpdateEffect(() => {
     if (state.dialog === null) triggerRef.current?.focus()
   }, [state.dialog])
-  const openDialog = (dialog: 'create' | 'manage') =>
+  const openDialog = (dialog: 'create' | 'manage'): void =>
     setState((current) => ({
       ...current,
       open: false,

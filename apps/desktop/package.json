@@ -1,6 +1,6 @@
 {
   "name": "@corelive/desktop",
-  "version": "0.24.1",
+  "version": "0.24.2",
   "description": "CoreLive macOS desktop wrapper",
   "author": "Ryota Murakami <dojce1048@gmail.com> (https://github.com/ryota-murakami)",
   "homepage": "./",

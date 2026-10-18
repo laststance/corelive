@@ -148,7 +148,7 @@ export const LiveEditorSettings = function LiveEditorSettings({
         if (!cancelled) setIsReady(true)
       })
 
-    return () => {
+    return (): void => {
       cancelled = true
     }
   }, [preferencesVersion])

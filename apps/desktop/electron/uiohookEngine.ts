@@ -116,6 +116,7 @@ export function createUiohookShortcutEngine(
   // PRIOR launch armed the tap but never confirmed (→ start INACTIVE this run).
   let stabilityTimer: ReturnType<typeof setTimeout> | null = null
   let blockedByStaleLatch = uiohook !== null && latch.isSet()
+  let retryingBlockedTap = false
   if (blockedByStaleLatch) {
     log.warn(
       '[uiohookEngine] freeze-safety latch set from a prior unconfirmed arming — tap starts INACTIVE until re-enabled',
@@ -271,7 +272,8 @@ export function createUiohookShortcutEngine(
 
     isLatchBlocked: () => blockedByStaleLatch,
 
-    clearLatchBlock: () => {
+    clearLatchBlock: (): void => {
+      retryingBlockedTap = blockedByStaleLatch
       blockedByStaleLatch = false
     },
 
@@ -300,8 +302,12 @@ export function createUiohookShortcutEngine(
       if (!ensureTapRunning()) {
         keycodeById.delete(id)
         bindingByKeycode.delete(keycode)
+        // A failed manual retry must not let rollback start the prior key.
+        blockedByStaleLatch = retryingBlockedTap
+        retryingBlockedTap = false
         return false
       }
+      retryingBlockedTap = false
       return true
     },
 

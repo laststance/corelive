@@ -507,11 +507,11 @@ export class ShortcutManager {
     // confirmed stability (it may have wedged the app during arming). Re-arming
     // would risk re-freezing on every launch — so do NOT register. A lone
     // modifier has no chord equivalent, so the binding is simply left INACTIVE
-    // (not "degraded to chord"). A regular chord chosen in Settings remains
-    // available without clearing the persistent freeze-safety guard.
+    // (not "degraded to chord"). Settings can explicitly retry a native binding
+    // through updateShortcuts; automatic registration keeps the guard.
     if (this.nativeEngine.isLatchBlocked()) {
       log.warn(
-        `[registerNativeShortcut] Latch-blocked; leaving ${id} inactive (prior arming unconfirmed). Choose a regular shortcut in Settings.`,
+        `[registerNativeShortcut] Latch-blocked; leaving ${id} inactive (prior arming unconfirmed). Select the shortcut again in Settings to retry.`,
       )
       // Notify ONCE per block (codex #6): registerGlobalShortcuts() can run many
       // times while still latch-blocked (startup, rebinds), and an OS toast on
@@ -520,7 +520,7 @@ export class ShortcutManager {
         this.hasNotifiedLatchBlock = true
         this.notificationManager.showNotification(
           'Native Shortcut Disabled',
-          `${this.getShortcutDisplayName(id)} was disabled after a failed start. Choose a regular shortcut in Settings.`,
+          `${this.getShortcutDisplayName(id)} was disabled after a failed start. Select the shortcut again in Settings to retry.`,
           { silent: true },
         )
       }
@@ -968,8 +968,17 @@ export class ShortcutManager {
    *
    * Rejects (without applying anything) a batch that would leave both LiveEditor
    * toggle slots on one accelerator.
+   * Called by {@link applyShortcutRebind} when the user saves a shortcut in Settings.
+   * @param options.retryNativeTap - Allows an explicit native-key save to retry
+   *   after an unfinished start. Startup and rollback must keep this disabled.
+   * @returns Whether every requested shortcut registered successfully.
+   * @example
+   * manager.updateShortcuts({ toggleLiveEditorSecondary: 'lone-modifier:rightOption' }, { retryNativeTap: true })
    */
-  updateShortcuts(newShortcuts: ShortcutConfig): boolean {
+  updateShortcuts(
+    newShortcuts: ShortcutConfig,
+    options: { retryNativeTap?: boolean } = {},
+  ): boolean {
     try {
       // Guard the merged result, not the payload: the generic Shortcut Settings
       // screen submits EVERY registered id — including the second LiveEditor slot,
@@ -1027,6 +1036,15 @@ export class ShortcutManager {
 
         const handler = this.getHandlerForShortcut(id)
         if (handler) {
+          // Only an explicit, valid native-key save can lift the startup block.
+          // The engine still arms its on-disk guard before starting the listener.
+          if (
+            options.retryNativeTap &&
+            parseNativeBinding(accelerator) !== null &&
+            this.nativeEngine.isLatchBlocked()
+          ) {
+            this.nativeEngine.clearLatchBlock()
+          }
           const ok = this.registerShortcut(accelerator, id, handler)
           allRegistered = allRegistered && ok
         }

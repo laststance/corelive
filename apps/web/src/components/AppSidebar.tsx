@@ -64,13 +64,13 @@ export const AppSidebar = function AppSidebar() {
   // Web deployment versions can precede a desktop release; the release page always points to published installers.
   const macDownloadUrl = `https://github.com/${GITHUB_REPO}/releases/latest`
 
-  const handleOpenSettings = () => {
+  const handleOpenSettings = (): void => {
     router.push('/settings')
   }
-  const handleOpenCategoryManager = () => {
+  const handleOpenCategoryManager = (): void => {
     setManageDialogOpen(true)
   }
-  const handleCategoryManagerOpenChange = (open: boolean) => {
+  const handleCategoryManagerOpenChange = (open: boolean): void => {
     setManageDialogOpen(open)
   }
 

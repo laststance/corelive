@@ -81,7 +81,7 @@ export function createLocalStorageSlot(key: string): LocalStorageSlot {
 
   return {
     read: () => memoryFallback.get(key) ?? readLocalStorageKey(key),
-    write: (raw) => {
+    write: (raw): void => {
       if (getLocalStorageAvailability() === 'ok') {
         try {
           window.localStorage.setItem(key, raw)
@@ -102,7 +102,7 @@ export function createLocalStorageSlot(key: string): LocalStorageSlot {
         if (event.key === key || event.key === null) listener()
       }
       window.addEventListener('storage', handleStorage)
-      return () => {
+      return (): void => {
         listeners.delete(listener)
         window.removeEventListener('storage', handleStorage)
       }

@@ -130,7 +130,7 @@ export function useCompletionWriter(): CompletionWriter {
       bumpDayTotal(createdDayKey, 1)
       return { id: created.id }
     },
-    remove: async ({ id }) => {
+    remove: async ({ id }): Promise<void> => {
       // A string id is a device-local keep, whatever the sign-in state is now.
       if (typeof id === 'string') {
         removeLocalCompletion(id)

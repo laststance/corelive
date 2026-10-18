@@ -13,7 +13,10 @@
  */
 export interface ShortcutRebinder {
   /** Persist + (re)register the given accelerators; false when a global one failed to bind. */
-  updateShortcuts(shortcuts: Record<string, string>): boolean
+  updateShortcuts(
+    shortcuts: Record<string, string>,
+    options?: { retryNativeTap?: boolean },
+  ): boolean
   /** Map of shortcut id → the accelerator ACTUALLY bound (a fallback differs from the request). */
   getRegisteredShortcuts(): Record<string, string>
 }
@@ -26,7 +29,8 @@ export interface ShortcutRebinder {
  * it restores `previous` and returns `false`, so the caller (and the Settings UI)
  * never shows a key the user did not choose. `handleShortcutConflict` itself is
  * left untouched. An empty `accelerator` ('' = intentional disable) skips the
- * read-back, since nothing is expected to be registered afterwards.
+ * read-back, since nothing is expected to be registered afterwards. This explicit
+ * Settings save can retry a blocked native key; rollback never grants that retry.
  *
  * @param rebinder - The ShortcutManager, or a structural stand-in in tests.
  * @param id - The toggle's shortcut id, e.g. `'toggleLiveEditor'`.
@@ -48,11 +52,14 @@ export function applyShortcutRebind(
   accelerator: string,
   previous: string,
 ): boolean {
-  const didRegister = rebinder.updateShortcuts({ [id]: accelerator })
+  const didRegister = rebinder.updateShortcuts(
+    { [id]: accelerator },
+    { retryNativeTap: true },
+  )
   if (!didRegister) {
-    // Nothing (not even a fallback) bound — restore the prior accelerator so
-    // config and live registration stay in sync.
-    restorePreviousOrThrow(rebinder, id, previous)
+    // An unchanged key needs no config rollback. Registering it again here
+    // would silently make a second native-start attempt after a failed retry.
+    if (accelerator !== previous) restorePreviousOrThrow(rebinder, id, previous)
     return false
   }
 

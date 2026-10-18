@@ -54,7 +54,7 @@ function subscribeToLocalDay(onStoreChange: () => void): () => void {
   window.addEventListener('focus', refreshAfterPause)
   document.addEventListener('visibilitychange', handleVisibilityChange)
 
-  return () => {
+  return (): void => {
     if (timeoutId !== undefined) clearTimeout(timeoutId)
     window.removeEventListener('focus', refreshAfterPause)
     document.removeEventListener('visibilitychange', handleVisibilityChange)

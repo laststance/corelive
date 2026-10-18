@@ -295,7 +295,7 @@ describe('LocalKeepMergeSync', () => {
       queryKey: todayHeatmapKey,
       queryFn: async () =>
         new Promise((resolve) => {
-          answerStaleFetch = () =>
+          answerStaleFetch = (): void =>
             resolve({
               data: [],
               streaks: { current: 0, longest: 0 },

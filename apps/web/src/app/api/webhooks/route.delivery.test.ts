@@ -407,7 +407,7 @@ describeIfDb('Clerk webhook deliveries against an existing database', () => {
       name: 'Old Account',
     })
     let categoryInsertSpy: MockInstance | undefined
-    const failCategoryInsert = (client: PoolClient) => {
+    const failCategoryInsert = (client: PoolClient): void => {
       const realQuery = client.query.bind(client) as (
         ...args: unknown[]
       ) => unknown

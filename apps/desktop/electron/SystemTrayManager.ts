@@ -499,7 +499,7 @@ export class SystemTrayManager {
       const template: MenuItemConstructorOptions[] = [
         {
           label: 'Open full app in browser ↗',
-          click: () => {
+          click: (): void => {
             // The full task app is web-only now that the main window is retired:
             // open corelive.app in the user's browser (↗ = leaves the app),
             // never a native main window. (T9 / user: no item restores main.)
@@ -511,7 +511,7 @@ export class SystemTrayManager {
           // A native lone-modifier binding renders as a label glyph, not an
           // Electron accelerator (which can't parse 'lone-modifier:*').
           ...trayShortcutMenuFields('Toggle LiveEditor', liveEditorAccelerator),
-          click: () => {
+          click: (): void => {
             try {
               this.windowManager.toggleLiveEditor()
             } catch (error) {
@@ -522,7 +522,7 @@ export class SystemTrayManager {
         { type: 'separator' },
         {
           label: 'Settings',
-          click: () => {
+          click: (): void => {
             try {
               this.windowManager.openSettings()
             } catch (error) {
@@ -533,7 +533,7 @@ export class SystemTrayManager {
         { type: 'separator' },
         {
           label: 'Quit',
-          click: () => {
+          click: (): void => {
             try {
               this.isQuitting = true
               app.quit()
@@ -570,14 +570,14 @@ export class SystemTrayManager {
       const fallbackMenu = Menu.buildFromTemplate([
         {
           label: 'Open full app in browser ↗',
-          click: () => {
+          click: (): void => {
             // Degraded menu still never restores a native main window.
             openWebAppInBrowser(this.windowManager.getWebAppOrigin(), '/home')
           },
         },
         {
           label: 'Quit',
-          click: () => {
+          click: (): void => {
             this.isQuitting = true
             app.quit()
           },

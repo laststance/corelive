@@ -112,7 +112,7 @@ export const SkillTreeView = function SkillTreeView() {
    * @example
    * handleDragStart(event)
    */
-  const handleDragStart = (event: DragStartEvent) => {
+  const handleDragStart = (event: DragStartEvent): void => {
     const todoId = parseTodoDragId(event.operation.source?.id)
     if (todoId !== null) {
       setActiveDragId(todoId)
@@ -127,7 +127,7 @@ export const SkillTreeView = function SkillTreeView() {
    * @example
    * handleDragEnd(event)
    */
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = (event: DragEndEvent): void => {
     setActiveDragId(null)
     if (event.canceled) return
 
@@ -148,27 +148,27 @@ export const SkillTreeView = function SkillTreeView() {
     })
   }
 
-  const handleUnassign = (nodeId: SkillNodeId, todoId: TodoId) => {
+  const handleUnassign = (nodeId: SkillNodeId, todoId: TodoId): void => {
     startTransition(async () => {
       applyOptimistic({ type: 'unassign', nodeId, todoId })
       await unassignMutation.mutateAsync({ nodeId, todoId }).catch(() => {})
     })
   }
 
-  const handleNodeClick = (nodeId: SkillNodeId) => {
+  const handleNodeClick = (nodeId: SkillNodeId): void => {
     setActivePopoverNodeId(nodeId)
   }
 
-  const handlePopoverOpenChange = (open: boolean) => {
+  const handlePopoverOpenChange = (open: boolean): void => {
     if (!open) setActivePopoverNodeId(null)
   }
 
-  const handlePopoverUnassign = (todoId: TodoId) => {
+  const handlePopoverUnassign = (todoId: TodoId): void => {
     if (!activePopoverNodeId) return
     handleUnassign(activePopoverNodeId, todoId)
   }
 
-  const handleDrawerOpenChange = (open: boolean) => {
+  const handleDrawerOpenChange = (open: boolean): void => {
     setDrawerOpen(open)
   }
 
