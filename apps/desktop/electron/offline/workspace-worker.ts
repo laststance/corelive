@@ -130,7 +130,7 @@ async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
       return workspaceView(state)
     }
     case 'export':
-      return JSON.stringify(await file.read(), null, 2)
+      return exportWriting()
     case 'previewRecovery': {
       const preview = await file.previewRecoveryInfo()
       return {
@@ -155,6 +155,18 @@ async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
           ),
         })),
       )
+  }
+}
+
+/** Keeps ordinary workspace exports compatible and offers preserved raw files after corruption.
+ * @example const json = await exportWriting()
+ */
+async function exportWriting(): Promise<string> {
+  try {
+    return JSON.stringify(await file.read(), null, 2)
+  } catch (error) {
+    if (!(error instanceof WorkspaceFileError)) throw error
+    return file.exportRecoveryFiles()
   }
 }
 

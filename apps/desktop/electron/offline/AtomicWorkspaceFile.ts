@@ -125,6 +125,88 @@ export class AtomicWorkspaceFile<T> {
     }))
   }
 
+  /** Exports exact bytes from this account's partition when the primary cannot be opened.
+   * The worker calls this only for recovery export; no file is rewritten or promoted.
+   * Known foreign-owner envelopes are excluded, and invalid bytes are labelled as unvalidated.
+   * @example const archive = await file.exportRecoveryFiles()
+   */
+  async exportRecoveryFiles(): Promise<string> {
+    return this.serialize(async () => {
+      const files: {
+        name: string
+        contentBase64: string
+        integrity: 'valid' | 'invalid'
+      }[] = []
+      const excluded: string[] = []
+      for (const [name, path] of [
+        ['workspace.json', this.path],
+        ['recovery.json', this.recoveryPath],
+      ] as const) {
+        let bytes: Buffer
+        try {
+          bytes = await readFile(path)
+        } catch (error) {
+          if (isMissingFile(error)) continue
+          throw error
+        }
+        const text = bytes.toString('utf8')
+        if (this.declaresForeignOwner(text)) {
+          excluded.push(name)
+          continue
+        }
+        let integrity: 'valid' | 'invalid' = 'valid'
+        try {
+          this.decode(text)
+        } catch {
+          integrity = 'invalid'
+        }
+        files.push({ name, contentBase64: bytes.toString('base64'), integrity })
+      }
+      if (!files.length) throw new WorkspaceFileError('recovery-missing')
+      return JSON.stringify(
+        {
+          format: 'corelive-recovery-files',
+          version: 1,
+          ownerId: this.ownerId,
+          exportedAt: new Date().toISOString(),
+          files,
+          excluded,
+        },
+        null,
+        2,
+      )
+    })
+  }
+
+  /** Excludes explicitly foreign ownership while retaining uninterpretable bytes from the current partition.
+   * @example if (this.declaresForeignOwner(text)) omitFile()
+   */
+  private declaresForeignOwner(text: string): boolean {
+    let value: unknown
+    try {
+      value = JSON.parse(text) as unknown
+    } catch {
+      return false
+    }
+    if (typeof value !== 'object' || value === null) return false
+    if ('ownerId' in value && value.ownerId !== this.ownerId) return true
+    if ('payload' in value && typeof value.payload === 'string') {
+      let payload: unknown
+      try {
+        payload = JSON.parse(value.payload) as unknown
+      } catch {
+        return false
+      }
+      return (
+        typeof payload === 'object' &&
+        payload !== null &&
+        'ownerId' in payload &&
+        payload.ownerId !== this.ownerId
+      )
+    }
+    return false
+  }
+
   /**
    * Restores a user-confirmed recovery copy, preserving invalid primary bytes first.
    * The domain callback advances its generation and records the recovery decision.
@@ -136,7 +218,7 @@ export class AtomicWorkspaceFile<T> {
       const candidate = this.parse(advance(recovery))
       // Preserve the exact failed primary; it may contain newer recoverable writing.
       try {
-        const original = await readFile(this.path, 'utf8')
+        const original = await readFile(this.path)
         await this.replace(
           `${this.path}.preserved-${randomUUID()}`,
           original,
@@ -174,7 +256,7 @@ export class AtomicWorkspaceFile<T> {
       try {
         await this.replace(
           `${this.path}.preserved-${randomUUID()}`,
-          await readFile(this.path, 'utf8'),
+          await readFile(this.path),
           false,
         )
       } catch (error) {
@@ -275,7 +357,7 @@ export class AtomicWorkspaceFile<T> {
    */
   private async replace(
     path: string,
-    bytes: string,
+    bytes: string | Uint8Array,
     observe: boolean,
   ): Promise<void> {
     const temporary = `${path}.${randomUUID()}.tmp`
