@@ -4,6 +4,7 @@ import type {
   OfflineEditorSnapshot,
 } from '@corelive/desktop-contract/offline-workspace'
 import { SharedCategoryPicker } from '@corelive/live-editor/category-picker'
+import { getDraftInputLimit } from '@corelive/live-editor/draft-input-limit'
 import { TodayEmber } from '@corelive/live-editor/ember'
 import { useEditorInput } from '@corelive/live-editor/input'
 import type {
@@ -263,6 +264,7 @@ function PreparedEditor({
 
   return (
     <SharedEditorSurface
+      noteMaxLength={getDraftInputLimit(workspace.draft)}
       windowSettings={windowSettings}
       textareaProps={input.textareaProps}
       settings={settings}

@@ -212,6 +212,83 @@ test('later typing stays dirty through an older save acknowledgement and is incl
   ).toEqual(['First edited', 'Second', 'Later input'])
 })
 
+test('a shortening acknowledgement cannot reject newer typing within the preserved large draft allowance', async () => {
+  // Arrange
+  const fixture = await createFixture('a'.repeat(60000))
+  fixture.store.edit('a'.repeat(55000))
+  const delivery = fixture.hold('save')
+  const saving = fixture.store.flush()
+  await delivery.ready()
+
+  // Act
+  fixture.store.edit('b'.repeat(60000))
+  delivery.release()
+
+  // Assert
+  await expect(saving).resolves.toBe(true)
+  expect(fixture.store.getSnapshot()).toMatchObject({
+    text: 'b'.repeat(60000),
+    save: 'saved',
+  })
+  expect((await fixture.worker.call('open', null)).draft).toMatchObject({
+    inputLimit: 60000,
+    rows: [{ text: 'b'.repeat(60000) }],
+  })
+})
+
+test('a definite rejected save exposes exact Copy writing and blocks exit until a fresh corrected retry succeeds', async () => {
+  // Arrange
+  const fixture = await createFixture()
+  fixture.store.edit('x'.repeat(51001))
+
+  // Act
+  fixture.requestFlush()
+  await vi.waitFor(() => expect(fixture.replyFlush).toHaveBeenCalled())
+  await fixture.store.copyWriting()
+
+  // Assert
+  expect(fixture.replyFlush.mock.calls[0]?.[1]).toBe(false)
+  expect(fixture.store.getSnapshot().save).toBe('failed')
+  expect(fixture.copyWriting).toHaveBeenCalledWith(0, 'x'.repeat(51001))
+  fixture.store.edit('Corrected')
+  await expect(fixture.store.retry()).resolves.toBe(true)
+  expect(fixture.store.getSnapshot()).toMatchObject({
+    text: 'Corrected',
+    save: 'saved',
+  })
+  expect(fixture.command.mock.calls[1]?.[1].commandId).not.toBe(
+    fixture.command.mock.calls[0]?.[1].commandId,
+  )
+})
+
+test('an exhausted save conflict offers writing recovery while an expired Undo leaves saved writing saved', async () => {
+  // Arrange
+  const fixture = await createFixture()
+  fixture.command.mockResolvedValue({ ok: false, reason: 'revision-conflict' })
+  fixture.store.edit('Changed')
+
+  // Act / Assert
+  await expect(fixture.store.flush()).resolves.toBe(false)
+  expect(fixture.store.getSnapshot()).toMatchObject({
+    save: 'failed',
+    error: 'Could not save writing on this Mac. Retry or copy your writing.',
+  })
+  fixture.command.mockImplementation(fixture.apply)
+  await expect(fixture.store.retry()).resolves.toBe(true)
+  fixture.command.mockResolvedValue({ ok: false, reason: 'undo-expired' })
+  await expect(
+    fixture.store.command({
+      type: 'undo',
+      commandId: randomUUID(),
+      completionId: randomUUID(),
+    }),
+  ).resolves.toBe(false)
+  expect(fixture.store.getSnapshot()).toMatchObject({
+    save: 'saved',
+    error: 'Undo has expired. Your writing is still saved.',
+  })
+})
+
 test('a completion response cannot overwrite a later rewrite and Undo restores the captured text beside it', async () => {
   // Arrange
   const fixture = await createFixture()

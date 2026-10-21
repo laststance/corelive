@@ -134,11 +134,31 @@ function mountEditor(
   render(<NativeEditor api={api} store={store} />)
   return {
     host,
+    store,
     show: (): void => {
       for (const listener of shown) listener()
     },
   }
 }
+
+test('a definite save rejection shows Retry and Copy writing instead of an endless saving state', async () => {
+  // Arrange
+  const { host, store } = mountEditor()
+  host.command = async () => ({ ok: false, reason: 'invalid-row' })
+  const field = await screen.findByRole('textbox', { name: 'Write one thing' })
+
+  // Act
+  fireEvent.change(field, { target: { value: 'Rejected writing' } })
+  await act(async () => {
+    await store.flush()
+  })
+
+  // Assert
+  expect(screen.getByText('Not saved on this Mac')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Retry' })).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Copy writing' })).toBeVisible()
+  expect(field).toHaveValue('Rejected writing')
+})
 
 test('opening a prepared offline editor focuses the preserved writing without a click', async () => {
   // Arrange / Act

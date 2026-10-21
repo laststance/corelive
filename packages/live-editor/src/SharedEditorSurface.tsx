@@ -52,7 +52,7 @@ type FooterCopy = Readonly<{
 
 /**
  * Picks the web frame's footer line for the current auth / storage state. The
- * Electron panel renders no footer, so this is web-only copy (design review DR3/DR4).
+ * Bundled Electron supplies its own durable-save footer; this is web-only copy.
  * @param isAuthLoaded - Whether Clerk has resolved the session yet.
  * @param isSignedIn - Whether a signed-in user is present (undefined until loaded).
  * @param storageAvailability - The localStorage probe result for signed-out keeps.
@@ -110,6 +110,7 @@ export interface SharedEditorSurfaceProps {
   storageAvailability: BrowserStorageAvailability
   ember?: React.ReactNode
   nativeFooter?: React.ReactNode
+  noteMaxLength?: number
   details?: React.ReactNode
   linkComponent?: React.ComponentType<{
     href: string
@@ -145,6 +146,7 @@ export function SharedEditorSurface({
   storageAvailability,
   ember,
   nativeFooter,
+  noteMaxLength = NOTE_MAX_LENGTH,
   details,
   linkComponent,
   isCategoryListPending,
@@ -340,7 +342,7 @@ export function SharedEditorSurface({
         aria-label={NOTE_FIELD_LABEL}
         placeholder={placeholder}
         disabled={isNoteFieldDisabled}
-        maxLength={NOTE_MAX_LENGTH}
+        maxLength={noteMaxLength}
         // LiveEditor is messy quick-capture — the native red spellcheck underlines
         // make unfinished / mixed-language fragments feel "corrected" and noisy, so
         // we keep the writing surface calm by disabling them. Only the correction

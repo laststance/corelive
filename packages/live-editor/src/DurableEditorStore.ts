@@ -480,10 +480,12 @@ export class DurableEditorStore {
       if (!(await this.send(uncertain))) return false
     }
     if (
-      version <= buffer.acknowledged ||
-      !buffer.edits.some((edit) => edit.version <= version)
+      !buffer.saveFailed &&
+      (version <= buffer.acknowledged ||
+        !buffer.edits.some((edit) => edit.version <= version))
     )
       return true
+    // Even a reverted failed edit needs an ACK to clear main's retained rescue copy.
     const edits = buffer.edits.filter((edit) => edit.version <= version)
     const rows = applyDraftEdits(buffer.base.rows, edits)
     const pending: PendingCommand = {
@@ -529,6 +531,7 @@ export class DurableEditorStore {
           ? {
               categoryId: buffer.categoryId,
               draft: {
+                ...buffer.base,
                 revision: command.baseRevision + 1,
                 rows: pending.submittedRows,
               },
@@ -585,14 +588,14 @@ export class DurableEditorStore {
     if (!storageFailure) this.uncertain.delete(buffer.ownerId)
     return this.fail(
       buffer,
-      reason === 'revision-conflict'
+      reason === 'revision-conflict' && command.type !== 'save'
         ? 'This record changed. Close the dialog and review its latest details.'
         : reason === 'undo-expired'
           ? 'Undo has expired. Your writing is still saved.'
           : reason === 'account-changed'
             ? 'The active account changed.'
             : 'Could not save writing on this Mac. Retry or copy your writing.',
-      storageFailure,
+      storageFailure || command.type === 'save',
     )
   }
 

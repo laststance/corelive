@@ -3,11 +3,13 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import type { OfflineEditorAPI } from '@corelive/desktop-contract/offline-editor-api'
 import {
   OfflineWorkspaceSchema,
   type OfflineEditorSnapshot,
 } from '@corelive/desktop-contract/offline-workspace'
 import { UserSettingsStateSchema } from '@corelive/desktop-contract/settings'
+import { DurableEditorStore } from '@corelive/live-editor/store'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { AtomicWorkspaceFile } from './AtomicWorkspaceFile'
@@ -119,6 +121,74 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
   })
   return { promise, resolve }
 }
+
+test('reverting rejected writing clears the main rescue copy before a fresh renderer opens', async () => {
+  // Arrange: real controller, worker and disk; only the preload transport is in-process.
+  const listeners = new Set<(snapshot: OfflineEditorSnapshot) => void>()
+  const { controller } = await createFixture(true, {
+    onSnapshot: (snapshot) => {
+      for (const listener of listeners) listener(snapshot)
+    },
+  })
+  await controller.initialize()
+  const command = vi.fn<OfflineEditorAPI['command']>(
+    async (generation, input) => controller.command(generation, input),
+  )
+  const host: OfflineEditorAPI = {
+    version: 1,
+    snapshot: async () => controller.getSnapshot(),
+    command,
+    draft: async (generation, categoryId) =>
+      controller.draft(generation, categoryId),
+    retry: async () => undefined,
+    details: async (generation, offset, limit) =>
+      controller.details(generation, offset, limit),
+    undoHistory: async (generation, offset, limit) =>
+      controller.undoHistory(generation, offset, limit),
+    recoveryCopies: async (generation, offset, limit) =>
+      controller.recoveryCopies(generation, offset, limit),
+    signIn: async () => undefined,
+    manageCategories: async () => undefined,
+    copyWriting: async () => true,
+    export: async () => true,
+    previewRecovery: async (generation) =>
+      controller.previewRecovery(generation),
+    recover: async (generation) => controller.recover(generation),
+    subscribe: (listener) => {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+    onFlush: () => () => undefined,
+    onShown: () => () => undefined,
+    onCategoryCreated: () => () => undefined,
+    replyFlush: async () => true,
+  }
+  const store = new DurableEditorStore(host)
+  const fresh = new DurableEditorStore(host)
+  cleanups.push(async () => {
+    store.disconnect()
+    fresh.disconnect()
+  })
+  await store.connect()
+
+  // Act: a definite failed save is rescued by main, then the user removes that input.
+  store.edit('x'.repeat(51001))
+  await expect(store.flush()).resolves.toBe(false)
+  expect(store.getSnapshot().save).toBe('failed')
+  store.edit('Writing survives offline startup')
+  await expect(store.retry()).resolves.toBe(true)
+  store.disconnect()
+  await fresh.connect()
+
+  // Assert: a baseline ACK also removes the retained failed text in main.
+  expect(command).toHaveBeenCalledTimes(2)
+  expect(controller.getSnapshot()).not.toHaveProperty('unsavedDraft')
+  expect(fresh.getSnapshot()).toMatchObject({
+    text: 'Writing survives offline startup',
+    save: 'saved',
+    error: null,
+  })
+})
 
 test.each([
   { mode: 'prepare', ordering: 'lock-first' },

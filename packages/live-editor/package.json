@@ -27,6 +27,7 @@
     "./input": "./src/editorInput.ts",
     "./store": "./src/DurableEditorStore.ts",
     "./draft-edits": "./src/draftEdits.ts",
+    "./draft-input-limit": "./src/draftInputLimit.ts",
     "./themes": "./src/themes/registry.ts",
     "./theme-transition": "./src/ThemeTransition.tsx",
     "./styles/*": "./src/styles/*",

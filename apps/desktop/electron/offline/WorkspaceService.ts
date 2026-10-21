@@ -14,6 +14,7 @@ import {
   type WorkspaceCommand,
 } from '@corelive/desktop-contract/offline-workspace'
 import { diffDraftRows } from '@corelive/live-editor/draft-edits'
+import { getDraftInputLimit } from '@corelive/live-editor/draft-input-limit'
 import {
   markPlainLineCompleted,
   normalizeCompletedTitle,
@@ -129,6 +130,11 @@ export class WorkspaceService {
       }
       const state = structuredClone(current)
       this.apply(state, command)
+      // Trusted reducers can preserve larger documents; normal saves cannot grant themselves capacity.
+      for (const [id, draft] of Object.entries(state.drafts)) {
+        if (draft.revision !== current.drafts[id]?.revision)
+          draft.inputLimit = getDraftInputLimit(draft)
+      }
       state.revision++
       state.commandReceipts[command.commandId] = {
         digest: commandDigest,
@@ -406,7 +412,7 @@ export class WorkspaceService {
 
     if (
       unique.size !== command.rows.length ||
-      length > 51000 ||
+      length > getDraftInputLimit(draft) ||
       command.rows.some((row) => row.text.includes('\n'))
     )
       throw new WorkspaceCommandError('invalid-row')
@@ -999,6 +1005,8 @@ export class WorkspaceService {
       !state.categories.some((category) => category.id === categoryId)
     )
       throw new WorkspaceCommandError('category-unavailable')
+    // Capture an older document's allowance before a reducer can shorten its rows.
+    draft.inputLimit = getDraftInputLimit(draft)
     return draft
   }
 

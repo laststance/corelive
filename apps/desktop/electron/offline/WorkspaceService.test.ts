@@ -107,6 +107,208 @@ afterEach(async () => {
 })
 
 describe('offline writing and completion transactions', () => {
+  test.each(['move', 'recovery'] as const)(
+    '%s preserves both large documents and permits shortening and retyping after restart',
+    async (mode) => {
+      // Arrange
+      const fixture = await createWorkspace('a'.repeat(30000), false, {
+        workText: 'b'.repeat(30000),
+      })
+      let state = await fixture.file.read()
+      if (mode === 'move') {
+        state = await fixture.service.execute({
+          type: 'moveCategory',
+          commandId: randomUUID(),
+          sourceId: 2,
+          destinationId: 1,
+        })
+      } else {
+        state = await fixture.service.refreshCategories(state.categories, [], {
+          '1': 'b'.repeat(30000),
+        })
+        const command = {
+          type: 'restoreRecovery',
+          commandId: randomUUID(),
+          copyId: state.recoveryCopies[0]!.id,
+          destinationId: 1,
+        }
+        state = await fixture.service.execute(command)
+        // A new request for the same recovered copy must not append it again.
+        state = await fixture.service.execute({
+          ...command,
+          commandId: randomUUID(),
+        })
+      }
+      expect(state.drafts['1']!.rows.map((row) => row.text)).toEqual([
+        'a'.repeat(30000),
+        '',
+        'b'.repeat(30000),
+      ])
+
+      // Act: replace at the allowance, shorten it, and retype after reopening the file.
+      for (const text of [
+        'c'.repeat(30000),
+        'c'.repeat(29999),
+        'd'.repeat(30000),
+      ]) {
+        const reopened = new AtomicWorkspaceFile(fixture.options)
+        state = await reopened.read()
+        state = await new WorkspaceService(reopened).execute({
+          type: 'save',
+          commandId: randomUUID(),
+          categoryId: 1,
+          baseRevision: state.drafts['1']!.revision,
+          rows: state.drafts['1']!.rows.map((row, index) =>
+            index === 0 ? { ...row, text } : row,
+          ),
+        })
+      }
+
+      // Assert: capacity is retained, but submitted input cannot raise it.
+      const durable = await new AtomicWorkspaceFile(fixture.options).read()
+      expect(durable.drafts['1']!.rows.map((row) => row.text)).toEqual([
+        'd'.repeat(30000),
+        '',
+        'b'.repeat(30000),
+      ])
+      expect(durable.drafts['1']!.inputLimit).toBe(60002)
+      await expect(
+        fixture.service.execute({
+          type: 'save',
+          commandId: randomUUID(),
+          categoryId: 1,
+          baseRevision: durable.drafts['1']!.revision,
+          inputLimit: 999999,
+          rows: [{ id: randomUUID(), text: 'x'.repeat(60003) }],
+        }),
+      ).rejects.toThrow('invalid-row')
+      expect(await new AtomicWorkspaceFile(fixture.options).read()).toEqual(
+        durable,
+      )
+    },
+  )
+
+  test('completion at the ordinary limit keeps the full marker and accepts later editing', async () => {
+    // Arrange
+    const fixture = await createWorkspace(`Task\n${'x'.repeat(50995)}`)
+    let state = await fixture.service.execute(
+      completionCommand(await fixture.file.read()),
+    )
+    expect(state.drafts['1']!.inputLimit).toBe(51006)
+
+    // Act
+    state = await fixture.service.execute({
+      type: 'save',
+      commandId: randomUUID(),
+      categoryId: 1,
+      baseRevision: state.drafts['1']!.revision,
+      rows: state.drafts['1']!.rows.map((row, index) =>
+        index === 1 ? { ...row, text: 'y'.repeat(50995) } : row,
+      ),
+    })
+
+    // Assert
+    expect(state.drafts['1']!.rows.map((row) => row.text)).toEqual([
+      '- [x] Task',
+      'y'.repeat(50995),
+    ])
+    expect(
+      (await new AtomicWorkspaceFile(fixture.options).read()).drafts['1'],
+    ).toEqual(state.drafts['1'])
+  })
+
+  test('Undo restores captured writing beside a full draft without making subsequent edits unsavable', async () => {
+    // Arrange
+    const fixture = await createWorkspace('Task\nLater', true)
+    await fixture.service.execute(completionCommand(await fixture.file.read()))
+    let state = await fixture.service.clearDue()
+    state = await fixture.service.execute({
+      type: 'save',
+      commandId: randomUUID(),
+      categoryId: 1,
+      baseRevision: state.drafts['1']!.revision,
+      rows: [{ id: state.drafts['1']!.rows[0]!.id, text: 'x'.repeat(51000) }],
+    })
+
+    // Act
+    state = await fixture.service.execute({
+      type: 'undo',
+      commandId: randomUUID(),
+      completionId: completionA,
+    })
+    expect(state.drafts['1']!.inputLimit).toBe(51005)
+    state = await fixture.service.execute({
+      type: 'save',
+      commandId: randomUUID(),
+      categoryId: 1,
+      baseRevision: state.drafts['1']!.revision,
+      rows: state.drafts['1']!.rows.map((row) =>
+        row.text === 'Task' ? { ...row, text: 'Edit' } : row,
+      ),
+    })
+
+    // Assert
+    expect(state.drafts['1']!.rows.map((row) => row.text)).toEqual([
+      'Edit',
+      'x'.repeat(51000),
+    ])
+    expect(
+      (await new AtomicWorkspaceFile(fixture.options).read()).drafts['1'],
+    ).toEqual(state.drafts['1'])
+  })
+
+  test('ordinary drafts count surrogate pairs and row separators within the unchanged 51000 limit', async () => {
+    // Arrange
+    const fixture = await createWorkspace('Original')
+    let state = await fixture.file.read()
+
+    // Act
+    state = await fixture.service.execute({
+      type: 'save',
+      commandId: randomUUID(),
+      categoryId: 1,
+      baseRevision: 0,
+      rows: [{ id: randomUUID(), text: '😀'.repeat(25500) }],
+    })
+    await expect(
+      fixture.service.execute({
+        type: 'save',
+        commandId: randomUUID(),
+        categoryId: 1,
+        baseRevision: state.drafts['1']!.revision,
+        rows: [...state.drafts['1']!.rows, { id: randomUUID(), text: '' }],
+      }),
+    ).rejects.toThrow('invalid-row')
+
+    // Assert
+    expect(state.drafts['1']!.inputLimit).toBe(51000)
+    expect(await new AtomicWorkspaceFile(fixture.options).read()).toEqual(state)
+  })
+
+  test('an older oversized draft retains its original allowance before its first shortening save', async () => {
+    // Arrange
+    const fixture = await createWorkspace('a'.repeat(60000))
+    const original = await fixture.file.read()
+    expect(original.drafts['1']!.inputLimit).toBeUndefined()
+
+    // Act
+    const state = await fixture.service.execute({
+      type: 'save',
+      commandId: randomUUID(),
+      categoryId: 1,
+      baseRevision: 0,
+      rows: [{ id: randomUUID(), text: 'b'.repeat(55000) }],
+    })
+
+    // Assert
+    expect(state.drafts['1']!.inputLimit).toBe(60000)
+    expect(
+      (await new AtomicWorkspaceFile(fixture.options).read()).drafts[
+        '1'
+      ]!.rows.map((row) => row.text),
+    ).toEqual(['b'.repeat(55000)])
+  })
+
   test('the General and Work midnight fixture survives lost replies, restart and queued Undo with original day totals', async () => {
     // Arrange: the approved acceptance fixture, with a synthetic remote receipt ledger.
     const firstTime = Date.parse('2026-10-21T14:59:59.000Z')

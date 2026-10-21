@@ -25,7 +25,12 @@ export const DraftRowSchema = z.object({
   completionId: identity.optional(),
 })
 export type DraftRow = z.infer<typeof DraftRowSchema>
-export const DraftSchema = z.object({ revision, rows: z.array(DraftRowSchema) })
+export const DraftSchema = z.object({
+  revision,
+  rows: z.array(DraftRowSchema),
+  // Older snapshots derive this allowance from their preserved writing on first use.
+  inputLimit: revision.optional(),
+})
 export type OfflineDraft = z.infer<typeof DraftSchema>
 export interface OfflineDraftRecord {
   categoryId: number
