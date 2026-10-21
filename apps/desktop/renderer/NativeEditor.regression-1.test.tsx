@@ -16,7 +16,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react'
-import { afterEach, expect, test } from 'vitest'
+import { afterEach, expect, test, vi } from 'vitest'
 
 import { NativeEditor } from './NativeEditor'
 
@@ -24,6 +24,7 @@ const stores: DurableEditorStore[] = []
 afterEach(() => {
   cleanup()
   for (const store of stores.splice(0)) store.disconnect()
+  vi.useRealTimers()
 })
 
 /** Supplies only synthetic preload values; this regression tests DOM focus, not IPC or disk persistence.
@@ -132,6 +133,7 @@ function mountEditor(
   stores.push(store)
   render(<NativeEditor api={api} store={store} />)
   return {
+    host,
     show: (): void => {
       for (const listener of shown) listener()
     },
@@ -148,6 +150,74 @@ test('opening a prepared offline editor focuses the preserved writing without a 
   expect(field).toHaveValue('Saved writing')
   await waitFor(() => expect(field).toHaveFocus())
 })
+
+test('Copy writing acknowledges the exact live text only after copying and clears Copied after two seconds', async () => {
+  // Arrange
+  const fixture = mountEditor()
+  fixture.host.command = async () => ({ ok: false, reason: 'storage-failed' })
+  const field = await screen.findByRole('textbox', { name: 'Write one thing' })
+  fireEvent.change(field, {
+    target: { value: 'Unsaved line\nMore live writing' },
+  })
+  const button = await screen.findByRole('button', { name: 'Copy writing' })
+  let finishCopy: (copied: boolean) => void = () => undefined
+  fixture.host.copyWriting = vi.fn(
+    async () =>
+      new Promise<boolean>((resolve) => {
+        finishCopy = resolve
+      }),
+  )
+  vi.useFakeTimers()
+
+  // Act
+  fireEvent.click(button)
+  await act(async () => undefined)
+
+  // Assert
+  expect(fixture.host.copyWriting).toHaveBeenCalledWith(
+    1,
+    'Unsaved line\nMore live writing',
+  )
+  expect(screen.queryByText('Copied')).not.toBeInTheDocument()
+  await act(async () => finishCopy(true))
+  expect(screen.getByText('Copied')).toBeVisible()
+  await act(async () => vi.advanceTimersByTimeAsync(1999))
+  expect(screen.getByText('Copied')).toBeVisible()
+  await act(async () => vi.advanceTimersByTimeAsync(1))
+  expect(screen.queryByText('Copied')).not.toBeInTheDocument()
+  expect(field).toHaveValue('Unsaved line\nMore live writing')
+})
+
+test.each(['false', 'rejected'])(
+  'Copy writing gives manual-copy guidance when the clipboard result is %s',
+  async (result) => {
+    // Arrange
+    const fixture = mountEditor()
+    fixture.host.command = async () => ({ ok: false, reason: 'storage-failed' })
+    const field = await screen.findByRole('textbox', {
+      name: 'Write one thing',
+    })
+    fireEvent.change(field, { target: { value: 'Writing still at risk' } })
+    const button = await screen.findByRole('button', { name: 'Copy writing' })
+    fixture.host.copyWriting = async () => {
+      if (result === 'rejected')
+        throw new Error('Synthetic clipboard unavailable')
+      return false
+    }
+
+    // Act
+    fireEvent.click(button)
+
+    // Assert
+    expect(
+      await screen.findByText(
+        'Could not copy. Select your writing and copy it.',
+      ),
+    ).toBeVisible()
+    expect(screen.queryByText('Copied')).not.toBeInTheDocument()
+    expect(field).toHaveValue('Writing still at risk')
+  },
+)
 
 test('revealing the native editor returns focus to its writing while keeping the live caret', async () => {
   // Arrange

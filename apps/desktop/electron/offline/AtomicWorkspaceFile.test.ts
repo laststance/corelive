@@ -42,6 +42,54 @@ afterEach(async () => {
 })
 
 describe('durable account workspace', () => {
+  test('replaying a renamed command flushes its directory before acknowledging and still rejects a failed barrier', async () => {
+    // Arrange
+    let failure: WorkspaceWriteStage | undefined
+    const stages: WorkspaceWriteStage[] = []
+    const { file, options } = await createFixture((stage) => {
+      stages.push(stage)
+      if (stage === failure) throw new Error('Unacknowledged directory barrier')
+    })
+    await file.initialize({
+      revision: 0,
+      text: 'Before',
+      completions: [],
+      receipts: [],
+    })
+    const complete = (state: Fixture): Fixture =>
+      state.receipts.includes('command-1')
+        ? state
+        : {
+            revision: 1,
+            text: 'After',
+            completions: ['completion-1'],
+            receipts: ['command-1'],
+          }
+    failure = 'replaced'
+    await expect(file.update(complete)).rejects.toThrow(
+      'Unacknowledged directory barrier',
+    )
+    const restarted = new AtomicWorkspaceFile(options)
+    stages.length = 0
+
+    // Act / Assert: readback alone must not turn an uncertain rename into success.
+    failure = 'directory-flushed'
+    await expect(restarted.update(complete)).rejects.toThrow(
+      'Unacknowledged directory barrier',
+    )
+    expect(stages).toEqual(['directory-flushed'])
+    failure = undefined
+    stages.length = 0
+    const retried = await restarted.update(complete)
+    expect(stages).toEqual(['directory-flushed'])
+    expect(retried).toEqual({
+      revision: 1,
+      text: 'After',
+      completions: ['completion-1'],
+      receipts: ['command-1'],
+    })
+  })
+
   test.each(['file-flushed', 'acknowledged'] as const)(
     'an actual process death at %s reopens the committed generation',
     async (stage) => {

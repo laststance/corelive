@@ -28,6 +28,7 @@
     "./store": "./src/DurableEditorStore.ts",
     "./draft-edits": "./src/draftEdits.ts",
     "./themes": "./src/themes/registry.ts",
+    "./theme-transition": "./src/ThemeTransition.tsx",
     "./styles/*": "./src/styles/*",
     "./window-settings": "./src/useEditorWindowSettings.ts"
   },

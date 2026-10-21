@@ -5,6 +5,9 @@ import { join } from 'node:path'
 
 import {
   OfflineWorkspaceSchema,
+  type CompletionProjection,
+  type CompletionSyncOperation,
+  type CompletionSyncReceipt,
   type OfflineWorkspace,
   type WorkspaceCommand,
 } from '@corelive/desktop-contract/offline-workspace'
@@ -23,7 +26,11 @@ const instant = Date.UTC(2026, 9, 21, 12)
 /** Creates a verified synthetic account with three categories in an isolated directory.
  * @example const fixture = await createWorkspace()
  */
-async function createWorkspace(text = 'Original\nLater', clear = false) {
+async function createWorkspace(
+  text = 'Original\nLater',
+  clear = false,
+  initial?: { workText?: string; categoryNames?: string[]; now?: number },
+) {
   const directory = await mkdtemp(join(tmpdir(), 'corelive-commands-'))
   directories.push(directory)
   const options = {
@@ -31,18 +38,20 @@ async function createWorkspace(text = 'Original\nLater', clear = false) {
     ownerId: 'account-a',
     parse: OfflineWorkspaceSchema.parse,
   }
-  let now = instant
+  let now = initial?.now ?? instant
   const file = new AtomicWorkspaceFile(options)
   const service = new WorkspaceService(file, () => now)
   await service.prepare({
     ownerId: 'account-a',
     deviceId: '00000000-0000-4000-8000-000000000003',
-    categories: [1, 2, 3].map((id) => ({
-      id,
-      name: `Category ${id}`,
+    categories: (
+      initial?.categoryNames ?? ['Category 1', 'Category 2', 'Category 3']
+    ).map((name, index) => ({
+      id: index + 1,
+      name,
       color: 'blue',
       parentId: null,
-      isDefault: id === 1,
+      isDefault: index === 0,
       removed: false,
     })),
     preferences: {
@@ -57,7 +66,7 @@ async function createWorkspace(text = 'Original\nLater', clear = false) {
     },
     legacyNotes: {
       '1': text,
-      '2': 'Target writing',
+      '2': initial?.workText ?? 'Target writing',
       '999': 'Unmapped writing',
     },
   })
@@ -98,6 +107,153 @@ afterEach(async () => {
 })
 
 describe('offline writing and completion transactions', () => {
+  test('the General and Work midnight fixture survives lost replies, restart and queued Undo with original day totals', async () => {
+    // Arrange: the approved acceptance fixture, with a synthetic remote receipt ledger.
+    const firstTime = Date.parse('2026-10-21T14:59:59.000Z')
+    const secondTime = Date.parse('2026-10-21T14:59:59.500Z')
+    const thirdTime = Date.parse('2026-10-21T15:00:01.000Z')
+    const undoTime = Date.parse('2026-10-21T15:00:02.000Z')
+    const completionC = '00000000-0000-4000-8000-000000000004'
+    const fixture = await createWorkspace(
+      'Ship a small fix\nRead a page\nKeep General draft',
+      true,
+      {
+        workText: 'Ship a small fix\nKeep Work draft',
+        categoryNames: ['General', 'Work'],
+        now: firstTime,
+      },
+    )
+    const receipts = new Map<string, CompletionSyncReceipt>()
+    const remote = new Map<string, CompletionProjection>()
+    const deliver = (
+      operation: CompletionSyncOperation,
+    ): CompletionSyncReceipt => {
+      // This fixture models transport response loss; PostgreSQL transaction tests cover the server implementation.
+      const existing = receipts.get(operation.operationId)
+      if (existing) return existing
+      const projection: CompletionProjection = {
+        completionId: operation.completionId,
+        revision: operation.revision,
+        cancelled: operation.kind === 'cancel',
+        categoryId: operation.categoryId,
+        title: operation.title,
+        completedAt: operation.completedAt,
+      }
+      const receipt: CompletionSyncReceipt = {
+        operationId: operation.operationId,
+        completionId: operation.completionId,
+        revision: operation.revision,
+        status: 'applied',
+        projection,
+      }
+      remote.set(operation.completionId, projection)
+      receipts.set(operation.operationId, receipt)
+      return receipt
+    }
+    for (const [completionId, categoryId, completedAt] of [
+      [completionA, 1, firstTime],
+      [completionB, 2, secondTime],
+      [completionC, 1, thirdTime],
+    ] as const) {
+      fixture.setNow(completedAt)
+      const state = await fixture.file.read()
+      const draft = state.drafts[String(categoryId)]!
+      await fixture.service.execute({
+        type: 'complete',
+        commandId: randomUUID(),
+        completionId,
+        categoryId,
+        baseRevision: draft.revision,
+        rowId: draft.rows[0]!.id,
+        completedAt,
+        timezone: 'Asia/Tokyo',
+      })
+    }
+
+    // Act: restart offline, then lose all successful network responses before local receipt persistence.
+    let service = new WorkspaceService(
+      new AtomicWorkspaceFile(fixture.options),
+      () => undoTime,
+    )
+    let state = await fixture.file.read()
+    expect(state.drafts['1']!.rows.map((row) => row.text)).toEqual([
+      'Keep General draft',
+    ])
+    expect(state.drafts['2']!.rows.map((row) => row.text)).toEqual([
+      'Keep Work draft',
+    ])
+    const creates = Object.values(state.outbox).map((entry) => entry.operation)
+    await service.markSentBatch(
+      creates.map((operation) => operation.operationId),
+    )
+    creates.forEach(deliver)
+    service = new WorkspaceService(
+      new AtomicWorkspaceFile(fixture.options),
+      () => undoTime,
+    )
+    state = await service.acceptReceipts('account-a', creates.map(deliver))
+
+    // Assert: equal titles remain separate, and replay retains both sides of local midnight.
+    expect(
+      [...remote.values()].filter((record) => !record.cancelled),
+    ).toHaveLength(3)
+    expect(
+      [...remote.values()].map((record) => [
+        record.title,
+        record.categoryId,
+        record.completedAt,
+      ]),
+    ).toEqual([
+      ['Ship a small fix', 1, 1792594799000],
+      ['Ship a small fix', 2, 1792594799500],
+      ['Read a page', 1, 1792594801000],
+    ])
+    expect(workspaceToday(state, firstTime, 'Asia/Tokyo').total).toBe(2)
+    expect(workspaceToday(state, thirdTime, 'Asia/Tokyo').total).toBe(1)
+
+    // Act: eligible C1 Undo queues durably, survives another restart, then replays its cancellation.
+    await service.execute({
+      type: 'undo',
+      commandId: randomUUID(),
+      completionId: completionA,
+    })
+    service = new WorkspaceService(
+      new AtomicWorkspaceFile(fixture.options),
+      () => undoTime,
+    )
+    state = await fixture.file.read()
+    const cancellations = Object.values(state.outbox).map(
+      (entry) => entry.operation,
+    )
+    expect(cancellations.map((operation) => operation.kind)).toEqual(['cancel'])
+    await service.markSentBatch(
+      cancellations.map((operation) => operation.operationId),
+    )
+    state = await service.acceptReceipts(
+      'account-a',
+      cancellations.map(deliver),
+    )
+    state = await service.acceptReceipts(
+      'account-a',
+      cancellations.map(deliver),
+    )
+
+    // Assert
+    expect(state.drafts['1']!.rows.map((row) => row.text)).toEqual([
+      'Ship a small fix',
+      'Keep General draft',
+    ])
+    expect(state.drafts['2']!.rows.map((row) => row.text)).toEqual([
+      'Keep Work draft',
+    ])
+    expect(
+      [...remote.values()].filter((record) => !record.cancelled),
+    ).toHaveLength(2)
+    expect(workspaceToday(state, firstTime, 'Asia/Tokyo').total).toBe(1)
+    expect(workspaceToday(state, thirdTime, 'Asia/Tokyo').total).toBe(1)
+    expect(Object.values(state.outbox)).toEqual([])
+  })
+
   test('a later upgrade preserves changed legacy writing as a separate owned recovery copy without overwriting current writing', async () => {
     // Arrange
     const { file, service } = await createWorkspace()
@@ -237,7 +393,7 @@ describe('offline writing and completion transactions', () => {
 
   test('compaction waits for receipt, count reconciliation and Undo expiry, then preserves writing and identity evidence', async () => {
     // Arrange
-    const { file, service, setNow } = await createWorkspace()
+    const { file, service, setNow, options } = await createWorkspace()
     let state = await service.execute(completionCommand(await file.read()))
     const operation = Object.values(state.outbox)[0]!.operation
     const projection = {
@@ -284,7 +440,18 @@ describe('offline writing and completion transactions', () => {
       '- [x] Original',
       'Later',
     ])
-    expect(state.drafts['1']!.rows[0]).not.toHaveProperty('completionId')
+    // A new UUID is what the renderer uses for another shortcut on this same row.
+    const reopened = new WorkspaceService(
+      new AtomicWorkspaceFile(options),
+      () => instant + 6000,
+    )
+    await expect(
+      reopened.execute(completionCommand(state, completionB)),
+    ).rejects.toMatchObject({ reason: 'invalid-row' })
+    expect(state.drafts['1']!.rows[0]).toHaveProperty(
+      'completionId',
+      completionA,
+    )
     expect(workspaceToday(state, instant + 6000, 'Asia/Tokyo')).toMatchObject({
       total: 1,
       deviceTotal: 1,
@@ -293,6 +460,20 @@ describe('offline writing and completion transactions', () => {
     await expect(
       service.execute(completionCommand(state, completionA, 1)),
     ).rejects.toMatchObject({ reason: 'invalid-row' })
+
+    // Deliberately rewriting the occurrence releases its duplicate guard, including pasted checked text.
+    state = await reopened.execute({
+      type: 'save',
+      commandId: randomUUID(),
+      categoryId: 1,
+      baseRevision: state.drafts['1']!.revision,
+      rows: state.drafts['1']!.rows.map((row, index) =>
+        index === 0 ? { id: row.id, text: '- [x] A different task' } : row,
+      ),
+    })
+    state = await reopened.execute(completionCommand(state, completionB))
+    expect(state.completions[completionB]?.title).toBe('A different task')
+    expect(Object.values(state.outbox)).toHaveLength(1)
   })
 
   test('more than 2000 old acknowledged records can reconcile in bounded batches without blocking forever', async () => {
@@ -520,6 +701,182 @@ describe('offline writing and completion transactions', () => {
       'Newer writing',
       'Later',
     ])
+  })
+
+  test.each([true, false])(
+    'Undo follows surviving occurrences after earlier rows are inserted and the workspace restarts (clear: %s)',
+    async (clear) => {
+      // Arrange
+      const { file, service, options } = await createWorkspace(
+        'Before\nOriginal\nAfter',
+        clear,
+      )
+      const completed = await service.execute(
+        completionCommand(await file.read(), completionA, 1),
+      )
+      await service.execute({
+        type: 'save',
+        commandId: randomUUID(),
+        categoryId: 1,
+        baseRevision: completed.drafts['1']!.revision,
+        rows: [
+          { id: randomUUID(), text: 'Inserted first' },
+          ...completed.drafts['1']!.rows.map((row) =>
+            row.completionId ? { ...row, text: 'Newer writing' } : row,
+          ),
+          { id: randomUUID(), text: 'New tail' },
+        ],
+      })
+      const restarted = new WorkspaceService(
+        new AtomicWorkspaceFile(options),
+        () => instant + 1000,
+      )
+
+      // Act
+      const restored = await restarted.execute({
+        type: 'undo',
+        commandId: randomUUID(),
+        completionId: completionA,
+      })
+
+      // Assert
+      expect(restored.drafts['1']!.rows.map((row) => row.text)).toEqual(
+        clear
+          ? ['Inserted first', 'Before', 'Original', 'After', 'New tail']
+          : [
+              'Inserted first',
+              'Before',
+              'Original',
+              'Newer writing',
+              'After',
+              'New tail',
+            ],
+      )
+    },
+  )
+
+  test('Undo uses the preceding occurrence when the following row was deleted', async () => {
+    // Arrange
+    const { file, service } = await createWorkspace(
+      'Before\nOriginal\nAfter',
+      true,
+    )
+    const completed = await service.execute(
+      completionCommand(await file.read(), completionA, 1),
+    )
+    await service.execute({
+      type: 'save',
+      commandId: randomUUID(),
+      categoryId: 1,
+      baseRevision: completed.drafts['1']!.revision,
+      rows: [
+        { id: randomUUID(), text: 'Inserted first' },
+        { id: randomUUID(), text: 'Inserted second' },
+        completed.drafts['1']!.rows[0]!,
+        { id: randomUUID(), text: 'Later writing' },
+      ],
+    })
+
+    // Act
+    const restored = await service.execute({
+      type: 'undo',
+      commandId: randomUUID(),
+      completionId: completionA,
+    })
+
+    // Assert
+    expect(restored.drafts['1']!.rows.map((row) => row.text)).toEqual([
+      'Inserted first',
+      'Inserted second',
+      'Before',
+      'Original',
+      'Later writing',
+    ])
+  })
+
+  test('Undo appends captured writing when every original occurrence was replaced', async () => {
+    // Arrange
+    const { file, service } = await createWorkspace(
+      'Before\nOriginal\nAfter',
+      true,
+    )
+    const completed = await service.execute(
+      completionCommand(await file.read(), completionA, 1),
+    )
+    await service.execute({
+      type: 'save',
+      commandId: randomUUID(),
+      categoryId: 1,
+      baseRevision: completed.drafts['1']!.revision,
+      rows: [
+        'First replacement',
+        'Second replacement',
+        'Third replacement',
+      ].map((text) => ({ id: randomUUID(), text })),
+    })
+
+    // Act
+    const restored = await service.execute({
+      type: 'undo',
+      commandId: randomUUID(),
+      completionId: completionA,
+    })
+
+    // Assert
+    expect(restored.drafts['1']!.rows.map((row) => row.text)).toEqual([
+      'First replacement',
+      'Second replacement',
+      'Third replacement',
+      'Original',
+    ])
+  })
+
+  test('Undo follows cleared writing through category merge chains and a restart', async () => {
+    // Arrange
+    const { file, service, options } = await createWorkspace(
+      'Before\nOriginal\nAfter',
+      true,
+    )
+    await service.execute(completionCommand(await file.read(), completionA, 1))
+    await service.execute({
+      type: 'moveCategory',
+      commandId: randomUUID(),
+      sourceId: 1,
+      destinationId: 2,
+    })
+    await service.execute({
+      type: 'moveCategory',
+      commandId: randomUUID(),
+      sourceId: 2,
+      destinationId: 3,
+    })
+    const restarted = new WorkspaceService(
+      new AtomicWorkspaceFile(options),
+      () => instant + 1000,
+    )
+
+    // Act
+    const restored = await restarted.execute({
+      type: 'undo',
+      commandId: randomUUID(),
+      completionId: completionA,
+    })
+
+    // Assert
+    expect(restored.drafts['3']!.rows.map((row) => row.text)).toEqual([
+      'Target writing',
+      '',
+      'Before',
+      'Original',
+      'After',
+    ])
+    expect(restored.drafts['1']).toBeUndefined()
+    expect(restored.drafts['2']).toBeUndefined()
+    expect(restored.completions[completionA]).toMatchObject({
+      categoryId: 3,
+      cancelled: true,
+      restored: true,
+    })
   })
 
   test('restart never extends the original Undo deadline', async () => {

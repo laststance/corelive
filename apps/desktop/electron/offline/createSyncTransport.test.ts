@@ -14,7 +14,7 @@ test('the actual oRPC client sends a memory-only bearer to the canonical API and
   )
   const transport = createSyncTransport(
     'https://corelive.app',
-    'synthetic-credential',
+    'test-token',
     fetcher,
   )
   const controller = new AbortController()
@@ -28,7 +28,7 @@ test('the actual oRPC client sends a memory-only bearer to the canonical API and
   expect(url).toBe('https://www.corelive.app/api/orpc/completed/syncBootstrap')
   expect(init?.redirect).toBe('error')
   expect(new Headers(init?.headers).get('Authorization')).toBe(
-    'Bearer synthetic-credential',
+    'Bearer test-token',
   )
   expect(init?.signal?.aborted).toBe(false)
   controller.abort()
@@ -55,7 +55,7 @@ test.each(['rpc', 'plain'] as const)(
     )
     const transport = createSyncTransport(
       'http://localhost:4991',
-      'synthetic-credential',
+      'test-token',
       fetcher,
     )
 
@@ -81,13 +81,13 @@ test('a malformed successful API response cannot prepare an empty or wrongly sha
   )
   const transport = createSyncTransport(
     'http://localhost:4991',
-    'synthetic-credential',
+    'test-token',
     fetcher,
   )
 
   // Act / Assert
   await expect(transport.bootstrap()).rejects.toThrow()
   expect(() =>
-    createSyncTransport('http://other.example', 'synthetic-credential'),
+    createSyncTransport('http://other.example', 'test-token'),
   ).toThrow('Unsupported sync origin')
 })

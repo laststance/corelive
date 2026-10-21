@@ -13,6 +13,7 @@ import {
   type OfflineWorkspace,
   type WorkspaceCommand,
 } from '@corelive/desktop-contract/offline-workspace'
+import { diffDraftRows } from '@corelive/live-editor/draft-edits'
 import {
   markPlainLineCompleted,
   normalizeCompletedTitle,
@@ -298,7 +299,6 @@ export class WorkspaceService {
           (entry) => entry.operation.completionId,
         ),
       )
-      const retired = new Set<string>()
       for (const completion of Object.values(state.completions)) {
         const remote = checkpoint.identities[completion.id]
         if (
@@ -321,19 +321,9 @@ export class WorkspaceService {
           revision: completion.revision,
           remoteRevision: remote.revision,
         }
-        retired.add(completion.id)
         delete state.completions[completion.id]
       }
-      // Expired resolved links no longer need captured text; visible writing and row identity stay intact.
-      for (const draft of Object.values(state.drafts)) {
-        let changed = false
-        for (const row of draft.rows)
-          if (row.completionId && retired.has(row.completionId)) {
-            delete row.completionId
-            changed = true
-          }
-        if (changed) draft.revision++
-      }
+      // Keep the small occurrence link on unchanged visible rows; retiring payloads must not enable duplicate keeps.
       state.revision++
       return state
     })
@@ -430,6 +420,26 @@ export class WorkspaceService {
     }
 
     const previous = new Map(draft.rows.map((row) => [row.id, row]))
+    const replacements = new Map(
+      diffDraftRows(draft.rows, command.rows, draft.revision).flatMap((edit) =>
+        edit.removedIds.length === 1 && edit.inserted.length === 1
+          ? [[edit.removedIds[0]!, edit.inserted[0]!.id] as const]
+          : [],
+      ),
+    )
+    for (const completion of Object.values(state.completions)) {
+      if (completion.categoryId !== command.categoryId || completion.restored)
+        continue
+      // A single rewritten occurrence remains a placement anchor, never the captured completion itself.
+      const replacement = replacements.get(completion.lineId)
+      if (replacement) completion.nextRowId = replacement
+      else if (completion.nextRowId)
+        completion.nextRowId =
+          replacements.get(completion.nextRowId) ?? completion.nextRowId
+      if (completion.previousRowId)
+        completion.previousRowId =
+          replacements.get(completion.previousRowId) ?? completion.previousRowId
+    }
 
     draft.rows = command.rows.map((row) => {
       const old = previous.get(row.id)
@@ -492,6 +502,8 @@ export class WorkspaceService {
       rawText: row.text,
       lineId: row.id,
       lineIndex: index,
+      previousRowId: draft.rows[index - 1]?.id,
+      nextRowId: draft.rows[index + 1]?.id,
       completedAt: command.completedAt,
       originalCompletedAt: command.completedAt,
       timezone: command.timezone,
@@ -517,7 +529,7 @@ export class WorkspaceService {
     row.completionId = completion.id
 
     if (completion.clearAfter !== null && completion.clearAfter <= now) {
-      draft.rows.splice(index, 1)
+      this.removeCompletedRow(state, draft, index)
       completion.cleared = true
     }
 
@@ -528,16 +540,42 @@ export class WorkspaceService {
     return
   }
 
+  /** Preserves other Undo positions when immediate or delayed clearing removes a known occurrence.
+   * Called by {@link completeLine} and {@link clearCompletedLine} inside their transaction.
+   * User-deleted anchors are not guessed; only this exact automatic removal has known neighbors.
+   * @example this.removeCompletedRow(state, draft, index)
+   */
+  private removeCompletedRow(
+    state: OfflineWorkspace,
+    draft: OfflineDraft,
+    index: number,
+  ): void {
+    const removed = draft.rows[index]!
+    const previous = draft.rows[index - 1]?.id
+    const next = draft.rows[index + 1]?.id
+    for (const completion of Object.values(state.completions)) {
+      // Retarget references before deleting the row so a later completion cannot erase an earlier Undo anchor.
+      if (completion.previousRowId === removed.id)
+        completion.previousRowId = previous
+      if (completion.nextRowId === removed.id) completion.nextRowId = next
+    }
+    draft.rows.splice(index, 1)
+  }
+
   /** Restores one captured occurrence without replacing an edited or identical neighboring line.
-   * Undo inserts at its original index; cancelled conflicts append a separate recovery occurrence.
-   * @example this.restoreCapturedRow(draft, completion, completion.lineIndex)
+   * Undo and an explicit cancelled-conflict repair share this preservation boundary.
+   * Uses surviving occurrence identities after edits, category merges and restart;
+   * an old numeric position cannot identify the same writing context.
+   * @example this.restoreCapturedRow(draft, completion)
    */
   private restoreCapturedRow(
     draft: OfflineDraft,
     completion: OfflineCompletion,
-    index: number,
   ): void {
-    const row = draft.rows.find((item) => item.id === completion.lineId)
+    const occurrence = draft.rows.findIndex(
+      (item) => item.id === completion.lineId,
+    )
+    const row = draft.rows[occurrence]
 
     if (
       row?.completionId === completion.id &&
@@ -546,8 +584,22 @@ export class WorkspaceService {
       row.text = completion.rawText
       delete row.completionId
     } else {
-      // The original occurrence changed or was cleared; restore beside newer writing.
-      draft.rows.splice(Math.min(index, draft.rows.length), 0, {
+      const next = draft.rows.findIndex(
+        (item) => item.id === completion.nextRowId,
+      )
+      const previous = draft.rows.findIndex(
+        (item) => item.id === completion.previousRowId,
+      )
+      // Moves retain row IDs, so neighbors still resolve in the effective destination.
+      const index =
+        occurrence >= 0
+          ? occurrence
+          : next >= 0
+            ? next
+            : previous >= 0
+              ? previous + 1
+              : draft.rows.length
+      draft.rows.splice(index, 0, {
         id: this.nextId(),
         text: completion.rawText,
       })
@@ -572,7 +624,7 @@ export class WorkspaceService {
 
     const draft = this.draft(state, destination)
 
-    this.restoreCapturedRow(draft, completion, completion.lineIndex)
+    this.restoreCapturedRow(draft, completion)
 
     completion.categoryId = destination
 
@@ -620,7 +672,7 @@ export class WorkspaceService {
     )
 
     if (index !== -1) {
-      draft.rows.splice(index, 1)
+      this.removeCompletedRow(state, draft, index)
       draft.revision++
     }
 
@@ -756,8 +808,7 @@ export class WorkspaceService {
         state,
         effectiveCategory(state, completion.categoryId),
       )
-      if (!completion.restored)
-        this.restoreCapturedRow(draft, completion, draft.rows.length)
+      if (!completion.restored) this.restoreCapturedRow(draft, completion)
       draft.revision++
       completion.restored = true
     }

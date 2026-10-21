@@ -1,0 +1,78 @@
+{
+  "$schema": "https://github.com/garrytan/gstack/docs/pregate.md#pregate-v1",
+  "dependencies": {
+    "packages/live-editor/**": [
+      "apps/desktop/renderer/NativeEditor.regression-1.test.tsx",
+      "apps/desktop/electron/offline/DurableEditorStore.test.ts",
+      "apps/web/src/components/live-editor/LiveEditor.test.tsx",
+      "apps/web/src/components/live-editor/LiveEditorCategoryPicker.test.tsx",
+      "apps/web/src/components/live-editor/TodayEmber.test.tsx",
+      "apps/web/src/components/live-editor/liveEditorUtils.test.ts",
+      "apps/web/src/components/live-editor/useLiveEditorWindowSettings.sync.test.tsx",
+      "apps/web/src/lib/categoryHierarchy.test.ts",
+      "apps/web/src/lib/heatmap-intensity.test.ts",
+      "apps/web/src/lib/toLocalDayKey.test.ts",
+      "apps/web/src/lib/cn.test.ts",
+      "apps/web/src/lib/themes/registry.test.ts",
+      "apps/web/src/lib/themes/contrast.test.ts"
+    ],
+    "packages/desktop-contract/**": [
+      "apps/desktop/electron/offline/WorkspaceService.test.ts",
+      "apps/desktop/electron/offline/OfflineEditorIPC.test.ts",
+      "apps/desktop/electron/offline/TokenBroker.test.ts",
+      "apps/desktop/electron/__tests__/ipc-contract.test.ts",
+      "apps/web/src/server/procedures/completionSync.test.ts",
+      "apps/web/src/lib/schemas/settings.test.ts"
+    ],
+    "pnpm-lock.yaml": [
+      "apps/desktop/renderer/NativeEditor.regression-1.test.tsx",
+      "apps/desktop/electron/offline/DurableEditorStore.test.ts",
+      "apps/web/src/components/live-editor/LiveEditor.test.tsx",
+      "apps/web/src/components/live-editor/LiveEditorCategoryPicker.test.tsx",
+      "apps/web/src/components/live-editor/TodayEmber.test.tsx",
+      "apps/web/src/components/live-editor/liveEditorUtils.test.ts",
+      "apps/web/src/components/live-editor/useLiveEditorWindowSettings.sync.test.tsx",
+      "apps/web/src/lib/categoryHierarchy.test.ts",
+      "apps/web/src/lib/heatmap-intensity.test.ts",
+      "apps/web/src/lib/toLocalDayKey.test.ts",
+      "apps/web/src/lib/cn.test.ts",
+      "apps/web/src/lib/themes/registry.test.ts",
+      "apps/web/src/lib/themes/contrast.test.ts",
+      "apps/desktop/electron/offline/WorkspaceService.test.ts",
+      "apps/desktop/electron/offline/OfflineEditorIPC.test.ts",
+      "apps/desktop/electron/offline/TokenBroker.test.ts",
+      "apps/desktop/electron/__tests__/ipc-contract.test.ts",
+      "apps/web/src/server/procedures/completionSync.test.ts",
+      "apps/web/src/lib/schemas/settings.test.ts",
+      "scripts/security-patches.test.ts"
+    ],
+    ".fallowrc.jsonc": [],
+    "scripts/check-workspace.mjs": [],
+    "scripts/pregate-tests.mjs": [
+      "scripts/security-patches.test.ts",
+      "apps/desktop/electron/offline/TokenBroker.test.ts",
+      "apps/web/src/components/live-editor/LiveEditor.test.tsx"
+    ]
+  },
+  "guards": [
+    {
+      "id": "workspace-boundaries",
+      "when": [
+        "scripts/check-workspace.mjs",
+        "packages/**/package.json",
+        "pnpm-lock.yaml"
+      ],
+      "command": "pnpm check:workspace",
+      "fix": "Keep package exports, workspace dependencies and pinned runtime boundaries consistent."
+    },
+    {
+      "id": "fallow-configuration",
+      "when": [
+        ".fallowrc.jsonc"
+      ],
+      "command": "pnpm fallow:dead-code && pnpm fallow:dupes && pnpm fallow:health",
+      "fix": "Resolve reported code health findings without weakening thresholds."
+    }
+  ],
+  "runner": "pnpm test:selected {files}"
+}

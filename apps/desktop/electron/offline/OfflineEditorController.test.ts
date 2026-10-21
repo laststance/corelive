@@ -13,6 +13,7 @@ import { afterEach, expect, test, vi } from 'vitest'
 import { AtomicWorkspaceFile } from './AtomicWorkspaceFile'
 import { OfflineAccountRegistry } from './OfflineAccountRegistry'
 import { OfflineEditorController } from './OfflineEditorController'
+import type { WorkspaceWorkerCalls } from './workspace-worker-protocol'
 import { WorkspaceWorkerClient } from './WorkspaceWorkerClient'
 
 type Options = ConstructorParameters<typeof OfflineEditorController>[0]
@@ -108,6 +109,123 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) await cleanup()
 })
 
+/** Holds a specific worker/registry boundary until a concurrency test releases it.
+ * @example const gate = deferred(); gate.resolve(); await gate.promise
+ */
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void
+  const promise = new Promise<void>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
+
+test.each(['prepare', 'recover'] as const)(
+  'logout stays durably locked when an in-flight %s finishes during its registry acknowledgement',
+  async (mode) => {
+    // Arrange
+    const fixture = await createFixture(true, {
+      transport: () => ({
+        bootstrap: async () => ({
+          accountId: 'account-a',
+          categories: [category],
+          deletions: [],
+        }),
+        apply: async () => ({ receipts: [] }),
+        receipts: async () => ({ receipts: [] }),
+        checkpoint: async () => {
+          throw new Error('No count response')
+        },
+      }),
+    })
+    const { controller, options, broker, registry, directory } = fixture
+    await registry.lock()
+    if (mode === 'recover') {
+      const file = new AtomicWorkspaceFile({
+        directory: join(directory, 'workspaces'),
+        ownerId: 'account-a',
+        parse: OfflineWorkspaceSchema.parse,
+      })
+      await file.update((state) => ({ ...state, revision: state.revision + 1 }))
+      await writeFile(file.path, 'Synthetic damaged primary')
+    }
+    const reached = deferred()
+    const releaseWorker = deferred()
+    const originalActor = options.actor!
+    options.actor = (ownerId) => {
+      const worker = originalActor(ownerId)
+      const originalCall = worker.call.bind(worker)
+      worker.call = async <K extends keyof WorkspaceWorkerCalls>(
+        method: K,
+        input: WorkspaceWorkerCalls[K]['input'],
+      ): Promise<WorkspaceWorkerCalls[K]['output']> => {
+        const result = await originalCall(method, input)
+        if (method === (mode === 'prepare' ? 'categories' : 'recover')) {
+          reached.resolve()
+          await releaseWorker.promise
+        }
+        return result
+      }
+      return worker
+    }
+    broker.acquire.mockImplementation(
+      async (expectedAccountId, generation) => ({
+        status: 'ready',
+        credential: {
+          status: 'ready',
+          requestId: randomUUID(),
+          expectedAccountId,
+          generation,
+          accountId: 'account-a',
+          token: 'synthetic-test-token',
+        },
+      }),
+    )
+    await controller.initialize()
+    controller.authenticated('account-a', true)
+    let recovering: Promise<boolean> | undefined
+    if (mode === 'recover') {
+      await vi.waitFor(() =>
+        expect(controller.getSnapshot().phase).toBe('recovery'),
+      )
+      recovering = controller.recover(controller.getSnapshot().generation)
+    }
+    await reached.promise
+    const lockCommitted = deferred()
+    const releaseLock = deferred()
+    const originalLock = registry.lock.bind(registry)
+    vi.spyOn(registry, 'lock').mockImplementationOnce(async () => {
+      const state = await originalLock()
+      lockCommitted.resolve()
+      await releaseLock.promise
+      return state
+    })
+    const activate = vi.spyOn(registry, 'activateVerified')
+
+    // Act: complete the older operation while logout's durable lock has no reply yet.
+    const logout = controller.signOut()
+    try {
+      await lockCommitted.promise
+      releaseWorker.resolve()
+      await new Promise<void>((resolve) => setImmediate(resolve))
+    } finally {
+      releaseWorker.resolve()
+      releaseLock.resolve()
+    }
+    expect(await logout).toBe(true)
+    if (recovering) expect(await recovering).toBe(false)
+    const restarted = new OfflineEditorController(options)
+    await restarted.initialize()
+
+    // Assert
+    expect(activate).not.toHaveBeenCalled()
+    expect((await registry.read()).activeAccountId).toBeNull()
+    expect(controller.getSnapshot().phase).toBe('locked')
+    expect(restarted.getSnapshot().phase).toBe('locked')
+    await restarted.shutdown()
+  },
+)
+
 test('a prepared Mac opens its writing and saved appearance without waiting for authentication', async () => {
   // Arrange
   const { controller, broker } = await createFixture(true)
@@ -170,6 +288,28 @@ test('a failed final save cancels logout and leaves the same account available f
     generation: 0,
   })
   expect((await registry.read()).activeAccountId).toBe('account-a')
+})
+
+test('a failed account lock cancels logout without stranding the prepared editor', async () => {
+  // Arrange
+  const { controller, registry } = await createFixture(true)
+  await controller.initialize()
+  vi.spyOn(registry, 'lock').mockRejectedValueOnce(
+    new Error('Synthetic storage error'),
+  )
+
+  // Act
+  const signedOut = await controller.signOut()
+
+  // Assert
+  expect(signedOut).toBe(false)
+  expect(controller.getSnapshot()).toMatchObject({
+    phase: 'ready',
+    generation: 0,
+  })
+  expect((await registry.read()).activeAccountId).toBe('account-a')
+  expect(await controller.signOut()).toBe(true)
+  expect((await registry.read()).activeAccountId).toBeNull()
 })
 
 test('first preparation waits for hydrated Settings and publishes readiness only after account files commit', async () => {

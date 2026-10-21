@@ -149,6 +149,7 @@ export function NativeDetails({
   const repairOpener = useRef<HTMLElement | null>(null)
   const [offsets, setOffsets] = useState({ details: 0, undo: 0, recovery: 0 })
   const [repair, setRepair] = useState<Repair | null>(null)
+  const id = repair ? JSON.stringify(repair) : undefined
   const data = useDetailPages(store, main, offsets)
   const categories = main.workspace.categories
   const openRepair = (next: Repair): void => {
@@ -450,7 +451,7 @@ export function NativeDetails({
       </Button>
       {repair && (
         <RepairDialog
-          key={JSON.stringify(repair)}
+          key={id}
           repair={repair}
           main={main}
           store={store}

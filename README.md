@@ -19,7 +19,7 @@ Categories organize writing and completed history in two levels:
 - In the signed-in LiveEditor picker, search by the main or subcategory name, select the full displayed path, or use **Create category…** and **Manage categories…** without leaving the editor.
 - Completed-history filters include a main category's direct entries and its subcategories. Weekly summaries, daily detail, and year in review group totals by main category with an optional subcategory breakdown. Moving a subcategory changes the grouping of past entries under the current hierarchy; their dates stay the same.
 - Deleting a category moves its direct entries to the destination shown in the confirmation, preserving the entries and their dates. The initial destination is the parent for a subcategory and `General` for a main category. Children of a deleted main category become main categories with their entries still attached; rename any child that conflicts with another main category before deleting.
-- Deletion also preserves unsaved writing in the app or browser that performs it. Other signed-in browsers and native editors rescue their own local drafts into the selected destination when they next refresh while visible, including on focus and every 15 seconds. Draft text stays in each host's local store; failed rescue keeps the source and offers **Retry**. See the [completed maintenance record](docs/ROADMAP.md#completed-maintenance--2026-10-05).
+- Deletion also preserves unsaved writing in the app or browser that performs it. Other signed-in browsers rescue their own local drafts into the selected destination when they next refresh while visible, including on focus and every 15 seconds. The bundled desktop editor retains removed categories and lets you confirm **Move writing** in Details; it refreshes connected category changes within 60 seconds. Draft text stays in each host's local store. See the [offline LiveEditor guide](docs/offline-liveeditor.md) for desktop preparation, synchronization, export, recovery and downgrade instructions, and the [completed maintenance record](docs/ROADMAP.md#completed-maintenance--2026-10-05) for browser behavior.
 
 ## Platform Support
 
@@ -63,14 +63,15 @@ One root pnpm lockfile owns all workspaces. Root commands delegate to their app;
 `pnpm dev` starts only Web, and `pnpm electron:dev` starts Web plus desktop.
 Web-specific framework instructions are in [`apps/web/AGENTS.md`](apps/web/AGENTS.md).
 
-| Directory                       | Responsibility                                                            |
-| ------------------------------- | ------------------------------------------------------------------------- |
-| `apps/web`                      | Next.js, oRPC, Drizzle schema/migrations, renderer and DB tests           |
-| `apps/desktop`                  | Electron main/preload, macOS packaging and native unit tests              |
-| `packages/desktop-contract`     | Browser-safe IPC/preload contracts and native constants used by both apps |
-| `packages/eslint-plugin-dslint` | Design-system ESLint rules                                                |
-| `assets`                        | Canonical icons and shortcut sounds; app outputs are generated            |
-| `scripts`                       | Workspace, asset, environment and Headless QA orchestration               |
+| Directory                       | Responsibility                                                              |
+| ------------------------------- | --------------------------------------------------------------------------- |
+| `apps/web`                      | Next.js, oRPC, Drizzle schema/migrations, renderer and DB tests             |
+| `apps/desktop`                  | Electron main/preload, macOS packaging and native unit tests                |
+| `packages/desktop-contract`     | Browser-safe IPC/preload contracts and native constants used by both apps   |
+| `packages/live-editor`          | Shared editor/input/category/theme presentation and durable desktop adapter |
+| `packages/eslint-plugin-dslint` | Design-system ESLint rules                                                  |
+| `assets`                        | Canonical icons and shortcut sounds; app outputs are generated              |
+| `scripts`                       | Workspace, asset, environment and Headless QA orchestration                 |
 
 Run `pnpm install --frozen-lockfile` from the root. App prebuild hooks generate
 icons/sounds even in a clean checkout. `pnpm clean` removes compiled outputs;

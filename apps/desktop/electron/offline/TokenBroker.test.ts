@@ -199,7 +199,7 @@ describe('Clerk session token broker boundary', () => {
       ...fixture.request(),
       status: 'ready',
       accountId: 'account-b',
-      token: 'wrong-account-token',
+      token: 'test-token',
     })
     const second = fixture.broker.acquire('account-a', 1)
     fixture.reply({ ...fixture.request(), status: 'unavailable' })

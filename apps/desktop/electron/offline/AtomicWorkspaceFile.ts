@@ -52,6 +52,7 @@ export class AtomicWorkspaceFile<T> {
   private readonly onStage: WorkspaceFileOptions<T>['onStage']
   private tail: Promise<void> = Promise.resolve()
   private committedBytes: string | undefined
+  private primaryDirectoryFlushed = false
 
   constructor(options: WorkspaceFileOptions<T>) {
     this.directory = options.directory
@@ -108,7 +109,14 @@ export class AtomicWorkspaceFile<T> {
     return this.serialize(async () => {
       const current = await this.readPrimary()
       const candidate = change(current)
-      if (candidate === current) return structuredClone(current)
+      if (candidate === current) {
+        // A receipt loaded after restart or an uncertain rename still needs its directory barrier.
+        if (!this.primaryDirectoryFlushed) {
+          await this.flushDirectory(true)
+          this.primaryDirectoryFlushed = true
+        }
+        return structuredClone(current)
+      }
       const validated = this.parse(candidate)
       await this.commit(validated)
       return structuredClone(validated)
@@ -312,6 +320,7 @@ export class AtomicWorkspaceFile<T> {
       throw error
     }
     const state = this.decode(bytes)
+    if (bytes !== this.committedBytes) this.primaryDirectoryFlushed = false
     this.committedBytes = bytes
     return state
   }
@@ -343,8 +352,10 @@ export class AtomicWorkspaceFile<T> {
       await this.replace(this.recoveryPath, this.committedBytes, false)
     }
     try {
+      this.primaryDirectoryFlushed = false
       await this.replace(this.path, bytes, true)
       this.committedBytes = bytes
+      this.primaryDirectoryFlushed = true
     } catch (error) {
       // A rename may already have committed; reread before accepting another command.
       this.committedBytes = undefined
@@ -373,19 +384,27 @@ export class AtomicWorkspaceFile<T> {
       if (observe) await this.onStage?.('file-flushed')
       await rename(temporary, path)
       if (observe) await this.onStage?.('replaced')
-      const directoryHandle = await open(this.directory, 'r')
-      try {
-        await directoryHandle.sync()
-      } finally {
-        await directoryHandle.close()
-      }
-      if (observe) await this.onStage?.('directory-flushed')
+      await this.flushDirectory(observe)
     } finally {
       // Remove only this command's temporary file; never discard recovery generations.
       await unlink(temporary).catch((error: unknown) => {
         if (!isMissingFile(error)) throw error
       })
     }
+  }
+
+  /** Establishes the final durability barrier for replacements and uncertain idempotent retries.
+   * @throws Filesystem or acknowledgement errors without marking the generation flushed.
+   * @example await this.flushDirectory(true)
+   */
+  private async flushDirectory(observe: boolean): Promise<void> {
+    const directoryHandle = await open(this.directory, 'r')
+    try {
+      await directoryHandle.sync()
+    } finally {
+      await directoryHandle.close()
+    }
+    if (observe) await this.onStage?.('directory-flushed')
   }
 }
 

@@ -25,7 +25,11 @@ import {
 } from 'react'
 
 import { NativeDetails } from './NativeDetails'
-import { NativeFooter, type ActionFeedback } from './NativeFooter'
+import {
+  NativeFooter,
+  type ActionFeedback,
+  type ActionOutcome,
+} from './NativeFooter'
 import { NativeStateScene } from './NativeStateScene'
 
 type ReadySnapshot = Extract<OfflineEditorSnapshot, { phase: 'ready' }>
@@ -34,7 +38,7 @@ type ReadySnapshot = Extract<OfflineEditorSnapshot, { phase: 'ready' }>
  * @example useEditorTheme(preferences.theme)
  */
 function useEditorTheme(theme: string): void {
-  useEffect(() => {
+  useLayoutEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
     const apply = (): void => {
       document.documentElement.dataset.theme =
@@ -72,15 +76,17 @@ export function NativeEditor({
       ? snapshot.main.workspace.preferences.theme
       : DEFAULT_THEME_ID,
   )
-  if (snapshot.main.phase !== 'ready')
+  if (snapshot.main.phase !== 'ready') {
+    const id = `${snapshot.main.generation}-${snapshot.main.phase}`
     return (
       <NativeStateScene
-        key={`${snapshot.main.generation}-${snapshot.main.phase}`}
+        key={id}
         snapshot={snapshot.main}
         host={store.host}
         close={async () => api.window.close()}
       />
     )
+  }
   return (
     <PreparedEditor
       key={snapshot.main.generation}
@@ -111,6 +117,15 @@ function PreparedEditor({
   const detailsButton = useRef<HTMLButtonElement>(null)
   const [details, setDetails] = useState(false)
   const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
+  useEffect(() => {
+    if (feedback?.expiresAt === undefined) return
+    // Only this acknowledged message expires; later action feedback keeps its own lifetime.
+    const timer = setTimeout(
+      () => setFeedback((current) => (current === feedback ? null : current)),
+      Math.max(0, feedback.expiresAt - Date.now()),
+    )
+    return (): void => clearTimeout(timer)
+  }, [feedback])
   const [windowVersion, setWindowVersion] = useState(0)
   const getHost = useMemo(() => () => api, [api])
   const reportWindowError = useCallback(
@@ -221,19 +236,21 @@ function PreparedEditor({
   }
   const run = async (
     operation: () => Promise<unknown>,
-    success?: string,
+    outcome?: ActionOutcome,
   ): Promise<void> => {
+    const failure =
+      outcome?.failure ?? 'Could not complete that action. Please try again.'
     try {
       const result = await operation()
-      if (success)
+      if (outcome)
         setFeedback({
-          text:
-            result === false
-              ? 'Could not complete that action. Please try again.'
-              : success,
+          text: result === false ? failure : outcome.success,
+          ...(result !== false && outcome.durationMs !== undefined
+            ? { expiresAt: Date.now() + outcome.durationMs }
+            : {}),
         })
     } catch {
-      setFeedback({ text: 'Could not complete that action. Please try again.' })
+      setFeedback({ text: failure })
     }
   }
   const today = workspace.today

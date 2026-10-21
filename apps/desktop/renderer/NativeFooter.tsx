@@ -7,9 +7,19 @@ import type {
   DurableEditorStore,
 } from '@corelive/live-editor/store'
 import { Button } from '@corelive/live-editor/ui/button'
+import { AlertCircle } from 'lucide-react'
 import type { RefObject } from 'react'
 
-export type ActionFeedback = { text: string; categoryId?: number }
+export type ActionFeedback = {
+  text: string
+  categoryId?: number
+  expiresAt?: number
+}
+export type ActionOutcome = {
+  success: string
+  failure?: string
+  durationMs?: number
+}
 type FooterProps = {
   state: DurableEditorSnapshot
   main: Extract<OfflineEditorSnapshot, { phase: 'ready' }>
@@ -21,7 +31,10 @@ type FooterProps = {
   onDismiss: () => void
   onSelect: (id: number) => Promise<void>
   onUndo: (completion: OfflineCompletion) => Promise<void>
-  run: (operation: () => Promise<unknown>, success?: string) => Promise<void>
+  run: (
+    operation: () => Promise<unknown>,
+    outcome?: ActionOutcome,
+  ) => Promise<void>
 }
 
 /** Gives local safety first priority and reserves scrollable space for feedback and recovery actions.
@@ -62,7 +75,14 @@ function SaveStatus({
   if (state.save === 'failed')
     return (
       <div className="flex flex-wrap items-center justify-between gap-x-2">
-        <p className="font-medium text-destructive" role="alert">
+        <p
+          className="flex items-center gap-1 font-medium text-foreground"
+          role="alert"
+        >
+          <AlertCircle
+            className="size-4 shrink-0 text-destructive"
+            aria-hidden="true"
+          />
           Not saved on this Mac
         </p>
         <div className="flex flex-wrap gap-1">
@@ -80,7 +100,11 @@ function SaveStatus({
             size="sm"
             variant="ghost"
             onClick={() =>
-              void run(async () => store.copyWriting(), 'Writing copied.')
+              void run(async () => store.copyWriting(), {
+                success: 'Copied',
+                failure: 'Could not copy. Select your writing and copy it.',
+                durationMs: 2000,
+              })
             }
           >
             Copy writing
@@ -91,10 +115,9 @@ function SaveStatus({
               size="sm"
               variant="ghost"
               onClick={() =>
-                void run(
-                  async () => store.copyUnsavedWriting(),
-                  'Unsaved categories copied with their names.',
-                )
+                void run(async () => store.copyUnsavedWriting(), {
+                  success: 'Unsaved categories copied with their names.',
+                })
               }
             >
               Copy unsaved categories

@@ -776,7 +776,7 @@ The real-filesystem tests include termination of a dedicated Node child before r
 
 Migration clarification: copy plaintext only for API-verified owned categories. Unmapped plaintext remains in the preserved legacy config; the account snapshot stores only unmapped category IDs. A different account must not receive that plaintext through its workspace export.
 
-## Implementation evidence — native integration (2026-10-22 JST)
+## Implementation evidence — native integration (earlier checkpoint, 2026-10-22 JST)
 
 Main now owns one account controller, a durable active-account registry, the existing-session token broker and the bounded sync loop. LiveEditor targets `corelive-editor://app/index.html` with a sandboxed, single-file preload and a no-network CSP. Settings/login retain their remote flow. Ordinary close/hide, explicit logout, quit and updater restart use a challenged renderer flush; failed acknowledgement cancels the exit. Session expiry preserves local editing. A stale Settings auth notification cannot unlock an explicitly signed-out account.
 
@@ -789,6 +789,18 @@ Count projections overlay each stable identity once over a coherent checkpoint. 
 After count projections were included, a separate pinned-runtime benchmark at 10,000 identities / 12.09MB snapshot measured worker acknowledgement p95 **312.1ms**, host-thread event-loop delay p95 **1.29ms**, maximum **4.49ms**. Raw receipt: `.gstack/offline-storage-integrated-isolated-benchmark-node24.20.json`. This does not measure renderer input latency or establish an unlimited-data guarantee.
 
 Validation at this checkpoint: native suite **66 files / 525 tests** passed; subsequent exit/update/window-crash/sender refinements passed **5 focused files / 84 tests**. Web integration checks passed **7 files / 76 tests**, then the additional expiry regression passed with its **7-test auth file**. Workspace-wide type checks passed. Main/worker/preload builds passed, including both standalone sandbox preload import assertions. The local renderer bundle does **not** exist yet: the native build still reports missing renderer configuration, so this checkout is not ready to launch, package, ship or release. Shared editor extraction, renderer behavior/video QA, full validation, migration delivery, current-diff review, CI and public release proof remain required.
+
+## Implementation evidence — bundled editor and recovery QA (2026-10-22 JST)
+
+This checkpoint supersedes the earlier missing-renderer status. The shared editor, input handling, category picker, appearance settings, themes and Today Ember now live in `packages/live-editor`; the web host retains its existing adapters. Electron bundles the local renderer and opens the same assets during prepared offline startup and renderer-crash recovery.
+
+At `afb8af4b`, `pnpm validate` passed: web **1,045 tests** with **191 database-gated skips**, desktop **552 tests**, package **30 tests**, and tooling **31 tests**, plus builds, types, zero-warning lint, generated themes, workspace boundaries and Fallow checks. The complete Web suite with the owned local PostgreSQL database then passed **1,236 tests**. Additional coverage tests were being written during that later run, so its ledger is not a final-candidate freshness receipt; the release gate must verify the completed candidate.
+
+An isolated archive of `afb8af4b` passed a clean frozen-lockfile install, desktop typecheck/build and unsigned arm64 packaging under Node 24.20.0 / pnpm 10.33.4. Inspection of the actual `app.asar` confirmed the main entry, `workspace-worker.cjs`, both standalone sandbox preloads, bundled renderer HTML/JS/CSS and unpacked native input binding. Renderer asset references are local and the offline preloads require only Electron. No packaged app was launched; signing, notarization, native Cocoa startup and installed-update behavior are not implied by this inspection.
+
+Two isolated Headless Playwright CLI runs used the compiled renderer and actual storage worker with synthetic IPC/auth/sync. Recorded interactions and extracted frames cover initial/revealed focus, distinct equal-title completions, Undo, worker restart, delayed acknowledgement, save failure while offline, exact clipboard recovery, failed-hide cancellation, explicit sign-out, preparation/retry, corrupt-file export/preview/cancel/restore, time correction, both conflict choices, history pagination, Japanese composition, reduced motion and the 320×320 layout. They do not prove a production Clerk session or native OS input activation.
+
+QA repaired initial writing focus, preparation heading semantics, corrupted-file export/byte preservation, and Details paging/dialog focus return. Permanent regressions protect those failures. Private evidence is retained in `.gstack/qa-reports/run-20261021T164545Z-offline-editor/` and `.gstack/qa-reports/run-20261021T173816Z-offline-recovery/`. Final coverage review, current-diff review, CI, additive migration deployment and public signed/notarized release verification remain pending. The planning report below remains planning evidence only.
 
 ## GSTACK REVIEW REPORT
 

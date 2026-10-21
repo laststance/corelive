@@ -1417,13 +1417,21 @@ export class WindowManager {
     })
   }
 
+  /** Allows native updater close events after main has durably drained writing.
+   * macOS closes windows before before-quit during installation, so main's prepareForQuit calls this first.
+   * @example windowManager.allowWindowCloseForQuit()
+   */
+  allowWindowCloseForQuit(): void {
+    this.closingForQuit = true
+  }
+
   /** Saves window state and cancels pending reveals before app shutdown closes every window.
    * @returns Nothing.
    * @example
    * windowManager.cleanup()
    */
   cleanup(): void {
-    this.closingForQuit = true
+    this.allowWindowCloseForQuit()
     this.saveWindowState()
 
     // Shutdown must detach load listeners before late navigation can reveal

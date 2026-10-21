@@ -451,6 +451,28 @@ describe('WindowManager bundled startup panel', () => {
     expect(onShown).not.toHaveBeenCalled()
   })
 
+  test('allows updater window close before before-quit only after durable quit permission', () => {
+    // Arrange
+    const windowManager = new WindowManager(SERVER_URL)
+    windowManager.showLiveEditor()
+    const { win } = getWindow(0)
+    const close = win.on.mock.calls.find(
+      ([event]) => event === 'close',
+    )?.[1] as (event: { preventDefault: () => void }) => void
+    const ordinaryClose = { preventDefault: vi.fn() }
+    close(ordinaryClose)
+    expect(ordinaryClose.preventDefault).toHaveBeenCalledOnce()
+
+    // Act: macOS sends close before before-quit/cleanup during update installation.
+    windowManager.allowWindowCloseForQuit()
+    const updaterClose = { preventDefault: vi.fn() }
+    close(updaterClose)
+
+    // Assert
+    expect(updaterClose.preventDefault).not.toHaveBeenCalled()
+    expect(win.close).not.toHaveBeenCalled()
+  })
+
   test('does not reveal or open the login window when startup loads settle after cleanup', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)

@@ -77,6 +77,7 @@ export class OfflineEditorController {
   private verifiedOwner: string | null = null
   private preparingOwner: string | null | undefined
   private generation = 0
+  private logoutBarrier: Promise<void> | null = null
   private settingsWaiter: SettingsWaiter | null = null
   private retryTimer: ReturnType<typeof setTimeout> | null = null
   private clearTimer: ReturnType<typeof setTimeout> | null = null
@@ -294,23 +295,35 @@ export class OfflineEditorController {
    * @example if (await controller.signOut()) await clerk.signOut()
    */
   async signOut(): Promise<boolean> {
-    if (!(await this.options.requestFlush(this.generation))) return false
+    if (this.logoutBarrier) return false
+    const generation = this.generation
+    if (!(await this.options.requestFlush(generation))) return false
+    if (generation !== this.generation) return false
+    if (this.logoutBarrier) return false
+    // Preparation/recovery must wait until the durable lock's outcome invalidates their generation.
+    let releaseBarrier!: () => void
+    this.logoutBarrier = new Promise<void>((resolve) => {
+      releaseBarrier = resolve
+    })
     try {
       this.registryState = await this.registry.lock()
+      this.generation++
+      this.context = null
+      this.draining = null
+      this.recovery = null
+      this.verifiedOwner = null
+      this.preparingOwner = undefined
+      this.cancelPreparation()
+      this.loop.stop()
+      this.options.broker.reset()
+      this.publish({ phase: 'locked', generation: this.generation })
+      return true
     } catch {
       return false
+    } finally {
+      this.logoutBarrier = null
+      releaseBarrier()
     }
-    this.generation++
-    this.context = null
-    this.draining = null
-    this.recovery = null
-    this.verifiedOwner = null
-    this.preparingOwner = undefined
-    this.cancelPreparation()
-    this.loop.stop()
-    this.options.broker.reset()
-    this.publish({ phase: 'locked', generation: this.generation })
-    return true
   }
 
   /** Provides bounded recovery/sync inspection only to the currently selected account generation.
@@ -390,6 +403,7 @@ export class OfflineEditorController {
       return false
     try {
       const view = await context.worker.call('recover', null)
+      await this.logoutBarrier
       if (generation !== this.generation) return false
       if (this.registryState?.activeAccountId !== context.ownerId) {
         if (this.verifiedOwner !== context.ownerId) return false
@@ -397,6 +411,7 @@ export class OfflineEditorController {
           context.ownerId,
         )
       }
+      if (generation !== this.generation) return false
       this.context = context
       this.recovery = null
       this.publishView(view, generation)
@@ -497,6 +512,7 @@ export class OfflineEditorController {
           legacyNotes: this.options.legacyNotes(),
         })
       }
+      await this.logoutBarrier
       if (generation !== this.generation) return
       this.registryState = await this.registry.activateVerified(ownerId)
       if (generation !== this.generation) return

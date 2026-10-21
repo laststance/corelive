@@ -102,6 +102,9 @@ export const OfflineCompletionSchema = z.object({
   rawText: z.string(),
   lineId: identity,
   lineIndex: z.number().int().nonnegative(),
+  // Older snapshots without neighbors safely append when their occurrence no longer exists.
+  previousRowId: identity.optional(),
+  nextRowId: identity.optional(),
   completedAt: timestamp,
   originalCompletedAt: timestamp,
   timezone: z.string(),

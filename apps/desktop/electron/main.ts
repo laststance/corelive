@@ -1511,8 +1511,11 @@ async function prepareForQuit(): Promise<boolean> {
   quitPreparation = offlineEditor.controller
     .shutdown()
     .then((saved) => {
-      if (saved) quitAllowed = true
-      else windowManager.showLiveEditor()
+      if (saved) {
+        quitAllowed = true
+        // Native updater shutdown closes windows before before-quit reaches cleanup.
+        windowManager.allowWindowCloseForQuit()
+      } else windowManager.showLiveEditor()
       return saved
     })
     .finally(() => {
