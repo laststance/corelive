@@ -71,6 +71,9 @@ captured occurrence, not an old whole-document snapshot. If its original row was
 edited or removed, it uses surviving row identities or appends the captured text
 when the original context is gone.
 
+Writing enlarged by migration, recovery or category merging keeps its retained
+editing capacity through later shortening, category moves and restarts.
+
 ## Export and recover writing
 
 For a readable workspace, open **Details → Export writing** and choose a JSON
@@ -143,7 +146,9 @@ workloads under the pinned runtime. See [Headless development](headless-developm
 for isolation and video requirements, and the [design and acceptance contracts](designs/offline-liveeditor.md)
 for the fault, restart, midnight and response-loss cases.
 
-Deploy the additive migration and sync API before publishing the signed/notarized
+Apply and verify `apps/web/drizzle/0003_offline_liveeditor.sql` before deploying
+the new Web/API code: category deletion also updates the new `CompletionSyncState`
+table. Then deploy the Web/API, and only afterward publish the signed/notarized
 desktop release through the existing tag-driven GitHub Actions workflow. A Web
 deployment alone does not install the bundled editor. Contract tests, headless
 renderer QA and package inspection do not establish real-account Clerk refresh,

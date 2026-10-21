@@ -113,7 +113,8 @@ recovery navigation, then inspect extracted frames.
 
 The [offline LiveEditor guide](offline-liveeditor.md) covers first preparation,
 completion synchronization, export/recovery, downgrade precautions and retention.
-Its release order requires the additive API/migration before the desktop release.
+Its release order is the verified additive database migration, then Web/API
+deployment, then desktop publication.
 Run `pnpm --filter @corelive/desktop benchmark:offline` under the pinned runtime
 for reproducible synthetic volume measurements; distinguish worker acknowledgement
 latency from renderer input latency and native startup latency.

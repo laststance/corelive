@@ -195,15 +195,15 @@ like `ngrok http --domain=foo.bar-ngrok.app 4991`
 
 ## Desktop Application (Electron - macOS 13+)
 
-This project includes an Electron desktop application that wraps the Next.js web app. **Desktop builds require macOS 13 or later.**
+The Electron desktop application bundles LiveEditor locally and loads Settings and sign-in from the Next.js web app. **Desktop builds require macOS 13 or later.**
 
 ### Desktop features
 
 Beyond the web app, the macOS build adds native surfaces:
 
-- **LiveEditor** — a distraction-light freeform capture window
-- **Login window** — a small fixed-size sign-in shell (`/login-shell`) shown while signed out; after OAuth sign-in it closes and LiveEditor opens. If the panel fails to load, use **Open LiveEditor** on the signed-in recovery screen to retry without signing in again.
-- **Startup** — the app opens LiveEditor at launch, or the login window while signed out; the first launch after upgrading removes retired keys (`window.floating`, `behavior.startup`, the retired `shortcuts.*` toggles, `liveEditor.syncMode` / `lastCategoryId`) from `config.json`
+- **LiveEditor** — a bundled freeform capture window that saves writing locally and reopens offline after one connected account preparation; see the [offline LiveEditor guide](docs/offline-liveeditor.md).
+- **Login window** — a small fixed-size sign-in shell (`/login-shell`) opened by **Sign in**; after OAuth sign-in it closes and LiveEditor opens. If the panel fails to load, use **Open LiveEditor** on the signed-in recovery screen to retry without signing in again.
+- **Startup** — the app opens the bundled LiveEditor at launch. A prepared account can write without a connection; an unprepared Mac shows the preparation state, and explicit sign-out leaves a locked editor with **Sign in**. Existing config migration removes retired keys (`window.floating`, the retired `shortcuts.*` toggles, `liveEditor.syncMode` / `lastCategoryId`) from `config.json`; it preserves the unused `behavior.startup` values for older builds after a downgrade.
 - **Settings** — a native settings window
 - **System tray** — menu-bar access and quick toggles
 - **Always-on-top** — keep LiveEditor above other windows (off by default)
@@ -211,7 +211,7 @@ Beyond the web app, the macOS build adds native surfaces:
 - **Global keyboard shortcuts** — optional system-wide hotkeys, including lone-modifier keys (opt-in, off by default). If a single-modifier shortcut such as Right Option stops after an unfinished start, open Settings and select that shortcut again to retry. Startup keeps the crash guard.
 - **In-app shortcuts** — while any CoreLive window has focus, `⌘N` opens LiveEditor in the browser and `⌘M` minimizes; both release when the app loses focus
 - **Deep links** — `corelive://` URLs open the app
-- **Connection recovery** — if corelive.app can't be reached, or answers with an HTTP error, while the login window or LiveEditor loads, the app retries three times and then shows a native Retry / Close dialog
+- **Load recovery** — the app retries failed local editor loads and failed remote login-window loads three times, then offers a native Retry / Close dialog. Network or authentication failures after account preparation pause completion synchronization while local writing remains available.
 - **Auto-update** — signed, notarized releases update in place. Choose **Download Now** or **Later** when prompted; Settings → Updates shows download progress and offers **Restart to Update** when ready. **Check for Updates** is available in Settings and the app menu.
 
 ### Electron Development
@@ -248,5 +248,5 @@ The built macOS applications (DMG and ZIP) will be available in `apps/desktop/di
 ### Migration verification
 
 See [monorepo QA and deployment ordering](docs/qa/monorepo-2026-10-07.md) for the
-current migration, its Headless verification boundaries, and the additive
+monorepo migration, its Headless verification boundaries, and the additive
 category-deletion receipt migration.
