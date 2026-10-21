@@ -51,7 +51,7 @@ type FooterCopy = Readonly<{
 }>
 
 /**
- * Picks the web frame's footer line for the current auth / storage state. The
+ * Picks the web frame's footer line for the current auth / storage state.
  * Bundled Electron supplies its own durable-save footer; this is web-only copy.
  * @param isAuthLoaded - Whether Clerk has resolved the session yet.
  * @param isSignedIn - Whether a signed-in user is present (undefined until loaded).
@@ -408,7 +408,7 @@ export function SharedEditorSurface({
   )
 }
 
-/** Explains the note field's readiness and input method for {@link LiveEditorSurface}.
+/** Explains the note field's readiness and input method for {@link SharedEditorSurface}.
  * @param isCategoryListPending - Whether category loading is still in flight.
  * @param needsCategoryPick - Whether a signed-in user must select a category.
  * @param isCoarsePointer - Whether touch is the primary input.

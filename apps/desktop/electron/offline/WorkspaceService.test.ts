@@ -107,6 +107,85 @@ afterEach(async () => {
 })
 
 describe('offline writing and completion transactions', () => {
+  test.each([
+    { label: 'empty', target: '', originalTarget: '', limit: 60000 },
+    { label: 'small', target: 'Work', originalTarget: 'Work', limit: 60000 },
+    {
+      label: 'previously larger',
+      target: 'Work',
+      originalTarget: 'z'.repeat(70000),
+      limit: 70000,
+    },
+  ])(
+    'moving shortened writing through a $label destination retains its allowance after restart',
+    async ({ target, originalTarget, limit }) => {
+      // Arrange
+      const fixture = await createWorkspace('a'.repeat(60000), false, {
+        workText: originalTarget,
+      })
+      let state = await fixture.file.read()
+      for (const [categoryId, text] of [
+        [1, 'a'.repeat(55000)],
+        [2, target],
+      ] as const) {
+        state = await fixture.service.execute({
+          type: 'save',
+          commandId: randomUUID(),
+          categoryId,
+          baseRevision: state.drafts[String(categoryId)]!.revision,
+          rows: [{ id: state.drafts[String(categoryId)]!.rows[0]!.id, text }],
+        })
+      }
+
+      // Act: the same retained allowance must survive both source retirements.
+      for (const [sourceId, destinationId] of [
+        [1, 2],
+        [2, 3],
+      ] as const) {
+        state = await fixture.service.execute({
+          type: 'moveCategory',
+          commandId: randomUUID(),
+          sourceId,
+          destinationId,
+        })
+        const reopened = await new AtomicWorkspaceFile(fixture.options).read()
+        expect(reopened.drafts[String(destinationId)]!.inputLimit).toBe(limit)
+        expect(reopened.drafts[String(sourceId)]).toBeUndefined()
+        expect(
+          reopened.drafts[String(destinationId)]!.rows.map((row) => row.text),
+        ).toEqual(
+          target ? ['Work', '', 'a'.repeat(55000)] : ['a'.repeat(55000)],
+        )
+      }
+      state = await fixture.service.execute({
+        type: 'save',
+        commandId: randomUUID(),
+        categoryId: 3,
+        baseRevision: state.drafts['3']!.revision,
+        rows: [{ id: randomUUID(), text: 'r'.repeat(limit) }],
+      })
+
+      // Assert: replacement within the retained absolute allowance works, additional growth does not.
+      expect(
+        (await new AtomicWorkspaceFile(fixture.options).read()).drafts[
+          '3'
+        ]!.rows.map((row) => row.text),
+      ).toEqual(['r'.repeat(limit)])
+      await expect(
+        fixture.service.execute({
+          type: 'save',
+          commandId: randomUUID(),
+          categoryId: 3,
+          baseRevision: state.drafts['3']!.revision,
+          rows: [{ id: randomUUID(), text: 'r'.repeat(limit + 1) }],
+        }),
+      ).rejects.toThrow('invalid-row')
+      expect(await new AtomicWorkspaceFile(fixture.options).read()).toEqual(
+        state,
+      )
+    },
+  )
+
   test.each(['move', 'recovery'] as const)(
     '%s preserves both large documents and permits shortening and retyping after restart',
     async (mode) => {

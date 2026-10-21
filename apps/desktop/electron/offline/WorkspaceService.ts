@@ -724,6 +724,9 @@ export class WorkspaceService {
 
     const to = this.draft(state, destination)
 
+    // Retiring a shortened source also transfers its retained absolute editing allowance.
+    to.inputLimit = Math.max(getDraftInputLimit(to), getDraftInputLimit(from))
+
     // A blank separator retains both complete documents and every occurrence identity.
     if (from.rows.some((row) => row.text.length > 0)) {
       if (to.rows.some((row) => row.text.length > 0))
