@@ -403,7 +403,8 @@ export class OfflineEditorController {
       return false
     try {
       const view = await context.worker.call('recover', null)
-      await this.logoutBarrier
+      // An absent barrier must not yield before activation can be enqueued.
+      while (this.logoutBarrier) await this.logoutBarrier
       if (generation !== this.generation) return false
       if (this.registryState?.activeAccountId !== context.ownerId) {
         if (this.verifiedOwner !== context.ownerId) return false
@@ -512,7 +513,8 @@ export class OfflineEditorController {
           legacyNotes: this.options.legacyNotes(),
         })
       }
-      await this.logoutBarrier
+      // Recheck after a real wait; yielding on null would let logout overtake activation.
+      while (this.logoutBarrier) await this.logoutBarrier
       if (generation !== this.generation) return
       this.registryState = await this.registry.activateVerified(ownerId)
       if (generation !== this.generation) return

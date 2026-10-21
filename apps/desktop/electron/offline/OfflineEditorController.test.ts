@@ -120,9 +120,14 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
   return { promise, resolve }
 }
 
-test.each(['prepare', 'recover'] as const)(
-  'logout stays durably locked when an in-flight %s finishes during its registry acknowledgement',
-  async (mode) => {
+test.each([
+  { mode: 'prepare', ordering: 'lock-first' },
+  { mode: 'recover', ordering: 'lock-first' },
+  { mode: 'prepare', ordering: 'worker-first' },
+  { mode: 'recover', ordering: 'worker-first' },
+] as const)(
+  'logout stays durably locked after in-flight $mode with $ordering scheduling',
+  async ({ mode, ordering }) => {
     // Arrange
     const fixture = await createFixture(true, {
       transport: () => ({
@@ -151,6 +156,8 @@ test.each(['prepare', 'recover'] as const)(
     }
     const reached = deferred()
     const releaseWorker = deferred()
+    let logout: Promise<boolean> | undefined
+    let heldWorkerResult = false
     const originalActor = options.actor!
     options.actor = (ownerId) => {
       const worker = originalActor(ownerId)
@@ -160,9 +167,19 @@ test.each(['prepare', 'recover'] as const)(
         input: WorkspaceWorkerCalls[K]['input'],
       ): Promise<WorkspaceWorkerCalls[K]['output']> => {
         const result = await originalCall(method, input)
-        if (method === (mode === 'prepare' ? 'categories' : 'recover')) {
+        if (
+          !heldWorkerResult &&
+          method === (mode === 'prepare' ? 'categories' : 'recover')
+        ) {
+          heldWorkerResult = true
           reached.resolve()
           await releaseWorker.promise
+          // Start logout just before the controller resumes from this worker result.
+          if (ordering === 'worker-first') {
+            queueMicrotask(() => {
+              logout = controller.signOut()
+            })
+          }
         }
         return result
       }
@@ -202,8 +219,9 @@ test.each(['prepare', 'recover'] as const)(
     })
     const activate = vi.spyOn(registry, 'activateVerified')
 
-    // Act: complete the older operation while logout's durable lock has no reply yet.
-    const logout = controller.signOut()
+    // Act: cover both an installed barrier and logout starting at the activation boundary.
+    if (ordering === 'lock-first') logout = controller.signOut()
+    else releaseWorker.resolve()
     try {
       await lockCommitted.promise
       releaseWorker.resolve()
@@ -213,12 +231,15 @@ test.each(['prepare', 'recover'] as const)(
       releaseLock.resolve()
     }
     expect(await logout).toBe(true)
-    if (recovering) expect(await recovering).toBe(false)
+    if (recovering) {
+      const recovered = await recovering
+      if (ordering === 'lock-first') expect(recovered).toBe(false)
+    }
     const restarted = new OfflineEditorController(options)
     await restarted.initialize()
 
     // Assert
-    expect(activate).not.toHaveBeenCalled()
+    if (ordering === 'lock-first') expect(activate).not.toHaveBeenCalled()
     expect((await registry.read()).activeAccountId).toBeNull()
     expect(controller.getSnapshot().phase).toBe('locked')
     expect(restarted.getSnapshot().phase).toBe('locked')
