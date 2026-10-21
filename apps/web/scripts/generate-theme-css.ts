@@ -1,6 +1,6 @@
 /**
  * Theme CSS generator — reads the theme registry and writes
- * `src/lib/themes/generated.css` with one block per generator-emitted theme:
+ * `packages/live-editor/src/styles/generated.css` with one block per generator-emitted theme:
  * the DERIVED (colored) families and the STATIC shadcn Default pair.
  *
  * Preserved themes (Warm Cathedral light/dark) are SKIPPED: their CSS stays
@@ -16,7 +16,7 @@
  *
  * @example
  * // add a family seed to registry.ts, then:
- * // $ pnpm theme:generate   → rewrites src/lib/themes/generated.css
+ * // $ pnpm theme:generate   → rewrites packages/live-editor/src/styles/generated.css
  */
 import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -374,7 +374,10 @@ export function generateThemesCss(themes: readonly ThemeSeed[]): string {
 // Write the file when run directly (tsx scripts/generate-theme-css.ts).
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const outPath = fileURLToPath(
-    new URL('../src/lib/themes/generated.css', import.meta.url),
+    new URL(
+      '../../../packages/live-editor/src/styles/generated.css',
+      import.meta.url,
+    ),
   )
   const generated = generateThemesCss(Object.values(THEME_REGISTRY))
   // Validation compares content without modifying the golden file or relying on Git staging.

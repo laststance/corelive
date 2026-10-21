@@ -16,13 +16,27 @@
  * @module electron/main
  */
 
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
 import {
   LIVE_EDITOR_SHORTCUT_IDS,
   type LiveEditorShortcutId,
 } from '@corelive/desktop-contract/constants'
 import type { AuthUserPayload } from '@corelive/desktop-contract/ipc'
-import { app, BrowserWindow, dialog, session, powerMonitor } from 'electron'
-import type { WebContents, Event as ElectronEvent } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  session,
+  powerMonitor,
+  protocol,
+} from 'electron'
+import type {
+  WebContents,
+  Event as ElectronEvent,
+  IpcMainInvokeEvent,
+} from 'electron'
 
 import type { AutoUpdater as AutoUpdaterType } from './AutoUpdater'
 import { ConfigManager } from './ConfigManager'
@@ -31,12 +45,22 @@ import { isRendererReadableConfigPath } from './ipc/ipc-schemas'
 import { registerAuthHandlers } from './ipc/registerAuthHandlers'
 import { typedHandle } from './ipc/typedHandle'
 import { lazyLoadManager } from './LazyLoadManager'
-import { getLiveEditorNote, setLiveEditorNote } from './LiveEditorNoteStore'
 import { log } from './logger'
 import { memoryProfiler } from './MemoryProfiler'
 import type { MenuManager as MenuManagerType } from './MenuManager'
 import type { NotificationManager as NotificationManagerType } from './NotificationManager'
 import type { OAuthManager as OAuthManagerType } from './OAuthManager'
+import { createOfflineEditor } from './offline/createOfflineEditor'
+import {
+  isLocalEditorDocument,
+  isLocalEditorURL,
+  LOCAL_EDITOR_SCHEME,
+} from './offline/localEditorOrigin'
+import {
+  LOCAL_EDITOR_CSP,
+  serveLocalEditor,
+} from './offline/localEditorProtocol'
+import { isTrustedAuthSender } from './offline/OfflineEditorIPC'
 import type { ShortcutManager as ShortcutManagerType } from './ShortcutManager'
 import type { SystemIntegrationErrorHandler as SystemIntegrationErrorHandlerType } from './SystemIntegrationErrorHandler'
 import type { SystemTrayManager as SystemTrayManagerType } from './SystemTrayManager'
@@ -106,6 +130,15 @@ if (remoteDebuggingPort) {
  * These affect security policies, performance optimizations, and debugging features.
  */
 const isDev = process.env.NODE_ENV === 'development'
+const mainDirectory = fileURLToPath(new URL('.', import.meta.url))
+
+// Register before app readiness so the bundled renderer has a secure, separate origin.
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: LOCAL_EDITOR_SCHEME,
+    privileges: { standard: true, secure: true, supportFetchAPI: true },
+  },
+])
 
 // ============================================================================
 // Manager Instances
@@ -124,6 +157,10 @@ const isDev = process.env.NODE_ENV === 'development'
 let configManager: ConfigManager
 let windowStateManager: WindowStateManager
 let windowManager: WindowManager
+let offlineEditor: ReturnType<typeof createOfflineEditor> | null = null
+let quitAllowed = false
+let quitPending = false
+let quitPreparation: Promise<boolean> | null = null
 
 /**
  * Guards setupIPCHandlers against a second run. IPC handlers bind the
@@ -314,6 +351,7 @@ function ensureDeepLinkManager(): DeepLinkManagerType | null {
  */
 async function setActiveUser(
   userPayload: AuthUserPayload,
+  event: IpcMainInvokeEvent,
 ): Promise<AuthUserPayload> {
   // Validate payload to prevent security issues
   if (!userPayload || typeof userPayload !== 'object' || !userPayload.clerkId) {
@@ -326,6 +364,10 @@ async function setActiveUser(
     emailAddresses: userPayload.emailAddresses || [],
     firstName: userPayload.firstName || null,
   }
+  offlineEditor?.controller.authenticated(
+    activeUser.clerkId,
+    event.sender === windowManager.getLoginWindow()?.webContents,
+  )
   return activeUser
 }
 
@@ -404,7 +446,9 @@ function setupSecurity(): void {
       callback({
         responseHeaders: {
           ...details.responseHeaders,
-          'Content-Security-Policy': [CSP_POLICY],
+          'Content-Security-Policy': [
+            isLocalEditorURL(details.url) ? LOCAL_EDITOR_CSP : CSP_POLICY,
+          ],
         },
       })
     })
@@ -628,12 +672,14 @@ async function createWindow(): Promise<void> {
       windowStateManager,
     )
 
-    // The Electron main window is retired (T18). CoreLive is now a thin native
-    // companion: the full task app runs browser-only at corelive.app, and
-    // Electron always opens the LiveEditor panel at launch. It is created hidden
-    // and surfaces once it resolves — signed out, it hands over to the login
-    // window (WindowManager nav-watch); a load failure self-heals via the panel
-    // recovery dialog.
+    offlineEditor = createOfflineEditor(
+      windowManager,
+      configManager,
+      mainDirectory,
+    )
+    setupIPCHandlers()
+    // Local readiness is read from disk; optional authentication/sync never blocks startup.
+    await offlineEditor.controller.initialize()
     windowManager.openStartupPanel()
 
     return { serverUrl }
@@ -664,7 +710,7 @@ async function createWindow(): Promise<void> {
         try {
           const AutoUpdaterCls =
             await lazyLoadManager.loadComponent('AutoUpdater')
-          autoUpdater = new AutoUpdaterCls()
+          autoUpdater = new AutoUpdaterCls(prepareForQuit)
           // No main window to bind dialogs to after T18; the updater surfaces
           // through its own notifications.
         } catch (autoUpdaterError) {
@@ -810,9 +856,9 @@ function setupIPCHandlers(): void {
     windowManager.showLiveEditor()
   })
 
-  typedHandle('live-editor-window-hide', () => {
+  typedHandle('live-editor-window-hide', async () => {
     if (!windowManager) return
-    windowManager.hideLiveEditor()
+    await windowManager.hideLiveEditor()
   })
 
   typedHandle('live-editor-window-set-opacity', (_event, value) => {
@@ -855,16 +901,12 @@ function setupIPCHandlers(): void {
     }
   })
 
-  // Per-category note text (persisted in `liveEditor.notes[<categoryId>]`).
-  typedHandle('live-editor-note-get', (_event, categoryId) => {
-    if (!configManager) return ''
-    return getLiveEditorNote(configManager, categoryId)
+  // The old config remains migration evidence; the upgraded app never writes two note stores.
+  typedHandle('live-editor-note-get', () => {
+    throw new Error('Use the prepared workspace')
   })
-
-  typedHandle('live-editor-note-set', (_event, categoryId, text) => {
-    if (!configManager) return false
-    setLiveEditorNote(configManager, categoryId, text)
-    return true
+  typedHandle('live-editor-note-set', () => {
+    throw new Error('Use the prepared workspace')
   })
 
   /**
@@ -1098,9 +1140,17 @@ function setupIPCHandlers(): void {
   registerAuthHandlers({
     getActiveUser: () => activeUser,
     setActiveUser,
-    clearActiveUser: () => {
+    clearActiveUser: async () => {
+      if (!offlineEditor || !(await offlineEditor.controller.signOut())) {
+        windowManager.showLiveEditor()
+        return false
+      }
       activeUser = null
+      return true
     },
+    authorize: (event) =>
+      Boolean(offlineEditor && isTrustedAuthSender(event, windowManager)),
+    sessionUnavailable: () => offlineEditor?.controller.sessionUnavailable(),
     getWindowManager: () => windowManager ?? null,
   })
 
@@ -1281,10 +1331,9 @@ function setupIPCHandlers(): void {
     return false
   })
 
-  typedHandle('updater-quit-and-install', () => {
+  typedHandle('updater-quit-and-install', async () => {
     if (autoUpdater) {
-      autoUpdater.quitAndInstall()
-      return true
+      return autoUpdater.quitAndInstall()
     }
     return false
   })
@@ -1346,6 +1395,9 @@ if (!gotTheLock) {
     .then(async () => {
       // Setup security policies before any window creation
       setupSecurity()
+      protocol.handle(LOCAL_EDITOR_SCHEME, async (request) =>
+        serveLocalEditor(request, join(mainDirectory, '..', 'renderer')),
+      )
 
       // Boot the Electron companion (auxiliary panels only; main is retired).
       await createWindow()
@@ -1450,7 +1502,30 @@ app.on('window-all-closed', () => {
  * - Memory leaks from orphaned processes
  * - System resource leaks (tray icons persisting)
  */
-app.on('before-quit', async () => {
+/** Drains acknowledged writing before either a normal quit or an updater restart.
+ * @example if (await prepareForQuit()) app.quit()
+ */
+async function prepareForQuit(): Promise<boolean> {
+  if (quitAllowed || !offlineEditor) return true
+  if (quitPreparation) return quitPreparation
+  quitPreparation = offlineEditor.controller
+    .shutdown()
+    .then((saved) => {
+      if (saved) quitAllowed = true
+      else windowManager.showLiveEditor()
+      return saved
+    })
+    .finally(() => {
+      quitPreparation = null
+    })
+  return quitPreparation
+}
+
+/** Releases initialized managers after the editor has acknowledged durable shutdown.
+ * Native before-quit calls this only after the flush gate succeeds.
+ * @example cleanupForQuit()
+ */
+function cleanupForQuit(): void {
   // Stop performance monitoring first
   memoryProfiler.stopMonitoring()
 
@@ -1491,6 +1566,25 @@ app.on('before-quit', async () => {
   // Final performance cleanup
   lazyLoadManager.cleanup()
   memoryProfiler.cleanup()
+}
+
+app.on('before-quit', (event) => {
+  if (!quitAllowed && offlineEditor) {
+    event.preventDefault()
+    if (quitPending) return
+    quitPending = true
+    void prepareForQuit()
+      .then((saved) => {
+        quitPending = false
+        if (saved) app.quit()
+      })
+      .catch(() => {
+        quitPending = false
+        windowManager.showLiveEditor()
+      })
+    return
+  }
+  cleanupForQuit()
 })
 
 /**
@@ -1562,6 +1656,10 @@ app.on('web-contents-created', (_event, contents: WebContents) => {
     _isInPlace?: boolean,
     isMainFrame?: boolean,
   ): void => {
+    if (contents === windowManager?.getLiveEditorWindow()?.webContents) {
+      if (!isLocalEditorDocument(navigationUrl)) event.preventDefault()
+      return
+    }
     // Redirect events include iframe requests; Clerk's isolated frames do not receive preload APIs.
     if (isMainFrame === false) return
     const appOrigin =

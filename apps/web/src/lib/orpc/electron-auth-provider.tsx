@@ -306,8 +306,11 @@ export const ElectronAuthProvider = function ElectronAuthProvider({
             imageUrl: user.imageUrl ?? null,
           })
         } else {
-          // User is not authenticated, logout from Electron
-          await window.electronAPI?.auth?.logout()
+          // Session expiry pauses sync; explicit user logout owns the durable local lock.
+          const auth = window.electronAPI?.auth
+          if (typeof auth?.sessionUnavailable === 'function')
+            await auth.sessionUnavailable()
+          else await auth?.logout()
         }
       } catch (error) {
         log.error('Failed to sync authentication with Electron:', error)

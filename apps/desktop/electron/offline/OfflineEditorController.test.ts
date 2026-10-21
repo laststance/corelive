@@ -1,0 +1,257 @@
+import { randomUUID } from 'node:crypto'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+import {
+  OfflineWorkspaceSchema,
+  type OfflineEditorSnapshot,
+} from '@corelive/desktop-contract/offline-workspace'
+import { UserSettingsStateSchema } from '@corelive/desktop-contract/settings'
+import { afterEach, expect, test, vi } from 'vitest'
+
+import { AtomicWorkspaceFile } from './AtomicWorkspaceFile'
+import { OfflineAccountRegistry } from './OfflineAccountRegistry'
+import { OfflineEditorController } from './OfflineEditorController'
+import { WorkspaceWorkerClient } from './WorkspaceWorkerClient'
+
+type Options = ConstructorParameters<typeof OfflineEditorController>[0]
+const cleanups: (() => Promise<void>)[] = []
+const category = {
+  id: 1,
+  name: 'General',
+  color: 'blue',
+  isDefault: true,
+  parentId: null,
+  removed: false,
+} as const
+const preferences = {
+  revision: 0,
+  theme: 'warm-cathedral-dark',
+  settings: UserSettingsStateSchema.parse({
+    liveEditorFontFamily: 'sans',
+    liveEditorFontSize: 19,
+  }),
+}
+
+/** Uses real account files and worker threads with synthetic auth; never launches Electron.
+ * @example const fixture = await createFixture(true)
+ */
+async function createFixture(
+  prepared: boolean,
+  override: Partial<Options> = {},
+) {
+  const directory = await mkdtemp(join(tmpdir(), 'corelive-controller-'))
+  const registry = new OfflineAccountRegistry(directory)
+  await registry.read()
+  const actor = (ownerId: string): WorkspaceWorkerClient =>
+    new WorkspaceWorkerClient({
+      directory: join(directory, 'workspaces'),
+      ownerId,
+      script: new URL('./workspace-worker.ts', import.meta.url),
+      execArgv: ['--import', 'tsx'],
+    })
+  if (prepared) {
+    const worker = actor('account-a')
+    await worker.call('prepare', {
+      ownerId: 'account-a',
+      deviceId: randomUUID(),
+      categories: [category],
+      preferences,
+      legacyNotes: { '1': 'Writing survives offline startup' },
+    })
+    await worker.close()
+    await registry.activateVerified('account-a')
+  }
+  const broker = {
+    acquire: vi.fn<Options['broker']['acquire']>(async () => ({
+      status: 'unavailable',
+    })),
+    reset: vi.fn(),
+  }
+  const requestFlush = vi.fn(async () => true)
+  const snapshots: OfflineEditorSnapshot[] = []
+  const options: Options = {
+    directory,
+    registry,
+    actor,
+    workerScript: 'unused-with-actor-factory',
+    broker,
+    transport: () => {
+      throw new Error('No test network transport')
+    },
+    requestFlush,
+    legacyNotes: () => ({ '1': 'Imported only after preparation' }),
+    openSettingsForPreparation: vi.fn(),
+    onSettingsContext: vi.fn(),
+    onSnapshot: (snapshot) => snapshots.push(snapshot),
+    ...override,
+  }
+  const controller = new OfflineEditorController(options)
+  cleanups.push(async () => {
+    requestFlush.mockResolvedValue(true)
+    await controller.shutdown()
+    await rm(directory, { recursive: true })
+  })
+  return {
+    controller,
+    options,
+    directory,
+    registry,
+    broker,
+    requestFlush,
+    snapshots,
+  }
+}
+
+afterEach(async () => {
+  for (const cleanup of cleanups.splice(0)) await cleanup()
+})
+
+test('a prepared Mac opens its writing and saved appearance without waiting for authentication', async () => {
+  // Arrange
+  const { controller, broker } = await createFixture(true)
+  broker.acquire.mockImplementation(async () => new Promise(() => undefined))
+
+  // Act
+  await controller.initialize()
+
+  // Assert
+  expect(controller.getSnapshot()).toMatchObject({
+    phase: 'ready',
+    generation: 0,
+    workspace: {
+      preferences: {
+        theme: 'warm-cathedral-dark',
+        settings: { liveEditorFontSize: 19 },
+      },
+      draft: { rows: [{ text: 'Writing survives offline startup' }] },
+    },
+  })
+  expect(broker.acquire).toHaveBeenCalledWith('account-a', 0)
+})
+
+test('session expiry preserves editing while explicit logout locks the next offline launch', async () => {
+  // Arrange
+  const { controller, options, requestFlush } = await createFixture(true)
+  await controller.initialize()
+
+  // Act
+  controller.sessionUnavailable()
+  expect(controller.getSnapshot()).toMatchObject({
+    phase: 'ready',
+    sync: 'sign-in-required',
+  })
+  await controller.signOut()
+  const restarted = new OfflineEditorController(options)
+  await restarted.initialize()
+  restarted.authenticated('account-a')
+
+  // Assert
+  expect(requestFlush).toHaveBeenCalledWith(0)
+  expect(controller.getSnapshot()).toEqual({ phase: 'locked', generation: 1 })
+  expect(restarted.getSnapshot()).toEqual({ phase: 'locked', generation: 0 })
+  await restarted.shutdown()
+})
+
+test('a failed final save cancels logout and leaves the same account available for recovery', async () => {
+  // Arrange
+  const { controller, requestFlush, registry } = await createFixture(true)
+  await controller.initialize()
+  requestFlush.mockResolvedValue(false)
+
+  // Act
+  const signedOut = await controller.signOut()
+
+  // Assert
+  expect(signedOut).toBe(false)
+  expect(controller.getSnapshot()).toMatchObject({
+    phase: 'ready',
+    generation: 0,
+  })
+  expect((await registry.read()).activeAccountId).toBe('account-a')
+})
+
+test('first preparation waits for hydrated Settings and publishes readiness only after account files commit', async () => {
+  // Arrange
+  const bootstrap = {
+    accountId: 'account-a',
+    categories: [category],
+    deletions: [],
+  }
+  const { controller, broker, options, registry } = await createFixture(false, {
+    transport: () => ({
+      bootstrap: async () => bootstrap,
+      apply: async () => ({ receipts: [] }),
+      receipts: async () => ({ receipts: [] }),
+      checkpoint: async () => {
+        throw new Error('No count response')
+      },
+    }),
+  })
+  broker.acquire.mockImplementation(async (expectedAccountId, generation) => ({
+    status: 'ready',
+    credential: {
+      status: 'ready',
+      requestId: randomUUID(),
+      expectedAccountId,
+      generation,
+      accountId: 'account-a',
+      token: 'synthetic-test-token',
+    },
+  }))
+
+  // Act
+  await controller.initialize()
+  await vi.waitFor(() =>
+    expect(options.openSettingsForPreparation).toHaveBeenCalledOnce(),
+  )
+  expect(controller.getSnapshot().phase).toBe('preparing')
+  expect((await registry.read()).activeAccountId).toBeNull()
+  const context = controller.settingsContext('account-a')!
+  expect(
+    controller.provideSettings(
+      'other-account',
+      context.generation,
+      preferences,
+    ),
+  ).toBe(false)
+  expect(
+    controller.provideSettings('account-a', context.generation, preferences),
+  ).toBe(true)
+  await vi.waitFor(() => expect(controller.getSnapshot().phase).toBe('ready'))
+
+  // Assert
+  expect(controller.getSnapshot()).toMatchObject({
+    workspace: {
+      preferences: {
+        theme: 'warm-cathedral-dark',
+        settings: { liveEditorFontFamily: 'sans', liveEditorFontSize: 19 },
+      },
+      draft: { rows: [{ text: 'Imported only after preparation' }] },
+    },
+  })
+  expect((await registry.read()).activeAccountId).toBe('account-a')
+})
+
+test('a corrupt prepared snapshot opens recovery instead of creating an empty draft', async () => {
+  // Arrange
+  const { controller, directory } = await createFixture(true)
+  const file = new AtomicWorkspaceFile({
+    directory: join(directory, 'workspaces'),
+    ownerId: 'account-a',
+    parse: OfflineWorkspaceSchema.parse,
+  })
+  await writeFile(file.path, 'broken snapshot', 'utf8')
+
+  // Act
+  await controller.initialize()
+
+  // Assert
+  expect(controller.getSnapshot()).toMatchObject({
+    phase: 'recovery',
+    canRecover: false,
+  })
+  expect(controller.getSnapshot()).not.toHaveProperty('workspace')
+  await expect(file.read()).rejects.toMatchObject({ reason: 'invalid' })
+})

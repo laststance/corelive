@@ -1,6 +1,12 @@
 'use client'
 
 import { useUser } from '@clerk/nextjs'
+import { getKeepLineIntent, useEditorInput } from '@corelive/live-editor/input'
+import {
+  createLineRemapper,
+  remapTrackedLineIndex,
+  type TextEditRange,
+} from '@corelive/live-editor/row-identity'
 import { useQueryClient } from '@tanstack/react-query'
 import * as React from 'react'
 import { useLayoutEffect, useRef, useState } from 'react'
@@ -44,7 +50,6 @@ import {
   type LiveEditorLineIndex,
   insertLineAtIndex,
   lineStartOffset,
-  markPlainLineCompleted,
   normalizeCompletedTitle,
   parseCheckboxLine,
   removeLineAtIndex,
@@ -65,13 +70,6 @@ type CheckedRowMemory = {
   /** Verbatim title used to detect double-toggles on the same line. */
   title: LiveEditorCompletedTitle
 }
-
-type TextEditRange = Readonly<{
-  /** Inclusive character offset before the textarea edit. */
-  start: number
-  /** Exclusive character offset before the textarea edit. */
-  end: number
-}>
 
 type NoteDraftUpdateOptions = Readonly<{
   /** Category this draft belongs to; defaults to the active category ref. */
@@ -190,129 +188,6 @@ function isClearedLineUndone(entry: ClearedLineMemory): boolean {
   return entry.outcome === 'undone'
 }
 
-/** Resolves a browser's exact splice for {@link remapTrackedLineIndex} before its content fallback.
- * @param previousText - Draft before the edit.
- * @param nextText - Draft after the edit.
- * @param lineIndex - Tracked row index.
- * @param editRange - Captured browser selection, when available.
- * @returns The shifted index, null for an edited row, or undefined when the splice cannot be verified.
- * @example remapExactEdit('a\nb', 'x\na\nb', 1, {start: 0, end: 0})
- */
-function remapExactEdit(
-  previousText: string,
-  nextText: string,
-  lineIndex: LiveEditorLineIndex,
-  editRange?: TextEditRange,
-): LiveEditorLineIndex | null | undefined {
-  const previousLines = previousText.split('\n')
-  if (
-    editRange &&
-    editRange.start >= 0 &&
-    editRange.start <= editRange.end &&
-    editRange.end <= previousText.length
-  ) {
-    const replacedLength = editRange.end - editRange.start
-    const insertedLength =
-      nextText.length - (previousText.length - replacedLength)
-    const insertedEnd = editRange.start + insertedLength
-    const editMatchesText =
-      insertedLength >= 0 &&
-      previousText.slice(0, editRange.start) ===
-        nextText.slice(0, editRange.start) &&
-      previousText.slice(editRange.end) === nextText.slice(insertedEnd)
-    if (editMatchesText) {
-      const insertedText = nextText.slice(editRange.start, insertedEnd)
-      const removedText = previousText.slice(editRange.start, editRange.end)
-      const newlineDelta =
-        insertedText.split('\n').length - removedText.split('\n').length
-      const rowStart = lineStartOffset(previousText, lineIndex)
-      const rowEnd = rowStart + (previousLines[lineIndex]?.length ?? 0)
-
-      // A splice wholly before this row shifts it by exactly the newline delta.
-      if (editRange.end < rowStart) return lineIndex + newlineDelta
-      if (editRange.end === rowStart) {
-        const keepsRowBoundary =
-          !removedText.endsWith('\n') || insertedText.endsWith('\n')
-        return keepsRowBoundary ? lineIndex + newlineDelta : null
-      }
-
-      // A splice wholly after this row cannot change its line identity.
-      if (editRange.start > rowEnd) return lineIndex
-      if (editRange.start === rowEnd) {
-        return insertedText.startsWith('\n') ? lineIndex : null
-      }
-
-      // Editing through the tracked row is ambiguous, so callers drop its identity.
-      return null
-    }
-  }
-
-  return undefined
-}
-
-/**
- * Re-indexes an unchanged row across one contiguous textarea edit. Called before draft refs update.
- * @param previousText - Text whose line index the completion currently stores.
- * @param nextText - Text after the user or completion flow edits the textarea.
- * @param lineIndex - Previously tracked zero-based line index.
- * @param editRange - Exact replaced range when the change came from textarea input.
- * @returns The shifted index, or null when the tracked row itself changed.
- * @example
- * remapTrackedLineIndex('header\n- [x] task', 'new\nheader\n- [x] task', 1) // => 2
- */
-function remapTrackedLineIndex(
-  previousText: string,
-  nextText: string,
-  lineIndex: LiveEditorLineIndex,
-  editRange?: TextEditRange,
-): LiveEditorLineIndex | null {
-  if (previousText === nextText) return lineIndex
-
-  const previousLines = previousText.split('\n')
-  const nextLines = nextText.split('\n')
-  const exactIndex = remapExactEdit(
-    previousText,
-    nextText,
-    lineIndex,
-    editRange,
-  )
-  if (exactIndex !== undefined) return exactIndex
-
-  const trackedLineText = previousLines[lineIndex]
-  if (
-    trackedLineText !== undefined &&
-    nextLines.filter((line) => line === trackedLineText).length > 1
-  ) {
-    // Duplicate full rows are indistinguishable without an exact browser splice.
-    return null
-  }
-
-  // Internal changes have no DOM selection; retain the conservative content fallback.
-  let unchangedPrefixLength = 0
-  while (
-    unchangedPrefixLength < previousLines.length &&
-    unchangedPrefixLength < nextLines.length &&
-    previousLines[unchangedPrefixLength] === nextLines[unchangedPrefixLength]
-  ) {
-    unchangedPrefixLength += 1
-  }
-
-  let unchangedSuffixLength = 0
-  while (
-    unchangedSuffixLength < previousLines.length - unchangedPrefixLength &&
-    unchangedSuffixLength < nextLines.length - unchangedPrefixLength &&
-    previousLines[previousLines.length - 1 - unchangedSuffixLength] ===
-      nextLines[nextLines.length - 1 - unchangedSuffixLength]
-  ) {
-    unchangedSuffixLength += 1
-  }
-
-  if (lineIndex < unchangedPrefixLength) return lineIndex
-  const previousSuffixStart = previousLines.length - unchangedSuffixLength
-  if (lineIndex < previousSuffixStart) return null
-  return lineIndex + nextLines.length - previousLines.length
-}
-
 /**
  * Keeps line-index keyed completion memory aligned after rows above it move. Called by setNoteDraft.
  * @param entries - Pending or recorded completion memory keyed by current line index.
@@ -333,13 +208,9 @@ function reindexTrackedCompletionMap<
 ): void {
   if (entries.size === 0 || previousText === nextText) return
   const reindexedEntries = new Map<LiveEditorLineIndex, T>()
+  const remap = createLineRemapper(previousText, nextText, editRange)
   for (const [lineIndex, entry] of entries) {
-    const nextLineIndex = remapTrackedLineIndex(
-      previousText,
-      nextText,
-      lineIndex,
-      editRange,
-    )
+    const nextLineIndex = remap(lineIndex)
     // Editing the tracked row ends its identity; unchanged rows keep following shifts.
     if (nextLineIndex === null) continue
     entry.lineIndex = nextLineIndex
@@ -838,8 +709,6 @@ export const LiveEditor = function LiveEditor({
   const activeCategoryIdRef = useRef<Category['id'] | null>(activeCategoryId)
   // Latest noteText for callbacks (toast Undo) so they never see a stale snapshot.
   const noteTextRef = useRef<string>('')
-  // Captured before browser input so identical inserted rows still have an unambiguous splice.
-  const pendingTextareaEditRef = useRef<TextEditRange | null>(null)
   // Category owning noteTextRef; prevents a category load from re-indexing old completion memory.
   const noteTextCategoryRef = useRef<Category['id'] | null>(null)
   // Last value persisted via `note.set` — guards against the load effect
@@ -2128,101 +1997,25 @@ export const LiveEditor = function LiveEditor({
   const keepCaretLine = (): void => {
     const textarea = textareaRef.current
     if (!textarea) return
-
-    const text = textarea.value
-    const caret = textarea.selectionStart
-    const lines = text.split('\n')
-    const lineIndex = text.slice(0, caret).split('\n').length - 1
-    const line = lines[lineIndex]
-    if (line === undefined) return
-    const parsed = parseCheckboxLine(line, lineIndex)
-
-    // Clear-on-complete treats plain, unchecked, and manually checked rows alike:
-    // record the win, show `[x]`, then tuck the source row away with Undo available.
+    const intent = getKeepLineIntent(textarea.value, textarea.selectionStart)
+    if (!intent) return
     if (effectiveClearOnComplete) {
-      let completionTitle: LiveEditorCompletedTitle
-      let completedText: string
-      if (parsed) {
-        completionTitle = parsed.title
-        // Preserve a manually checked row verbatim; only unchecked rows need rewriting.
-        completedText = parsed.checked
-          ? text
-          : setCheckboxStateAtLine(text, lineIndex, true)
-      } else {
-        // Plain prose line: wrap as `[x]` first so the eye sees the completion.
-        const promoted = markPlainLineCompleted(text, lineIndex)
-        if (!promoted) return
-        completionTitle = promoted.title
-        completedText = promoted.text
-      }
-      // `line` is the verbatim source row → restored as-is on undo/failure.
-      completeAndClearLine(completedText, lineIndex, line, completionTitle)
+      completeAndClearLine(
+        intent.completedText,
+        intent.lineIndex,
+        intent.rawText,
+        intent.title,
+      )
       return
     }
-
-    if (!parsed) {
-      // Not a checkbox line: let the complete command finish an ordinary prose
-      // line by wrapping it as `- [x] …` and promoting it, so users don't have
-      // to pre-type `- [ ]` markdown just to log a win. Blank lines and empty
-      // checkbox skeletons return null and fall through to a no-op.
-      const promoted = markPlainLineCompleted(text, lineIndex)
-      if (!promoted) return
-      setNoteDraft(promoted.text, { dirty: true })
-      // Pass the plain prose as rollback text so a failed create restores the
-      // original line instead of leaving the optimistic `- [x]` skeleton.
-      void promoteLineToCompleted(lineIndex, promoted.title, line)
-      return
-    }
-
     if (activeCategoryIdRef.current === null) return
-    if (!parsed.checked) {
-      const completedText = setCheckboxStateAtLine(text, lineIndex, true)
-      setNoteDraft(completedText, { dirty: true })
-    }
-    // A pre-checked row is still a completion command, not an uncheck command.
+    if (intent.kind !== 'checked')
+      setNoteDraft(intent.completedText, { dirty: true })
     void promoteLineToCompleted(
-      lineIndex,
-      parsed.title,
-      parsed.checked ? line : undefined,
+      intent.lineIndex,
+      intent.title,
+      intent.kind === 'unchecked' ? undefined : intent.rawText,
     )
-  }
-
-  /**
-   * Cmd/Ctrl+Enter keeps the caret line; every other key just records the
-   * pre-edit selection so identical inserted rows still re-index unambiguously.
-   * @param event - The textarea keydown.
-   * @returns void.
-   * @example
-   * <textarea onKeyDown={handleKeyDown} />
-   */
-  const handleKeyDown = (
-    event: React.KeyboardEvent<HTMLTextAreaElement>,
-  ): void => {
-    if (event.key !== 'Enter' || !(event.metaKey || event.ctrlKey)) {
-      // Keyboard edits expose their pre-change selection here; beforeinput covers paste/IME.
-      pendingTextareaEditRef.current = {
-        start: event.currentTarget.selectionStart,
-        end: event.currentTarget.selectionEnd,
-      }
-      return
-    }
-    pendingTextareaEditRef.current = null
-    // Skip while IME is composing — never hijack a CJK confirmation Enter.
-    if (event.nativeEvent.isComposing) return
-    event.preventDefault()
-    keepCaretLine()
-  }
-
-  /**
-   * Touch-only "Keep line" button (design review DR9): the same completion path
-   * as the shortcut, then focus returns to the textarea so the next line can start.
-   * @returns void.
-   * @example
-   * <Button onClick={handleKeepLineClick}>Keep line</Button>
-   */
-  const handleKeepLineClick = (): void => {
-    keepCaretLine()
-    textareaRef.current?.focus()
   }
 
   const closeWindow = (): void => {
@@ -2241,35 +2034,12 @@ export const LiveEditor = function LiveEditor({
     setNoteDraft(text, { categoryId: activeCategoryId, dirty: true, editRange })
   }
 
-  const captureTextareaSelection: React.ClipboardEventHandler<
-    HTMLTextAreaElement
-  > = (event) => {
-    pendingTextareaEditRef.current = {
-      start: event.currentTarget.selectionStart,
-      end: event.currentTarget.selectionEnd,
-    }
-  }
-  const textareaProps = {
+  const { textareaProps, handleKeepLineClick } = useEditorInput({
     ref: textareaRef,
     value: noteText,
-    onPaste: captureTextareaSelection,
-    onCut: captureTextareaSelection,
-    onDrop: (): void => {
-      pendingTextareaEditRef.current = null
-    },
-    onBeforeInput: (event: React.InputEvent<HTMLTextAreaElement>): void => {
-      pendingTextareaEditRef.current = {
-        start: event.currentTarget.selectionStart,
-        end: event.currentTarget.selectionEnd,
-      }
-    },
-    onChange: (event: React.ChangeEvent<HTMLTextAreaElement>): void => {
-      const editRange = pendingTextareaEditRef.current ?? undefined
-      pendingTextareaEditRef.current = null
-      handleDraftChange(event.target.value, editRange)
-    },
-    onKeyDown: handleKeyDown,
-  }
+    onChange: handleDraftChange,
+    onKeep: keepCaretLine,
+  })
 
   return (
     <LiveEditorSurface

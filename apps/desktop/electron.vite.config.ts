@@ -1,11 +1,17 @@
 import { resolve } from 'path'
 
-import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
+import { defineConfig } from 'electron-vite'
 
 import packageJson from './package.json' with { type: 'json' }
 
 // Declare runtime dependencies before Vite 8 normalizes the legacy plugin's options.
-const dependencyNames = Object.keys(packageJson.dependencies)
+const bundledWorkspaceDependencies = [
+  '@corelive/live-editor',
+  '@corelive/desktop-contract',
+]
+const dependencyNames = Object.keys(packageJson.dependencies).filter(
+  (name) => !bundledWorkspaceDependencies.includes(name),
+)
 const externalDependencies = [
   'electron',
   ...dependencyNames,
@@ -25,8 +31,8 @@ const externalDependencies = [
  */
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
     build: {
+      externalizeDeps: { exclude: bundledWorkspaceDependencies },
       rollupOptions: {
         // Keep separately emitted manager files as runtime imports under Vite 8.
         external: [
@@ -42,6 +48,10 @@ export default defineConfig({
         ],
         input: {
           index: resolve(import.meta.dirname, 'electron/main.ts'),
+          'workspace-worker': resolve(
+            import.meta.dirname,
+            'electron/offline/workspace-worker.ts',
+          ),
           // Add lazy-loaded modules as separate entry points so they're built as separate files
           SystemTrayManager: resolve(
             import.meta.dirname,
@@ -91,8 +101,8 @@ export default defineConfig({
     },
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
     build: {
+      externalizeDeps: { exclude: bundledWorkspaceDependencies },
       rollupOptions: {
         external: externalDependencies,
         input: {
@@ -105,6 +115,10 @@ export default defineConfig({
             import.meta.dirname,
             'electron/preload-live-editor.ts',
           ),
+          'preload-offline-auth': resolve(
+            import.meta.dirname,
+            'electron/preload-offline-auth.ts',
+          ),
         },
         output: {
           format: 'cjs',
@@ -115,6 +129,16 @@ export default defineConfig({
       sourcemap: true,
     },
   },
-  // Renderer is omitted - Next.js handles it via WebView architecture
-  // (loads https://corelive.app/ directly, no local renderer entry)
+  renderer: {
+    root: resolve(import.meta.dirname, 'renderer'),
+    base: './',
+    build: {
+      outDir: resolve(import.meta.dirname, 'dist-electron/renderer'),
+      minify: true,
+      sourcemap: true,
+      rollupOptions: {
+        input: resolve(import.meta.dirname, 'renderer/index.html'),
+      },
+    },
+  },
 })

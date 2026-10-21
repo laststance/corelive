@@ -1,4 +1,5 @@
 import type { IPCChannel } from '@corelive/desktop-contract/ipc'
+import { OFFLINE_IPC_ARGUMENT_SCHEMAS } from '@corelive/desktop-contract/offline-editor-api'
 import { z } from 'zod'
 
 // Mirror renderer-side caps (`COMPLETED_TITLE_MAX_LENGTH * LIVE_EDITOR_NOTE_LINES_PER_CAP`)
@@ -63,6 +64,10 @@ const rendererReadableConfigPathSchema = z
  *   'config-set': z.tuple([z.string(), z.unknown()]),
  */
 export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
+  ...OFFLINE_IPC_ARGUMENT_SCHEMAS,
+  // Scoped broker handlers validate the full discriminated result and sender themselves.
+  'offline-auth-ready': z.tuple([]),
+  'offline-auth-result': z.tuple([z.unknown()]),
   // ──────────────────────────────────────────────────────────────────────────
   // App (all void-arg)
   // ──────────────────────────────────────────────────────────────────────────

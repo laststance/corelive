@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'vitest'
 
+import type { UserSettingsState } from '@/lib/schemas/settings'
+
 import type { RootState } from '../store'
 
 import reducer, {
@@ -19,7 +21,6 @@ import reducer, {
   setLiveEditorFontSize,
   setLiveEditorTextColor,
   setLiveEditorToastDurationMs,
-  type UserSettingsState,
 } from './settingsSlice'
 
 // Build a RootState-shaped object carrying only the settings slice the

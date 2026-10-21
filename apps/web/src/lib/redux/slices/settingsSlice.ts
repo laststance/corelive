@@ -40,7 +40,6 @@ import type { RootState } from '../store'
 
 // The settings SHAPE is the Zod schema's inferred type (D2 SSoT). Re-exported
 // so sync and test callers share the same canonical type.
-export type { UserSettingsState }
 
 /**
  * Default settings state. Used as initial state and for reset; sourced from

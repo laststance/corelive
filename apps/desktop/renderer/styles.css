@@ -1,0 +1,47 @@
+@import 'tailwindcss' source('.');
+@import 'tw-animate-css';
+@import '@corelive/live-editor/styles/generated.css';
+@import '@corelive/live-editor/styles/typography.css';
+@import '@corelive/live-editor/styles/base.css';
+
+@source '../../../packages/live-editor/src';
+@plugin 'tailwindcss-animate';
+
+html,
+body,
+#root {
+  height: 100%;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+}
+
+/* Native repair controls keep their targets visible even at the minimum panel size. */
+.offline-action {
+  min-height: 44px;
+  min-width: 44px;
+  white-space: normal;
+}
+.offline-field {
+  min-height: 44px;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius);
+  background: var(--background);
+  color: var(--foreground);
+  padding: 8px;
+}
+.offline-field:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot='dialog-content'],
+  [data-slot='dialog-overlay'],
+  [data-slot='popover-content'] {
+    animation: none;
+    transition: none;
+  }
+}

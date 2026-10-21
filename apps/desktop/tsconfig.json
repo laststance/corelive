@@ -12,7 +12,8 @@
     "lib": ["ES2022", "DOM"],
     "types": ["node", "vitest/globals"],
     "allowJs": true,
-    "checkJs": false
+    "checkJs": false,
+    "jsx": "react-jsx"
   },
   "include": [
     "electron/**/*.ts",
@@ -20,8 +21,11 @@
     "*.js",
     "*.mjs",
     "scripts/**/*.js",
+    "scripts/**/*.ts",
     "scripts/**/*.mjs",
-    "scripts/**/*.cjs"
+    "scripts/**/*.cjs",
+    "renderer/**/*.ts",
+    "renderer/**/*.tsx"
   ],
   "exclude": ["node_modules", "dist", "dist-electron"]
 }

@@ -9,6 +9,7 @@
  */
 
 import type { ConfigSection, UpdaterStatus, IPCResponse } from './ipc'
+import type { OfflineEditorAPI, OfflineSettingsAPI } from './offline-editor-api'
 
 /**
  * Electron API exposed to renderer via contextBridge.
@@ -33,6 +34,8 @@ export interface AuthBridge {
   getUser: () => Promise<IPCResponse<'auth-get-user'>>
   setUser: (user: ElectronUserData) => Promise<IPCResponse<'auth-set-user'>>
   logout: () => Promise<boolean>
+  /** Expiry pauses background sync without locking locally prepared writing. */
+  sessionUnavailable?: () => Promise<void>
   isAuthenticated: () => Promise<boolean>
   syncFromWeb: (authData: ElectronUserData) => Promise<boolean>
 }
@@ -51,6 +54,7 @@ export interface OAuthBridge {
 }
 
 export interface ElectronAPI {
+  offlineSettings?: OfflineSettingsAPI
   /**
    * Authentication operations.
    */
@@ -232,6 +236,7 @@ export interface ElectronEnv {
  * - `spaces.*` — macOS Spaces tracking for the panel
  */
 export interface LiveEditorAPI {
+  workspace?: OfflineEditorAPI
   window: {
     /** Hide the LiveEditor window (kept in memory for fast re-show). */
     close: () => Promise<void>

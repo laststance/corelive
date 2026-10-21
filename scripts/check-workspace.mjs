@@ -42,5 +42,12 @@ for (const file of files) {
     )
   )
     errors.push(`Unsafe shared import: ${file}`)
+  if (
+    file.startsWith('packages/live-editor/src/') &&
+    /(?:from|import\()\s*['"](?:@\/|next(?:\/|['"])|@clerk\/|@orpc\/server|electron['"]|node:|(?:\.\.\/)+apps\/)/.test(
+      source,
+    )
+  )
+    errors.push(`Application dependency in shared editor: ${file}`)
 }
 if (errors.length) throw new Error(errors.join('\n'))

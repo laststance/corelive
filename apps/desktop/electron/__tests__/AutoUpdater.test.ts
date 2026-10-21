@@ -356,10 +356,35 @@ describe('AutoUpdater download progress', () => {
       electronMocks.mockAutoUpdater.checkForUpdatesAndNotify,
     ).not.toHaveBeenCalled()
     expect(updater.getUpdateStatus().updateDownloaded).toBe(true)
-    updater.quitAndInstall()
+    await updater.quitAndInstall()
     expect(electronMocks.mockAutoUpdater.quitAndInstall).toHaveBeenCalledOnce()
     updater.cleanup()
   })
+
+  test.each(['failed', 'rejected'] as const)(
+    'a %s final writing save prevents an updater restart',
+    async (outcome) => {
+      // Arrange
+      const updater = new AutoUpdater(async () => {
+        if (outcome === 'rejected') throw new Error('Storage unavailable')
+        return false
+      })
+      electronMocks.mockAutoUpdater.emit('update-downloaded', {
+        version: '99.0.0',
+      })
+
+      // Act
+      const restarted = await updater.quitAndInstall()
+
+      // Assert
+      expect(restarted).toBe(false)
+      expect(
+        electronMocks.mockAutoUpdater.quitAndInstall,
+      ).not.toHaveBeenCalled()
+      expect(updater.getUpdateStatus().updateDownloaded).toBe(true)
+      updater.cleanup()
+    },
+  )
 
   test('keeps the restart action when a concurrent update check fails after a download completes', async () => {
     // Arrange

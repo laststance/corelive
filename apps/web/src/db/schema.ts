@@ -9,6 +9,7 @@
  *
  * @module db/schema
  */
+import type { CompletionSyncReceipt } from '@corelive/desktop-contract/offline-workspace'
 import { sql } from 'drizzle-orm'
 import {
   boolean,
@@ -17,7 +18,9 @@ import {
   foreignKey,
   index,
   integer,
+  jsonb,
   pgTable,
+  primaryKey,
   serial,
   text,
   timestamp,
@@ -212,6 +215,51 @@ export const completedTable = pgTable(
       .onUpdate('cascade')
       .onDelete('restrict'),
   ],
+)
+
+/** Durable sync identity/tombstone; retained until its account is deleted. */
+export const completionSyncStateTable = pgTable(
+  'CompletionSyncState',
+  {
+    userId: integer('userId')
+      .notNull()
+      .references(() => userTable.id, { onDelete: 'cascade' }),
+    completionId: text('completionId').notNull(),
+    revision: integer('revision').notNull(),
+    cancelled: boolean('cancelled').notNull().default(false),
+    completedId: integer('completedId').references(() => completedTable.id, {
+      onDelete: 'set null',
+    }),
+    categoryId: integer('categoryId').notNull(),
+    title: varchar('title', { length: 255 }).notNull(),
+    completedAt: timestampColumn('completedAt').notNull(),
+    originalCompletedAt: timestampColumn('originalCompletedAt').notNull(),
+    timezone: text('timezone').notNull(),
+    deviceId: text('deviceId').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.completionId] }),
+    index('CompletionSyncState_userId_categoryId_idx').on(
+      table.userId,
+      table.categoryId,
+    ),
+    uniqueIndex('CompletionSyncState_completedId_key').on(table.completedId),
+  ],
+)
+
+/** Immutable operation evidence prevents replay after response loss or late cancellation. */
+export const completionSyncReceiptTable = pgTable(
+  'CompletionSyncReceipt',
+  {
+    userId: integer('userId')
+      .notNull()
+      .references(() => userTable.id, { onDelete: 'cascade' }),
+    operationId: text('operationId').notNull(),
+    payloadDigest: text('payloadDigest').notNull(),
+    outcome: jsonb('outcome').$type<CompletionSyncReceipt>().notNull(),
+    createdAt: createdAtColumn(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.operationId] })],
 )
 
 export const importBatchTable = pgTable(

@@ -30,4 +30,4 @@ html
 
 # Generated (machine-written; formatting is owned by scripts/generate-theme-css.ts
 # so prettier must not reformat it and break the generated-not-stale CI check)
-apps/web/src/lib/themes/generated.css
+packages/live-editor/src/styles/generated.css
