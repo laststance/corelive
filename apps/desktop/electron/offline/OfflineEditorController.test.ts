@@ -10,13 +10,23 @@ import {
 } from '@corelive/desktop-contract/offline-workspace'
 import { UserSettingsStateSchema } from '@corelive/desktop-contract/settings'
 import { DurableEditorStore } from '@corelive/live-editor/store'
+import type { BrowserWindow } from 'electron'
 import { afterEach, expect, test, vi } from 'vitest'
+
+import type { WindowManager } from '../WindowManager'
 
 import { AtomicWorkspaceFile } from './AtomicWorkspaceFile'
 import { OfflineAccountRegistry } from './OfflineAccountRegistry'
 import { OfflineEditorController } from './OfflineEditorController'
+import { OfflineEditorIPC } from './OfflineEditorIPC'
 import type { WorkspaceWorkerCalls } from './workspace-worker-protocol'
 import { WorkspaceWorkerClient } from './WorkspaceWorkerClient'
+
+vi.mock('electron', () => ({
+  ipcMain: { handle: vi.fn() },
+  clipboard: { writeText: vi.fn() },
+  dialog: { showSaveDialog: vi.fn() },
+}))
 
 type Options = ConstructorParameters<typeof OfflineEditorController>[0]
 const cleanups: (() => Promise<void>)[] = []
@@ -47,13 +57,17 @@ async function createFixture(
   const directory = await mkdtemp(join(tmpdir(), 'corelive-controller-'))
   const registry = new OfflineAccountRegistry(directory)
   await registry.read()
-  const actor = (ownerId: string): WorkspaceWorkerClient =>
-    new WorkspaceWorkerClient({
+  const workers: WorkspaceWorkerClient[] = []
+  const actor = (ownerId: string): WorkspaceWorkerClient => {
+    const worker = new WorkspaceWorkerClient({
       directory: join(directory, 'workspaces'),
       ownerId,
       script: new URL('./workspace-worker.ts', import.meta.url),
       execArgv: ['--import', 'tsx'],
     })
+    workers.push(worker)
+    return worker
+  }
   if (prepared) {
     const worker = actor('account-a')
     await worker.call('prepare', {
@@ -72,7 +86,7 @@ async function createFixture(
     })),
     reset: vi.fn(),
   }
-  const requestFlush = vi.fn(async () => true)
+  const requestFlush = vi.fn<Options['requestFlush']>(async () => true)
   const snapshots: OfflineEditorSnapshot[] = []
   const options: Options = {
     directory,
@@ -94,6 +108,8 @@ async function createFixture(
   cleanups.push(async () => {
     requestFlush.mockResolvedValue(true)
     await controller.shutdown()
+    // Failed-exit cases intentionally retain actors; only these synthetic workers are terminated.
+    await Promise.all(workers.map(async (worker) => worker.close()))
     await rm(directory, { recursive: true })
   })
   return {
@@ -379,6 +395,393 @@ test('a failed final save cancels logout and leaves the same account available f
     generation: 0,
   })
   expect((await registry.read()).activeAccountId).toBe('account-a')
+})
+
+test.each(['failed', 'rejected'] as const)(
+  'a %s account-switch save preserves the current account and accepts a later save',
+  async (failure) => {
+    // Arrange
+    const { controller, requestFlush, registry, broker, snapshots } =
+      await createFixture(true)
+    await controller.initialize()
+    const release = deferred()
+    requestFlush.mockImplementation(async () => {
+      await release.promise
+      if (failure === 'rejected') throw new Error('Synthetic flush failure')
+      return false
+    })
+    broker.acquire.mockClear()
+    const lock = vi.spyOn(registry, 'lock')
+
+    // Act: repeated login notifications must share the pending transition.
+    for (let notification = 0; notification < 8; notification++)
+      controller.authenticated('account-b', true)
+    try {
+      expect(requestFlush).toHaveBeenCalledOnce()
+      expect(controller.getSnapshot()).toMatchObject({
+        phase: 'ready',
+        generation: 0,
+        workspace: { ownerId: 'account-a' },
+      })
+    } finally {
+      release.resolve()
+    }
+    await new Promise<void>((resolve) => setImmediate(resolve))
+
+    // Assert: no generation/phase/registry change can clear the live editor.
+    expect(snapshots.every((snapshot) => snapshot.phase === 'ready')).toBe(true)
+    expect(lock).not.toHaveBeenCalled()
+    expect(broker.acquire).not.toHaveBeenCalled()
+    expect((await registry.read()).activeAccountId).toBe('account-a')
+    const snapshot = controller.getSnapshot()
+    if (snapshot.phase !== 'ready') throw new Error('Current editor was lost')
+    await expect(
+      controller.command(0, {
+        type: 'save',
+        commandId: randomUUID(),
+        categoryId: 1,
+        baseRevision: snapshot.workspace.draft.revision,
+        rows: [{ id: randomUUID(), text: 'Writing can still be saved' }],
+      }),
+    ).resolves.toMatchObject({ ok: true, generation: 0 })
+    controller.authenticated('account-b', true)
+    expect(requestFlush).toHaveBeenCalledTimes(2)
+    await new Promise<void>((resolve) => setImmediate(resolve))
+  },
+)
+
+test('account switching waits for the departing draft to commit before opening the next account', async () => {
+  // Arrange
+  const { controller, requestFlush, broker, registry, directory } =
+    await createFixture(true)
+  await controller.initialize()
+  const snapshot = controller.getSnapshot()
+  if (snapshot.phase !== 'ready') throw new Error('Missing prepared account')
+  const release = deferred()
+  requestFlush.mockImplementation(async (generation) => {
+    await release.promise
+    const result = await controller.command(generation, {
+      type: 'save',
+      commandId: randomUUID(),
+      categoryId: 1,
+      baseRevision: snapshot.workspace.draft.revision,
+      rows: [{ id: randomUUID(), text: 'Final writing from account A' }],
+    })
+    return result.ok
+  })
+  broker.acquire.mockClear()
+  const lock = vi.spyOn(registry, 'lock')
+
+  // Act
+  controller.authenticated('account-b', true)
+  try {
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: 'ready',
+      generation: 0,
+    })
+    expect(lock).not.toHaveBeenCalled()
+    expect(broker.acquire).not.toHaveBeenCalled()
+  } finally {
+    release.resolve()
+  }
+  await vi.waitFor(() =>
+    expect(broker.acquire).toHaveBeenCalledWith('account-b', 1),
+  )
+
+  // Assert: the actual departing account file contains its last acknowledged text.
+  const file = new AtomicWorkspaceFile({
+    directory: join(directory, 'workspaces'),
+    ownerId: 'account-a',
+    parse: OfflineWorkspaceSchema.parse,
+  })
+  expect((await file.read()).drafts['1']).toMatchObject({
+    rows: [{ text: 'Final writing from account A' }],
+  })
+  expect(lock).toHaveBeenCalledOnce()
+})
+
+test('only the latest login notification can proceed after a shared departing-account flush', async () => {
+  // Arrange
+  const { controller, requestFlush, broker } = await createFixture(true)
+  await controller.initialize()
+  const release = deferred()
+  requestFlush.mockImplementation(async () => {
+    await release.promise
+    return true
+  })
+  broker.acquire.mockClear()
+
+  // Act: repeated owner IDs must not allow an older attempt to win.
+  for (const owner of ['b', 'c', 'b', 'd', 'b', 'e', 'f', 'b'])
+    controller.authenticated(`account-${owner}`, true)
+  try {
+    expect(broker.acquire).not.toHaveBeenCalled()
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: 'ready',
+      generation: 0,
+    })
+  } finally {
+    release.resolve()
+  }
+  await vi.waitFor(() => expect(broker.acquire).toHaveBeenCalledOnce())
+
+  // Assert
+  expect(broker.acquire).toHaveBeenCalledWith('account-b', 1)
+})
+
+test('logout during an account-switch flush cannot be undone by its late successful reply', async () => {
+  // Arrange
+  const { controller, requestFlush, broker, registry } =
+    await createFixture(true)
+  await controller.initialize()
+  const release = deferred()
+  requestFlush.mockImplementationOnce(async () => {
+    await release.promise
+    return true
+  })
+  broker.acquire.mockClear()
+
+  // Act
+  controller.authenticated('account-b', true)
+  try {
+    expect(await controller.signOut()).toBe(true)
+  } finally {
+    release.resolve()
+  }
+  await new Promise<void>((resolve) => setImmediate(resolve))
+
+  // Assert
+  expect(controller.getSnapshot()).toEqual({ phase: 'locked', generation: 1 })
+  expect((await registry.read()).activeAccountId).toBeNull()
+  expect(broker.acquire).not.toHaveBeenCalled()
+})
+
+test('logging back into the active account supersedes a pending switch and restores editing', async () => {
+  // Arrange
+  const { controller, requestFlush, broker, registry } = await createFixture(
+    true,
+    {
+      transport: () => ({
+        bootstrap: async () => ({
+          accountId: 'account-a',
+          categories: [category],
+          deletions: [],
+        }),
+        apply: async () => ({ receipts: [] }),
+        receipts: async () => ({ receipts: [] }),
+        checkpoint: async () => {
+          throw new Error('No count response')
+        },
+      }),
+    },
+  )
+  await controller.initialize()
+  const release = deferred()
+  requestFlush.mockImplementation(async () => {
+    await release.promise
+    return true
+  })
+  broker.acquire.mockClear()
+  broker.acquire.mockImplementation(async (expectedAccountId, generation) => ({
+    status: 'ready',
+    credential: {
+      status: 'ready',
+      requestId: randomUUID(),
+      expectedAccountId,
+      generation,
+      accountId: 'account-a',
+      token: 'synthetic-test-token',
+    },
+  }))
+
+  // Act
+  controller.authenticated('account-b', true)
+  controller.authenticated('account-a', true)
+  release.resolve()
+  await vi.waitFor(() =>
+    expect(controller.getSnapshot()).toMatchObject({
+      phase: 'ready',
+      generation: 1,
+      workspace: { ownerId: 'account-a' },
+    }),
+  )
+
+  // Assert: the new generation also releases the retained renderer's exit barrier.
+  expect(broker.acquire).toHaveBeenCalledWith('account-a', 1)
+  expect(broker.acquire).not.toHaveBeenCalledWith('account-b', 1)
+  expect((await registry.read()).activeAccountId).toBe('account-a')
+  const snapshot = controller.getSnapshot()
+  if (snapshot.phase !== 'ready') throw new Error('Current editor was lost')
+  await expect(
+    controller.command(1, {
+      type: 'save',
+      commandId: randomUUID(),
+      categoryId: 1,
+      baseRevision: snapshot.workspace.draft.revision,
+      rows: [{ id: randomUUID(), text: 'Editing continues in account A' }],
+    }),
+  ).resolves.toMatchObject({ ok: true, generation: 1 })
+})
+
+test.each(['crashed', 'loading', 'destroyed', 'contents-destroyed', 'missing'])(
+  'a %s renderer cannot allow normal exit to discard main-retained writing',
+  async (state) => {
+    // Arrange: capacity rejection keeps a real failed-save rescue in main.
+    const { controller, requestFlush } = await createFixture(true)
+    await controller.initialize()
+    const snapshot = controller.getSnapshot()
+    if (snapshot.phase !== 'ready') throw new Error('Missing prepared account')
+    const editor = {
+      isDestroyed: () => state === 'destroyed',
+      webContents: {
+        isDestroyed: () => state === 'contents-destroyed',
+        isLoadingMainFrame: () => state === 'loading',
+        isCrashed: () => state === 'crashed',
+        send: vi.fn(),
+      },
+    }
+    const ipc = new OfflineEditorIPC(
+      {
+        getLiveEditorWindow: () =>
+          state === 'missing' ? null : (editor as unknown as BrowserWindow),
+      } as unknown as WindowManager,
+      controller,
+    )
+    requestFlush.mockImplementation(async (generation) => ipc.flush(generation))
+    const save = {
+      type: 'save' as const,
+      commandId: randomUUID(),
+      categoryId: 1,
+      baseRevision: snapshot.workspace.draft.revision,
+      rows: [{ id: randomUUID(), text: 'x'.repeat(51001) }],
+    }
+    await expect(controller.command(0, save)).resolves.toMatchObject({
+      ok: false,
+      reason: 'invalid-row',
+    })
+
+    // Act / Assert: no unreachable renderer challenge and no destructive exit.
+    await expect(ipc.flush(0)).resolves.toBe(false)
+    await expect(controller.shutdown()).resolves.toBe(false)
+    expect(editor.webContents.send).not.toHaveBeenCalled()
+    controller.retryPreparation()
+    await vi.waitFor(() =>
+      expect(controller.getSnapshot()).toMatchObject({ unsavedDraft: save }),
+    )
+
+    // A successful recovery ACK removes the rescue and permits a later exit.
+    await expect(
+      controller.command(0, {
+        ...save,
+        commandId: randomUUID(),
+        rows: [{ id: randomUUID(), text: 'Recovered writing' }],
+      }),
+    ).resolves.toMatchObject({ ok: true })
+    await expect(controller.shutdown()).resolves.toBe(true)
+  },
+)
+
+test('normal exit waits for a main-process writing command even when the renderer is unavailable', async () => {
+  // Arrange
+  const { controller, options } = await createFixture(true)
+  const reached = deferred()
+  const release = deferred()
+  const originalActor = options.actor!
+  options.actor = (ownerId) => {
+    const worker = originalActor(ownerId)
+    const originalCall = worker.call.bind(worker)
+    worker.call = async <K extends keyof WorkspaceWorkerCalls>(
+      method: K,
+      input: WorkspaceWorkerCalls[K]['input'],
+    ): Promise<WorkspaceWorkerCalls[K]['output']> => {
+      if (method === 'command') {
+        reached.resolve()
+        await release.promise
+      }
+      return originalCall(method, input)
+    }
+    return worker
+  }
+  await controller.initialize()
+  const snapshot = controller.getSnapshot()
+  if (snapshot.phase !== 'ready') throw new Error('Missing prepared account')
+  const save = controller.command(0, {
+    type: 'save',
+    commandId: randomUUID(),
+    categoryId: 1,
+    baseRevision: snapshot.workspace.draft.revision,
+    rows: [{ id: randomUUID(), text: 'In-flight writing survives' }],
+  })
+  await reached.promise
+
+  // Act / Assert: a true renderer no-op cannot bypass an unresolved main command.
+  try {
+    await expect(controller.shutdown()).resolves.toBe(false)
+  } finally {
+    release.resolve()
+    await save
+  }
+  await expect(save).resolves.toMatchObject({ ok: true })
+  await expect(controller.draft(0, 1)).resolves.toMatchObject({
+    draft: { rows: [{ text: 'In-flight writing survives' }] },
+  })
+  await expect(controller.shutdown()).resolves.toBe(true)
+})
+
+test('a newer login arriving immediately after the flush acknowledgement owns the transition', async () => {
+  // Arrange
+  const { controller, requestFlush, broker } = await createFixture(true)
+  await controller.initialize()
+  broker.acquire.mockClear()
+  let finishFlush!: (saved: boolean) => void
+  const flush = new Promise<boolean>((resolve) => {
+    finishFlush = resolve
+  })
+  requestFlush.mockReturnValueOnce(flush)
+
+  // Act: run the newer notification between the flush continuation and its caller.
+  controller.authenticated('account-b', true)
+  finishFlush(true)
+  queueMicrotask(() => {
+    queueMicrotask(() => controller.authenticated('account-c', true))
+  })
+  await vi.waitFor(() => expect(broker.acquire).toHaveBeenCalledOnce())
+
+  // Assert
+  expect(broker.acquire).toHaveBeenCalledWith('account-c', 1)
+})
+
+test('an obsolete account lock cannot restart authentication after a newer login has taken over', async () => {
+  // Arrange
+  const { controller, broker, registry } = await createFixture(true)
+  await controller.initialize()
+  broker.acquire.mockClear()
+  const reached = deferred()
+  const release = deferred()
+  const originalLock = registry.lock.bind(registry)
+  vi.spyOn(registry, 'lock').mockImplementationOnce(async () => {
+    const state = await originalLock()
+    reached.resolve()
+    await release.promise
+    return state
+  })
+
+  // Act: the old disk operation finishes, but its reply arrives after another login.
+  controller.authenticated('account-b', true)
+  await reached.promise
+  try {
+    controller.authenticated('account-c', true)
+    await vi.waitFor(() =>
+      expect(broker.acquire).toHaveBeenCalledWith('account-c', 2),
+    )
+  } finally {
+    release.resolve()
+  }
+  await new Promise<void>((resolve) => setImmediate(resolve))
+
+  // Assert
+  expect(broker.acquire).toHaveBeenCalledOnce()
+  expect(broker.acquire).toHaveBeenCalledWith('account-c', 2)
 })
 
 test('a failed account lock cancels logout without stranding the prepared editor', async () => {

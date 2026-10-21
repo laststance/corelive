@@ -71,7 +71,7 @@ export function isTrustedAuthSender(
  * Binds the local editor and remote Settings to their narrow main-process capabilities.
  * Main constructs this once, before loading either renderer. Reads recheck generation
  * after worker/dialog awaits so an account switch cannot disclose an earlier result.
- * @example const ipc = new OfflineEditorIPC(windowManager, () => controller)
+ * @example const ipc = new OfflineEditorIPC(windowManager, controller)
  */
 export class OfflineEditorIPC {
   private pending: PendingFlush | null = null
@@ -293,9 +293,14 @@ export class OfflineEditorIPC {
     if (
       !editor ||
       editor.isDestroyed() ||
-      editor.webContents.isLoadingMainFrame()
-    )
-      return Promise.resolve(true)
+      editor.webContents.isDestroyed() ||
+      editor.webContents.isLoadingMainFrame() ||
+      editor.webContents.isCrashed()
+    ) {
+      // A dead renderer cannot reply, but main may still hold recoverable writing.
+      this.finishFlush(false)
+      return this.controller.canLeaveWithoutRenderer(generation)
+    }
     if (
       this.pending?.request.generation === generation &&
       this.pending.sender === editor.webContents

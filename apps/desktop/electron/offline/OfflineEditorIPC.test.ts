@@ -39,6 +39,7 @@ function createFixture() {
       mainFrame: frame,
       isDestroyed: () => false,
       isLoadingMainFrame: () => false,
+      isCrashed: () => false,
       getURL: () => frame.url,
       send: vi.fn(),
     },
@@ -102,6 +103,7 @@ function createFixture() {
   }
   const controller = {
     getSnapshot: () => snapshot,
+    canLeaveWithoutRenderer: vi.fn(() => true),
     retryPreparation: vi.fn(),
     details: vi.fn(async () => ({ total: 0, records: [] })),
     settingsContext: vi.fn(() => ({ generation: 1, preferences })),
@@ -258,6 +260,25 @@ test('a missing flush reply cancels an ordinary exit rather than acknowledging l
 
   // Assert
   await expect(flush).resolves.toBe(false)
+})
+
+test('a crashed editor permits quitting or updating without waiting for an unreachable flush reply', async () => {
+  // Arrange
+  vi.useFakeTimers()
+  const { ipc, editor } = createFixture()
+  vi.spyOn(editor.webContents, 'isCrashed').mockReturnValue(true)
+
+  // Act
+  const flush = ipc.flush(1)
+  try {
+    expect(editor.webContents.send).not.toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
+  } finally {
+    await vi.advanceTimersByTimeAsync(15000)
+  }
+
+  // Assert
+  await expect(flush).resolves.toBe(true)
 })
 
 test('category creation selects only an owned ID verified by the current account refresh', async () => {

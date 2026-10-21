@@ -72,10 +72,11 @@ export class OfflineEditorController {
   private readonly loop: CompletionSyncLoop
   private registryState: OfflineAccountRegistryState | null = null
   private context: AccountContext | null = null
-  private draining: AccountContext | null = null
   private recovery: AccountContext | null = null
   private verifiedOwner: string | null = null
   private preparingOwner: string | null | undefined
+  private preparationAttempt = 0
+  private pendingCommands = 0
   private generation = 0
   private logoutBarrier: Promise<void> | null = null
   private settingsWaiter: SettingsWaiter | null = null
@@ -158,7 +159,10 @@ export class OfflineEditorController {
   authenticated(ownerId: string, fromLogin = false): void {
     // A stale Settings session report after explicit logout cannot silently unlock the account.
     if (this.snapshot.phase === 'locked' && !fromLogin) return
-    if (this.context?.ownerId === ownerId) {
+    if (
+      this.context?.ownerId === ownerId &&
+      this.preparingOwner === undefined
+    ) {
       this.loop.wake()
       return
     }
@@ -191,8 +195,8 @@ export class OfflineEditorController {
   }
 
   /**
-   * Commits a generation-bound editor command. During an account transition only
-   * a challenged final draft save may finish in the departing account partition.
+   * Commits a generation-bound editor command. The departing account remains
+   * active until its challenged final save finishes, then old commands are rejected.
    * @example await controller.command(generation, command)
    */
   async command(
@@ -203,12 +207,9 @@ export class OfflineEditorController {
     if (!parsed.success) return { ok: false, reason: 'invalid-command' }
     const command = parsed.data
     const context =
-      this.context?.generation === generation
-        ? this.context
-        : command.type === 'save' && this.draining?.generation === generation
-          ? this.draining
-          : null
+      this.context?.generation === generation ? this.context : null
     if (!context) return { ok: false, reason: 'account-changed' }
+    this.pendingCommands++
     try {
       const { writtenDraft, ...view } = await context.worker.call(
         'command',
@@ -234,7 +235,25 @@ export class OfflineEditorController {
       if (command.type === 'save' && reason !== 'revision-conflict')
         this.failedDrafts.set(context.ownerId, command)
       return { ok: false, reason }
+    } finally {
+      this.pendingCommands--
     }
+  }
+
+  /**
+   * Protects main-retained writing when no renderer can answer a flush challenge.
+   * {@link OfflineEditorIPC.flush} checks this for an unavailable renderer, and
+   * {@link OfflineEditorController.shutdown} rechecks after awaiting any flush.
+   * @param generation - The account generation challenged before the asynchronous exit.
+   * @returns Whether no command or failed-save rescue can be discarded by that exit.
+   * @example if (!controller.canLeaveWithoutRenderer(generation)) return false
+   */
+  canLeaveWithoutRenderer(generation: number): boolean {
+    return (
+      generation === this.generation &&
+      this.pendingCommands === 0 &&
+      this.failedDrafts.size === 0
+    )
   }
 
   /** Returns the verified account's settings authority; no other account receives its preferences.
@@ -309,7 +328,6 @@ export class OfflineEditorController {
       this.registryState = await this.registry.lock()
       this.generation++
       this.context = null
-      this.draining = null
       this.recovery = null
       this.verifiedOwner = null
       this.preparingOwner = undefined
@@ -427,7 +445,12 @@ export class OfflineEditorController {
    * @example if (await controller.shutdown()) app.quit()
    */
   async shutdown(): Promise<boolean> {
-    if (!(await this.options.requestFlush(this.generation))) return false
+    const generation = this.generation
+    if (
+      !(await this.options.requestFlush(generation)) ||
+      !this.canLeaveWithoutRenderer(generation)
+    )
+      return false
     this.generation++
     this.context = null
     this.cancelPreparation()
@@ -448,25 +471,21 @@ export class OfflineEditorController {
    */
   private async prepare(expectedOwner: string | null): Promise<void> {
     const previous = this.context
-    const flush = previous
-      ? this.options.requestFlush(previous.generation)
-      : Promise.resolve(true)
-    this.draining = previous
-    this.context = null
-    this.recovery = null
-    const generation = ++this.generation
-    this.cancelPreparation()
-    this.loop.stop()
-    this.options.broker.reset()
-    this.verifiedOwner = null
+    const attempt = ++this.preparationAttempt
     this.preparingOwner = expectedOwner
-    this.publish({ phase: 'preparing', generation })
+    if (previous && !(await this.flushForPreparation(previous))) {
+      if (attempt === this.preparationAttempt) this.preparingOwner = undefined
+      return
+    }
+    const generation = this.beginPreparation(previous, attempt)
+    if (generation === null) return
     try {
-      const flushed = await flush
-      if (generation !== this.generation) return
-      this.draining = null
-      if (previous) this.registryState = await this.registry.lock()
-      if (!flushed) throw new WorkspaceWorkerError('storage-failed')
+      if (previous) {
+        const registryState = await this.registry.lock()
+        // A superseded lock reply must not reset a newer authentication request.
+        if (generation !== this.generation) return
+        this.registryState = registryState
+      }
       const token = await this.options.broker.acquire(expectedOwner, generation)
       if (generation !== this.generation) return
       if (token.status !== 'ready')
@@ -497,12 +516,7 @@ export class OfflineEditorController {
           legacyNotes: this.options.legacyNotes(),
         })
       } catch (error) {
-        if (
-          !(error instanceof WorkspaceWorkerError) ||
-          error.reason !== 'missing' ||
-          this.registryState?.preparedAccounts.includes(ownerId)
-        )
-          throw error
+        this.assertFirstPreparation(ownerId, error)
         const preferences = await this.waitForSettings(ownerId, generation)
         if (generation !== this.generation) return
         view = await worker.call('prepare', {
@@ -530,6 +544,55 @@ export class OfflineEditorController {
     }
   }
 
+  /**
+   * Keeps the departing editor available until its final save succeeds.
+   * {@link OfflineEditorController.prepare} calls this before changing any account
+   * authority; {@link OfflineEditorController.beginPreparation} rechecks ownership
+   * synchronously after this asynchronous wait.
+   * @param context - The active account captured before the flush challenge.
+   * @returns Whether the final save succeeded, without authorizing a transition.
+   * @example if (!(await this.flushForPreparation(context))) return
+   */
+  private async flushForPreparation(context: AccountContext): Promise<boolean> {
+    const flushed = await this.options
+      .requestFlush(context.generation)
+      .catch(() => false)
+    if (!flushed) return false
+    // Logout must finish its durable lock before preparation can inspect authority.
+    while (this.logoutBarrier) await this.logoutBarrier
+    return true
+  }
+
+  /**
+   * Claims the latest prepared-account transition without yielding after validation.
+   * {@link OfflineEditorController.prepare} calls this after the departing save;
+   * a newer login, logout or shutdown makes that completed flush obsolete.
+   * @param previous - The account whose live buffer was just flushed, if any.
+   * @param attempt - Distinguishes overlapping logins, including repeated owner IDs.
+   * @returns The claimed generation, or null when another transition took ownership.
+   * @example const generation = this.beginPreparation(previous, attempt)
+   */
+  private beginPreparation(
+    previous: AccountContext | null,
+    attempt: number,
+  ): number | null {
+    if (
+      attempt !== this.preparationAttempt ||
+      this.context !== previous ||
+      (previous && this.generation !== previous.generation)
+    )
+      return null
+    this.context = null
+    this.recovery = null
+    const generation = ++this.generation
+    this.cancelPreparation()
+    this.loop.stop()
+    this.options.broker.reset()
+    this.verifiedOwner = null
+    this.publish({ phase: 'preparing', generation })
+    return generation
+  }
+
   /** Requires broker and API identity to match the requested account before opening its files.
    * @example this.assertPreparationAccount(apiOwner, tokenOwner, expectedOwner)
    */
@@ -540,6 +603,22 @@ export class OfflineEditorController {
   ): void {
     if (owner !== tokenOwner || (expectedOwner && owner !== expectedOwner))
       throw new WorkspaceWorkerError('sign-in-required')
+  }
+
+  /**
+   * Allows first preparation only for a missing account that was never prepared.
+   * {@link OfflineEditorController.prepare} calls this after an open failure so
+   * damaged or previously prepared workspaces cannot be replaced with empty data.
+   * @throws The original open error when recovery is required instead.
+   * @example this.assertFirstPreparation(ownerId, error)
+   */
+  private assertFirstPreparation(ownerId: string, error: unknown): void {
+    if (
+      !(error instanceof WorkspaceWorkerError) ||
+      error.reason !== 'missing' ||
+      this.registryState?.preparedAccounts.includes(ownerId)
+    )
+      throw error
   }
 
   /** Chooses recovery or a bounded preparation retry without unlocking a stale account generation.
