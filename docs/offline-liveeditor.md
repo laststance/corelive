@@ -34,9 +34,9 @@ configuration and are not exposed to another account.
 | `Sign in to sync completions`            | Writing remains available; renew the account's session to resume sending completions.         |
 
 A local save failure takes priority over connectivity messages. Failed saving
-cancels normal hide, close, category switch, quit and update installation. Retry
-does not automatically repeat an earlier quit request. Force termination can
-lose writing that has not been acknowledged.
+cancels normal hide, close, category switch, account switch, quit and update
+installation. Retry does not automatically repeat an earlier quit request.
+Force termination can lose writing that has not been acknowledged.
 
 **Drafts stay on this Mac.** Completion records and their cancellation, category
 and time updates synchronize to the account. Cross-device draft synchronization
