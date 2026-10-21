@@ -16,6 +16,7 @@ import { useEditorWindowSettings } from '@corelive/live-editor/window-settings'
 import {
   useCallback,
   useEffect,
+  useEffectEvent,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -127,8 +128,17 @@ function PreparedEditor({
     refreshWindow,
     reportWindowError,
   )
-  // eslint-disable-next-line react-you-might-not-need-an-effect/no-pass-data-to-parent -- subscribe to a native window event, not a parent data callback
-  useEffect(() => store.host.onShown(refreshWindow), [store, refreshWindow])
+  const onNativeShown = useEffectEvent(() => {
+    refreshWindow()
+    // Revealing writing restores its caret; an open Details panel retains its own focus.
+    if (!details) textarea.current?.focus({ preventScroll: true })
+  })
+  // eslint-disable-next-line react-you-might-not-need-an-effect/no-pass-data-to-parent -- native event subscription, not a notification to a parent component
+  useEffect(() => store.host.onShown(onNativeShown), [store])
+  useLayoutEffect(() => {
+    // The first prepared render is ready for immediate shortcut-to-writing capture.
+    textarea.current?.focus({ preventScroll: true })
+  }, [])
   const { workspace } = main
   const { settings } = workspace.preferences
   const online = main.sync === 'idle' || main.sync === 'syncing'
