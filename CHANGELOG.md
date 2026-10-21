@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.25.0] - 2026-10-22
+
+### Added
+
+- Reopen LiveEditor without a connection after one online preparation on the upgraded Mac app. Write, complete lines, and use eligible Undo across restarts with writing saved locally first.
+- Send completed records and their updates after reconnection while preserving their original time, category, and identity. Drafts stay on the Mac; see the [offline LiveEditor guide](docs/offline-liveeditor.md) for preparation and recovery.
+- Inspect pending records in Details, move writing from removed categories, correct completion times, and resolve conflicting updates without replacing newer writing.
+- Export local writing and preview validated recovery copies when a workspace cannot be opened. Preserve damaged files for recovery instead of silently resetting the editor.
+
+### Fixed
+
+- Wait for writing to save before hiding, closing, signing out, quitting, or installing an update. Failed saves keep writing available with Retry and Copy writing actions.
+- Preserve large merged or recovered drafts through later edits, category moves, and restarts without shrinking their retained editing capacity.
+- Keep completion identities distinct through retries and cleanup, and preserve keyboard focus when opening LiveEditor or returning from Details and repair dialogs.
+
 ## [0.24.2] - 2026-10-18
 
 ### Fixed
