@@ -29,7 +29,7 @@ afterEach(() => {
 /** Supplies only synthetic preload values; this regression tests DOM focus, not IPC or disk persistence.
  * @example const fixture = mountEditor()
  */
-function mountEditor() {
+function mountEditor(phase: 'ready' | 'preparing' = 'ready') {
   const shown = new Set<() => void>()
   const snapshot: OfflineEditorSnapshot = {
     phase: 'ready',
@@ -83,7 +83,8 @@ function mountEditor() {
   }
   const host: OfflineEditorAPI = {
     version: 1,
-    snapshot: async () => snapshot,
+    snapshot: async () =>
+      phase === 'preparing' ? { phase, generation: 1 } : snapshot,
     draft: async () => ({ categoryId: 1, draft: snapshot.workspace.draft }),
     command: async () => ({ ok: false, reason: 'unused-in-focus-test' }),
     retry: async () => undefined,
@@ -177,4 +178,19 @@ test('revealing an open Details panel keeps its focus instead of moving to the h
 
   // Assert
   expect(heading).toHaveFocus()
+})
+
+// Regression: ISSUE-002 — preparation must remain discoverable through heading navigation.
+// Found by /qa on 2026-10-22; previous scene probe lost its heading because role=status replaced it.
+test('preparation progress remains a level-one heading with a polite announcement', async () => {
+  // Arrange / Act
+  mountEditor('preparing')
+  const heading = await screen.findByRole('heading', {
+    name: 'Preparing offline access…',
+    level: 1,
+  })
+
+  // Assert
+  expect(heading).toBeVisible()
+  expect(heading).toHaveAttribute('aria-live', 'polite')
 })

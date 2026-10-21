@@ -62,7 +62,7 @@ export function NativeStateScene({
       </div>
       <h1
         className="text-lg font-semibold"
-        role={snapshot.phase === 'preparing' ? 'status' : undefined}
+        aria-live={snapshot.phase === 'preparing' ? 'polite' : undefined}
       >
         {title}
       </h1>
