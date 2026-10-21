@@ -146,10 +146,19 @@ export function NativeDetails({
   onFeedback: (text: string) => void
 }) {
   const heading = useRef<HTMLHeadingElement>(null)
+  const repairOpener = useRef<HTMLElement | null>(null)
   const [offsets, setOffsets] = useState({ details: 0, undo: 0, recovery: 0 })
   const [repair, setRepair] = useState<Repair | null>(null)
   const data = useDetailPages(store, main, offsets)
   const categories = main.workspace.categories
+  const openRepair = (next: Repair): void => {
+    // These dialogs open without a Radix Trigger, so retain their actual opener.
+    repairOpener.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null
+    setRepair(next)
+  }
   useEffect(() => {
     heading.current?.focus()
   }, [])
@@ -167,12 +176,14 @@ export function NativeDetails({
           size="sm"
           variant="outline"
           disabled={offsets[kind] === 0 || data.loading}
-          onClick={() =>
+          onClick={() => {
+            // Pagination may disable its own button; keep Escape within Details.
+            heading.current?.focus()
             setOffsets((current) => ({
               ...current,
               [kind]: Math.max(0, current[kind] - PAGE_SIZE),
             }))
-          }
+          }}
         >
           Previous
         </Button>
@@ -185,12 +196,14 @@ export function NativeDetails({
           size="sm"
           variant="outline"
           disabled={offsets[kind] + PAGE_SIZE >= total || data.loading}
-          onClick={() =>
+          onClick={() => {
+            // Pagination may disable its own button; keep Escape within Details.
+            heading.current?.focus()
             setOffsets((current) => ({
               ...current,
               [kind]: current[kind] + PAGE_SIZE,
             }))
-          }
+          }}
         >
           Next
         </Button>
@@ -251,7 +264,7 @@ export function NativeDetails({
       <RemovedCategories
         categories={categories}
         busy={busy}
-        onRepair={setRepair}
+        onRepair={openRepair}
       />
       {data.pages && (
         <>
@@ -305,7 +318,7 @@ export function NativeDetails({
                   categories={categories}
                   busy={busy}
                   loading={data.loading}
-                  onRepair={setRepair}
+                  onRepair={openRepair}
                   store={store}
                 />
               </article>
@@ -389,7 +402,7 @@ export function NativeDetails({
                       className="offline-action"
                       variant="outline"
                       disabled={busy || data.loading}
-                      onClick={() => setRepair({ kind: 'recovery', copy })}
+                      onClick={() => openRepair({ kind: 'recovery', copy })}
                     >
                       Restore writing
                     </Button>
@@ -441,7 +454,17 @@ export function NativeDetails({
           repair={repair}
           main={main}
           store={store}
-          onClose={() => setRepair(null)}
+          onClose={(saved) => {
+            // Saved repairs can remove their action on the next page refresh.
+            if (saved) repairOpener.current = null
+            setRepair(null)
+          }}
+          restoreFocus={() => {
+            const opener = repairOpener.current
+            if (opener?.isConnected && !opener.matches(':disabled'))
+              opener.focus()
+            else heading.current?.focus()
+          }}
           onFeedback={onFeedback}
         />
       )}
@@ -457,12 +480,14 @@ function RepairDialog({
   main,
   store,
   onClose,
+  restoreFocus,
   onFeedback,
 }: {
   repair: Repair
   main: ReadySnapshot
   store: DurableEditorStore
-  onClose: () => void
+  onClose: (saved: boolean) => void
+  restoreFocus: () => void
   onFeedback: (text: string) => void
 }) {
   const destinations = main.workspace.categories.filter(
@@ -506,7 +531,7 @@ function RepairDialog({
         onFeedback(
           'Change saved on this Mac. Completion updates will sync when connected.',
         )
-        onClose()
+        onClose(true)
       } else
         setError(
           store.getSnapshot().error ??
@@ -526,12 +551,16 @@ function RepairDialog({
     <Dialog
       open
       onOpenChange={(open) => {
-        if (!open && !pending) onClose()
+        if (!open && !pending) onClose(false)
       }}
     >
       <DialogContent
         showCloseButton={false}
         className="max-h-[calc(100dvh-1rem)] gap-3 overflow-y-auto p-4"
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          restoreFocus()
+        }}
         onEscapeKeyDown={(event) => {
           event.stopPropagation()
           if (pending) event.preventDefault()
@@ -579,7 +608,7 @@ function RepairDialog({
           pending={pending}
           destination={destination}
           submit={submit}
-          onClose={onClose}
+          onClose={() => onClose(false)}
         />
       </DialogContent>
     </Dialog>

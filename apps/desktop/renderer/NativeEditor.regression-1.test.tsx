@@ -29,7 +29,11 @@ afterEach(() => {
 /** Supplies only synthetic preload values; this regression tests DOM focus, not IPC or disk persistence.
  * @example const fixture = mountEditor()
  */
-function mountEditor(phase: 'ready' | 'preparing' = 'ready') {
+function mountEditor(
+  phase: 'ready' | 'preparing' = 'ready',
+  paginated = false,
+  removed = false,
+) {
   const shown = new Set<() => void>()
   const snapshot: OfflineEditorSnapshot = {
     phase: 'ready',
@@ -46,7 +50,7 @@ function mountEditor(phase: 'ready' | 'preparing' = 'ready') {
           color: 'blue',
           parentId: null,
           isDefault: true,
-          removed: false,
+          removed,
         },
       ],
       preferences: {
@@ -88,7 +92,7 @@ function mountEditor(phase: 'ready' | 'preparing' = 'ready') {
     draft: async () => ({ categoryId: 1, draft: snapshot.workspace.draft }),
     command: async () => ({ ok: false, reason: 'unused-in-focus-test' }),
     retry: async () => undefined,
-    details: async () => ({ total: 0, records: [] }),
+    details: async () => ({ total: paginated ? 21 : 0, records: [] }),
     undoHistory: async () => ({ total: 0, completions: [] }),
     recoveryCopies: async () => ({ total: 0, copies: [] }),
     signIn: async () => undefined,
@@ -193,4 +197,45 @@ test('preparation progress remains a level-one heading with a polite announcemen
   // Assert
   expect(heading).toBeVisible()
   expect(heading).toHaveAttribute('aria-live', 'polite')
+})
+
+// Regression: ISSUE-004 — disabling a pagination button must not strand focus outside Details.
+// Found by /qa on 2026-10-22; Escape failed after returning to the first page.
+test('changing a Details page keeps keyboard focus in the panel so Escape returns to writing', async () => {
+  // Arrange
+  mountEditor('ready', true)
+  await screen.findByRole('textbox', { name: 'Write one thing' })
+  fireEvent.click(screen.getByRole('button', { name: 'Details' }))
+  const next = await screen.findByRole('button', { name: 'Next' })
+  next.focus()
+
+  // Act
+  fireEvent.click(next)
+
+  // Assert
+  const heading = screen.getByRole('heading', { name: 'Completion details' })
+  await waitFor(() => expect(heading).toHaveFocus())
+  fireEvent.keyDown(heading, { key: 'Escape' })
+  const field = await screen.findByRole('textbox', { name: 'Write one thing' })
+  expect(field).toBeVisible()
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Details' })).toHaveFocus(),
+  )
+})
+
+// Regression: ISSUE-004 — cancelling a programmatic repair must restore its opener.
+test('cancelling a repair returns keyboard focus to the action that opened it', async () => {
+  // Arrange
+  mountEditor('ready', false, true)
+  const details = await screen.findByRole('button', { name: 'Details' })
+  fireEvent.click(details)
+  const opener = await screen.findByRole('button', { name: 'Move writing' })
+  opener.focus()
+  fireEvent.click(opener)
+
+  // Act
+  fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
+
+  // Assert
+  await waitFor(() => expect(opener).toHaveFocus())
 })
