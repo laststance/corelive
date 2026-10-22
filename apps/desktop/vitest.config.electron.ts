@@ -1,14 +1,15 @@
 /// <reference types="vitest/config" />
+import { fileURLToPath } from 'node:url'
+
 import { defineConfig } from 'vitest/config'
 
 // Electron tests configuration
 export default defineConfig({
   test: {
     // Concurrent workspace suites must not clear each other's transformed modules.
-    fsModuleCachePath: new URL(
-      './node_modules/.vitest-electron',
-      import.meta.url,
-    ).pathname,
+    fsModuleCachePath: fileURLToPath(
+      new URL('./node_modules/.vitest-electron', import.meta.url),
+    ),
     name: 'electron',
     environment: 'node',
     globals: true,
