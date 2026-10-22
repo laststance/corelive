@@ -4,7 +4,10 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { STORAGE_SCHEMA_VERSION } from './migratePersistedState'
 import { selectShowInMenuBar } from './slices/electronSettingsSlice'
-import { setShowTodayEmber } from './slices/settingsSlice'
+import {
+  setShowTodayEmber,
+  setLiveEditorShowStatusBar,
+} from './slices/settingsSlice'
 import { createPersistenceMiddleware, STORAGE_KEY } from './store'
 
 /** Hydrates a fresh store through the production migration and merge configuration for upgrade tests.
@@ -92,6 +95,7 @@ describe('settings survive an app update', () => {
 
       // Assert
       expect(reloaded.store.getState().settings).toEqual({
+        liveEditorShowStatusBar: true,
         showTodayEmber: false,
         liveEditorFontFamily: 'serif',
         liveEditorFontSize: 21,
@@ -233,4 +237,49 @@ describe('settings survive an app update', () => {
       startAtLogin: true,
     })
   })
+})
+
+test('hidden status survives a save and fresh store hydration', async () => {
+  // Arrange
+  window.localStorage.clear()
+  const initial = await rehydrateSavedSettings()
+
+  // Act
+  initial.store.dispatch(setLiveEditorShowStatusBar(false))
+  await vi.waitFor(() =>
+    expect(window.localStorage.getItem(STORAGE_KEY)).toContain(
+      '"liveEditorShowStatusBar":false',
+    ),
+  )
+  const reloaded = await rehydrateSavedSettings()
+
+  // Assert
+  expect(reloaded.store.getState().settings.liveEditorShowStatusBar).toBe(false)
+  window.localStorage.clear()
+})
+
+test('corrupt stored visibility repairs only that field and preserves font and native settings', async () => {
+  // Arrange
+  window.localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({
+      version: STORAGE_SCHEMA_VERSION,
+      state: {
+        settings: {
+          liveEditorShowStatusBar: 'invalid',
+          liveEditorFontSize: 22,
+        },
+        electronSettings: { hideAppIcon: true },
+      },
+    }),
+  )
+
+  // Act
+  const loaded = await rehydrateSavedSettings()
+
+  // Assert
+  expect(loaded.store.getState().settings.liveEditorShowStatusBar).toBe(true)
+  expect(loaded.store.getState().settings.liveEditorFontSize).toBe(22)
+  expect(loaded.store.getState().electronSettings.hideAppIcon).toBe(true)
+  window.localStorage.clear()
 })

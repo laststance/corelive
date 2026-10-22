@@ -108,6 +108,21 @@ const config = [
             // the token source (only `gridTemplateColumns` → `grid-cols-*` is).
             'col-span-*',
             // Typography
+            // Named typography utilities in packages/live-editor/src/styles/typography.css.
+            'type-h3',
+            'type-body',
+            'type-small',
+            'settings-label',
+            'settings-section',
+            'settings-theme-grid',
+            'settings-options',
+            'settings-action-row',
+            'leading-5',
+            'leading-7',
+            '@container',
+            'auto-rows-fr',
+            'basis-44',
+            'offline-status-footer',
             'antialiased',
             'subpixel-antialiased',
             'tabular-nums',

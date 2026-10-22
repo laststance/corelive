@@ -1343,7 +1343,7 @@ describe('offline writing and completion transactions', () => {
 
   test('preference patches do not fill defaults over unrelated saved settings', async () => {
     // Arrange
-    const { service } = await createWorkspace()
+    const { service, file } = await createWorkspace()
     await service.execute({
       type: 'preferences',
       commandId: randomUUID(),
@@ -1356,15 +1356,19 @@ describe('offline writing and completion transactions', () => {
       type: 'preferences',
       commandId: randomUUID(),
       expectedRevision: 1,
-      patch: { showTodayEmber: true },
+      patch: { showTodayEmber: true, liveEditorShowStatusBar: false },
     })
 
     // Assert
     expect(state.preferences.settings).toMatchObject({
       showTodayEmber: true,
+      liveEditorShowStatusBar: false,
       liveEditorFontFamily: 'serif',
       liveEditorFontSize: 24,
     })
+    expect(
+      (await file.read()).preferences.settings.liveEditorShowStatusBar,
+    ).toBe(false)
   })
 
   test('an old account receipt cannot mutate the current workspace', async () => {

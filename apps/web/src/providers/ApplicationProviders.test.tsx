@@ -22,9 +22,9 @@ vi.mock('@/components/electron/ElectronStartupSync', () => ({
   },
 }))
 vi.mock('@/components/electron/OfflineSettingsSync', () => ({
-  OfflineSettingsSync: () => {
+  OfflineSettingsSync: ({ children }: { children: ReactNode }) => {
     state.effects('offline-settings')
-    return null
+    return <>{children}</>
   },
 }))
 vi.mock('@/components/live-editor/LocalKeepMergeSync', () => ({

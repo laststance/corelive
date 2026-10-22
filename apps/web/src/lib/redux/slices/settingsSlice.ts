@@ -56,6 +56,12 @@ const userSettingsSlice = createSlice({
   name: 'settings',
   initialState,
   reducers: {
+    /** Saves the routine footer preference from {@link LiveEditorStatusSetting}.
+     * @example dispatch(setLiveEditorShowStatusBar(false))
+     */
+    setLiveEditorShowStatusBar: (state, action: PayloadAction<boolean>) => {
+      state.liveEditorShowStatusBar = action.payload
+    },
     /**
      * Saves Ember visibility when {@link TaskSettings} toggles the shared LiveEditor feedback.
      * @param state - Current settings.
@@ -192,6 +198,7 @@ const userSettingsSlice = createSlice({
 
 // Export actions
 export const {
+  setLiveEditorShowStatusBar,
   setShowTodayEmber,
   setLiveEditorFontFamily,
   setLiveEditorFontSize,
@@ -215,6 +222,14 @@ export const {
  */
 export const selectShowTodayEmber = (state: RootState): boolean =>
   state.settings.showTodayEmber === true
+
+/** Reads footer visibility for Settings, repairing absent/corrupt older preferences.
+ * @example selectLiveEditorShowStatusBar(state)
+ */
+export const selectLiveEditorShowStatusBar = (state: RootState): boolean =>
+  typeof state.settings.liveEditorShowStatusBar === 'boolean'
+    ? state.settings.liveEditorShowStatusBar
+    : true
 
 /**
  * Selects the LiveEditor editor font family.
@@ -276,6 +291,7 @@ export const selectLiveEditorToastDurationMs = (state: RootState): number =>
  * @returns The complete, effective settings state
  */
 export const selectUserSettings = (state: RootState): UserSettingsState => ({
+  liveEditorShowStatusBar: selectLiveEditorShowStatusBar(state),
   showTodayEmber: selectShowTodayEmber(state),
   liveEditorFontFamily: selectLiveEditorFontFamily(state),
   liveEditorFontSize: selectLiveEditorFontSize(state),

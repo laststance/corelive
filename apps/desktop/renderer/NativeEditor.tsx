@@ -28,6 +28,8 @@ import {
 import { NativeDetails } from './NativeDetails'
 import {
   NativeFooter,
+  NativeHeaderActions,
+  NativeStatusActions,
   type ActionFeedback,
   type ActionOutcome,
 } from './NativeFooter'
@@ -117,6 +119,7 @@ function PreparedEditor({
   const textarea = useRef<HTMLTextAreaElement>(null)
   const detailsButton = useRef<HTMLButtonElement>(null)
   const [details, setDetails] = useState(false)
+  const [retrying, setRetrying] = useState(false)
   const [feedback, setFeedback] = useState<ActionFeedback | null>(null)
   useEffect(() => {
     if (feedback?.expiresAt === undefined) return
@@ -254,6 +257,30 @@ function PreparedEditor({
       setFeedback({ text: failure })
     }
   }
+  const retrySave = async (): Promise<void> => {
+    if (retrying) return
+    setRetrying(true)
+    try {
+      await store.retry()
+    } finally {
+      setRetrying(false)
+    }
+  }
+  const statusProps = {
+    retrying,
+    onRetry: retrySave,
+    state,
+    main,
+    store,
+    details,
+    detailsButton,
+    onDetails: (): void => (details ? closeDetails() : setDetails(true)),
+    feedback,
+    onDismiss: (): void => setFeedback(null),
+    onSelect: select,
+    onUndo: undo,
+    run,
+  }
   const today = workspace.today
   const emberContext =
     today.scope === 'device'
@@ -296,20 +323,11 @@ function PreparedEditor({
         ) : undefined
       }
       storageAvailability="ok"
+      nativeHeader={<NativeHeaderActions {...statusProps} />}
       nativeFooter={
-        <NativeFooter
-          state={state}
-          main={main}
-          store={store}
-          details={details}
-          detailsButton={detailsButton}
-          onDetails={() => (details ? closeDetails() : setDetails(true))}
-          feedback={feedback}
-          onDismiss={() => setFeedback(null)}
-          onSelect={select}
-          onUndo={undo}
-          run={run}
-        />
+        settings.liveEditorShowStatusBar ? (
+          <NativeFooter {...statusProps} />
+        ) : undefined
       }
       details={
         details ? (
@@ -318,6 +336,7 @@ function PreparedEditor({
             store={store}
             main={main}
             busy={state.busy}
+            actions={<NativeStatusActions {...statusProps} />}
             onClose={closeDetails}
             onUndo={undo}
             onSelect={select}

@@ -13,6 +13,7 @@ import {
   type OutboxEntry,
   type WorkspaceCommand,
 } from './offline-workspace'
+import type { UserSettingsState } from './settings'
 
 export interface OfflineDetailsPage {
   total: number
@@ -93,6 +94,7 @@ export interface OfflineEditorAPI {
 /** Remote Settings transfers hydrated preferences only for its verified account challenge. */
 export interface OfflineSettingsAPI {
   version: 1
+  supportedKeys?: readonly (keyof UserSettingsState)[]
   read: (accountId: string) => Promise<OfflineSettingsContext | null>
   prepare: (
     accountId: string,

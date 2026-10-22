@@ -1,3 +1,5 @@
+import './layout.css'
+
 import * as React from 'react'
 
 import { AppSidebar } from '@/components/AppSidebar'

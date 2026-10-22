@@ -358,23 +358,24 @@ export const ShortcutOpeningSoundSetting =
 
     return (
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0 space-y-1">
             <Label
               htmlFor={SHORTCUT_OPEN_SOUND_SWITCH_ID}
-              className="text-sm font-medium"
+              className="settings-label"
             >
               Shortcut opening sound
             </Label>
             <p
               id={SHORTCUT_OPEN_SOUND_DESCRIPTION_ID}
-              className="text-xs text-muted-foreground"
+              className="type-small leading-5 text-muted-foreground"
             >
               Play a brief keyboard cue when a shortcut opens LiveEditor
               off-screen.
             </p>
           </div>
           <Switch
+            className="shrink-0"
             id={SHORTCUT_OPEN_SOUND_SWITCH_ID}
             aria-describedby={SHORTCUT_OPEN_SOUND_DESCRIPTION_ID}
             checked={settingState.isEnabled}
@@ -386,17 +387,17 @@ export const ShortcutOpeningSoundSetting =
         <div className="space-y-2">
           <Label
             htmlFor={SHORTCUT_OPEN_SOUND_SELECT_ID}
-            className="text-sm font-medium"
+            className="settings-label"
           >
             Opening sound
           </Label>
           <p
             id={SHORTCUT_OPEN_SOUND_SELECT_DESCRIPTION_ID}
-            className="text-xs text-muted-foreground"
+            className="type-small leading-5 text-muted-foreground"
           >
             Keep the default rotation, or pin one exact keyboard texture.
           </p>
-          <div className="flex items-start gap-2">
+          <div className="settings-action-row flex items-start gap-2">
             <Select
               value={settingState.selection}
               onValueChange={handleShortcutOpeningSoundSelectionChange}
@@ -435,7 +436,7 @@ export const ShortcutOpeningSoundSetting =
           </div>
           <p
             id={SHORTCUT_OPEN_SOUND_CURRENT_CUE_DESCRIPTION_ID}
-            className="text-xs text-muted-foreground"
+            className="type-small leading-5 text-muted-foreground"
           >
             {selectedCueDescription}
           </p>

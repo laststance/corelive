@@ -29,13 +29,14 @@ export function ApplicationProviders({ children }: { children: ReactNode }) {
       <QueryClientProvider>
         <ReduxProvider>
           <ElectronStartupSync />
-          <OfflineSettingsSync />
-          <LocalKeepMergeSync />
-          <ElectronAuthProvider>
-            <CategoryChangeSync />
-            {children}
-          </ElectronAuthProvider>
-          <Toaster />
+          <OfflineSettingsSync>
+            <LocalKeepMergeSync />
+            <ElectronAuthProvider>
+              <CategoryChangeSync />
+              {children}
+            </ElectronAuthProvider>
+            <Toaster />
+          </OfflineSettingsSync>
         </ReduxProvider>
       </QueryClientProvider>
     </ThemeProvider>

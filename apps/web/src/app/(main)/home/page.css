@@ -1,16 +1,3 @@
-.window-drag-region {
-  -webkit-app-region: drag;
-}
-
-.no-drag,
-button,
-a,
-input,
-textarea,
-select {
-  -webkit-app-region: no-drag;
-}
-
 /* macOS Electron window controls spacing */
 /* Add top padding to prevent overlap with traffic lights (28px) + content padding (16px) */
 [data-sidebar='header'] {

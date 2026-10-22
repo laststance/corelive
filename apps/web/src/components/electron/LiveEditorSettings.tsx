@@ -42,6 +42,11 @@ import { cn } from '@/lib/utils'
  */
 interface LiveEditorSettingsProps {
   className?: string
+  children?: (controls: {
+    opacity: React.ReactNode
+    shortcuts: React.ReactNode
+    config: React.ReactNode
+  }) => React.ReactElement
 }
 
 /**
@@ -60,6 +65,7 @@ interface LiveEditorSettingsProps {
  */
 export const LiveEditorSettings = function LiveEditorSettings({
   className,
+  children,
 }: LiveEditorSettingsProps): React.ReactElement {
   const preferencesVersion = useNativeWindowPreferencesVersion()
   const opacityId = useId()
@@ -74,7 +80,12 @@ export const LiveEditorSettings = function LiveEditorSettings({
   // useSyncExternalStore under the hood for tear-free SSR semantics.
   const hasMounted = useMounted()
   const [opacity, setOpacity] = useState<LiveEditorOpacity>(1.0)
-  const [error, setError] = useState<string | null>(null)
+  const [errors, setErrors] = useState<
+    Record<'opacity' | 'shortcuts' | 'config', string | null>
+  >({ opacity: null, shortcuts: null, config: null })
+  const setError = (source: keyof typeof errors, text: string | null): void => {
+    setErrors((current) => ({ ...current, [source]: text }))
+  }
   // Last successfully persisted opacity — a rollback target so we don't restore
   // the in-flight optimistic value (held in `opacity`) while the IPC call pends.
   const lastGoodOpacityRef = useRef<LiveEditorOpacity>(1.0)
@@ -88,7 +99,7 @@ export const LiveEditorSettings = function LiveEditorSettings({
     persist: async (accelerator) =>
       getLiveEditorSettingsAPI()?.setShortcut(accelerator) ??
       Promise.resolve(undefined),
-    onError: setError,
+    onError: (text) => setError('shortcuts', text),
   })
   // Second, equally-live key for the same toggle. `setShortcutSecondary` is
   // optional on the bridge (an installed app's preload is frozen while this web
@@ -102,7 +113,7 @@ export const LiveEditorSettings = function LiveEditorSettings({
     persist: async (accelerator) =>
       getLiveEditorSettingsAPI()?.setShortcutSecondary?.(accelerator) ??
       Promise.resolve(undefined),
-    onError: setError,
+    onError: (text) => setError('shortcuts', text),
   })
 
   // Reload native values on mount and after a save in either open window.
@@ -124,29 +135,39 @@ export const LiveEditorSettings = function LiveEditorSettings({
 
     let cancelled = false
 
+    // Load failures belong beside their controls, even when another group loads successfully.
     void Promise.all([
-      api.getOpacity(),
-      api.getShortcut(),
-      // Newer than the two above — an older preload lacks it, so the optional
-      // call yields undefined and the second box stays hidden (see the render).
-      api.getShortcutSecondary?.() ?? '',
-    ])
-      .then(([op, sc, secondarySc]) => {
-        if (cancelled) return
-        setOpacity(op)
-        setLoadedShortcut(sc)
-        setLoadedSecondaryShortcut(secondarySc)
-        lastGoodOpacityRef.current = op
-      })
-      .catch((loadError: unknown) => {
-        log.error('Failed to load LiveEditor settings:', loadError)
-        if (!cancelled) {
-          setError('Failed to load LiveEditor settings')
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setIsReady(true)
-      })
+      api
+        .getOpacity()
+        .then((op) => {
+          if (cancelled) return
+          setOpacity(op)
+          lastGoodOpacityRef.current = op
+          setError('opacity', null)
+        })
+        .catch((loadError: unknown) => {
+          log.error('Failed to load LiveEditor opacity:', loadError)
+          if (!cancelled) setError('opacity', 'Failed to load window opacity')
+        }),
+      Promise.all([
+        api.getShortcut(),
+        // Older preloads lack the second slot, so keep its capture box hidden.
+        api.getShortcutSecondary?.() ?? '',
+      ])
+        .then(([sc, secondarySc]) => {
+          if (cancelled) return
+          setLoadedShortcut(sc)
+          setLoadedSecondaryShortcut(secondarySc)
+          setError('shortcuts', null)
+        })
+        .catch((loadError: unknown) => {
+          log.error('Failed to load LiveEditor shortcuts:', loadError)
+          if (!cancelled)
+            setError('shortcuts', 'Failed to load toggle shortcuts')
+        }),
+    ]).finally(() => {
+      if (!cancelled) setIsReady(true)
+    })
 
     return (): void => {
       cancelled = true
@@ -162,7 +183,7 @@ export const LiveEditorSettings = function LiveEditorSettings({
   const handleOpacityCommit = async (values: number[]): Promise<void> => {
     const next = values[0]
     if (next === undefined) return
-    setError(null)
+    setError('opacity', null)
     try {
       const applied = await getLiveEditorSettingsAPI()?.setOpacity(next)
       const persisted = typeof applied === 'number' ? applied : next
@@ -174,36 +195,43 @@ export const LiveEditorSettings = function LiveEditorSettings({
       // Roll back to the last value the main process confirmed, not the
       // in-flight optimistic value held in `opacity` state.
       setOpacity(lastGoodOpacityRef.current)
-      setError('Failed to update opacity')
+      setError('opacity', 'Failed to update opacity')
     }
   }
 
   const handleOpenConfigFile = async (): Promise<void> => {
-    setError(null)
+    setError('config', null)
     try {
       const opened = await window.electronAPI?.config?.open()
       if (!opened) {
-        setError('Failed to open config file')
+        setError('config', 'Failed to open config file')
       }
     } catch (err) {
       log.error('Failed to open config file:', err)
-      setError('Failed to open config file')
+      setError('config', 'Failed to open config file')
     }
   }
 
   const opacityValue = [opacity]
 
+  const renderUnavailable = (message: React.ReactNode): React.ReactElement =>
+    children ? (
+      children({ opacity: message, shortcuts: null, config: null })
+    ) : (
+      <>{message}</>
+    )
+
   // Defer the non-Electron fallback until after hydration so server and
   // first client render produce the same markup. Until `hasMounted` is
   // true we keep rendering the "Loading" branch below.
   if (hasMounted && !getLiveEditorSettingsAPI()) {
-    return (
+    return renderUnavailable(
       <SettingsStateCard
         icon={Brain}
         title="LiveEditor Note"
         description="LiveEditor Note is only available in the desktop application."
         className={className}
-      />
+      />,
     )
   }
 
@@ -214,24 +242,24 @@ export const LiveEditorSettings = function LiveEditorSettings({
     (typeof getLiveEditorSettingsAPI()?.getOpacity !== 'function' ||
       typeof getLiveEditorSettingsAPI()?.getShortcut !== 'function')
   ) {
-    return (
+    return renderUnavailable(
       <SettingsStateCard
         icon={Brain}
         title="LiveEditor Note"
         description="Update CoreLive to the latest version to manage LiveEditor Note."
         className={className}
-      />
+      />,
     )
   }
 
   if (!isReady) {
-    return (
+    return renderUnavailable(
       <SettingsStateCard
         icon={Brain}
         title="LiveEditor Note"
         description="Loading LiveEditor settings…"
         className={className}
-      />
+      />,
     )
   }
 
@@ -240,106 +268,132 @@ export const LiveEditorSettings = function LiveEditorSettings({
   // app running an older preload gets the single box it can actually persist.
   const canBindSecondShortcut =
     typeof getLiveEditorSettingsAPI()?.setShortcutSecondary === 'function'
-
-  return (
-    // The "LiveEditor Note" card title collapsed into the LiveEditor section
-    // <h2> (design-review D1 flatten); the behavior copy stays as a lead-in.
-    <div className={cn('space-y-6', className)}>
-      <p className="text-sm text-muted-foreground">
-        A frameless scratchpad for the active category. Checked items become
-        Completed entries with a 5-second undo window.
+  const errorFor = (source: keyof typeof errors): React.ReactNode =>
+    errors[source] && (
+      <p role="alert" className="type-small text-destructive">
+        {errors[source]}
       </p>
-      {error && (
-        <div className="bg-destructive/10 rounded-md p-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
+    )
 
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label
-            htmlFor={opacityId}
-            className="flex items-center gap-2 text-sm font-medium"
-          >
-            <Eye className="h-4 w-4" />
-            Window opacity
-          </Label>
-          <span className="text-xs tabular-nums text-muted-foreground">
-            {opacityPercent}%
-          </span>
-        </div>
-        <Slider
-          id={opacityId}
-          min={LIVE_EDITOR_OPACITY_MIN}
-          max={LIVE_EDITOR_OPACITY_MAX}
-          step={LIVE_EDITOR_OPACITY_STEP}
-          value={opacityValue}
-          onValueChange={handleOpacityChange}
-          onValueCommit={handleOpacityCommit}
-          aria-label="LiveEditor window opacity"
-        />
-
-        <p className="text-xs text-muted-foreground">
-          {Math.round(LIVE_EDITOR_OPACITY_MIN * 100)}% is the minimum so the
-          window stays discoverable.
-        </p>
-      </div>
-
-      <div className="space-y-2">
-        <Label
-          htmlFor={shortcutId}
-          className="flex items-center gap-2 text-sm font-medium"
-        >
-          <Keyboard className="h-4 w-4" />
-          Toggle shortcut
-        </Label>
-        <KeybindingCaptureInput
-          id={shortcutId}
-          value={shortcut}
-          ariaLabel="Toggle shortcut"
-          onChange={handleShortcutCapture}
-        />
-
-        <p className="text-xs text-muted-foreground">
-          Click, then press the keys you want. Esc cancels; Backspace clears it
-          to disable the global shortcut.
-        </p>
-      </div>
-
-      {canBindSecondShortcut && (
+  const controls = {
+    opacity: (
+      <div className="space-y-6">
+        {errorFor('opacity')}
         <div className="space-y-2">
-          <Label
-            htmlFor={secondaryShortcutId}
-            className="flex items-center gap-2 text-sm font-medium"
-          >
-            <Keyboard className="h-4 w-4" />
-            Second toggle shortcut
-          </Label>
-          <KeybindingCaptureInput
-            id={secondaryShortcutId}
-            value={secondaryShortcut}
-            ariaLabel="Second toggle shortcut"
-            onChange={handleSecondaryShortcutCapture}
+          <div className="flex items-center justify-between gap-4">
+            <Label
+              htmlFor={opacityId}
+              className="settings-label flex items-center gap-2"
+            >
+              <Eye className="h-4 w-4" />
+              Window opacity
+            </Label>
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {opacityPercent}%
+            </span>
+          </div>
+          <Slider
+            id={opacityId}
+            min={LIVE_EDITOR_OPACITY_MIN}
+            max={LIVE_EDITOR_OPACITY_MAX}
+            step={LIVE_EDITOR_OPACITY_STEP}
+            value={opacityValue}
+            onValueChange={handleOpacityChange}
+            onValueCommit={handleOpacityCommit}
+            aria-label="LiveEditor window opacity"
+            aria-describedby={`${opacityId}-description`}
           />
 
-          <p className="text-xs text-muted-foreground">
-            Optional — another key that opens the same LiveEditor. It has to
-            differ from the one above.
+          <p
+            id={`${opacityId}-description`}
+            className="type-small leading-5 text-muted-foreground"
+          >
+            {Math.round(LIVE_EDITOR_OPACITY_MIN * 100)}% is the minimum so the
+            window stays discoverable.
           </p>
         </div>
-      )}
-
-      <div className="flex items-center justify-between">
-        <div className="space-y-0.5">
-          <p className="text-sm font-medium">Open config file</p>
-          <p className="text-xs text-muted-foreground">
-            LiveEditor text is saved per category in config.json on this device.
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={handleOpenConfigFile}>
-          Open config.json
-        </Button>
       </div>
+    ),
+    shortcuts: (
+      <div className="space-y-6">
+        {errorFor('shortcuts')}
+        <div className="space-y-2">
+          <Label
+            htmlFor={shortcutId}
+            className="settings-label flex items-center gap-2"
+          >
+            <Keyboard className="h-4 w-4" />
+            Toggle shortcut
+          </Label>
+          <KeybindingCaptureInput
+            id={shortcutId}
+            value={shortcut}
+            ariaLabel="Toggle shortcut"
+            ariaDescribedBy={`${shortcutId}-description`}
+            onChange={handleShortcutCapture}
+          />
+
+          <p
+            id={`${shortcutId}-description`}
+            className="type-small leading-5 text-muted-foreground"
+          >
+            Click, then press the keys you want. Esc cancels; Backspace clears
+            it to disable the global shortcut.
+          </p>
+        </div>
+
+        {canBindSecondShortcut && (
+          <div className="space-y-2">
+            <Label
+              htmlFor={secondaryShortcutId}
+              className="settings-label flex items-center gap-2"
+            >
+              <Keyboard className="h-4 w-4" />
+              Second toggle shortcut
+            </Label>
+            <KeybindingCaptureInput
+              id={secondaryShortcutId}
+              value={secondaryShortcut}
+              ariaLabel="Second toggle shortcut"
+              ariaDescribedBy={`${secondaryShortcutId}-description`}
+              onChange={handleSecondaryShortcutCapture}
+            />
+
+            <p
+              id={`${secondaryShortcutId}-description`}
+              className="type-small leading-5 text-muted-foreground"
+            >
+              Optional — another key that opens the same LiveEditor. It has to
+              differ from the one above.
+            </p>
+          </div>
+        )}
+      </div>
+    ),
+    config: (
+      <div className="space-y-2">
+        {errorFor('config')}
+        <div className="settings-action-row flex items-center justify-between gap-4">
+          <div className="min-w-0 space-y-1">
+            <p className="settings-label">Open config file</p>
+            <p className="type-small leading-5 text-muted-foreground">
+              Open native window and shortcut preferences on this Mac.
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={handleOpenConfigFile}>
+            Open config.json
+          </Button>
+        </div>
+      </div>
+    ),
+  }
+  return children ? (
+    children(controls)
+  ) : (
+    <div className={cn('space-y-6', className)}>
+      {controls.opacity}
+      {controls.shortcuts}
+      {controls.config}
     </div>
   )
 }

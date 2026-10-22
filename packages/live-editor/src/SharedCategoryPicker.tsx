@@ -107,7 +107,7 @@ export function SharedCategoryPicker({
             disabled={!categories.length && !isSignedIn}
             className={cn(
               'justify-between gap-1 text-xs font-normal',
-              isElectronPanel ? 'h-7 w-40' : 'min-h-11 w-44',
+              isElectronPanel ? 'h-7 w-40 max-w-full' : 'min-h-11 w-44',
             )}
           >
             <span className="flex min-w-0 flex-1 items-center gap-1">

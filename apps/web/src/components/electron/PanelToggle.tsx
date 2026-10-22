@@ -122,17 +122,24 @@ export const PanelToggle = function PanelToggle({
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between gap-4">
-        <div className="space-y-0.5">
-          <Label htmlFor={switchId} className="text-sm font-medium">
+        <div className="min-w-0 space-y-1">
+          <Label htmlFor={switchId} className="settings-label">
             {label}
           </Label>
           {description && (
-            <p className="text-xs text-muted-foreground">{description}</p>
+            <p
+              id={`${switchId}-description`}
+              className="type-small leading-5 text-muted-foreground"
+            >
+              {description}
+            </p>
           )}
         </div>
         <Switch
+          className="shrink-0"
           id={switchId}
           aria-label={ariaLabel}
+          aria-describedby={description ? `${switchId}-description` : undefined}
           checked={value}
           // Disabled until the saved value loads (so a tap can't act on the
           // default) and while a save is in flight, plus any caller condition.

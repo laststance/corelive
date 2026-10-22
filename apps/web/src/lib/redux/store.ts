@@ -75,7 +75,17 @@ export const createPersistenceMiddleware = () =>
     slices: ['electronSettings', 'settings'], // Slices to persist to localStorage
     version: STORAGE_SCHEMA_VERSION,
     migrate: migratePersistedState,
-    merge: deepMerge,
+    merge: (current, persisted) => {
+      const merged = deepMerge(current, persisted)
+      // Repair this field locally without rejecting other persisted preferences.
+      if (typeof merged.settings.liveEditorShowStatusBar !== 'boolean') {
+        merged.settings.liveEditorShowStatusBar =
+          typeof current.settings?.liveEditorShowStatusBar === 'boolean'
+            ? current.settings.liveEditorShowStatusBar
+            : true
+      }
+      return merged
+    },
   })
 
 const { middleware: storageMiddleware, reducer: hydratedReducer } =

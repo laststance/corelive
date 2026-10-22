@@ -10,6 +10,7 @@ describe('UserSettingsStateSchema', () => {
     // Assert — retain the LiveEditor look (sans / 16px / theme foreground),
     // and clear-on-complete OFF (finished lines stay put by default).
     expect(result).toEqual({
+      liveEditorShowStatusBar: true,
       showTodayEmber: false,
       liveEditorFontFamily: 'sans',
       liveEditorFontSize: 16,
@@ -33,6 +34,7 @@ describe('UserSettingsStateSchema', () => {
 
     // Assert — retired values are absent; current fields fill from defaults.
     expect(result).toEqual({
+      liveEditorShowStatusBar: true,
       showTodayEmber: false,
       liveEditorFontFamily: 'sans',
       liveEditorFontSize: 16,

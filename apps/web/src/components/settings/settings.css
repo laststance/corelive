@@ -1,0 +1,65 @@
+/* Scoped composition rules keep the shared controls readable at narrow widths and zoom. */
+.settings-section {
+  container-type: inline-size;
+}
+.settings-section
+  button:not([role='switch']):not([role='radio']):not([role='slider']) {
+  min-height: 44px;
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+}
+.settings-options label {
+  min-height: 44px;
+  flex: 1;
+}
+.settings-section [data-slot='slider'] {
+  min-height: 44px;
+}
+.settings-section [role='radio']:not(.sr-only),
+.settings-section [role='slider'],
+.settings-section [role='switch'] {
+  position: relative;
+}
+.settings-section [role='radio']:not(.sr-only)::after,
+.settings-section [role='slider']::after,
+.settings-section [role='switch']::after {
+  content: '';
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.settings-theme-grid,
+.settings-options {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+@container (min-width: 264px) {
+  .settings-theme-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .settings-options {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@container (min-width: 480px) {
+  .settings-theme-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@container (max-width: 263px) {
+  .settings-action-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .settings-section [data-slot='toggle-group'] {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  .settings-section [data-slot='toggle-group-item'] {
+    flex: 1 1 100%;
+  }
+}

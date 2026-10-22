@@ -34,6 +34,7 @@ function mountEditor(
   phase: 'ready' | 'preparing' = 'ready',
   paginated = false,
   removed = false,
+  showStatus = true,
 ) {
   const shown = new Set<() => void>()
   const snapshot: OfflineEditorSnapshot = {
@@ -57,7 +58,9 @@ function mountEditor(
       preferences: {
         revision: 0,
         theme: 'light',
-        settings: UserSettingsStateSchema.parse({}),
+        settings: UserSettingsStateSchema.parse({
+          liveEditorShowStatusBar: showStatus,
+        }),
       },
       draft: {
         revision: 0,
@@ -155,6 +158,9 @@ test('a definite save rejection shows Retry and Copy writing instead of an endle
 
   // Assert
   expect(screen.getByText('Not saved on this Mac')).toBeVisible()
+  fireEvent.click(
+    screen.getByRole('button', { name: /Not saved on this Mac. Open details/ }),
+  )
   expect(screen.getByRole('button', { name: 'Retry' })).toBeVisible()
   expect(screen.getByRole('button', { name: 'Copy writing' })).toBeVisible()
   expect(field).toHaveValue('Rejected writing')
@@ -179,6 +185,11 @@ test('Copy writing acknowledges the exact live text only after copying and clear
   fireEvent.change(field, {
     target: { value: 'Unsaved line\nMore live writing' },
   })
+  fireEvent.click(
+    await screen.findByRole('button', {
+      name: /Not saved on this Mac. Open details/,
+    }),
+  )
   const button = await screen.findByRole('button', { name: 'Copy writing' })
   let finishCopy: (copied: boolean) => void = () => undefined
   fixture.host.copyWriting = vi.fn(
@@ -218,6 +229,11 @@ test.each(['false', 'rejected'])(
       name: 'Write one thing',
     })
     fireEvent.change(field, { target: { value: 'Writing still at risk' } })
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: /Not saved on this Mac. Open details/,
+      }),
+    )
     const button = await screen.findByRole('button', { name: 'Copy writing' })
     fixture.host.copyWriting = async () => {
       if (result === 'rejected')
@@ -231,7 +247,7 @@ test.each(['false', 'rejected'])(
     // Assert
     expect(
       await screen.findByText(
-        'Could not copy. Select your writing and copy it.',
+        'Could not copy. Close Details, then select your writing and copy it.',
       ),
     ).toBeVisible()
     expect(screen.queryByText('Copied')).not.toBeInTheDocument()
@@ -328,4 +344,40 @@ test('cancelling a repair returns keyboard focus to the action that opened it', 
 
   // Assert
   await waitFor(() => expect(opener).toHaveFocus())
+})
+
+test('hidden routine status retains writing, recovery access and the caret across Details', async () => {
+  // Arrange
+  const { host, store } = mountEditor('ready', false, false, false)
+  host.command = async () => ({ ok: false, reason: 'storage-failed' })
+  const field = await screen.findByRole<HTMLTextAreaElement>('textbox', {
+    name: 'Write one thing',
+  })
+  field.setSelectionRange(3, 3)
+  fireEvent.select(field)
+
+  // Act
+  fireEvent.change(field, { target: { value: 'Unsaved writing' } })
+  await act(async () => {
+    await store.flush()
+  })
+  const details = screen.getByRole('button', {
+    name: /Not saved on this Mac. Open details/,
+  })
+  fireEvent.click(details)
+
+  // Assert
+  expect(
+    screen.queryByRole('contentinfo', { name: 'Writing status' }),
+  ).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Copy writing' })).toBeVisible()
+  expect(field).not.toBeVisible()
+  expect(field).toHaveValue('Unsaved writing')
+  fireEvent.keyDown(
+    screen.getByRole('heading', { name: 'Completion details' }),
+    { key: 'Escape' },
+  )
+  expect(screen.getByRole('textbox', { name: 'Write one thing' })).toBe(field)
+  expect(field).toBeVisible()
+  await waitFor(() => expect(details).toHaveFocus())
 })

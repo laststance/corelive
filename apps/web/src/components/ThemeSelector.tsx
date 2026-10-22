@@ -60,7 +60,7 @@ export const ThemeSelector = function ThemeSelector() {
   return (
     // The "Theme" CardTitle collapsed into the APPEARANCE section `<h2>`
     // (design-review flatten); this renders bare under that header.
-    <div className="space-y-4">
+    <div className="@container space-y-8">
       {/* Hold a same-height placeholder until next-themes hydrates, so the
            selected state never flashes from the default to the stored theme. */}
       {!mounted ? (
@@ -71,13 +71,13 @@ export const ThemeSelector = function ThemeSelector() {
       ) : (
         <>
           {/* Mode axis — Light / Dark, plus System for Warm Cathedral only. */}
-          <div className="space-y-1.5">
-            <Label className="text-sm font-medium">Mode</Label>
+          <div className="space-y-3">
+            <Label className="settings-label">Mode</Label>
             <ToggleGroup
               type="single"
               value={mode}
               onValueChange={handleModeChange}
-              className="justify-start gap-2"
+              className="w-full flex-wrap justify-start gap-2"
               aria-label="Theme mode"
             >
               {availableModes.map((modeChoice) => {
@@ -88,7 +88,7 @@ export const ThemeSelector = function ThemeSelector() {
                     value={modeChoice}
                     aria-label={label}
                     data-testid={`theme-mode-${modeChoice}`}
-                    className="gap-1.5"
+                    className="min-h-11 gap-1.5"
                   >
                     <Icon className="size-4" />
                     <span className="text-sm">{label}</span>
@@ -99,12 +99,13 @@ export const ThemeSelector = function ThemeSelector() {
           </div>
 
           {/* Family axis — each card previews the family at the current mode. */}
-          <div className="space-y-1.5">
-            <Label className="text-sm font-medium">Palette</Label>
+          <div className="space-y-3">
+            <Label className="settings-label">Palette</Label>
             <RadioGroup
               value={family}
               onValueChange={handleFamilyChange}
-              className="grid grid-cols-2 gap-3 sm:grid-cols-3"
+              aria-label="Theme palette"
+              className="settings-theme-grid auto-rows-fr gap-3"
             >
               {families.map(({ family: familyId, label }) => {
                 const previewId = getThemeId(familyId, resolvedMode)
@@ -114,7 +115,7 @@ export const ThemeSelector = function ThemeSelector() {
                     key={familyId}
                     htmlFor={`theme-family-${familyId}`}
                     data-testid={`theme-family-card-${familyId}`}
-                    className="relative cursor-pointer"
+                    className="relative block h-full min-w-0 cursor-pointer"
                   >
                     {/* sr-only radio is the `peer`; the card below shows its
                            keyboard focus via peer-focus-visible (standard variant,
@@ -127,7 +128,7 @@ export const ThemeSelector = function ThemeSelector() {
 
                     <div
                       className={cn(
-                        'hover:bg-accent/50 flex flex-col gap-2 rounded-lg border p-2 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2',
+                        'hover:bg-accent/50 flex h-full w-full min-w-0 flex-col gap-2 rounded-lg border p-3 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 motion-reduce:transition-none',
                         isActive && 'border-primary ring-2 ring-primary',
                       )}
                     >
@@ -136,9 +137,13 @@ export const ThemeSelector = function ThemeSelector() {
                         className="h-12 w-full"
                       />
 
-                      <span className="flex items-center justify-between text-sm font-medium">
-                        {label}
-                        {isActive && <Check className="size-4 text-primary" />}
+                      <span className="type-body flex min-h-10 items-center justify-between gap-1 font-medium leading-5">
+                        <span className="min-w-0 break-words">{label}</span>
+                        <span className="size-4 shrink-0">
+                          {isActive && (
+                            <Check className="size-4 text-primary" />
+                          )}
+                        </span>
                       </span>
                     </div>
                   </Label>

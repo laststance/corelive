@@ -1,12 +1,12 @@
+import './settings.css'
+
 import * as React from 'react'
 
 /**
- * Caption-tier section-label class (DESIGN.md Caption token): 12px / 500,
- * uppercase, 0.05em tracking. `text-foreground` keeps the section `<h2>` the
+ * Section-heading class using the DESIGN.md 18px semibold tier. `text-foreground` keeps the section `<h2>` the
  * strongest caption on the page, so the hierarchy reads Section `<h2>` ＞ row.
  */
-const SETTINGS_SECTION_LABEL_CLASS =
-  'text-xs font-medium uppercase tracking-[0.05em] text-foreground'
+const SETTINGS_SECTION_LABEL_CLASS = 'type-h3 leading-7 text-foreground'
 
 /**
  * Turns a human label into a stable DOM id (hook-free, so this wrapper renders in
@@ -27,13 +27,13 @@ function slugifySectionId(label: string): string {
 }
 
 /**
- * Presentational settings-section wrapper — a Caption-style `<h2>` landmark over its
+ * Presentational settings-section wrapper — a readable `<h2>` landmark over its
  * content, giving the now-headered /settings page screen-reader landmark navigation
  * for free (`<section aria-labelledby>`). Replaces the old per-card `CardTitle text-lg`
  * (design-review D1 flatten). Hook-free on purpose so it composes into the server
  * settings page and the client Electron page alike.
  *
- * @param label - Section heading text (rendered uppercase via the Caption token).
+ * @param label - Section heading text.
  * @param children - The section's controls/cards.
  * @param id - Optional explicit id for the `<h2>`/`aria-labelledby` pair; defaults to a slug of `label`.
  * @returns A labelled `<section>` landmark.
@@ -51,7 +51,7 @@ export const SettingsSection = function SettingsSection({
 }): React.ReactNode {
   const headingId = id ?? slugifySectionId(label)
   return (
-    <section aria-labelledby={headingId} className="space-y-4">
+    <section aria-labelledby={headingId} className="settings-section space-y-6">
       <h2 id={headingId} className={SETTINGS_SECTION_LABEL_CLASS}>
         {label}
       </h2>

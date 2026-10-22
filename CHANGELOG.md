@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.26.0] - 2026-10-22
+
+### Added
+
+- Add a Settings option to hide LiveEditor's routine save and sync status. Saving, error alerts, Details and Undo stay available.
+
+### Changed
+
+- Group Settings by LiveEditor, Appearance, Shortcuts & Sound, Application and Updates, with more readable spacing, larger control targets and equal-sized theme cards.
+
+### Fixed
+
+- Keep writing in place when save, sync and completion status changes, including narrow windows and enlarged text.
+- Preserve newer preference edits during recovery, retry uncertain saves with their original identity, and keep recovery controls available on older desktop versions.
+
 ## [0.25.1] - 2026-10-22
 
 ### Changed

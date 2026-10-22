@@ -109,6 +109,7 @@ export interface SharedEditorSurfaceProps {
   settings: UserSettingsState
   storageAvailability: BrowserStorageAvailability
   ember?: React.ReactNode
+  nativeHeader?: React.ReactNode
   nativeFooter?: React.ReactNode
   noteMaxLength?: number
   details?: React.ReactNode
@@ -145,6 +146,7 @@ export function SharedEditorSurface({
   settings,
   storageAvailability,
   ember,
+  nativeHeader,
   nativeFooter,
   noteMaxLength = NOTE_MAX_LENGTH,
   details,
@@ -161,13 +163,6 @@ export function SharedEditorSurface({
   handleKeepLineClick,
   closeWindow,
 }: SharedEditorSurfaceProps) {
-  const {
-    opacity,
-    spacesTrackingEnabled,
-    isUpdatingSpacesTracking,
-    handleSpacesTrackingChange,
-    handleOpacityValueChange,
-  } = windowSettings
   const isCoarsePointer = useCoarsePointer()
   const Link = linkComponent ?? 'a'
   const noteInputId = useId()
@@ -176,7 +171,6 @@ export function SharedEditorSurface({
 
   const { liveEditorFontFamily, liveEditorFontSize, liveEditorTextColor } =
     settings
-  const opacityValue = [opacity]
   // The field is disabled until its note is ready. On the web that disabled
   // field IS the first-paint stand-in (design review DR5) — same placeholder,
   // same styling, no spinner — and turns live once Clerk resolves.
@@ -214,54 +208,19 @@ export function SharedEditorSurface({
       className={cn(
         'flex w-full flex-col',
         isElectronPanel
-          ? 'h-dvh min-h-0 gap-2 overflow-hidden p-3'
+          ? 'h-full min-h-0 gap-2 overflow-y-auto p-3'
           : 'mx-auto h-dvh max-w-2xl gap-3 px-4 py-6',
       )}
       data-live-editor-root
     >
-      <div
-        className={
-          isElectronPanel
-            ? 'min-h-0 shrink space-y-2 overflow-y-auto'
-            : 'contents'
-        }
-      >
+      <div className={isElectronPanel ? 'shrink-0 space-y-2' : 'contents'}>
         {isElectronPanel ? (
-          <header
-            className="flex items-center justify-between gap-2"
-            style={DRAG_REGION_STYLE}
-          >
-            <div className="flex items-center gap-2">
-              {/* Header Text Zone*/}
-            </div>
-            <div
-              className="flex items-center gap-2"
-              style={NO_DRAG_REGION_STYLE}
-            >
-              <Switch
-                id={spacesInputId}
-                checked={spacesTrackingEnabled}
-                onCheckedChange={handleSpacesTrackingChange}
-                disabled={isUpdatingSpacesTracking}
-                aria-label="Show LiveEditor on all Mac desktops"
-              />
-
-              <Label
-                htmlFor={spacesInputId}
-                className="cursor-pointer text-xs text-muted-foreground"
-              >
-                Follow Spaces
-              </Label>
-              <button
-                type="button"
-                onClick={closeWindow}
-                className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                aria-label="Close LiveEditor"
-              >
-                ✕
-              </button>
-            </div>
-          </header>
+          <NativeEditorHeader
+            windowSettings={windowSettings}
+            nativeHeader={nativeHeader}
+            spacesInputId={spacesInputId}
+            closeWindow={closeWindow}
+          />
         ) : (
           // Web caption row (design review DR2/DR3): plain wordmark left (a link
           // home once signed in), the shortcut hint right — it stays after typing.
@@ -295,43 +254,12 @@ export function SharedEditorSurface({
         {ember}
 
         {(isElectronPanel || isSignedIn) && (
-          <div
-            className={cn(
-              'flex items-center text-xs',
-              isElectronPanel ? 'flex-wrap gap-2' : 'gap-3',
-            )}
-            style={NO_DRAG_REGION_STYLE}
-          >
-            {/* /write has no sidebar, so on the signed-in web this picker is the
-              only category control (design review DR3); it writes the shared
-              selection. Signed out there is one implicit category — no picker. */}
-            {categoryPicker}
-
-            {isElectronPanel && (
-              <div className="flex min-w-32 flex-1 items-center gap-2">
-                <Label
-                  htmlFor={opacityInputId}
-                  className="text-xs text-muted-foreground"
-                >
-                  Opacity
-                </Label>
-                <Slider
-                  id={opacityInputId}
-                  min={LIVE_EDITOR_OPACITY_MIN}
-                  max={LIVE_EDITOR_OPACITY_MAX}
-                  step={LIVE_EDITOR_OPACITY_STEP}
-                  value={opacityValue}
-                  onValueChange={handleOpacityValueChange}
-                  className="flex-1"
-                  aria-label="Window opacity"
-                />
-
-                <span className="w-10 text-right tabular-nums">
-                  {Math.round(opacity * 100)}%
-                </span>
-              </div>
-            )}
-          </div>
+          <EditorCategoryControls
+            categoryPicker={categoryPicker}
+            windowSettings={windowSettings}
+            opacityInputId={opacityInputId}
+            isElectronPanel={isElectronPanel}
+          />
         )}
       </div>
       {details}
@@ -392,17 +320,7 @@ export function SharedEditorSurface({
 
       {isElectronPanel && nativeFooter}
       {!isElectronPanel && (
-        <footer className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>{footerCopy.text}</span>
-          {footerCopy.link && (
-            <Link
-              href={footerCopy.link.href}
-              className="inline-flex min-h-11 items-center rounded-sm px-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {footerCopy.link.label}
-            </Link>
-          )}
-        </footer>
+        <WebEditorFooter footerCopy={footerCopy} Link={Link} />
       )}
     </div>
   )
@@ -426,4 +344,143 @@ function getNotePlaceholder(
   if (needsCategoryPick) return 'Pick a category to start writing'
   if (isCoarsePointer) return "Write one thing. Tap Keep when it's done."
   return `Write one thing. ${modifierLabel} Enter keeps it.`
+}
+
+/** Keeps native header geometry independent of save/sync state while preserving window controls.
+ * {@link SharedEditorSurface} provides the host's action slot and window settings.
+ * @example <NativeEditorHeader {...props} />
+ */
+function NativeEditorHeader({
+  windowSettings,
+  nativeHeader,
+  spacesInputId,
+  closeWindow,
+}: {
+  windowSettings: EditorWindowSettings
+  nativeHeader: React.ReactNode
+  spacesInputId: string
+  closeWindow: () => void
+}) {
+  const {
+    spacesTrackingEnabled,
+    isUpdatingSpacesTracking,
+    handleSpacesTrackingChange,
+  } = windowSettings
+  return (
+    <header
+      className="flex flex-wrap items-center justify-between gap-2"
+      style={DRAG_REGION_STYLE}
+    >
+      <div className="flex items-center gap-2" style={NO_DRAG_REGION_STYLE}>
+        {nativeHeader}
+      </div>
+      <div
+        className="flex min-w-0 flex-1 basis-44 items-center gap-2"
+        style={NO_DRAG_REGION_STYLE}
+      >
+        <Switch
+          id={spacesInputId}
+          checked={spacesTrackingEnabled}
+          onCheckedChange={handleSpacesTrackingChange}
+          disabled={isUpdatingSpacesTracking}
+          aria-label="Show LiveEditor on all Mac desktops"
+        />
+
+        <Label
+          htmlFor={spacesInputId}
+          className="min-w-0 flex-1 cursor-pointer text-xs text-muted-foreground"
+        >
+          Follow Spaces
+        </Label>
+        <button
+          type="button"
+          onClick={closeWindow}
+          className="size-11 shrink-0 rounded-md text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+          aria-label="Close LiveEditor"
+        >
+          ✕
+        </button>
+      </div>
+    </header>
+  )
+}
+
+/** Shows the web storage explanation without coupling native status geometry to web auth.
+ * @example <WebEditorFooter footerCopy={copy} Link="a" />
+ */
+function WebEditorFooter({
+  footerCopy,
+  Link,
+}: {
+  footerCopy: FooterCopy
+  Link: NonNullable<SharedEditorSurfaceProps['linkComponent']> | 'a'
+}) {
+  return (
+    <footer className="flex items-center justify-between text-sm text-muted-foreground">
+      <span>{footerCopy.text}</span>
+      {footerCopy.link && (
+        <Link
+          href={footerCopy.link.href}
+          className="inline-flex min-h-11 items-center rounded-sm px-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {footerCopy.link.label}
+        </Link>
+      )}
+    </footer>
+  )
+}
+
+/** Groups category selection and native opacity controls without affecting the writing node.
+ * @example <EditorCategoryControls {...props} />
+ */
+function EditorCategoryControls({
+  categoryPicker,
+  windowSettings,
+  opacityInputId,
+  isElectronPanel,
+}: Pick<
+  SharedEditorSurfaceProps,
+  'categoryPicker' | 'windowSettings' | 'isElectronPanel'
+> & { opacityInputId: string }) {
+  const { opacity, handleOpacityValueChange } = windowSettings
+  const opacityValue = [opacity]
+  return (
+    <div
+      className={cn(
+        'flex items-center text-xs',
+        isElectronPanel ? 'flex-wrap gap-2' : 'gap-3',
+      )}
+      style={NO_DRAG_REGION_STYLE}
+    >
+      {/* /write has no sidebar, so on the signed-in web this picker is the
+              only category control (design review DR3); it writes the shared
+              selection. Signed out there is one implicit category — no picker. */}
+      {categoryPicker}
+
+      {isElectronPanel && (
+        <div className="flex min-w-32 flex-1 items-center gap-2">
+          <Label
+            htmlFor={opacityInputId}
+            className="text-xs text-muted-foreground"
+          >
+            Opacity
+          </Label>
+          <Slider
+            id={opacityInputId}
+            min={LIVE_EDITOR_OPACITY_MIN}
+            max={LIVE_EDITOR_OPACITY_MAX}
+            step={LIVE_EDITOR_OPACITY_STEP}
+            value={opacityValue}
+            onValueChange={handleOpacityValueChange}
+            className="flex-1"
+            aria-label="Window opacity"
+          />
+
+          <span className="w-10 text-right tabular-nums">
+            {Math.round(opacity * 100)}%
+          </span>
+        </div>
+      )}
+    </div>
+  )
 }
