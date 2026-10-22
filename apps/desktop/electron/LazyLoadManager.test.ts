@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { runInNewContext } from 'node:vm'
 
-import { ModuleKind, transpileModule } from 'typescript'
+import { ModuleKind, transpileModule } from '@typescript/typescript6'
 import { describe, expect, test, vi } from 'vitest'
 
 import type * as LazyLoadModule from './LazyLoadManager'

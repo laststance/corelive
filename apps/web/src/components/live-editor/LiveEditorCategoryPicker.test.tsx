@@ -101,7 +101,7 @@ function renderPicker(rows = categories, signedIn = true) {
   return select
 }
 
-beforeAll(() => orpcServer.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => orpcServer.listen({ onUnhandledFrame: 'error' }))
 afterEach(() => orpcServer.resetHandlers())
 afterAll(() => orpcServer.close())
 beforeEach(() => resetOrpcServer(categories))

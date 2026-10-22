@@ -9,7 +9,7 @@ export default defineConfig([
   { ignores: ['dist/**'] },
   ...tsPrefixer,
   {
-    files: ['tsup.config.ts', 'eslint.config.js'],
+    files: ['tsup.config.ts', 'vitest.config.ts', 'eslint.config.js'],
     languageOptions: {
       parserOptions: {
         // Keep the build config typed without expanding the package's emit root.

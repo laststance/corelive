@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.25.1] - 2026-10-22
+
+### Changed
+
+- Refresh the web and desktop dependencies, including Next.js 16.4, React 19.3, and Electron 45.
+
+### Fixed
+
+- Keep development validation reliable with TypeScript 7, updated API mocks, and independent caches for concurrent test suites.
+
 ## [0.25.0] - 2026-10-22
 
 ### Added

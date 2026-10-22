@@ -4,6 +4,7 @@
   // The shadcn catalog stays installed even when the app does not import every primitive.
   // Wallaby reads wallaby.conf.js outside the app module graph.
   "entry": [
+    ".pnpmfile.cjs",
     "apps/desktop/electron/dev-runner.ts",
     // Standalone sandbox entry bundled by scripts/build-offline-preloads.mjs.
     "apps/desktop/electron/preload-offline-editor.ts",

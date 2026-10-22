@@ -6,6 +6,9 @@ import { defineConfig } from 'vitest/config'
 // Unit tests configuration only
 export default defineConfig({
   test: {
+    // Concurrent workspace suites must not clear each other's transformed modules.
+    fsModuleCachePath: new URL('./node_modules/.vitest-web', import.meta.url)
+      .pathname,
     name: 'unit',
     environment: 'happy-dom',
     globals: true,

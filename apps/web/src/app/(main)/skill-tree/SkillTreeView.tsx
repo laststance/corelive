@@ -74,16 +74,19 @@ export const SkillTreeView = function SkillTreeView() {
   // also reconcile optimistic state. On error: refetch → baseState updates →
   // useOptimistic rebases away the bad optimistic value. Without this, the
   // UI would stay wrong until the user manually refreshes.
+  /** Refreshes both assignment views after either mutation settles, including failures.
+   * @example onSettled: reconcileAssignments
+   */
+  const reconcileAssignments = (): void => {
+    queryClient.invalidateQueries({ queryKey: orpc.skillTree.getMyTree.key() })
+    queryClient.invalidateQueries({
+      queryKey: orpc.skillTree.getUnassignedPool.key(),
+    })
+  }
+
   const assignMutation = useMutation({
     ...orpc.skillTree.assignTask.mutationOptions({}),
-    onSettled: () => {
-      queryClient.invalidateQueries({
-        queryKey: orpc.skillTree.getMyTree.key(),
-      })
-      queryClient.invalidateQueries({
-        queryKey: orpc.skillTree.getUnassignedPool.key(),
-      })
-    },
+    onSettled: reconcileAssignments,
     onError: () => {
       toast.error("Couldn't assign task — try again")
     },
@@ -91,14 +94,7 @@ export const SkillTreeView = function SkillTreeView() {
 
   const unassignMutation = useMutation({
     ...orpc.skillTree.unassignTask.mutationOptions({}),
-    onSettled: () => {
-      queryClient.invalidateQueries({
-        queryKey: orpc.skillTree.getMyTree.key(),
-      })
-      queryClient.invalidateQueries({
-        queryKey: orpc.skillTree.getUnassignedPool.key(),
-      })
-    },
+    onSettled: reconcileAssignments,
     onError: () => {
       toast.error("Couldn't unassign task — try again")
     },

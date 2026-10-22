@@ -167,40 +167,57 @@ async function mutateSyncIdentity(
     current,
   )
   if (completedId === null) return rejected(operation, 'conflict', current)
-  const next = requireRow(
+  const next = await upsertSyncState(
+    tx,
+    {
+      userId,
+      completionId: operation.completionId,
+      revision: operation.revision,
+      cancelled: false,
+      completedId,
+      categoryId: operation.categoryId,
+      title: operation.title,
+      completedAt: new Date(operation.completedAt),
+      originalCompletedAt:
+        current?.originalCompletedAt ?? new Date(operation.originalCompletedAt),
+      timezone: current?.timezone ?? operation.timezone,
+      deviceId: current?.deviceId ?? operation.deviceId,
+    },
+    {
+      revision: operation.revision,
+      categoryId: operation.categoryId,
+      title: operation.title,
+      completedAt: new Date(operation.completedAt),
+    },
+    'sync.state',
+  )
+  return applied(next)
+}
+
+/** Persists a sync identity and its conflict update for {@link mutateSyncIdentity} and {@link cancelSyncIdentity}.
+ * Throws when the transaction returns no state, keeping acknowledgements atomic.
+ * @example const state = await upsertSyncState(tx, values, changes, 'sync.state')
+ */
+async function upsertSyncState(
+  tx: Transaction,
+  values: typeof completionSyncStateTable.$inferInsert,
+  changes: Partial<typeof completionSyncStateTable.$inferInsert>,
+  context: string,
+): Promise<SyncState> {
+  return requireRow(
     await tx
       .insert(completionSyncStateTable)
-      .values({
-        userId,
-        completionId: operation.completionId,
-        revision: operation.revision,
-        cancelled: false,
-        completedId,
-        categoryId: operation.categoryId,
-        title: operation.title,
-        completedAt: new Date(operation.completedAt),
-        originalCompletedAt:
-          current?.originalCompletedAt ??
-          new Date(operation.originalCompletedAt),
-        timezone: current?.timezone ?? operation.timezone,
-        deviceId: current?.deviceId ?? operation.deviceId,
-      })
+      .values(values)
       .onConflictDoUpdate({
         target: [
           completionSyncStateTable.userId,
           completionSyncStateTable.completionId,
         ],
-        set: {
-          revision: operation.revision,
-          categoryId: operation.categoryId,
-          title: operation.title,
-          completedAt: new Date(operation.completedAt),
-        },
+        set: changes,
       })
       .returning(),
-    'sync.state',
+    context,
   )
-  return applied(next)
 }
 
 /** Classifies a stale or missing remote revision before any visible completion mutation.
@@ -295,36 +312,27 @@ async function cancelSyncIdentity(
           eq(completedTable.userId, userId),
         ),
       )
-  const cancelled = requireRow(
-    await tx
-      .insert(completionSyncStateTable)
-      .values({
-        userId,
-        completionId: operation.completionId,
-        revision: Math.max(operation.revision, (current?.revision ?? 0) + 1),
-        cancelled: true,
-        completedId: null,
-        categoryId: current?.categoryId ?? operation.categoryId,
-        title: current?.title ?? operation.title,
-        completedAt: current?.completedAt ?? new Date(operation.completedAt),
-        originalCompletedAt:
-          current?.originalCompletedAt ??
-          new Date(operation.originalCompletedAt),
-        timezone: current?.timezone ?? operation.timezone,
-        deviceId: current?.deviceId ?? operation.deviceId,
-      })
-      .onConflictDoUpdate({
-        target: [
-          completionSyncStateTable.userId,
-          completionSyncStateTable.completionId,
-        ],
-        set: {
-          cancelled: true,
-          completedId: null,
-          revision: Math.max(operation.revision, (current?.revision ?? 0) + 1),
-        },
-      })
-      .returning(),
+  const cancelled = await upsertSyncState(
+    tx,
+    {
+      userId,
+      completionId: operation.completionId,
+      revision: Math.max(operation.revision, (current?.revision ?? 0) + 1),
+      cancelled: true,
+      completedId: null,
+      categoryId: current?.categoryId ?? operation.categoryId,
+      title: current?.title ?? operation.title,
+      completedAt: current?.completedAt ?? new Date(operation.completedAt),
+      originalCompletedAt:
+        current?.originalCompletedAt ?? new Date(operation.originalCompletedAt),
+      timezone: current?.timezone ?? operation.timezone,
+      deviceId: current?.deviceId ?? operation.deviceId,
+    },
+    {
+      cancelled: true,
+      completedId: null,
+      revision: Math.max(operation.revision, (current?.revision ?? 0) + 1),
+    },
     'sync.cancel',
   )
   return cancelled
