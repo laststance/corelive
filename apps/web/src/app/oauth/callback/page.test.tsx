@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import OAuthCallbackPage from './page'
@@ -110,7 +110,10 @@ test('shows a recoverable error when the browser cannot issue a fresh native tic
   // Assert
   expect(assign).toHaveBeenCalledTimes(1)
   expect(fetchMock).toHaveBeenCalledTimes(3)
-  expect(screen.getByRole('button', { name: 'Open CoreLive' })).toHaveFocus()
+  // The visible success text can commit before its passive focus effect runs.
+  await waitFor(() => {
+    expect(screen.getByRole('button', { name: 'Open CoreLive' })).toHaveFocus()
+  })
 })
 
 test('prepares an expired native ticket before the next synchronous return click', async () => {

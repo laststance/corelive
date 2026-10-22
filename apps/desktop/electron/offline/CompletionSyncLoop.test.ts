@@ -7,6 +7,7 @@ import type { CompletionSyncTransport } from '@corelive/desktop-contract/offline
 import type {
   CompletionProjection,
   CompletionSyncReceipt,
+  OfflineSyncStatus,
 } from '@corelive/desktop-contract/offline-workspace'
 import { UserSettingsStateSchema } from '@corelive/desktop-contract/settings'
 import { afterEach, expect, test, vi } from 'vitest'
@@ -117,7 +118,14 @@ async function createFixture() {
     generation: 1,
     worker,
   }
-  const onStatus = vi.fn()
+  const statusWaiters = new Map<OfflineSyncStatus, () => void>()
+  const onStatus = vi.fn((status: OfflineSyncStatus): void => {
+    statusWaiters.get(status)?.()
+    statusWaiters.delete(status)
+  })
+  // Disk-backed passes signal completion; polling latency is not the sync contract.
+  const nextStatus = async (status: OfflineSyncStatus): Promise<void> =>
+    new Promise((resolve) => statusWaiters.set(status, resolve))
   const onView = vi.fn()
   const loop = new CompletionSyncLoop({
     context: () => context,
@@ -152,6 +160,7 @@ async function createFixture() {
     completionId,
     onStatus,
     onView,
+    nextStatus,
     leaveAccount: (): void => {
       context = null
       loop.stop()
@@ -172,17 +181,17 @@ test('a response lost after server commit is resolved by receipt lookup without 
   })
 
   // Act
+  const offline = fixture.nextStatus('offline')
   fixture.loop.wake()
-  await vi.waitFor(() =>
-    expect(fixture.onStatus).toHaveBeenLastCalledWith('offline', 1),
-  )
+  await offline
+  expect(fixture.onStatus).toHaveBeenLastCalledWith('offline', 1)
   expect((await fixture.worker.call('pending', { limit: 16 }))[0]?.state).toBe(
     'sent',
   )
+  const idle = fixture.nextStatus('idle')
   fixture.loop.wake()
-  await vi.waitFor(() =>
-    expect(fixture.onStatus).toHaveBeenLastCalledWith('idle', 1),
-  )
+  await idle
+  expect(fixture.onStatus).toHaveBeenLastCalledWith('idle', 1)
 
   // Assert
   expect(fixture.transport.apply).toHaveBeenCalledOnce()
@@ -213,10 +222,10 @@ test('Undo while a create is in flight preserves the original request and follow
     commandId: randomUUID(),
     completionId: fixture.completionId,
   })
+  const idle = fixture.nextStatus('idle')
   deliver()
-  await vi.waitFor(() =>
-    expect(fixture.onStatus).toHaveBeenLastCalledWith('idle', 1),
-  )
+  await idle
+  expect(fixture.onStatus).toHaveBeenLastCalledWith('idle', 1)
 
   // Assert
   expect(
@@ -238,10 +247,10 @@ test('authentication rejection pauses synchronization while the durable local wr
   )
 
   // Act
+  const signInRequired = fixture.nextStatus('sign-in-required')
   fixture.loop.wake()
-  await vi.waitFor(() =>
-    expect(fixture.onStatus).toHaveBeenLastCalledWith('sign-in-required', 1),
-  )
+  await signInRequired
+  expect(fixture.onStatus).toHaveBeenLastCalledWith('sign-in-required', 1)
 
   // Assert
   expect(fixture.transport.apply).not.toHaveBeenCalled()
@@ -305,10 +314,10 @@ test.each(['missing', 'foreign', 'duplicate'] as const)(
     })
 
     // Act
+    const offline = fixture.nextStatus('offline')
     fixture.loop.wake()
-    await vi.waitFor(() =>
-      expect(fixture.onStatus).toHaveBeenLastCalledWith('offline', 1),
-    )
+    await offline
+    expect(fixture.onStatus).toHaveBeenLastCalledWith('offline', 1)
 
     // Assert
     const pending = await fixture.worker.call('pending', { limit: 16 })
@@ -320,10 +329,10 @@ test.each(['missing', 'foreign', 'duplicate'] as const)(
       '- [x] One completion',
     )
 
+    const idle = fixture.nextStatus('idle')
     fixture.loop.wake()
-    await vi.waitFor(() =>
-      expect(fixture.onStatus).toHaveBeenLastCalledWith('idle', 1),
-    )
+    await idle
+    expect(fixture.onStatus).toHaveBeenLastCalledWith('idle', 1)
     expect(fixture.transport.apply).toHaveBeenCalledOnce()
     expect(fixture.transport.receipts).toHaveBeenCalledOnce()
     expect((await fixture.worker.call('open', null)).pendingCount).toBe(0)
@@ -349,10 +358,10 @@ test('a checkpoint for another day is rejected while saved writing and its ackno
   )
 
   // Act
+  const offline = fixture.nextStatus('offline')
   fixture.loop.wake()
-  await vi.waitFor(() =>
-    expect(fixture.onStatus).toHaveBeenLastCalledWith('offline', 1),
-  )
+  await offline
+  expect(fixture.onStatus).toHaveBeenLastCalledWith('offline', 1)
 
   // Assert
   const view = await fixture.worker.call('open', null)
