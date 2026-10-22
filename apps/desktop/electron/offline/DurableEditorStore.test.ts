@@ -182,6 +182,78 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) await cleanup()
 })
 
+test.each(['older', 'status', 'revision', 'account', 'prepared'] as const)(
+  'initial reading preserves the latest %s publication without allowing premature writing',
+  async (ordering) => {
+    // Arrange
+    const fixture = await createFixture('Original writing')
+    const baseline = await fixture.host.snapshot()
+    if (baseline.phase !== 'ready') throw new Error('Workspace not prepared')
+    const initial: OfflineEditorSnapshot =
+      ordering === 'prepared'
+        ? { phase: 'preparing', generation: 0, sequence: 10 }
+        : { ...baseline, sequence: 10 }
+    const delivered: OfflineEditorSnapshot =
+      ordering === 'account'
+        ? { phase: 'locked', generation: 1, sequence: 11 }
+        : {
+            ...baseline,
+            sequence: ordering === 'older' ? 9 : 11,
+            sync: 'sign-in-required',
+            workspace:
+              ordering === 'revision'
+                ? {
+                    ...baseline.workspace,
+                    revision: baseline.workspace.revision + 1,
+                    draft: {
+                      ...baseline.workspace.draft,
+                      revision: baseline.workspace.draft.revision + 1,
+                      rows: [{ id: 'new-row', text: 'Newer writing' }],
+                    },
+                  }
+                : baseline.workspace,
+          }
+    let release!: () => void
+    vi.spyOn(fixture.host, 'snapshot').mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => {
+        release = resolve
+      })
+      return initial
+    })
+
+    // Act: delivery and the invoke reply are independently delayed.
+    const connecting = fixture.store.connect()
+    try {
+      fixture.publish(delivered)
+      expect(fixture.store.getSnapshot().main.phase).toBe('opening')
+      fixture.store.edit('An early edit must not replace accepted writing')
+      expect(fixture.store.getSnapshot().text).toBe('')
+      await expect(fixture.store.flush()).resolves.toBe(false)
+    } finally {
+      release()
+      await connecting
+    }
+
+    // Assert: the authoritative publication order wins, including unchanged disk revisions.
+    const current = fixture.store.getSnapshot()
+    if (ordering === 'account') {
+      expect(current.main.phase).toBe('locked')
+      expect(current.text).toBe('')
+    } else {
+      expect(current.main).toMatchObject({
+        phase: 'ready',
+        sync: ordering === 'older' ? 'offline' : 'sign-in-required',
+      })
+      expect(current.text).toBe(
+        ordering === 'revision' ? 'Newer writing' : 'Original writing',
+      )
+    }
+    fixture.publish({ ...baseline, sequence: 8 })
+    expect(fixture.store.getSnapshot()).toEqual(current)
+    expect(fixture.command).not.toHaveBeenCalled()
+  },
+)
+
 test('later typing stays dirty through an older save acknowledgement and is included in the final flush', async () => {
   // Arrange
   const fixture = await createFixture()

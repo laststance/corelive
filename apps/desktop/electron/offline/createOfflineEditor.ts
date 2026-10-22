@@ -32,6 +32,8 @@ export function createOfflineEditor(
     legacyNotes: () =>
       config.get<Record<string, string>>('liveEditor.notes', {}),
     requestFlush: async (generation) => ipc.flush(generation),
+    onPreparationCancelled: (generation) =>
+      ipc.resumeAfterCancelledTransition(generation),
     openSettingsForPreparation: () => {
       windows.createSettingsWindow(true)
     },

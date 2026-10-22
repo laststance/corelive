@@ -10,7 +10,7 @@ import {
 } from '@corelive/desktop-contract/offline-workspace'
 import { UserSettingsStateSchema } from '@corelive/desktop-contract/settings'
 import { DurableEditorStore } from '@corelive/live-editor/store'
-import type { BrowserWindow } from 'electron'
+import { ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import type { WindowManager } from '../WindowManager'
@@ -98,6 +98,7 @@ async function createFixture(
       throw new Error('No test network transport')
     },
     requestFlush,
+    onPreparationCancelled: vi.fn(),
     legacyNotes: () => ({ '1': 'Imported only after preparation' }),
     openSettingsForPreparation: vi.fn(),
     onSettingsContext: vi.fn(),
@@ -138,73 +139,167 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
   return { promise, resolve }
 }
 
-test('reverting rejected writing clears the main rescue copy before a fresh renderer opens', async () => {
-  // Arrange: real controller, worker and disk; only the preload transport is in-process.
-  const listeners = new Set<(snapshot: OfflineEditorSnapshot) => void>()
-  const { controller } = await createFixture(true, {
-    onSnapshot: (snapshot) => {
-      for (const listener of listeners) listener(snapshot)
-    },
-  })
-  await controller.initialize()
-  const command = vi.fn<OfflineEditorAPI['command']>(
-    async (generation, input) => controller.command(generation, input),
-  )
-  const host: OfflineEditorAPI = {
-    version: 1,
-    snapshot: async () => controller.getSnapshot(),
-    command,
-    draft: async (generation, categoryId) =>
-      controller.draft(generation, categoryId),
-    retry: async () => undefined,
-    details: async (generation, offset, limit) =>
-      controller.details(generation, offset, limit),
-    undoHistory: async (generation, offset, limit) =>
-      controller.undoHistory(generation, offset, limit),
-    recoveryCopies: async (generation, offset, limit) =>
-      controller.recoveryCopies(generation, offset, limit),
-    signIn: async () => undefined,
-    manageCategories: async () => undefined,
-    copyWriting: async () => true,
-    export: async () => true,
-    previewRecovery: async (generation) =>
-      controller.previewRecovery(generation),
-    recover: async (generation) => controller.recover(generation),
-    subscribe: (listener) => {
-      listeners.add(listener)
-      return () => listeners.delete(listener)
-    },
-    onFlush: () => () => undefined,
-    onShown: () => () => undefined,
-    onCategoryCreated: () => () => undefined,
-    replyFlush: async () => true,
-  }
-  const store = new DurableEditorStore(host)
-  const fresh = new DurableEditorStore(host)
-  cleanups.push(async () => {
-    store.disconnect()
-    fresh.disconnect()
-  })
-  await store.connect()
+test.each(['after', 'before', 'queued'] as const)(
+  'failed writing survives a renderer restart %s the worker response until acknowledged recovery',
+  async (ordering) => {
+    // Arrange: real controller, worker and disk; only the preload transport is in-process.
+    const listeners = new Set<(snapshot: OfflineEditorSnapshot) => void>()
+    const { controller, options } = await createFixture(true, {
+      onSnapshot: (snapshot) => ipc.publish(snapshot),
+    })
+    const reached = deferred()
+    const release = deferred()
+    const originalActor = options.actor!
+    options.actor = (ownerId) => {
+      const worker = originalActor(ownerId)
+      const originalCall = worker.call.bind(worker)
+      worker.call = async <K extends keyof WorkspaceWorkerCalls>(
+        method: K,
+        input: WorkspaceWorkerCalls[K]['input'],
+      ): Promise<WorkspaceWorkerCalls[K]['output']> => {
+        if (method === 'command') {
+          reached.resolve()
+          await release.promise
+        }
+        return originalCall(method, input)
+      }
+      return worker
+    }
+    const frame = {
+      url: 'corelive-editor://app/index.html',
+      origin: 'corelive-editor://app',
+    }
+    const editor = {
+      isDestroyed: () => false,
+      webContents: {
+        mainFrame: frame,
+        getURL: () => frame.url,
+        isDestroyed: () => false,
+        isLoadingMainFrame: () => false,
+        isCrashed: () => false,
+        send: (channel: string, snapshot: OfflineEditorSnapshot): void => {
+          if (channel === 'offline-editor-changed')
+            for (const listener of listeners) listener(snapshot)
+        },
+      },
+    }
+    const ipc = new OfflineEditorIPC(
+      {
+        getLiveEditorWindow: () => editor as unknown as BrowserWindow,
+        getSettingsWindow: () => null,
+      } as unknown as WindowManager,
+      controller,
+    )
+    ipc.register()
+    const readSnapshot = vi
+      .mocked(ipcMain.handle)
+      .mock.calls.filter(([name]) => name === 'offline-editor-snapshot')
+      .at(-1)?.[1]
+    if (!readSnapshot) throw new Error('Missing snapshot handler')
+    const event = {
+      sender: editor.webContents,
+      senderFrame: frame,
+    } as unknown as IpcMainInvokeEvent
+    await controller.initialize()
+    const command = vi.fn<OfflineEditorAPI['command']>(
+      async (generation, input) => controller.command(generation, input),
+    )
+    const host: OfflineEditorAPI = {
+      version: 1,
+      snapshot: async () =>
+        (await readSnapshot(event)) as OfflineEditorSnapshot,
+      command,
+      draft: async (generation, categoryId) =>
+        controller.draft(generation, categoryId),
+      retry: async () => undefined,
+      details: async (generation, offset, limit) =>
+        controller.details(generation, offset, limit),
+      undoHistory: async (generation, offset, limit) =>
+        controller.undoHistory(generation, offset, limit),
+      recoveryCopies: async (generation, offset, limit) =>
+        controller.recoveryCopies(generation, offset, limit),
+      signIn: async () => undefined,
+      manageCategories: async () => undefined,
+      copyWriting: async () => true,
+      export: async () => true,
+      previewRecovery: async (generation) =>
+        controller.previewRecovery(generation),
+      recover: async (generation) => controller.recover(generation),
+      subscribe: (listener) => {
+        listeners.add(listener)
+        return () => listeners.delete(listener)
+      },
+      onFlush: () => () => undefined,
+      onShown: () => () => undefined,
+      onCategoryCreated: () => () => undefined,
+      replyFlush: async () => true,
+    }
+    const store = new DurableEditorStore(host)
+    const restarted = new DurableEditorStore(host)
+    const fresh = new DurableEditorStore(host)
+    cleanups.push(async () => {
+      store.disconnect()
+      restarted.disconnect()
+      fresh.disconnect()
+    })
+    await store.connect()
 
-  // Act: a definite failed save is rescued by main, then the user removes that input.
-  store.edit('x'.repeat(51001))
-  await expect(store.flush()).resolves.toBe(false)
-  expect(store.getSnapshot().save).toBe('failed')
-  store.edit('Writing survives offline startup')
-  await expect(store.retry()).resolves.toBe(true)
-  store.disconnect()
-  await fresh.connect()
+    // Act: restart immediately after failure, without waiting for a worker refresh.
+    const previouslySent = controller.getSnapshot()
+    store.edit('x'.repeat(51001))
+    const saving = store.flush()
+    await reached.promise
+    let reconnect: Promise<void> | undefined
+    try {
+      if (ordering !== 'after') {
+        store.disconnect()
+        reconnect = restarted.connect()
+        await new Promise<void>((resolve) => setImmediate(resolve))
+        // A background notification must not expose old writing during the handoff.
+        ipc.publish(controller.getSnapshot())
+        // Already-sent notifications can arrive after the new snapshot request starts.
+        if (ordering === 'queued')
+          for (let delivery = 0; delivery < 8; delivery++)
+            for (const listener of listeners) listener(previouslySent)
+        expect(restarted.getSnapshot().main.phase).toBe('opening')
+        restarted.edit('This edit must wait for the accepted writing')
+        expect(restarted.getSnapshot().text).toBe('')
+        await expect(ipc.flush(0)).resolves.toBe(false)
+      }
+    } finally {
+      release.resolve()
+      await saving
+      await reconnect
+    }
+    await expect(saving).resolves.toBe(false)
+    if (ordering === 'after') {
+      expect(store.getSnapshot().save).toBe('failed')
+      store.disconnect()
+      await restarted.connect()
+    }
 
-  // Assert: a baseline ACK also removes the retained failed text in main.
-  expect(command).toHaveBeenCalledTimes(2)
-  expect(controller.getSnapshot()).not.toHaveProperty('unsavedDraft')
-  expect(fresh.getSnapshot()).toMatchObject({
-    text: 'Writing survives offline startup',
-    save: 'saved',
-    error: null,
-  })
-})
+    // Assert: the replacement renderer receives the exact writing and its failed state.
+    expect(restarted.getSnapshot()).toMatchObject({
+      text: 'x'.repeat(51001),
+      save: 'failed',
+    })
+
+    // Act: only the user's acknowledged recovery clears the main rescue copy.
+    restarted.edit('Writing survives offline startup')
+    await expect(restarted.retry()).resolves.toBe(true)
+    restarted.disconnect()
+    await fresh.connect()
+
+    // Assert: a baseline ACK also removes the retained failed text in main.
+    expect(command).toHaveBeenCalledTimes(2)
+    expect(controller.getSnapshot()).not.toHaveProperty('unsavedDraft')
+    expect(fresh.getSnapshot()).toMatchObject({
+      text: 'Writing survives offline startup',
+      save: 'saved',
+      error: null,
+    })
+  },
+)
 
 test.each([
   { mode: 'prepare', ordering: 'lock-first' },
@@ -374,8 +469,16 @@ test('session expiry preserves editing while explicit logout locks the next offl
 
   // Assert
   expect(requestFlush).toHaveBeenCalledWith(0)
-  expect(controller.getSnapshot()).toEqual({ phase: 'locked', generation: 1 })
-  expect(restarted.getSnapshot()).toEqual({ phase: 'locked', generation: 0 })
+  expect(controller.getSnapshot()).toEqual({
+    phase: 'locked',
+    generation: 1,
+    sequence: expect.any(Number),
+  })
+  expect(restarted.getSnapshot()).toEqual({
+    phase: 'locked',
+    generation: 0,
+    sequence: expect.any(Number),
+  })
   await restarted.shutdown()
 })
 
@@ -551,76 +654,63 @@ test('logout during an account-switch flush cannot be undone by its late success
   await new Promise<void>((resolve) => setImmediate(resolve))
 
   // Assert
-  expect(controller.getSnapshot()).toEqual({ phase: 'locked', generation: 1 })
+  expect(controller.getSnapshot()).toEqual({
+    phase: 'locked',
+    generation: 1,
+    sequence: expect.any(Number),
+  })
   expect((await registry.read()).activeAccountId).toBeNull()
   expect(broker.acquire).not.toHaveBeenCalled()
 })
 
-test('logging back into the active account supersedes a pending switch and restores editing', async () => {
+test('returning to the active account cancels pending switches without requiring the network again', async () => {
   // Arrange
-  const { controller, requestFlush, broker, registry } = await createFixture(
-    true,
-    {
-      transport: () => ({
-        bootstrap: async () => ({
-          accountId: 'account-a',
-          categories: [category],
-          deletions: [],
-        }),
-        apply: async () => ({ receipts: [] }),
-        receipts: async () => ({ receipts: [] }),
-        checkpoint: async () => {
-          throw new Error('No count response')
-        },
-      }),
-    },
-  )
+  const { controller, requestFlush, broker, registry, options } =
+    await createFixture(true)
   await controller.initialize()
   const release = deferred()
+  const lock = vi.spyOn(registry, 'lock')
   requestFlush.mockImplementation(async () => {
     await release.promise
     return true
   })
   broker.acquire.mockClear()
-  broker.acquire.mockImplementation(async (expectedAccountId, generation) => ({
-    status: 'ready',
-    credential: {
-      status: 'ready',
-      requestId: randomUUID(),
-      expectedAccountId,
-      generation,
-      accountId: 'account-a',
-      token: 'synthetic-test-token',
-    },
-  }))
 
-  // Act
-  controller.authenticated('account-b', true)
-  controller.authenticated('account-a', true)
+  // Act: every returning notification must cancel its older pending switch.
+  for (let attempt = 0; attempt < 8; attempt++) {
+    controller.authenticated('account-b', true)
+    controller.authenticated('account-a', true)
+  }
   release.resolve()
   await vi.waitFor(() =>
-    expect(controller.getSnapshot()).toMatchObject({
-      phase: 'ready',
-      generation: 1,
-      workspace: { ownerId: 'account-a' },
-    }),
+    expect(options.onPreparationCancelled).toHaveBeenCalledWith(0),
   )
 
-  // Assert: the new generation also releases the retained renderer's exit barrier.
-  expect(broker.acquire).toHaveBeenCalledWith('account-a', 1)
-  expect(broker.acquire).not.toHaveBeenCalledWith('account-b', 1)
+  // Assert: the still-prepared account stays usable even though the broker is offline.
+  expect(lock).not.toHaveBeenCalled()
+  expect(broker.acquire.mock.calls).not.toContainEqual(['account-b', 1])
+  expect(
+    broker.acquire.mock.calls.every(
+      ([owner, generation]) => owner === 'account-a' && generation === 0,
+    ),
+  ).toBe(true)
+  expect(controller.getSnapshot()).toMatchObject({
+    phase: 'ready',
+    generation: 0,
+    workspace: { ownerId: 'account-a' },
+  })
   expect((await registry.read()).activeAccountId).toBe('account-a')
   const snapshot = controller.getSnapshot()
   if (snapshot.phase !== 'ready') throw new Error('Current editor was lost')
   await expect(
-    controller.command(1, {
+    controller.command(0, {
       type: 'save',
       commandId: randomUUID(),
       categoryId: 1,
       baseRevision: snapshot.workspace.draft.revision,
       rows: [{ id: randomUUID(), text: 'Editing continues in account A' }],
     }),
-  ).resolves.toMatchObject({ ok: true, generation: 1 })
+  ).resolves.toMatchObject({ ok: true, generation: 0 })
 })
 
 test.each(['crashed', 'loading', 'destroyed', 'contents-destroyed', 'missing'])(

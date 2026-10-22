@@ -44,6 +44,7 @@ type ControllerOptions = {
   transport: (token: string) => CompletionSyncTransport
   legacyNotes: () => Record<string, string>
   requestFlush: (generation: number) => Promise<boolean>
+  onPreparationCancelled: (generation: number) => void
   openSettingsForPreparation: () => void
   onSnapshot: (snapshot: OfflineEditorSnapshot) => void
   onSettingsContext: (
@@ -77,13 +78,19 @@ export class OfflineEditorController {
   private preparingOwner: string | null | undefined
   private preparationAttempt = 0
   private pendingCommands = 0
+  private readonly snapshotWaiters = new Set<() => void>()
   private generation = 0
   private logoutBarrier: Promise<void> | null = null
   private settingsWaiter: SettingsWaiter | null = null
   private retryTimer: ReturnType<typeof setTimeout> | null = null
   private clearTimer: ReturnType<typeof setTimeout> | null = null
   private preparationFailures = 0
-  private snapshot: OfflineEditorSnapshot = { phase: 'opening', generation: 0 }
+  private snapshotSequence = 0
+  private snapshot: OfflineEditorSnapshot = {
+    phase: 'opening',
+    generation: 0,
+    sequence: 0,
+  }
 
   constructor(private readonly options: ControllerOptions) {
     this.registry =
@@ -153,16 +160,32 @@ export class OfflineEditorController {
     return this.snapshot
   }
 
+  /**
+   * Hands a replacement renderer the outcome of every already accepted command.
+   * {@link OfflineEditorIPC} holds its initial read and notifications while this
+   * waits, so old disk text cannot become editable before a late save is rescued.
+   * Existing connected renderers continue editing while their commands run.
+   * @example const snapshot = await controller.readSnapshot()
+   */
+  async readSnapshot(): Promise<OfflineEditorSnapshot> {
+    while (this.pendingCommands > 0) {
+      await new Promise<void>((resolve) => this.snapshotWaiters.add(resolve))
+    }
+    return this.snapshot
+  }
+
   /** Handles a trusted login/settings session notification; canonical ownership is verified separately.
    * @example controller.authenticated('user_123')
    */
   authenticated(ownerId: string, fromLogin = false): void {
     // A stale Settings session report after explicit logout cannot silently unlock the account.
     if (this.snapshot.phase === 'locked' && !fromLogin) return
-    if (
-      this.context?.ownerId === ownerId &&
-      this.preparingOwner === undefined
-    ) {
+    if (this.context?.ownerId === ownerId) {
+      // Returning to the still-active account cancels its pending departure.
+      if (this.preparingOwner !== undefined) {
+        this.preparationAttempt++
+        this.preparingOwner = undefined
+      }
       this.loop.wake()
       return
     }
@@ -232,12 +255,28 @@ export class OfflineEditorController {
     } catch (error) {
       const reason =
         error instanceof WorkspaceWorkerError ? error.reason : 'storage-failed'
-      if (command.type === 'save' && reason !== 'revision-conflict')
+      if (command.type === 'save' && reason !== 'revision-conflict') {
         this.failedDrafts.set(context.ownerId, command)
+        // A replacement renderer must receive rescued writing before any later refresh.
+        if (this.snapshot.phase === 'ready')
+          this.publishView(this.snapshot.workspace, generation)
+      }
       return { ok: false, reason }
     } finally {
-      this.pendingCommands--
+      this.finishCommand()
     }
+  }
+
+  /**
+   * Releases initial snapshot readers only after the last accepted command settles.
+   * {@link OfflineEditorController.command} calls this for success and failure.
+   * @example this.finishCommand()
+   */
+  private finishCommand(): void {
+    this.pendingCommands--
+    if (this.pendingCommands !== 0) return
+    for (const resolve of this.snapshotWaiters) resolve()
+    this.snapshotWaiters.clear()
   }
 
   /**
@@ -478,7 +517,10 @@ export class OfflineEditorController {
       return
     }
     const generation = this.beginPreparation(previous, attempt)
-    if (generation === null) return
+    if (generation === null) {
+      this.resumeCancelledPreparation(previous)
+      return
+    }
     try {
       if (previous) {
         const registryState = await this.registry.lock()
@@ -591,6 +633,22 @@ export class OfflineEditorController {
     this.verifiedOwner = null
     this.publish({ phase: 'preparing', generation })
     return generation
+  }
+
+  /**
+   * Releases a completed departure's input barrier when its account stayed active.
+   * {@link OfflineEditorController.prepare} calls this after a superseded flush;
+   * another pending transition or a changed account must keep its own barrier.
+   * @example this.resumeCancelledPreparation(previous)
+   */
+  private resumeCancelledPreparation(previous: AccountContext | null): void {
+    if (
+      previous &&
+      this.context === previous &&
+      this.generation === previous.generation &&
+      this.preparingOwner === undefined
+    )
+      this.options.onPreparationCancelled(previous.generation)
   }
 
   /** Requires broker and API identity to match the requested account before opening its files.
@@ -830,7 +888,7 @@ export class OfflineEditorController {
    * @example this.publish(snapshot)
    */
   private publish(snapshot: OfflineEditorSnapshot): void {
-    this.snapshot = snapshot
-    this.options.onSnapshot(snapshot)
+    this.snapshot = { ...snapshot, sequence: ++this.snapshotSequence }
+    this.options.onSnapshot(this.snapshot)
   }
 }

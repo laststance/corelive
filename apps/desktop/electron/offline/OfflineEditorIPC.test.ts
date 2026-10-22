@@ -103,6 +103,7 @@ function createFixture() {
   }
   const controller = {
     getSnapshot: () => snapshot,
+    readSnapshot: vi.fn(async () => snapshot),
     canLeaveWithoutRenderer: vi.fn(() => true),
     retryPreparation: vi.fn(),
     details: vi.fn(async () => ({ total: 0, records: [] })),
@@ -194,6 +195,42 @@ test('a late details response from the previous account never crosses the bridge
   await expect(response).rejects.toThrow('Account changed')
 })
 
+test.each(['failed', 'account-changed'] as const)(
+  'a %s initial snapshot cannot leak old writing or leave later notifications blocked',
+  async (outcome) => {
+    // Arrange
+    const { ipc, event, handler, controller, editor, changeAccount } =
+      createFixture()
+    const previous = controller.getSnapshot()
+    let release!: () => void
+    controller.readSnapshot.mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => {
+        release = resolve
+      })
+      if (outcome === 'failed') throw new Error('Snapshot unavailable')
+      return previous
+    })
+
+    // Act
+    const read = handler('offline-editor-snapshot')(event)
+    ipc.publish(previous)
+    expect(editor.webContents.send).not.toHaveBeenCalled()
+    if (outcome === 'account-changed') changeAccount()
+    release()
+
+    // Assert
+    await expect(read).rejects.toThrow(
+      outcome === 'failed' ? 'Snapshot unavailable' : 'Account changed',
+    )
+    expect(editor.webContents.send).not.toHaveBeenCalled()
+    ipc.publish(controller.getSnapshot())
+    expect(editor.webContents.send).toHaveBeenCalledWith(
+      'offline-editor-changed',
+      controller.getSnapshot(),
+    )
+  },
+)
+
 test('Settings receives only preferences after a patch, never the account draft', async () => {
   // Arrange
   const { settingsEvent, handler } = createFixture()
@@ -261,6 +298,61 @@ test('a missing flush reply cancels an ordinary exit rather than acknowledging l
   // Assert
   await expect(flush).resolves.toBe(false)
 })
+
+test('cancelling an account departure resumes editing without releasing a newer save or another account', async () => {
+  // Arrange
+  const { ipc, event, editor, handler, changeAccount } = createFixture()
+
+  // Act: cancellation after a completed flush releases the renderer barrier.
+  ipc.resumeAfterCancelledTransition(1)
+
+  // Assert
+  expect(editor.webContents.send).toHaveBeenCalledWith('offline-editor-shown')
+  editor.webContents.send.mockClear()
+
+  // Act: a newer final-save challenge owns the barrier until it finishes.
+  const pending = ipc.flush(1)
+  const request: unknown = editor.webContents.send.mock.calls[0]?.[1]
+  ipc.resumeAfterCancelledTransition(1)
+
+  // Assert
+  expect(editor.webContents.send).not.toHaveBeenCalledWith(
+    'offline-editor-shown',
+  )
+  await handler('offline-editor-flush-result')(event, request, false)
+  await expect(pending).resolves.toBe(false)
+  ipc.resumeAfterCancelledTransition(1)
+  expect(editor.webContents.send).toHaveBeenCalledWith('offline-editor-shown')
+  editor.webContents.send.mockClear()
+
+  // Act / Assert: a stale cancellation cannot unlock the next account.
+  changeAccount()
+  ipc.resumeAfterCancelledTransition(1)
+  expect(editor.webContents.send).not.toHaveBeenCalled()
+})
+
+test.each(['destroyed', 'loading', 'crashed'] as const)(
+  'cancelling an account departure does not notify a %s renderer',
+  (state) => {
+    // Arrange
+    const { ipc, editor } = createFixture()
+    vi.spyOn(editor.webContents, 'isDestroyed').mockReturnValue(
+      state === 'destroyed',
+    )
+    vi.spyOn(editor.webContents, 'isLoadingMainFrame').mockReturnValue(
+      state === 'loading',
+    )
+    vi.spyOn(editor.webContents, 'isCrashed').mockReturnValue(
+      state === 'crashed',
+    )
+
+    // Act
+    ipc.resumeAfterCancelledTransition(1)
+
+    // Assert
+    expect(editor.webContents.send).not.toHaveBeenCalled()
+  },
+)
 
 test('a crashed editor permits quitting or updating without waiting for an unreachable flush reply', async () => {
   // Arrange

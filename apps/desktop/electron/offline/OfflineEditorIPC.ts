@@ -75,6 +75,7 @@ export function isTrustedAuthSender(
  */
 export class OfflineEditorIPC {
   private pending: PendingFlush | null = null
+  private snapshotReaders = 0
   private categoryRequest: OfflineCategoryRequest | null = null
   private createdCategory: {
     generation: number
@@ -100,10 +101,9 @@ export class OfflineEditorIPC {
         return draft
       },
     )
-    typedHandle('offline-editor-snapshot', (event) => {
-      this.assertEditor(event)
-      return this.controller.getSnapshot()
-    })
+    typedHandle('offline-editor-snapshot', async (event) =>
+      this.readSnapshot(event),
+    )
     typedHandle(
       'offline-editor-command',
       async (event, generation, command) => {
@@ -229,10 +229,33 @@ export class OfflineEditorIPC {
     this.registerSettings()
   }
 
-  /** Notifies only the dedicated local document; the initial read covers missed load-time events.
+  /**
+   * Keeps replacement-renderer startup behind pending main-process commands.
+   * The snapshot handler calls this after reconnect; broadcasts cannot bypass the
+   * same barrier, and sender/account authority is rechecked after the wait.
+   * @example const snapshot = await this.readSnapshot(event)
+   */
+  private async readSnapshot(
+    event: IpcMainInvokeEvent,
+  ): Promise<OfflineEditorSnapshot> {
+    this.assertEditor(event)
+    this.snapshotReaders++
+    let snapshot: OfflineEditorSnapshot
+    try {
+      snapshot = await this.controller.readSnapshot()
+      this.assertEditor(event, snapshot.generation)
+    } finally {
+      this.snapshotReaders--
+    }
+    this.publish(snapshot)
+    return snapshot
+  }
+
+  /** Notifies only the dedicated local document; the settled initial read covers held load-time events.
    * @example ipc.publish(snapshot)
    */
   publish(snapshot: OfflineEditorSnapshot): void {
+    if (this.snapshotReaders > 0) return
     const editor = this.windows.getLiveEditorWindow()
     if (
       editor &&
@@ -270,9 +293,24 @@ export class OfflineEditorIPC {
     if (
       editor &&
       !editor.isDestroyed() &&
+      !editor.webContents.isDestroyed() &&
+      !editor.webContents.isLoadingMainFrame() &&
+      !editor.webContents.isCrashed() &&
       isLocalEditorDocument(editor.webContents.getURL())
     )
       typedSend(editor.webContents, 'offline-editor-shown')
+  }
+
+  /**
+   * Resumes editing after the controller cancels a flushed account departure.
+   * A newer flush or account generation retains its own input barrier; this check
+   * and notification are synchronous so no newer challenge can slip between them.
+   * @example ipc.resumeAfterCancelledTransition(generation)
+   */
+  resumeAfterCancelledTransition(generation: number): void {
+    if (this.pending || generation !== this.controller.getSnapshot().generation)
+      return
+    this.shown()
   }
 
   /** Sends no account data in the notification; Settings re-reads through its verified capability.
@@ -289,6 +327,8 @@ export class OfflineEditorIPC {
    * @example const saved = await ipc.flush(generation)
    */
   async flush(generation: number): Promise<boolean> {
+    // An opening replacement cannot acknowledge writing still owned by main.
+    if (this.snapshotReaders > 0) return false
     const editor = this.windows.getLiveEditorWindow()
     if (
       !editor ||

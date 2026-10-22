@@ -293,7 +293,10 @@ export interface OfflineTodayCount {
 
 export type OfflineSyncStatus =
   'idle' | 'syncing' | 'offline' | 'sign-in-required'
-export type OfflineEditorSnapshot =
+export type OfflineEditorSnapshot = {
+  /** Main's transient publication order, independent of durable workspace revisions. */
+  sequence?: number
+} & (
   | {
       phase: 'ready'
       generation: number
@@ -309,6 +312,7 @@ export type OfflineEditorSnapshot =
       reason?: string
       canRecover?: boolean
     }
+)
 export type OfflineCommandResult =
   | {
       ok: true

@@ -94,6 +94,7 @@ export class DurableEditorStore {
   private timer: ReturnType<typeof setTimeout> | null = null
   private cleanups: (() => void)[] = []
   private connection = 0
+  private initializing = false
   private selectionRevision = 0
   private notice: CompletionNotice | null = null
   private exitPending = false
@@ -119,9 +120,21 @@ export class DurableEditorStore {
   async connect(): Promise<void> {
     this.disconnect()
     const connection = ++this.connection
+    this.initializing = true
+    this.main = { phase: 'opening', generation: this.main.generation }
+    this.current = null
+    this.publish()
+    let queued: OfflineEditorSnapshot | null = null
     this.cleanups = [
       this.host.subscribe((snapshot) => {
-        if (connection === this.connection) this.receive(snapshot)
+        if (connection !== this.connection) return
+        // Already-sent events cannot enable edits before main settles accepted saves.
+        if (this.initializing) {
+          if (!queued || !this.isOlderSnapshot(snapshot, queued))
+            queued = snapshot
+          return
+        }
+        this.receive(snapshot)
       }),
       this.host.onFlush((request) => {
         this.exitPending = true
@@ -146,15 +159,23 @@ export class DurableEditorStore {
     ]
     try {
       const snapshot = await this.host.snapshot()
-      if (connection === this.connection) this.receive(snapshot)
+      if (connection === this.connection) {
+        this.initializing = false
+        // Delivery order across notifications and invoke replies is not authoritative.
+        this.receive(
+          queued && !this.isOlderSnapshot(queued, snapshot) ? queued : snapshot,
+        )
+      }
     } catch {
-      if (connection === this.connection)
+      if (connection === this.connection) {
+        this.initializing = false
         this.receive({
           phase: 'recovery',
           generation: this.main.generation,
           reason: 'bridge-unavailable',
           canRecover: false,
         })
+      }
     }
   }
 
@@ -229,6 +250,7 @@ export class DurableEditorStore {
    * @example const saved = await store.flush(request.generation)
    */
   async flush(generation = this.main.generation): Promise<boolean> {
+    if (this.initializing) return false
     this.cancelAutosave()
     const captures = [...this.buffers]
       .filter((buffer) => buffer.generation === generation)
@@ -626,7 +648,13 @@ export class DurableEditorStore {
               this.main.workspace.revision > workspaceResult.revision
             ? this.main.workspace
             : workspaceResult
-      this.main = { phase: 'ready', generation, workspace, sync }
+      this.main = {
+        phase: 'ready',
+        generation,
+        workspace,
+        sync,
+        sequence: deferred?.sequence ?? this.main.sequence,
+      }
       this.deferred = null
     }
   }
@@ -679,14 +707,7 @@ export class DurableEditorStore {
    * @example this.receive(snapshot)
    */
   private receive(snapshot: OfflineEditorSnapshot): void {
-    if (snapshot.generation < this.main.generation) return
-    if (
-      snapshot.phase === 'ready' &&
-      this.main.phase === 'ready' &&
-      snapshot.generation === this.main.generation &&
-      snapshot.workspace.revision < this.main.workspace.revision
-    )
-      return
+    if (this.isOlderSnapshot(snapshot, this.main)) return
     if (
       snapshot.phase === 'ready' &&
       snapshot.generation === this.main.generation &&
@@ -695,10 +716,7 @@ export class DurableEditorStore {
           snapshot.generation ||
         this.current?.composing)
     ) {
-      if (
-        !this.deferred ||
-        snapshot.workspace.revision >= this.deferred.workspace.revision
-      )
+      if (!this.deferred || !this.isOlderSnapshot(snapshot, this.deferred))
         this.deferred = snapshot
       return
     }
@@ -716,6 +734,28 @@ export class DurableEditorStore {
     }
     this.reconcileCurrent()
     this.publish()
+  }
+
+  /**
+   * Orders main publications independently of IPC delivery and unchanged disk revisions.
+   * Initial connection and later notifications use this before replacing visible state;
+   * hosts without sequence metadata retain the generation/workspace revision guards.
+   * @example if (this.isOlderSnapshot(incoming, current)) return
+   */
+  private isOlderSnapshot(
+    incoming: OfflineEditorSnapshot,
+    current: OfflineEditorSnapshot,
+  ): boolean {
+    return (
+      incoming.generation < current.generation ||
+      (incoming.sequence !== undefined &&
+        current.sequence !== undefined &&
+        incoming.sequence < current.sequence) ||
+      (incoming.phase === 'ready' &&
+        current.phase === 'ready' &&
+        incoming.generation === current.generation &&
+        incoming.workspace.revision < current.workspace.revision)
+    )
   }
 
   /** Reconciles a current durable view around live edits; pending commands defer base replacement.
