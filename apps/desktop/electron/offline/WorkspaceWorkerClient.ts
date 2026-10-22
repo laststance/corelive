@@ -24,24 +24,35 @@ export class WorkspaceWorkerError extends Error {
  * @example const client = new WorkspaceWorkerClient({ script, directory, ownerId })
  */
 export class WorkspaceWorkerClient {
-  private readonly worker: Worker
+  private worker: Worker | null = null
   private readonly pending = new Map<
     string,
     { resolve: (value: unknown) => void; reject: (reason: unknown) => void }
   >()
   private closed = false
 
-  constructor(options: {
-    script: string | URL
-    directory: string
-    ownerId: string
-    execArgv?: string[]
-  }) {
-    this.worker = new Worker(options.script, {
+  constructor(
+    private readonly options: {
+      script: string | URL
+      directory: string
+      ownerId: string
+      execArgv?: string[]
+    },
+  ) {
+    this.worker = this.startWorker()
+  }
+
+  /** Creates the account writer at construction or on a call following abnormal exit.
+   * {@link WorkspaceWorkerClient.call} replaces only a stopped worker; lost requests stay rejected for retry.
+   * @example this.worker = this.startWorker()
+   */
+  private startWorker(): Worker {
+    const options = this.options
+    const worker = new Worker(options.script, {
       workerData: { directory: options.directory, ownerId: options.ownerId },
       ...(options.execArgv ? { execArgv: options.execArgv } : {}),
     })
-    this.worker.on('message', (input: unknown) => {
+    worker.on('message', (input: unknown) => {
       const parsed = replySchema.safeParse(input)
       if (!parsed.success) {
         this.failAll('invalid-reply')
@@ -54,11 +65,14 @@ export class WorkspaceWorkerClient {
       if (reply.ok) pending.resolve(reply.result)
       else pending.reject(new WorkspaceWorkerError(reply.reason))
     })
-    this.worker.on('error', () => this.failAll('worker-unavailable'))
-    this.worker.on('exit', () => {
-      this.closed = true
+    worker.on('error', () => this.failAll('worker-unavailable'))
+    worker.on('exit', () => {
+      // Exit is the final event: a later caller may replace this writer without overlapping it.
+      if (this.worker !== worker) return
+      this.worker = null
       this.failAll('worker-unavailable')
     })
+    return worker
   }
 
   /** Dispatches a typed request without exposing worker paths or filesystem methods to a renderer.
@@ -69,13 +83,15 @@ export class WorkspaceWorkerClient {
     input: WorkspaceWorkerCalls[K]['input'],
   ): Promise<WorkspaceWorkerCalls[K]['output']> {
     if (this.closed) throw new WorkspaceWorkerError('worker-unavailable')
+    // Replacement is demand-driven; never replay an unknown command inside the transport.
+    const worker = (this.worker ??= this.startWorker())
     const requestId = randomUUID()
     return new Promise<WorkspaceWorkerCalls[K]['output']>((resolve, reject) => {
       this.pending.set(requestId, {
         resolve: (value) => resolve(value as WorkspaceWorkerCalls[K]['output']),
         reject,
       })
-      this.worker.postMessage({ requestId, type, input })
+      worker.postMessage({ requestId, type, input })
     })
   }
 
@@ -85,7 +101,7 @@ export class WorkspaceWorkerClient {
    */
   async close(): Promise<void> {
     this.closed = true
-    await this.worker.terminate()
+    await this.worker?.terminate()
     this.failAll('worker-unavailable')
   }
 

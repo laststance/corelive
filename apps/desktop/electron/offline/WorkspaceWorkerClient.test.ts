@@ -8,6 +8,130 @@ import { expect, test } from 'vitest'
 
 import { WorkspaceWorkerClient } from './WorkspaceWorkerClient'
 
+test.each(['before-commit', 'after-commit'] as const)(
+  'retrying after a worker exits %s restores saving without duplicating completion or reopening an explicitly closed client',
+  async (crashAt) => {
+    // Arrange: the real worker exits once; its next instance opens the same durable partition.
+    const directory = await mkdtemp(join(tmpdir(), 'corelive-worker-exit-'))
+    const script = join(directory, 'crash-once.mjs')
+    const workerURL = new URL('./workspace-worker.ts', import.meta.url).href
+    await writeFile(
+      script,
+      `import { parentPort, workerData } from 'node:worker_threads';
+import { appendFileSync, existsSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+const marker = join(workerData.directory, 'crashed');
+appendFileSync(join(workerData.directory, 'starts'), 'worker\\n');
+let crashRequest;
+const crash = () => { writeFileSync(marker, 'exited'); process.exit(1); };
+parentPort.on('message', request => {
+  if (request.type === 'command' && !crashRequest && !existsSync(marker)) {
+    crashRequest = request.requestId;
+    if (${JSON.stringify(crashAt)} === 'before-commit') crash();
+  }
+});
+const post = parentPort.postMessage.bind(parentPort);
+parentPort.postMessage = reply => {
+  if (reply.requestId === crashRequest && reply.ok && !existsSync(marker)) crash();
+  post(reply);
+};
+await import(${JSON.stringify(workerURL)});
+`,
+    )
+    const client = new WorkspaceWorkerClient({
+      directory,
+      ownerId: 'account-a',
+      script,
+      execArgv: ['--import', 'tsx'],
+    })
+    try {
+      const ready = await client.call('prepare', {
+        ownerId: 'account-a',
+        deviceId: randomUUID(),
+        legacyNotes: { '1': 'Retained completion' },
+        categories: [
+          {
+            id: 1,
+            name: 'General',
+            color: 'blue',
+            isDefault: true,
+            parentId: null,
+            removed: false,
+          },
+        ],
+        preferences: {
+          revision: 0,
+          theme: 'light',
+          settings: UserSettingsStateSchema.parse({}),
+        },
+      })
+      const completion = {
+        type: 'complete' as const,
+        commandId: randomUUID(),
+        completionId: randomUUID(),
+        categoryId: 1,
+        baseRevision: ready.draft.revision,
+        rowId: ready.draft.rows[0]!.id,
+        completedAt: Date.now(),
+        timezone: 'Asia/Tokyo',
+      }
+
+      // Act: all eight unknown outcomes reject, then concurrent retries share one new writer.
+      const interrupted = await Promise.allSettled(
+        Array.from({ length: 8 }, async () =>
+          client.call('command', completion),
+        ),
+      )
+      expect(interrupted).toHaveLength(8)
+      for (const result of interrupted)
+        expect(result).toMatchObject({
+          status: 'rejected',
+          reason: { reason: 'worker-unavailable' },
+        })
+      const replaying = Promise.all(
+        Array.from({ length: 8 }, async () =>
+          client.call('command', completion),
+        ),
+      )
+
+      // Assert: both commit boundaries produce exactly one original identity and remain writable.
+      await expect(replaying).resolves.toHaveLength(8)
+      const retried = await replaying
+      for (const result of retried) expect(result.pendingCount).toBe(1)
+      expect(await client.call('pending', { limit: 16 })).toMatchObject([
+        { operation: { completionId: completion.completionId } },
+      ])
+      const reopened = await client.call('open', null)
+      expect(reopened.draft.rows.map((row) => row.text)).toEqual([
+        '- [x] Retained completion',
+      ])
+      await client.call('command', {
+        type: 'save',
+        commandId: randomUUID(),
+        categoryId: 1,
+        baseRevision: reopened.draft.revision,
+        rows: [
+          ...reopened.draft.rows,
+          { id: randomUUID(), text: 'Writing after recovery' },
+        ],
+      })
+      expect(
+        (await client.call('open', null)).draft.rows.map((row) => row.text),
+      ).toEqual(['- [x] Retained completion', 'Writing after recovery'])
+      await client.close()
+      await expect(client.call('open', null)).rejects.toMatchObject({
+        reason: 'worker-unavailable',
+      })
+      expect(await readFile(join(directory, 'starts'), 'utf8')).toBe(
+        'worker\nworker\n',
+      )
+    } finally {
+      await client.close()
+      await rm(directory, { recursive: true })
+    }
+  },
+)
+
 test('the actual storage worker persists commands and returns a bounded projection across restart', async () => {
   // Arrange
   const directory = await mkdtemp(join(tmpdir(), 'corelive-worker-'))
