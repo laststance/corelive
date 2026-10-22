@@ -15,11 +15,12 @@
 import { configureStore } from '@reduxjs/toolkit'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { ReactNode } from 'react'
+import type { ReactNode, ReactElement } from 'react'
 import { Provider } from 'react-redux'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import electronSettingsReducer from '@/lib/redux/slices/electronSettingsSlice'
+import settingsReducer from '@/lib/redux/slices/settingsSlice'
 
 import { ElectronSettingsPage } from './ElectronSettingsPage'
 
@@ -38,7 +39,15 @@ vi.mock('./AppUpdateSettings', () => ({
   AppUpdateSettings: () => null,
 }))
 vi.mock('./LiveEditorSettings', () => ({
-  LiveEditorSettings: () => null,
+  LiveEditorSettings: ({
+    children,
+  }: {
+    children: (controls: {
+      opacity: ReactNode
+      shortcuts: ReactNode
+      config: ReactNode
+    }) => ReactElement
+  }) => children({ opacity: null, shortcuts: null, config: null }),
 }))
 vi.mock('./LiveEditorAppearance', () => ({
   LiveEditorAppearance: () => null,
@@ -53,7 +62,10 @@ vi.mock('./LiveEditorAppearance', () => ({
  */
 function buildStore() {
   return configureStore({
-    reducer: { electronSettings: electronSettingsReducer },
+    reducer: {
+      electronSettings: electronSettingsReducer,
+      settings: settingsReducer,
+    },
     preloadedState: {
       electronSettings: {
         hideAppIcon: false,
@@ -125,7 +137,9 @@ describe('ElectronSettingsPage — folded Window size control', () => {
     render(withStore(<ElectronSettingsPage />))
 
     // Assert
-    expect(screen.getByRole('heading', { name: 'Sound' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Shortcuts & Sound' }),
+    ).toBeVisible()
     expect(
       await screen.findByRole('switch', { name: 'Shortcut opening sound' }),
     ).toBeChecked()
@@ -152,14 +166,12 @@ describe('ElectronSettingsPage — folded Window size control', () => {
 
       // Assert
       expect(
-        screen.queryByRole('heading', { name: 'Sound' }),
+        screen.queryByRole('heading', { name: 'Shortcuts & Sound' }),
       ).not.toBeInTheDocument()
       expect(
         screen.queryByRole('switch', { name: 'Shortcut opening sound' }),
       ).not.toBeInTheDocument()
-      expect(
-        screen.getByRole('heading', { name: 'Application' }),
-      ).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Application' })).toBeVisible()
     },
   )
 
@@ -172,28 +184,27 @@ describe('ElectronSettingsPage — folded Window size control', () => {
 
     // Assert: the control now lives under the Application section <h2> (the
     // standalone "Settings Window" card was retired), with its Restore button.
-    expect(
-      screen.getByRole('heading', { name: 'Application' }),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Application' })).toBeVisible()
     expect(screen.queryByText('Settings Window')).not.toBeInTheDocument()
-    expect(screen.getByText('Window size')).toBeInTheDocument()
+    expect(screen.getByText('Window size')).toBeVisible()
     expect(
       screen.getByRole('button', { name: 'Restore default size' }),
-    ).toBeInTheDocument()
+    ).toBeVisible()
   })
 
-  test('returns null and renders no settings sections outside Electron', () => {
+  test('shows only LiveEditor and Appearance outside Electron', () => {
     // Arrange: web renderer — no electronAPI and isElectron = false.
     isElectronMock.value = false
     installElectronAPI(undefined)
 
     // Act
-    const { container } = render(withStore(<ElectronSettingsPage />))
+    render(withStore(<ElectronSettingsPage />))
 
     // Assert: nothing is rendered — not even the Application section heading.
-    expect(container).toBeEmptyDOMElement()
+    expect(screen.getByRole('heading', { name: 'LiveEditor' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Appearance' })).toBeVisible()
     expect(
-      screen.queryByRole('heading', { name: 'Sound' }),
+      screen.queryByRole('heading', { name: 'Shortcuts & Sound' }),
     ).not.toBeInTheDocument()
     expect(
       screen.queryByRole('heading', { name: 'Application' }),

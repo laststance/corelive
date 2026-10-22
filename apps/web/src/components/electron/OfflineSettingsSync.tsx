@@ -3,60 +3,92 @@
 import { useUser } from '@clerk/nextjs'
 import { usePathname } from 'next/navigation'
 import { useTheme } from 'next-themes'
-import { useRef } from 'react'
+import {
+  createContext,
+  useContext,
+  useMemo,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react'
 import { useStore } from 'react-redux'
-import { toast } from 'sonner'
 
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
-import { OfflinePreferenceSync } from '@/lib/offline-settings-sync'
+import {
+  EMPTY_PREFERENCE_OUTCOME,
+  OfflinePreferenceSync,
+} from '@/lib/offline-settings-sync'
 import {
   hydrateUserSettings,
   selectUserSettings,
 } from '@/lib/redux/slices/settingsSlice'
 import type { RootState } from '@/lib/redux/store'
 
-/**
- * Connects hydrated Settings to the prepared native account, retaining old-preload compatibility.
- * Mounted inside the normal app providers; the isolated auth broker never mounts this effect.
- * @example <OfflineSettingsSync />
+const PreferenceSyncContext = createContext<OfflinePreferenceSync | null>(null)
+const emptySubscribe = (): (() => void) => () => undefined
+const emptySnapshot = () => EMPTY_PREFERENCE_OUTCOME
+
+/** Exposes the account-owned coordinator's stable outcome to Settings controls.
+ * @example const { outcome, retry } = useOfflinePreferenceOutcome()
  */
-export function OfflineSettingsSync(): null {
+export function useOfflinePreferenceOutcome() {
+  const sync: OfflinePreferenceSync | null = useContext(PreferenceSyncContext)
+  const outcome = useSyncExternalStore(
+    sync?.subscribe ?? emptySubscribe,
+    sync?.getSnapshot ?? emptySnapshot,
+    emptySnapshot,
+  )
+  return {
+    outcome,
+    retry: () => sync?.retry(),
+    restore: async () => sync?.restoreConfirmed(),
+  }
+}
+
+/** Owns native preference intent across navigation, outside the credential-only broker.
+ * {@link ApplicationProviders} supplies the lifetime; only /settings may issue IPC.
+ * @example <OfflineSettingsSync>{children}</OfflineSettingsSync>
+ */
+export function OfflineSettingsSync({ children }: { children?: ReactNode }) {
   const { user, isLoaded } = useUser()
   const pathname = usePathname()
   const store = useStore<RootState>()
   const { theme, setTheme } = useTheme()
-  const sync = useRef<OfflinePreferenceSync | null>(null)
   const owner = isLoaded ? user?.id : undefined
+  const bridge =
+    typeof window === 'undefined'
+      ? undefined
+      : window.electronAPI?.offlineSettings
+  const sync: OfflinePreferenceSync | null = useMemo(
+    () =>
+      owner && bridge?.version === 1
+        ? new OfflinePreferenceSync({
+            accountId: owner,
+            bridge,
+            active: false,
+            settings: () => selectUserSettings(store.getState()),
+            applySettings: (settings) => {
+              store.dispatch(hydrateUserSettings(settings))
+            },
+          })
+        : null,
+    [owner, bridge, store],
+  )
 
   useCycleEffect(() => {
-    const bridge = window.electronAPI?.offlineSettings
-    if (pathname !== '/settings' || !owner || bridge?.version !== 1) return
-    const current = new OfflinePreferenceSync({
-      accountId: owner,
-      bridge,
-      settings: () => selectUserSettings(store.getState()),
-      applySettings: (settings) => {
-        store.dispatch(hydrateUserSettings(settings))
-      },
-      applyTheme: setTheme,
-      onError: () => {
-        toast.error('Settings could not be saved on this Mac. Retrying…')
-      },
-    })
-    sync.current = current
-    const unsubscribeStore = store.subscribe(() => current.settingsChanged())
-    const unsubscribeNative = bridge.onChanged(() => current.refresh())
+    if (!sync || !bridge) return
+    sync.start()
+    const unsubscribeStore = store.subscribe(() => sync.settingsChanged())
+    const unsubscribeNative = bridge.onChanged(() => sync.refresh())
     return (): void => {
-      current.stop()
       unsubscribeStore()
       unsubscribeNative()
-      sync.current = null
+      sync.stop()
     }
-  }, [owner, pathname, setTheme, store])
-
-  // Run after subscription setup, including when the account changes with the same theme.
+  }, [sync, bridge, store])
   useCycleEffect(() => {
-    sync.current?.themeChanged(theme)
-  }, [owner, pathname, setTheme, store, theme])
-  return null
+    sync?.setThemeHandler(setTheme)
+    sync?.setActive(pathname === '/settings')
+    sync?.themeChanged(theme)
+  }, [sync, pathname, theme, setTheme])
+  return <PreferenceSyncContext value={sync}>{children}</PreferenceSyncContext>
 }

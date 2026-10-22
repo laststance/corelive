@@ -42,6 +42,11 @@ import { cn } from '@/lib/utils'
  */
 interface LiveEditorSettingsProps {
   className?: string
+  children?: (controls: {
+    opacity: React.ReactNode
+    shortcuts: React.ReactNode
+    config: React.ReactNode
+  }) => React.ReactElement
 }
 
 /**
@@ -60,6 +65,7 @@ interface LiveEditorSettingsProps {
  */
 export const LiveEditorSettings = function LiveEditorSettings({
   className,
+  children,
 }: LiveEditorSettingsProps): React.ReactElement {
   const preferencesVersion = useNativeWindowPreferencesVersion()
   const opacityId = useId()
@@ -193,17 +199,24 @@ export const LiveEditorSettings = function LiveEditorSettings({
 
   const opacityValue = [opacity]
 
+  const renderUnavailable = (message: React.ReactNode): React.ReactElement =>
+    children ? (
+      children({ opacity: message, shortcuts: null, config: null })
+    ) : (
+      <>{message}</>
+    )
+
   // Defer the non-Electron fallback until after hydration so server and
   // first client render produce the same markup. Until `hasMounted` is
   // true we keep rendering the "Loading" branch below.
   if (hasMounted && !getLiveEditorSettingsAPI()) {
-    return (
+    return renderUnavailable(
       <SettingsStateCard
         icon={Brain}
         title="LiveEditor Note"
         description="LiveEditor Note is only available in the desktop application."
         className={className}
-      />
+      />,
     )
   }
 
@@ -214,24 +227,24 @@ export const LiveEditorSettings = function LiveEditorSettings({
     (typeof getLiveEditorSettingsAPI()?.getOpacity !== 'function' ||
       typeof getLiveEditorSettingsAPI()?.getShortcut !== 'function')
   ) {
-    return (
+    return renderUnavailable(
       <SettingsStateCard
         icon={Brain}
         title="LiveEditor Note"
         description="Update CoreLive to the latest version to manage LiveEditor Note."
         className={className}
-      />
+      />,
     )
   }
 
   if (!isReady) {
-    return (
+    return renderUnavailable(
       <SettingsStateCard
         icon={Brain}
         title="LiveEditor Note"
         description="Loading LiveEditor settings…"
         className={className}
-      />
+      />,
     )
   }
 
@@ -241,105 +254,125 @@ export const LiveEditorSettings = function LiveEditorSettings({
   const canBindSecondShortcut =
     typeof getLiveEditorSettingsAPI()?.setShortcutSecondary === 'function'
 
-  return (
-    // The "LiveEditor Note" card title collapsed into the LiveEditor section
-    // <h2> (design-review D1 flatten); the behavior copy stays as a lead-in.
-    <div className={cn('space-y-6', className)}>
-      <p className="text-sm text-muted-foreground">
-        A frameless scratchpad for the active category. Checked items become
-        Completed entries with a 5-second undo window.
-      </p>
-      {error && (
-        <div className="bg-destructive/10 rounded-md p-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label
-            htmlFor={opacityId}
-            className="flex items-center gap-2 text-sm font-medium"
-          >
-            <Eye className="h-4 w-4" />
-            Window opacity
-          </Label>
-          <span className="text-xs tabular-nums text-muted-foreground">
-            {opacityPercent}%
-          </span>
-        </div>
-        <Slider
-          id={opacityId}
-          min={LIVE_EDITOR_OPACITY_MIN}
-          max={LIVE_EDITOR_OPACITY_MAX}
-          step={LIVE_EDITOR_OPACITY_STEP}
-          value={opacityValue}
-          onValueChange={handleOpacityChange}
-          onValueCommit={handleOpacityCommit}
-          aria-label="LiveEditor window opacity"
-        />
-
-        <p className="text-xs text-muted-foreground">
-          {Math.round(LIVE_EDITOR_OPACITY_MIN * 100)}% is the minimum so the
-          window stays discoverable.
-        </p>
-      </div>
-
-      <div className="space-y-2">
-        <Label
-          htmlFor={shortcutId}
-          className="flex items-center gap-2 text-sm font-medium"
-        >
-          <Keyboard className="h-4 w-4" />
-          Toggle shortcut
-        </Label>
-        <KeybindingCaptureInput
-          id={shortcutId}
-          value={shortcut}
-          ariaLabel="Toggle shortcut"
-          onChange={handleShortcutCapture}
-        />
-
-        <p className="text-xs text-muted-foreground">
-          Click, then press the keys you want. Esc cancels; Backspace clears it
-          to disable the global shortcut.
-        </p>
-      </div>
-
-      {canBindSecondShortcut && (
+  const controls = {
+    opacity: (
+      <div className="space-y-6">
+        {error && (
+          <p role="alert" className="type-small text-destructive">
+            {error}
+          </p>
+        )}
         <div className="space-y-2">
-          <Label
-            htmlFor={secondaryShortcutId}
-            className="flex items-center gap-2 text-sm font-medium"
-          >
-            <Keyboard className="h-4 w-4" />
-            Second toggle shortcut
-          </Label>
-          <KeybindingCaptureInput
-            id={secondaryShortcutId}
-            value={secondaryShortcut}
-            ariaLabel="Second toggle shortcut"
-            onChange={handleSecondaryShortcutCapture}
+          <div className="flex items-center justify-between gap-4">
+            <Label
+              htmlFor={opacityId}
+              className="settings-label flex items-center gap-2"
+            >
+              <Eye className="h-4 w-4" />
+              Window opacity
+            </Label>
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {opacityPercent}%
+            </span>
+          </div>
+          <Slider
+            id={opacityId}
+            min={LIVE_EDITOR_OPACITY_MIN}
+            max={LIVE_EDITOR_OPACITY_MAX}
+            step={LIVE_EDITOR_OPACITY_STEP}
+            value={opacityValue}
+            onValueChange={handleOpacityChange}
+            onValueCommit={handleOpacityCommit}
+            aria-label="LiveEditor window opacity"
+            aria-describedby={`${opacityId}-description`}
           />
 
-          <p className="text-xs text-muted-foreground">
-            Optional — another key that opens the same LiveEditor. It has to
-            differ from the one above.
+          <p
+            id={`${opacityId}-description`}
+            className="type-small leading-5 text-muted-foreground"
+          >
+            {Math.round(LIVE_EDITOR_OPACITY_MIN * 100)}% is the minimum so the
+            window stays discoverable.
           </p>
         </div>
-      )}
+      </div>
+    ),
+    shortcuts: (
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <Label
+            htmlFor={shortcutId}
+            className="settings-label flex items-center gap-2"
+          >
+            <Keyboard className="h-4 w-4" />
+            Toggle shortcut
+          </Label>
+          <KeybindingCaptureInput
+            id={shortcutId}
+            value={shortcut}
+            ariaLabel="Toggle shortcut"
+            ariaDescribedBy={`${shortcutId}-description`}
+            onChange={handleShortcutCapture}
+          />
 
-      <div className="flex items-center justify-between">
-        <div className="space-y-0.5">
-          <p className="text-sm font-medium">Open config file</p>
-          <p className="text-xs text-muted-foreground">
-            LiveEditor text is saved per category in config.json on this device.
+          <p
+            id={`${shortcutId}-description`}
+            className="type-small leading-5 text-muted-foreground"
+          >
+            Click, then press the keys you want. Esc cancels; Backspace clears
+            it to disable the global shortcut.
+          </p>
+        </div>
+
+        {canBindSecondShortcut && (
+          <div className="space-y-2">
+            <Label
+              htmlFor={secondaryShortcutId}
+              className="settings-label flex items-center gap-2"
+            >
+              <Keyboard className="h-4 w-4" />
+              Second toggle shortcut
+            </Label>
+            <KeybindingCaptureInput
+              id={secondaryShortcutId}
+              value={secondaryShortcut}
+              ariaLabel="Second toggle shortcut"
+              ariaDescribedBy={`${secondaryShortcutId}-description`}
+              onChange={handleSecondaryShortcutCapture}
+            />
+
+            <p
+              id={`${secondaryShortcutId}-description`}
+              className="type-small leading-5 text-muted-foreground"
+            >
+              Optional — another key that opens the same LiveEditor. It has to
+              differ from the one above.
+            </p>
+          </div>
+        )}
+      </div>
+    ),
+    config: (
+      <div className="settings-action-row flex items-center justify-between gap-4">
+        <div className="min-w-0 space-y-1">
+          <p className="settings-label">Open config file</p>
+          <p className="type-small leading-5 text-muted-foreground">
+            Open native window and shortcut preferences on this Mac.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={handleOpenConfigFile}>
           Open config.json
         </Button>
       </div>
+    ),
+  }
+  return children ? (
+    children(controls)
+  ) : (
+    <div className={cn('space-y-6', className)}>
+      {controls.opacity}
+      {controls.shortcuts}
+      {controls.config}
     </div>
   )
 }

@@ -1,4 +1,8 @@
 import type { OfflineSettingsAPI } from '@corelive/desktop-contract/offline-editor-api'
+import {
+  UserSettingsStateSchema,
+  type UserSettingsState,
+} from '@corelive/desktop-contract/settings'
 
 import { subscribeToMain } from '../ipc/subscribeToMain'
 import { typedInvoke } from '../ipc/typedInvoke'
@@ -9,6 +13,9 @@ import { typedInvoke } from '../ipc/typedInvoke'
 export function createOfflineSettingsBridge(): OfflineSettingsAPI {
   return {
     version: 1,
+    supportedKeys: Object.keys(
+      UserSettingsStateSchema.shape,
+    ) as (keyof UserSettingsState)[],
     read: async (accountId) => typedInvoke('offline-settings-read', accountId),
     prepare: async (accountId, generation, preferences) =>
       typedInvoke(

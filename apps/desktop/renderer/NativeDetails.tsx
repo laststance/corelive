@@ -18,7 +18,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from '@corelive/live-editor/ui/dialog'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 type ReadySnapshot = Extract<OfflineEditorSnapshot, { phase: 'ready' }>
 type RecoveryCopy = OfflineWorkspace['recoveryCopies'][number]
@@ -136,10 +136,12 @@ export function NativeDetails({
   onUndo,
   onSelect,
   onFeedback,
+  actions,
 }: {
   store: DurableEditorStore
   main: ReadySnapshot
   busy: boolean
+  actions?: ReactNode
   onClose: () => void
   onUndo: (completion: OfflineCompletion) => Promise<void>
   onSelect: (categoryId: number) => Promise<void>
@@ -247,6 +249,7 @@ export function NativeDetails({
         this Mac.
       </p>
       <DetailsConnection main={main} store={store} onFeedback={onFeedback} />
+      {actions}
       {data.error && (
         <div role="alert">
           <p>Could not load details. Your writing is still available.</p>
@@ -632,6 +635,7 @@ function PendingActions({
   completion: OfflineCompletion
   categories: EditorCategory[]
   busy: boolean
+  actions?: ReactNode
   loading: boolean
   onRepair: (repair: Repair) => void
   store: DurableEditorStore
@@ -709,6 +713,7 @@ function RemovedCategories({
 }: {
   categories: EditorCategory[]
   busy: boolean
+  actions?: ReactNode
   onRepair: (repair: Repair) => void
 }) {
   if (!categories.some((category) => category.removed)) return null

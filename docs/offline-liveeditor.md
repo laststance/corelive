@@ -25,6 +25,26 @@ configuration and are not exposed to another account.
 
 ## Understand the status
 
+In **Settings → LiveEditor**, turn off **Show save and sync status** to hide the
+two routine lines below your writing. The choice persists on this Mac. Existing
+installations keep the status visible until you change it. When shown, the footer
+keeps a fixed height through saving and completion synchronization.
+
+**Details** stays in the header in either mode. A local save failure changes it
+to **Not saved**; open it for **Retry**, **Copy writing**, or **Copy unsaved
+categories**. Completion Undo has a reserved header slot and is also available
+in Details. Hiding the routine footer never disables persistence, error alerts,
+recovery, or the original Undo deadline. If clipboard access fails, close Details
+first, then select and copy your writing manually.
+
+Settings displays progress until the native workspace acknowledges a change.
+Unconfirmed writes retain their command identity for safe Retry. Automatic
+recovery is bounded to three attempts and 30 seconds spent on Settings; leaving
+the page pauses that budget. **Restore saved settings** is offered only when no
+write is unresolved, and re-reads the native value before restoring it. A newer
+edit takes precedence over an in-progress restoration. Older desktop versions
+hide unsupported controls while retaining recovery for their existing settings.
+
 | Status                                   | Meaning and action                                                                            |
 | ---------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `Saving on this Mac…`                    | Current writing has not yet received a durable save acknowledgement.                          |
@@ -47,6 +67,24 @@ original completion time rather than assigning the upload date.
 Today Ember retains its saved setting and is off by default. `On this Mac` is a
 device count; `Account total · last confirmed` is a stale account count. Neither
 claims a freshly fetched global total while disconnected.
+
+## Preference recovery diagnostics
+
+Settings shows an actionable message when automatic recovery stops. Diagnostics
+use stable reason codes and the `Native preference synchronization stopped` log
+anchor. They include bridge version/capability, changed key names, attempt,
+certainty and expected/observed revisions; an unresolved write also carries its
+command ID for correlation. Preference values, writing and account identity are
+excluded. Unknown exceptions are normalized rather than logging raw IPC payloads.
+
+| Reason                                            | Meaning                                                                | Recovery                                                                                  |
+| ------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `unavailable`                                     | Native Settings context is unavailable.                                | Reopen Settings and use Retry.                                                            |
+| `preparing`                                       | Initial preparation was accepted but durable readiness is unconfirmed. | Retry checks committed readiness.                                                         |
+| `revision-conflict`                               | Saved preferences changed before this patch.                           | Retry re-reads and applies retained intent.                                               |
+| `account-changed`                                 | The workspace generation no longer matches.                            | Retry reconciles the active workspace.                                                    |
+| `invalid-command`                                 | This desktop could not accept the setting command.                     | Check the desktop version, then Retry or restore the confirmed settings.                  |
+| `worker-unavailable`, `storage-failed`, `unknown` | The write may have committed; its result is uncertain.                 | Retry reuses the original command identity; restoration stays unavailable until resolved. |
 
 ## Resolve pending records
 

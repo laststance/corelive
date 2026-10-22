@@ -31,6 +31,8 @@ import {
  * Validates incoming settings for window sync, filling missing preferences and dropping retired keys from older windows.
  */
 export const UserSettingsStateSchema = z.object({
+  /** Routine native save/sync footer; older stored preferences retain visible status. */
+  liveEditorShowStatusBar: z.boolean().catch(true),
   /** Opt-in Today Ember above both LiveEditor hosts; existing installs keep it hidden. */
   showTodayEmber: z.boolean().default(false),
   /** LiveEditor editor font family. `.catch` (not `.default`) so a MISSING *or*
@@ -104,6 +106,18 @@ export type UserSettingsState = z.infer<typeof UserSettingsStateSchema>
 export const UserSettingsPatchSchema = z
   .record(z.string(), z.unknown())
   .transform((input, context): Partial<UserSettingsState> => {
+    // Stored-value repair must never turn a malformed command into a valid edit.
+    if (
+      Object.hasOwn(input, 'liveEditorShowStatusBar') &&
+      typeof input.liveEditorShowStatusBar !== 'boolean'
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Invalid status visibility',
+        path: ['liveEditorShowStatusBar'],
+      })
+      return z.NEVER
+    }
     const parsed = UserSettingsStateSchema.safeParse(input)
     if (!parsed.success) {
       context.addIssue({

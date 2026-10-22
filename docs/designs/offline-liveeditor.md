@@ -6,6 +6,10 @@ Status: IMPLEMENTATION IN PROGRESS — owner approved implementation through /sh
 Mode: Startup, engineering continuation  
 Supersedes: ryotamurakami-main-design-20260902-125500.md **only for the desktop's remote-renderer assumption**; its wider product roadmap remains in effect.
 
+This document preserves the historical plan and implementation checkpoints. The
+2026-10-22 status-visibility change supersedes its original footer/action placement;
+see the [current controls and recovery guide](../offline-liveeditor.md#understand-the-status).
+
 ## Problem and agreed scope
 
 The owner encountered a full-window category-loading error that prevented access to LiveEditor. The screenshot establishes an editing interruption; it does not establish that the connection was offline. The requested improvement is explicit: start the app without a network, write, complete a line, and synchronize after reconnection.

@@ -46,3 +46,11 @@
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
+
+/* Settings labels retain the body token while giving multiline copy a 22px rhythm. */
+@utility settings-label {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 500;
+}

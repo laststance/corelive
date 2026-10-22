@@ -144,6 +144,7 @@ describe('settings cross-window sync', () => {
 
     // Assert
     expect(receiver.getState().settings).toEqual({
+      liveEditorShowStatusBar: true,
       showTodayEmber: false,
       liveEditorFontFamily: 'serif',
       liveEditorFontSize: 21,

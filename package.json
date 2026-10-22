@@ -98,6 +98,8 @@
     "coverage:unit": "pnpm coverage:unit:web && pnpm coverage:unit:electron",
     "coverage:all": "pnpm build:assets && pnpm coverage:unit",
     "prettier": "prettier --ignore-unknown --write .",
+    "qa:settings": "pnpm --filter @corelive/web exec tsx scripts/qa-settings.ts",
+    "qa:offline-editor": "pnpm --filter @corelive/desktop exec tsx scripts/qa-offline-editor.ts",
     "qa:browser": "node scripts/qa-browser.mjs",
     "prepare": "husky",
     "setup:env": "node scripts/setup-env.mjs",

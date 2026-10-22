@@ -30,21 +30,22 @@ export const TaskSettings = function TaskSettings() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {/* Shared by the web editor and the desktop panel through settings sync. */}
       <div className="flex items-center justify-between gap-4">
-        <div className="space-y-0.5">
-          <Label htmlFor="show-today-ember" className="text-sm font-medium">
+        <div className="min-w-0 space-y-1">
+          <Label htmlFor="show-today-ember" className="settings-label">
             Show Today Ember
           </Label>
           <p
             id="today-ember-description"
-            className="text-xs text-muted-foreground"
+            className="type-small leading-5 text-muted-foreground"
           >
             Show today's keeps and a warm glow above the LiveEditor.
           </p>
         </div>
         <Switch
+          className="shrink-0"
           id="show-today-ember"
           aria-describedby="today-ember-description"
           checked={showTodayEmber}

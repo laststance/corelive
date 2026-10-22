@@ -271,7 +271,7 @@ export const AppUpdateSettings = function AppUpdateSettings({
 
       {downloadProgress ? (
         <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+          <div className="type-small flex items-center justify-between gap-2 leading-5 text-muted-foreground">
             <span>Download progress</span>
             <span className="font-mono tabular-nums">
               {Math.round(downloadProgress.percent)}%

@@ -31,11 +31,8 @@ function renderLiveEditorAppearance(
 }
 
 /**
- * Find a slider thumb by its track max. The three sliders here (font size, max 24;
- * clear delay, max 5000; toast duration, max 10000) can't be told apart by
- * accessible name — the thumb (role="slider") carries none, because shadcn forwards
- * aria-label to the slider ROOT, not the thumb — so the distinct track max is the
- * stable discriminator.
+ * Finds a slider thumb by its domain maximum for existing value-boundary tests.
+ * Accessible-name and helper relationships are covered independently below.
  *
  * @param max - The aria-valuemax to match ('24' = font size, '5000' = clear delay,
  * '10000' = toast duration).
@@ -276,4 +273,26 @@ describe('LiveEditorAppearance — editor presentation', () => {
     // Assert — the duration rose by one 500 ms step in the slice.
     expect(store.getState().settings.liveEditorToastDurationMs).toBe(6500)
   })
+})
+
+test('writing sliders expose their names and related helper text to assistive technology', () => {
+  // Arrange / Act
+  renderLiveEditorAppearance({ liveEditorClearOnComplete: false })
+
+  // Assert
+  expect(
+    screen.getByRole('slider', { name: 'LiveEditor font size' }),
+  ).toBeVisible()
+  expect(
+    screen.getByRole('slider', { name: 'LiveEditor clear delay' }),
+  ).toHaveAccessibleDescription(
+    'Turn on “Clear finished lines” to use the delay.',
+  )
+  expect(
+    screen.getByRole('slider', {
+      name: 'LiveEditor completion toast duration',
+    }),
+  ).toHaveAccessibleDescription(
+    'How long completion feedback stays available in Details. Undo keeps its original deadline.',
+  )
 })

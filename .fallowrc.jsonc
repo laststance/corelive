@@ -9,6 +9,8 @@
     // Standalone sandbox entry bundled by scripts/build-offline-preloads.mjs.
     "apps/desktop/electron/preload-offline-editor.ts",
     "apps/desktop/scripts/after-build.js",
+    // Loaded by the isolated Vite harness through HTML and explicit aliases.
+    "apps/web/scripts/qa-settings/*.{ts,tsx}",
     // Run by .github/workflows/db-migrate.yml around `drizzle-kit migrate`, not by a package script.
     "apps/web/scripts/baseline-drizzle-migrations.mjs",
     "apps/web/src/components/ui/**/*.tsx",

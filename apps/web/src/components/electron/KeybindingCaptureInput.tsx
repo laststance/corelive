@@ -38,6 +38,8 @@ interface KeybindingCaptureInputProps {
   onChange: (accelerator: string) => void
   /** Accessible name — set to the shortcut's human description so `getByLabelText` resolves here. */
   ariaLabel: string
+  /** Optional helper text associated with the capture control. */
+  ariaDescribedBy?: string
   /** Stable id so a sibling `<Label htmlFor>` associates with this control. */
   id?: string
   /** Display platform; defaults to `'darwin'` (CoreLive ships macOS-only). */
@@ -91,6 +93,7 @@ export const KeybindingCaptureInput = function KeybindingCaptureInput({
   value,
   onChange,
   ariaLabel,
+  ariaDescribedBy,
   id,
   platform = 'darwin',
   disabled = false,
@@ -194,6 +197,7 @@ export const KeybindingCaptureInput = function KeybindingCaptureInput({
       type="button"
       id={id}
       aria-label={ariaLabel}
+      aria-describedby={ariaDescribedBy}
       aria-keyshortcuts={value || undefined}
       variant="outline"
       disabled={disabled}

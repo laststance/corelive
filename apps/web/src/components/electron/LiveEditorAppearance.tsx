@@ -140,117 +140,15 @@ export const LiveEditorAppearance =
     }
 
     return (
-      <div className="space-y-4">
-        {/* Clear-on-complete — tuck a finished line away after the undo window. */}
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <Label
-              htmlFor="live-editor-clear-on-complete"
-              className="text-sm font-medium"
-            >
-              Clear finished lines
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              Once you finish a line, tuck it away after the undo moment — so
-              the page clears as you go. Off keeps every line in place.
-            </p>
-          </div>
-          <Switch
-            id="live-editor-clear-on-complete"
-            checked={liveEditorClearOnComplete}
-            onCheckedChange={handleLiveEditorClearOnCompleteChange}
-          />
-        </div>
-
-        {/* Clear delay — how long a finished line lingers before it's tucked
-           away. Only meaningful while "Clear finished lines" is on, so it's
-           DISABLED (not hidden) when that's off, with a helper nudge. 0 = remove
-           the instant the line completes; up to the 5 s undo window. */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label
-              htmlFor="live-editor-clear-delay"
-              className="text-sm font-medium"
-            >
-              Clear delay
-            </Label>
-            <span className="text-xs tabular-nums text-muted-foreground">
-              {liveEditorClearDelayMs === 0
-                ? 'Instant'
-                : `${liveEditorClearDelayMs} ms`}
-            </span>
-          </div>
-          <Slider
-            id="live-editor-clear-delay"
-            aria-label="LiveEditor clear delay"
-            min={LIVE_EDITOR_CLEAR_DELAY_MIN_MS}
-            max={LIVE_EDITOR_CLEAR_DELAY_MAX_MS}
-            step={LIVE_EDITOR_CLEAR_DELAY_STEP_MS}
-            value={clearDelaySliderValue}
-            onValueChange={handleLiveEditorClearDelayChange}
-            disabled={!liveEditorClearOnComplete}
-          />
-          {/* End-labels orient the extremes; the DESIGN.md Caption tier (12px,
-             medium, uppercase, 0.05em) — muted so the slider still leads. */}
-          <div className="flex justify-between text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            <span>Instant</span>
-            <span>Linger</span>
-          </div>
-          {!liveEditorClearOnComplete ? (
-            <p className="text-xs text-muted-foreground">
-              Turn on “Clear finished lines” to use the delay.
-            </p>
-          ) : null}
-        </div>
-
-        {/* Confirmation duration — how long the “Completed” toast (with its Undo)
-           stays before it fades. Unlike the clear delay, this ALWAYS applies
-           (every completion shows the toast), so it's never disabled. The new ✕
-           on the toast dismisses it sooner (#109). Readout is raw ms — the house
-           convention (font-size shows raw px); the MIN of 2 s never hits a 0
-           "Instant" floor, so no special label is needed. */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label
-              htmlFor="live-editor-toast-duration"
-              className="text-sm font-medium"
-            >
-              Confirmation duration
-            </Label>
-            <span className="text-xs tabular-nums text-muted-foreground">
-              {`${liveEditorToastDurationMs} ms`}
-            </span>
-          </div>
-          <Slider
-            id="live-editor-toast-duration"
-            aria-label="LiveEditor completion toast duration"
-            min={LIVE_EDITOR_TOAST_DURATION_MIN_MS}
-            max={LIVE_EDITOR_TOAST_DURATION_MAX_MS}
-            step={LIVE_EDITOR_TOAST_DURATION_STEP_MS}
-            value={toastDurationSliderValue}
-            onValueChange={handleLiveEditorToastDurationChange}
-          />
-          {/* End-labels orient the extremes; the DESIGN.md Caption tier (12px,
-             medium, uppercase, 0.05em) — muted so the slider still leads. "Quick"
-             (not "Instant" — that's the clear-delay 0-floor above) ↔ "Linger". */}
-          <div className="flex justify-between text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            <span>Quick</span>
-            <span>Linger</span>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            How long the “Completed” confirmation — with its Undo — stays before
-            it fades. The ✕ lets it fade early.
-          </p>
-        </div>
-
+      <div className="space-y-6">
         {/* Font family — the three stock faces; each label previews its own. */}
         <div className="space-y-2">
-          <span className="text-sm font-medium">Font</span>
+          <span className="settings-label">Font</span>
           <RadioGroup
             aria-label="LiveEditor font family"
             value={liveEditorFontFamily}
             onValueChange={handleLiveEditorFontFamilyChange}
-            className="grid grid-cols-3 gap-2"
+            className="settings-options gap-2"
           >
             {LIVE_EDITOR_FONT_FAMILIES.map((family) => (
               <div key={family.id} className="flex items-center gap-2">
@@ -261,7 +159,7 @@ export const LiveEditorAppearance =
 
                 <Label
                   htmlFor={`live-editor-font-${family.id}`}
-                  className="text-sm font-normal"
+                  className="type-body leading-5"
                 >
                   {/* Preview each option in its own face via the same utility
                      class the editor applies, so picker and surface agree. */}
@@ -273,14 +171,10 @@ export const LiveEditorAppearance =
             ))}
           </RadioGroup>
         </div>
-
         {/* Font size — px slider; default 14 matches the prior text-sm. */}
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label
-              htmlFor="live-editor-font-size"
-              className="text-sm font-medium"
-            >
+          <div className="flex items-center justify-between gap-4">
+            <Label htmlFor="live-editor-font-size" className="settings-label">
               Font size
             </Label>
             <span className="text-xs tabular-nums text-muted-foreground">
@@ -297,15 +191,14 @@ export const LiveEditorAppearance =
             onValueChange={handleLiveEditorFontSizeChange}
           />
         </div>
-
         {/* Text color — theme-aware presets, or a custom color (Presets First). */}
         <div className="space-y-2">
-          <span className="text-sm font-medium">Text color</span>
+          <span className="settings-label">Text color</span>
           <RadioGroup
             aria-label="LiveEditor text color"
             value={isCustomLiveEditorColor ? '' : liveEditorTextColor}
             onValueChange={handleLiveEditorTextColorPresetChange}
-            className="grid grid-cols-3 gap-2"
+            className="settings-options gap-2"
           >
             {LIVE_EDITOR_TEXT_COLOR_PRESETS.map((preset) => (
               <div key={preset.id} className="flex items-center gap-2">
@@ -316,7 +209,7 @@ export const LiveEditorAppearance =
 
                 <Label
                   htmlFor={`live-editor-text-color-${preset.id}`}
-                  className="flex items-center gap-2 text-sm font-normal"
+                  className="type-body flex items-center gap-2 leading-5"
                 >
                   <span
                     aria-hidden
@@ -333,7 +226,7 @@ export const LiveEditorAppearance =
           <div className="flex items-center gap-2">
             <Label
               htmlFor="live-editor-text-color-custom"
-              className="text-sm font-normal"
+              className="type-body leading-5"
             >
               Custom
             </Label>
@@ -348,9 +241,122 @@ export const LiveEditorAppearance =
               onChange={(event) =>
                 dispatch(setLiveEditorTextColor(event.target.value))
               }
-              className="h-7 w-10 cursor-pointer rounded border bg-transparent"
+              className="h-11 w-11 cursor-pointer rounded border bg-transparent"
             />
           </div>
+        </div>{' '}
+        {/* Clear-on-complete — tuck a finished line away after the undo window. */}
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0 space-y-1">
+            <Label
+              htmlFor="live-editor-clear-on-complete"
+              className="settings-label"
+            >
+              Clear finished lines
+            </Label>
+            <p
+              id="live-editor-clear-description"
+              className="type-small leading-5 text-muted-foreground"
+            >
+              Once you finish a line, tuck it away after the undo moment — so
+              the page clears as you go. Off keeps every line in place.
+            </p>
+          </div>
+          <Switch
+            className="shrink-0"
+            id="live-editor-clear-on-complete"
+            aria-describedby="live-editor-clear-description"
+            checked={liveEditorClearOnComplete}
+            onCheckedChange={handleLiveEditorClearOnCompleteChange}
+          />
+        </div>
+        {/* Clear delay — how long a finished line lingers before it's tucked
+           away. Only meaningful while "Clear finished lines" is on, so it's
+           DISABLED (not hidden) when that's off, with a helper nudge. 0 = remove
+           the instant the line completes; up to the 5 s undo window. */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-4">
+            <Label htmlFor="live-editor-clear-delay" className="settings-label">
+              Clear delay
+            </Label>
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {liveEditorClearDelayMs === 0
+                ? 'Instant'
+                : `${liveEditorClearDelayMs} ms`}
+            </span>
+          </div>
+          <Slider
+            id="live-editor-clear-delay"
+            aria-label="LiveEditor clear delay"
+            aria-describedby={
+              !liveEditorClearOnComplete
+                ? 'live-editor-delay-description'
+                : undefined
+            }
+            min={LIVE_EDITOR_CLEAR_DELAY_MIN_MS}
+            max={LIVE_EDITOR_CLEAR_DELAY_MAX_MS}
+            step={LIVE_EDITOR_CLEAR_DELAY_STEP_MS}
+            value={clearDelaySliderValue}
+            onValueChange={handleLiveEditorClearDelayChange}
+            disabled={!liveEditorClearOnComplete}
+          />
+          {/* End-labels orient the extremes; the DESIGN.md Caption tier (12px,
+             medium, uppercase, 0.05em) — muted so the slider still leads. */}
+          <div className="flex justify-between text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <span>Instant</span>
+            <span>Linger</span>
+          </div>
+          {!liveEditorClearOnComplete ? (
+            <p
+              id="live-editor-delay-description"
+              className="type-small leading-5 text-muted-foreground"
+            >
+              Turn on “Clear finished lines” to use the delay.
+            </p>
+          ) : null}
+        </div>
+        {/* Completion feedback duration — how long the “Completed” toast (with its Undo)
+           stays before it fades. Unlike the clear delay, this ALWAYS applies
+           (every completion shows the toast), so it's never disabled. The new ✕
+           on the toast dismisses it sooner (#109). Readout is raw ms — the house
+           convention (font-size shows raw px); the MIN of 2 s never hits a 0
+           "Instant" floor, so no special label is needed. */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-4">
+            <Label
+              htmlFor="live-editor-toast-duration"
+              className="settings-label"
+            >
+              Completion feedback duration
+            </Label>
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {`${liveEditorToastDurationMs} ms`}
+            </span>
+          </div>
+          <Slider
+            id="live-editor-toast-duration"
+            aria-label="LiveEditor completion toast duration"
+            aria-describedby="live-editor-feedback-description"
+            min={LIVE_EDITOR_TOAST_DURATION_MIN_MS}
+            max={LIVE_EDITOR_TOAST_DURATION_MAX_MS}
+            step={LIVE_EDITOR_TOAST_DURATION_STEP_MS}
+            value={toastDurationSliderValue}
+            onValueChange={handleLiveEditorToastDurationChange}
+          />
+          {/* End-labels orient the extremes; the DESIGN.md Caption tier (12px,
+             medium, uppercase, 0.05em) — muted so the slider still leads. "Quick"
+             (not "Instant" — that's the clear-delay 0-floor above) ↔ "Linger". */}
+          <div className="flex justify-between text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <span>Quick</span>
+            <span>Linger</span>
+          </div>
+          <p
+            id="live-editor-feedback-description"
+            className="type-small leading-5 text-muted-foreground"
+          >
+            How long completion feedback stays available in Details. Undo keeps
+            its original deadline.
+          </p>
         </div>
       </div>
     )

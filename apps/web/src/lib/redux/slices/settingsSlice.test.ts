@@ -34,6 +34,7 @@ describe('settingsSlice', () => {
   test('preserves the LiveEditor defaults without retired settings', () => {
     // Arrange — hard-code the remaining LiveEditor defaults.
     const expectedSettings = {
+      liveEditorShowStatusBar: true,
       showTodayEmber: false,
       liveEditorFontFamily: 'sans',
       liveEditorFontSize: 16,
@@ -53,6 +54,7 @@ describe('settingsSlice', () => {
   test('replaces the whole state on hydrateUserSettings (the cross-window apply path)', () => {
     // Arrange
     const incoming: UserSettingsState = {
+      liveEditorShowStatusBar: true,
       showTodayEmber: true,
       liveEditorFontFamily: 'serif',
       liveEditorFontSize: 20,
@@ -67,6 +69,7 @@ describe('settingsSlice', () => {
 
     // Assert
     expect(next).toEqual({
+      liveEditorShowStatusBar: true,
       showTodayEmber: true,
       liveEditorFontFamily: 'serif',
       liveEditorFontSize: 20,
@@ -80,6 +83,7 @@ describe('settingsSlice', () => {
   test('restores every default on resetUserSettings', () => {
     // Arrange — a fully-enabled state.
     const enabled: UserSettingsState = {
+      liveEditorShowStatusBar: true,
       showTodayEmber: true,
       liveEditorFontFamily: 'serif',
       liveEditorFontSize: 24,
@@ -94,6 +98,7 @@ describe('settingsSlice', () => {
 
     // Assert
     expect(next).toEqual({
+      liveEditorShowStatusBar: true,
       showTodayEmber: false,
       liveEditorFontFamily: 'sans',
       liveEditorFontSize: 16,
@@ -113,6 +118,7 @@ describe('settingsSlice', () => {
 
     // Assert
     expect(settings).toEqual({
+      liveEditorShowStatusBar: true,
       showTodayEmber: false,
       liveEditorFontFamily: 'sans',
       liveEditorFontSize: 16,

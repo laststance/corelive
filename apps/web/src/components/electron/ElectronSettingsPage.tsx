@@ -30,8 +30,11 @@ import {
   PanelToggle,
   VISIBLE_ON_ALL_WORKSPACES_SETTING,
 } from '@/components/electron/PanelToggle'
+import { LiveEditorStatusSetting } from '@/components/settings/LiveEditorStatusSetting'
 import { SettingsSection } from '@/components/settings/SettingsSection'
 import { ShortcutOpeningSoundSetting } from '@/components/settings/ShortcutOpeningSoundSetting'
+import { TaskSettings } from '@/components/settings/TaskSettings'
+import { ThemeSelector } from '@/components/ThemeSelector'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -205,7 +208,16 @@ export const ElectronSettingsPage =
     // page); the Electron window-chrome settings below are desktop-only, so
     // render nothing here off-Electron (D15 — one settings home for all).
     if (!isElectron) {
-      return null
+      return (
+        <>
+          <SettingsSection label="LiveEditor">
+            <TaskSettings />
+          </SettingsSection>
+          <SettingsSection label="Appearance">
+            <ThemeSelector />
+          </SettingsSection>
+        </>
+      )
     }
 
     // Older preloads must hide the heading together with unavailable sound controls.
@@ -222,144 +234,162 @@ export const ElectronSettingsPage =
     const isMac = !platform || platform === 'darwin'
 
     return (
-      // A fragment, NOT a wrapper div: these Electron sections become direct
-      // siblings of the web-common sections in page.tsx's `space-y-12` flow, so
-      // all six settings sections share one 48px rhythm (DESIGN.md 2xl).
-      <>
-        {/* Native shortcut feedback is the only sound preference with an active consumer. */}
-        {canConfigureShortcutSound ? (
-          <SettingsSection label="Sound">
-            <ShortcutOpeningSoundSetting />
-          </SettingsSection>
-        ) : null}
+      <LiveEditorSettings>
+        {({ opacity, shortcuts, config }) => (
+          <>
+            <SettingsSection label="LiveEditor">
+              <LiveEditorStatusSetting />
+              <TaskSettings />
+              <LiveEditorAppearance />
+              {opacity}
+              <PanelToggle
+                setting={LIVE_EDITOR_PIN_SETTING}
+                label="Keep on top"
+                description="Pin LiveEditor above your other windows so it stays visible."
+              />
+              <OfflineCategoryManagement />
+            </SettingsSection>
+            <SettingsSection label="Appearance">
+              <ThemeSelector />
+            </SettingsSection>
+            {(shortcuts || canConfigureShortcutSound) && (
+              <SettingsSection label="Shortcuts & Sound">
+                {shortcuts}
+                {canConfigureShortcutSound ? (
+                  <ShortcutOpeningSoundSetting />
+                ) : null}
+              </SettingsSection>
+            )}
 
-        {/* LIVEEDITOR — note behavior, look-and-feel, and its keep-on-top pin.
-            Three independent siblings (advisor): the note card degrades on the
-            `liveEditor` preload, the appearance is pure Redux, and the pin lives
-            on the panels bridge — nesting the pin in the card would let a stale
-            `liveEditor` preload hide a working pin. */}
-        <SettingsSection label="LiveEditor">
-          <LiveEditorSettings />
-          <LiveEditorAppearance />
-          <OfflineCategoryManagement />
-          <PanelToggle
-            setting={LIVE_EDITOR_PIN_SETTING}
-            label="Keep on top"
-            description="Pin LiveEditor above your other windows so it stays visible."
-          />
-        </SettingsSection>
-
-        {/* APPLICATION — app-wide chrome: dock/menu-bar/login presence, the
+            {/* APPLICATION — app-wide chrome: dock/menu-bar/login presence, the
             Spaces toggle, and the Settings window size (folded from its old
             standalone card, DR-D2). */}
-        <SettingsSection label="Application">
-          {/* Hide App Icon */}
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="hide-app-icon" className="text-sm font-medium">
-                Hide App Icon
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Hide the CoreLive icon from the Dock
-              </p>
-            </div>
-            <Switch
-              id="hide-app-icon"
-              checked={hideAppIcon}
-              onCheckedChange={handleHideAppIconChange}
-            />
-          </div>
+            <SettingsSection label="Application">
+              {/* Hide App Icon */}
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0 space-y-1">
+                  <Label htmlFor="hide-app-icon" className="settings-label">
+                    Hide App Icon
+                  </Label>
+                  <p
+                    id="hide-app-icon-description"
+                    className="type-small leading-5 text-muted-foreground"
+                  >
+                    Hide the CoreLive icon from the Dock
+                  </p>
+                </div>
+                <Switch
+                  className="shrink-0"
+                  id="hide-app-icon"
+                  aria-describedby="hide-app-icon-description"
+                  checked={hideAppIcon}
+                  onCheckedChange={handleHideAppIconChange}
+                />
+              </div>
 
-          {/*
+              {/*
            Show in Menu Bar — the IPC handler shows/hides the tray live
            (SystemTrayManager.setMenuBarVisible), and ElectronStartupSync
            re-pushes the persisted value at every launch so an "off" choice
            survives restarts (boot creates the tray, then the startup sync
            hides it — same correct-after-boot pattern as Hide App Icon).
           */}
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="show-in-menu-bar" className="text-sm font-medium">
-                Show in Menu Bar
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Display CoreLive in the system menu bar
-              </p>
-            </div>
-            <Switch
-              id="show-in-menu-bar"
-              checked={showInMenuBar}
-              onCheckedChange={handleShowInMenuBarChange}
-            />
-          </div>
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0 space-y-1">
+                  <Label htmlFor="show-in-menu-bar" className="settings-label">
+                    Show in Menu Bar
+                  </Label>
+                  <p
+                    id="show-in-menu-bar-description"
+                    className="type-small leading-5 text-muted-foreground"
+                  >
+                    Display CoreLive in the system menu bar
+                  </p>
+                </div>
+                <Switch
+                  className="shrink-0"
+                  id="show-in-menu-bar"
+                  aria-describedby="show-in-menu-bar-description"
+                  checked={showInMenuBar}
+                  onCheckedChange={handleShowInMenuBarChange}
+                />
+              </div>
 
-          {/* Start at Login */}
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="start-at-login" className="text-sm font-medium">
-                Start at Login
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Automatically launch CoreLive when you log in
-              </p>
-            </div>
-            <Switch
-              id="start-at-login"
-              checked={startAtLogin}
-              onCheckedChange={handleStartAtLoginChange}
-            />
-          </div>
+              {/* Start at Login */}
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0 space-y-1">
+                  <Label htmlFor="start-at-login" className="settings-label">
+                    Start at Login
+                  </Label>
+                  <p
+                    id="start-at-login-description"
+                    className="type-small leading-5 text-muted-foreground"
+                  >
+                    Automatically launch CoreLive when you log in
+                  </p>
+                </div>
+                <Switch
+                  className="shrink-0"
+                  id="start-at-login"
+                  aria-describedby="start-at-login-description"
+                  checked={startAtLogin}
+                  onCheckedChange={handleStartAtLoginChange}
+                />
+              </div>
 
-          {/* Show on all desktops — LiveEditor's OS-level Spaces flag, kept
+              {/* Show on all desktops — LiveEditor's OS-level Spaces flag, kept
               under Application because it is app-wide chrome. */}
-          <PanelToggle
-            setting={VISIBLE_ON_ALL_WORKSPACES_SETTING}
-            label="Show on all desktops"
-            description="Keep LiveEditor visible while switching Spaces, including fullscreen Spaces."
-            disabled={!isMac}
-            note={
-              !isMac && (
-                <p className="text-xs text-muted-foreground">
-                  This option only applies on macOS.
-                </p>
-              )
-            }
-          />
+              <PanelToggle
+                setting={VISIBLE_ON_ALL_WORKSPACES_SETTING}
+                label="Show on all desktops"
+                description="Keep LiveEditor visible while switching Spaces, including fullscreen Spaces."
+                disabled={!isMac}
+                note={
+                  !isMac && (
+                    <p className="type-small leading-5 text-muted-foreground">
+                      This option only applies on macOS.
+                    </p>
+                  )
+                }
+              />
 
-          {/* Settings window size — folded in from its own "Settings Window" card. */}
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label className="text-sm font-medium">Window size</Label>
-              <p className="text-xs text-muted-foreground">
-                Drag the window edge to resize. Default: 360×380.
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={isResettingPopoverSize}
-              onClick={handleResetPopoverSize}
-            >
-              Restore default size
-            </Button>
-          </div>
-        </SettingsSection>
+              {/* Settings window size — folded in from its own "Settings Window" card. */}
+              <div className="settings-action-row flex items-center justify-between gap-4">
+                <div className="min-w-0 space-y-1">
+                  <Label className="settings-label">Window size</Label>
+                  <p className="type-small leading-5 text-muted-foreground">
+                    Drag the window edge to resize. Default: 360×380.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isResettingPopoverSize}
+                  onClick={handleResetPopoverSize}
+                >
+                  Restore default size
+                </Button>
+              </div>
+              {config}
+            </SettingsSection>
 
-        {/* UPDATES */}
-        <SettingsSection label="Updates">
-          <AppUpdateSettings />
-        </SettingsSection>
+            {/* UPDATES */}
+            <SettingsSection label="Updates">
+              <AppUpdateSettings />
+            </SettingsSection>
 
-        {/* Visible resize grip — pointer-events:none so native edge resize still works */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none fixed bottom-1 right-1 h-4 w-4 opacity-40"
-          style={{
-            backgroundImage:
-              'radial-gradient(circle, currentColor 1px, transparent 1px)',
-            backgroundSize: '3px 3px',
-          }}
-        />
-      </>
+            {/* Visible resize grip — pointer-events:none so native edge resize still works */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none fixed bottom-1 right-1 h-4 w-4 opacity-40"
+              style={{
+                backgroundImage:
+                  'radial-gradient(circle, currentColor 1px, transparent 1px)',
+                backgroundSize: '3px 3px',
+              }}
+            />
+          </>
+        )}
+      </LiveEditorSettings>
     )
   }

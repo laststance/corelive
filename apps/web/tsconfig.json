@@ -39,7 +39,8 @@
     "scripts/**/*.mjs",
     "scripts/**/*.cjs",
     "scripts/**/*.js",
-    "scripts/**/*.ts"
+    "scripts/**/*.ts",
+    "scripts/**/*.tsx"
   ],
   "exclude": ["node_modules", ".next"],
   "$schema": "https://json.schemastore.org/tsconfig.json"

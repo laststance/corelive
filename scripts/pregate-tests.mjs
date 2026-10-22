@@ -22,6 +22,16 @@ const owners = [
     directory: 'packages/eslint-plugin-dslint',
     config: 'vitest.config.ts',
   },
+  {
+    prefix: 'packages/desktop-contract/',
+    directory: 'packages/desktop-contract',
+    config: null,
+  },
+  {
+    prefix: 'packages/live-editor/',
+    directory: 'packages/live-editor',
+    config: null,
+  },
   { prefix: 'scripts/', directory: '.', config: 'vitest.config.tools.ts' },
 ]
 const selected = process.argv.slice(2)
@@ -50,7 +60,13 @@ for (const file of selected) {
 for (const [owner, files] of groups) {
   const result = spawnSync(
     'pnpm',
-    ['exec', 'vitest', 'run', '--config', owner.config, ...files],
+    [
+      'exec',
+      'vitest',
+      'run',
+      ...(owner.config ? ['--config', owner.config] : []),
+      ...files,
+    ],
     {
       cwd: path.join(root, owner.directory),
       stdio: 'inherit',
