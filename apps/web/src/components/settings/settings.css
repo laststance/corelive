@@ -16,12 +16,12 @@
 .settings-section [data-slot='slider'] {
   min-height: 44px;
 }
-.settings-section [role='radio'],
+.settings-section [role='radio']:not(.sr-only),
 .settings-section [role='slider'],
 .settings-section [role='switch'] {
   position: relative;
 }
-.settings-section [role='radio']::after,
+.settings-section [role='radio']:not(.sr-only)::after,
 .settings-section [role='slider']::after,
 .settings-section [role='switch']::after {
   content: '';

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { LiveEditorSettings } from './LiveEditorSettings'
@@ -93,6 +93,23 @@ function installLiveEditorBridge(saved: {
   setShortcutSecondaryMock.mockResolvedValue(true)
 }
 
+/** Mirrors the Settings page's separated slots so error locality is observable.
+ * @example renderSplitSettings()
+ */
+function renderSplitSettings(): void {
+  render(
+    <LiveEditorSettings>
+      {(controls) => (
+        <>
+          <section aria-label="LiveEditor">{controls.opacity}</section>
+          <section aria-label="Shortcuts & Sound">{controls.shortcuts}</section>
+          <section aria-label="Application">{controls.config}</section>
+        </>
+      )}
+    </LiveEditorSettings>,
+  )
+}
+
 describe('LiveEditorSettings', () => {
   beforeEach(() => {
     getOpacityMock.mockReset()
@@ -181,7 +198,7 @@ describe('LiveEditorSettings', () => {
       opacity: 0.7,
       shortcut: 'Alt+Space',
     })
-    render(<LiveEditorSettings />)
+    renderSplitSettings()
     const box = await screen.findByLabelText('Toggle shortcut')
     expect(box).toHaveTextContent('⌥Space')
     // The main process rejects the next accelerator as already registered.
@@ -194,8 +211,20 @@ describe('LiveEditorSettings', () => {
     // Assert: the conflict copy appears and the box rolls back to the last
     // accepted binding rather than keeping the rejected ⌘3.
     expect(
-      await screen.findByText("That combo's already in use — try another."),
-    ).toBeInTheDocument()
+      await within(
+        screen.getByRole('region', { name: 'Shortcuts & Sound' }),
+      ).findByRole('alert'),
+    ).toHaveTextContent("That combo's already in use — try another.")
+    expect(
+      within(screen.getByRole('region', { name: 'LiveEditor' })).queryByRole(
+        'alert',
+      ),
+    ).toBeNull()
+    expect(
+      within(screen.getByRole('region', { name: 'Application' })).queryByRole(
+        'alert',
+      ),
+    ).toBeNull()
     expect(box).toHaveTextContent('⌥Space')
   })
 
@@ -296,14 +325,14 @@ describe('LiveEditorSettings', () => {
     expect(openConfigMock).toHaveBeenCalledTimes(1)
   })
 
-  test('shows an error banner when opening config.json fails', async () => {
+  test('keeps a config failure beside its button when another settings control succeeds', async () => {
     // Arrange
     installLiveEditorBridge({
       opacity: 0.7,
       shortcut: 'Alt+Space',
     })
     openConfigMock.mockResolvedValueOnce(false)
-    render(<LiveEditorSettings />)
+    renderSplitSettings()
     const openButton = await screen.findByRole('button', {
       name: 'Open config.json',
     })
@@ -312,8 +341,44 @@ describe('LiveEditorSettings', () => {
     fireEvent.click(openButton)
 
     // Assert
+    const application = screen.getByRole('region', { name: 'Application' })
+    expect(await within(application).findByRole('alert')).toHaveTextContent(
+      'Failed to open config file',
+    )
+    const box = screen.getByLabelText('Toggle shortcut')
+    fireEvent.click(box)
+    fireEvent.keyDown(box, { code: 'Digit3', metaKey: true })
+    expect(await within(application).findByRole('alert')).toBeVisible()
     expect(
-      await screen.findByText('Failed to open config file'),
-    ).toBeInTheDocument()
+      within(screen.getByRole('region', { name: 'LiveEditor' })).queryByRole(
+        'alert',
+      ),
+    ).toBeNull()
+    expect(
+      within(
+        screen.getByRole('region', { name: 'Shortcuts & Sound' }),
+      ).queryByRole('alert'),
+    ).toBeNull()
+  })
+
+  test('shows an opacity load failure beside opacity while preserving loaded shortcuts', async () => {
+    // Arrange
+    installLiveEditorBridge({ opacity: 0.7, shortcut: 'Alt+Space' })
+    getOpacityMock.mockRejectedValueOnce(new Error('Opacity unavailable'))
+
+    // Act
+    renderSplitSettings()
+
+    // Assert
+    const liveEditor = await screen.findByRole('region', { name: 'LiveEditor' })
+    expect(await within(liveEditor).findByRole('alert')).toHaveTextContent(
+      'Failed to load window opacity',
+    )
+    expect(screen.getByLabelText('Toggle shortcut')).toHaveTextContent('⌥Space')
+    expect(
+      within(
+        screen.getByRole('region', { name: 'Shortcuts & Sound' }),
+      ).queryByRole('alert'),
+    ).toBeNull()
   })
 })

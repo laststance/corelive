@@ -290,7 +290,7 @@ test('writing sliders expose their names and related helper text to assistive te
   )
   expect(
     screen.getByRole('slider', {
-      name: 'LiveEditor completion toast duration',
+      name: 'LiveEditor completion feedback duration',
     }),
   ).toHaveAccessibleDescription(
     'How long completion feedback stays available in Details. Undo keeps its original deadline.',

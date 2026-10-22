@@ -101,6 +101,76 @@ test('native preferences hydrate the remote Settings page without pushing its st
   expect(fixture.prepare).not.toHaveBeenCalled()
 })
 
+test('successful native notifications do not exhaust automatic recovery for a later read failure', async () => {
+  // Arrange: three confirmed reads finish before a new transient failure.
+  vi.useFakeTimers()
+  const fixture = createFixture()
+  fixture.sync.themeChanged('dark')
+  await vi.advanceTimersByTimeAsync(0)
+  fixture.sync.refresh()
+  await vi.advanceTimersByTimeAsync(0)
+  fixture.sync.refresh()
+  await vi.advanceTimersByTimeAsync(0)
+  fixture.read.mockRejectedValueOnce(new Error('Temporary native read failure'))
+
+  // Act
+  fixture.sync.refresh()
+  await vi.advanceTimersByTimeAsync(0)
+
+  // Assert: the new failure gets an automatic retry without requiring user action.
+  expect(fixture.sync.getSnapshot()).toMatchObject({
+    status: 'unknown',
+    terminal: false,
+    attempt: 1,
+  })
+  await vi.advanceTimersByTimeAsync(3000)
+  expect(fixture.sync.getSnapshot().status).toBe('saved')
+  expect(fixture.read).toHaveBeenCalledTimes(5)
+})
+
+test('a successful slow read leaves the next recovery cycle its full thirty seconds', async () => {
+  // Arrange: a prior success used nine seconds of active route time.
+  vi.useFakeTimers()
+  const fixture = createFixture()
+  fixture.read.mockImplementationOnce(
+    async () =>
+      new Promise((resolve) => {
+        setTimeout(
+          () =>
+            resolve({
+              generation: 2,
+              preferences: {
+                revision: 4,
+                theme: 'dark',
+                settings: UserSettingsStateSchema.parse({
+                  liveEditorFontFamily: 'serif',
+                  liveEditorFontSize: 22,
+                }),
+              },
+            }),
+          9000,
+        )
+      }),
+  )
+  fixture.sync.themeChanged('dark')
+  await vi.advanceTimersByTimeAsync(9000)
+  expect(fixture.sync.getSnapshot().status).toBe('saved')
+  fixture.read.mockImplementation(async () => new Promise(() => undefined))
+
+  // Act
+  fixture.sync.refresh()
+  await vi.advanceTimersByTimeAsync(29_999)
+
+  // Assert: the earlier success cannot shorten this independent recovery deadline.
+  expect(fixture.sync.getSnapshot().terminal).toBe(false)
+  await vi.advanceTimersByTimeAsync(1)
+  expect(fixture.sync.getSnapshot()).toMatchObject({
+    status: 'unknown',
+    terminal: true,
+  })
+  expect(fixture.read).toHaveBeenCalledTimes(2)
+})
+
 test('a user edit during the initial native read wins for that field while other native preferences remain', async () => {
   // Arrange
   const fixture = createFixture()

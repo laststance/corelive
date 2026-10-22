@@ -4,7 +4,7 @@
 
 ### Added
 
-- Hide LiveEditor's routine save and sync status from Settings while keeping saving, error alerts, Details and Undo available.
+- Add a Settings option to hide LiveEditor's routine save and sync status. Saving, error alerts, Details and Undo stay available.
 
 ### Changed
 

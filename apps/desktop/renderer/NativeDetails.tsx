@@ -635,7 +635,6 @@ function PendingActions({
   completion: OfflineCompletion
   categories: EditorCategory[]
   busy: boolean
-  actions?: ReactNode
   loading: boolean
   onRepair: (repair: Repair) => void
   store: DurableEditorStore
@@ -713,7 +712,6 @@ function RemovedCategories({
 }: {
   categories: EditorCategory[]
   busy: boolean
-  actions?: ReactNode
   onRepair: (repair: Repair) => void
 }) {
   if (!categories.some((category) => category.removed)) return null

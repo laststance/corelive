@@ -335,7 +335,7 @@ export const LiveEditorAppearance =
           </div>
           <Slider
             id="live-editor-toast-duration"
-            aria-label="LiveEditor completion toast duration"
+            aria-label="LiveEditor completion feedback duration"
             aria-describedby="live-editor-feedback-description"
             min={LIVE_EDITOR_TOAST_DURATION_MIN_MS}
             max={LIVE_EDITOR_TOAST_DURATION_MAX_MS}

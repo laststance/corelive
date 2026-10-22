@@ -553,6 +553,9 @@ export class OfflinePreferenceSync {
   private saved(): void {
     this.clearRetry()
     this.pauseBudget()
+    // Confirmed success closes this recovery cycle; later notifications start fresh.
+    this.attempts = 0
+    this.remaining = 30_000
     this.publish('saved', 'confirmed')
   }
 

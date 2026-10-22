@@ -200,7 +200,7 @@ describe('ElectronSettingsPage — folded Window size control', () => {
     // Act
     render(withStore(<ElectronSettingsPage />))
 
-    // Assert: nothing is rendered — not even the Application section heading.
+    // Assert: shared LiveEditor and Appearance render; Electron-only sections do not.
     expect(screen.getByRole('heading', { name: 'LiveEditor' })).toBeVisible()
     expect(screen.getByRole('heading', { name: 'Appearance' })).toBeVisible()
     expect(

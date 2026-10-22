@@ -34,6 +34,7 @@ afterEach(() => {
   environment.theme = 'light'
   environment.path = '/settings'
   vi.clearAllMocks()
+  vi.useRealTimers()
 })
 
 test('changing palette keeps the account sync owner and commits the selected theme instead of restoring stale native theme', async () => {
@@ -139,5 +140,4 @@ test('older preloads still show a failed preference and Retry while hiding the u
     ),
   ).toBeVisible()
   expect(screen.getByRole('button', { name: 'Retry' })).toBeVisible()
-  vi.useRealTimers()
 })

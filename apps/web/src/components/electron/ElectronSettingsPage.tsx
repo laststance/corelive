@@ -204,9 +204,8 @@ export const ElectronSettingsPage =
       })
     }
 
-    // Web users see the shared Settings section (rendered by the settings
-    // page); the Electron window-chrome settings below are desktop-only, so
-    // render nothing here off-Electron (D15 — one settings home for all).
+    // Web users see the shared LiveEditor and Appearance sections; the
+    // Electron sections below are desktop-only (D15 — one settings home for all).
     if (!isElectron) {
       return (
         <>
