@@ -1,5 +1,13 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+
+import { NATIVE_WINDOW_PREFERENCES_STORAGE_KEY } from '@/lib/live-editor/constants'
 
 import { LiveEditorSettings } from './LiveEditorSettings'
 
@@ -380,5 +388,45 @@ describe('LiveEditorSettings', () => {
         screen.getByRole('region', { name: 'Shortcuts & Sound' }),
       ).queryByRole('alert'),
     ).toBeNull()
+  })
+
+  test('a successful native preferences refresh clears load errors while retaining an unrelated config failure', async () => {
+    // Arrange: both preference reads fail before a separate config action fails.
+    installLiveEditorBridge({ opacity: 0.7, shortcut: 'Alt+Space' })
+    getOpacityMock.mockRejectedValueOnce(new Error('Opacity unavailable'))
+    getShortcutMock.mockRejectedValueOnce(new Error('Shortcuts unavailable'))
+    openConfigMock.mockResolvedValueOnce(false)
+    renderSplitSettings()
+    expect(
+      await screen.findByText('Failed to load window opacity'),
+    ).toBeVisible()
+    expect(
+      await screen.findByText('Failed to load toggle shortcuts'),
+    ).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Open config.json' }))
+    expect(await screen.findByText('Failed to open config file')).toBeVisible()
+
+    // Act: a remote window's preference version triggers successful native reads.
+    window.localStorage.setItem(
+      NATIVE_WINDOW_PREFERENCES_STORAGE_KEY,
+      'recovered-native-preferences',
+    )
+    fireEvent(
+      window,
+      new StorageEvent('storage', {
+        key: NATIVE_WINDOW_PREFERENCES_STORAGE_KEY,
+      }),
+    )
+
+    // Assert: only the successfully reloaded sources lose their error messages.
+    await waitFor(() => {
+      expect(screen.queryByText('Failed to load window opacity')).toBeNull()
+      expect(screen.queryByText('Failed to load toggle shortcuts')).toBeNull()
+    })
+    expect(screen.getByText('70%')).toBeVisible()
+    expect(screen.getByLabelText('Toggle shortcut')).toHaveTextContent('⌥Space')
+    expect(screen.getByText('Failed to open config file')).toBeVisible()
+    expect(getOpacityMock).toHaveBeenCalledTimes(2)
+    expect(getShortcutMock).toHaveBeenCalledTimes(2)
   })
 })

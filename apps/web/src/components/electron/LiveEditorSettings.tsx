@@ -143,6 +143,7 @@ export const LiveEditorSettings = function LiveEditorSettings({
           if (cancelled) return
           setOpacity(op)
           lastGoodOpacityRef.current = op
+          setError('opacity', null)
         })
         .catch((loadError: unknown) => {
           log.error('Failed to load LiveEditor opacity:', loadError)
@@ -157,6 +158,7 @@ export const LiveEditorSettings = function LiveEditorSettings({
           if (cancelled) return
           setLoadedShortcut(sc)
           setLoadedSecondaryShortcut(secondarySc)
+          setError('shortcuts', null)
         })
         .catch((loadError: unknown) => {
           log.error('Failed to load LiveEditor shortcuts:', loadError)
