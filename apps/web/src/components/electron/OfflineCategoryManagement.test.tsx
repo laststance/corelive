@@ -111,7 +111,7 @@ async function settleNativeDelivery(): Promise<void> {
   })
 }
 
-beforeAll(() => orpcServer.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => orpcServer.listen({ onUnhandledFrame: 'error' }))
 beforeEach(() => {
   auth.owner = 'account-a'
   resetOrpcServer([general])

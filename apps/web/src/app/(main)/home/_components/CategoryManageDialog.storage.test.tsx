@@ -47,7 +47,7 @@ const work: CategoryWithCount = {
   recordCount: 1,
 }
 
-beforeAll(() => orpcServer.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => orpcServer.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => orpcServer.close())
 beforeEach(() => {
   vi.resetModules()

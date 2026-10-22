@@ -50,7 +50,7 @@
     "eslint-config-ts-prefixer": "catalog:",
     "eslint-plugin-react-hooks": "catalog:",
     "eslint-plugin-react-you-might-not-need-an-effect": "catalog:",
-    "fallow": "3.33.1",
+    "fallow": "3.34.1",
     "husky": "^9.1.7",
     "lint-staged": "^17.6.0",
     "prettier": "catalog:",

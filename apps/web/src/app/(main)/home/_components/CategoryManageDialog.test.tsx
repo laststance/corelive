@@ -214,7 +214,7 @@ async function renderDialog(
   return { queryClient, onOpenChange }
 }
 
-beforeAll(() => orpcServer.listen({ onUnhandledRequest: 'error' }))
+beforeAll(() => orpcServer.listen({ onUnhandledFrame: 'error' }))
 afterEach(() => orpcServer.resetHandlers())
 afterAll(() => orpcServer.close())
 

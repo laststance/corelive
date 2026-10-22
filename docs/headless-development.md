@@ -15,6 +15,15 @@ verification records; they are not current requirements or proof of new changes.
 
 ## Start the environment
 
+The workspace uses TypeScript 7 for application type checks and Next.js builds.
+`.pnpmfile.cjs` gives compiler-API consumers (including typescript-eslint and
+tsup) their own TypeScript 6 dependency until those tools support the native API.
+The Electron loader fixture uses `@typescript/typescript6` for transpilation.
+`scripts/typescript-toolchain.test.ts` verifies the native compiler and the
+private compiler APIs together. Keep the hook in dependency installation inputs.
+Each concurrent Vitest suite uses its own filesystem module cache to avoid
+clearing another suite's transformed modules.
+
 For a fresh checkout, copy `.env.example` to `apps/web/.env` and provide the Web
 configuration. For an existing root `.env`, the setup helper below copies it
 without overwriting app files and keeps signing credentials in desktop only.

@@ -46,12 +46,60 @@
       "apps/web/src/lib/schemas/settings.test.ts",
       "scripts/security-patches.test.ts"
     ],
-    ".fallowrc.jsonc": [],
+    ".fallowrc.jsonc": [
+      "scripts/typescript-toolchain.test.ts"
+    ],
     "scripts/check-workspace.mjs": [],
     "scripts/pregate-tests.mjs": [
       "scripts/security-patches.test.ts",
       "apps/desktop/electron/offline/TokenBroker.test.ts",
       "apps/web/src/components/live-editor/LiveEditor.test.tsx"
+    ],
+    "pnpm-workspace.yaml": [
+      "apps/desktop/renderer/NativeEditor.regression-1.test.tsx",
+      "apps/desktop/electron/offline/DurableEditorStore.test.ts",
+      "apps/web/src/components/live-editor/LiveEditor.test.tsx",
+      "apps/web/src/components/live-editor/LiveEditorCategoryPicker.test.tsx",
+      "apps/web/src/components/live-editor/TodayEmber.test.tsx",
+      "apps/web/src/components/live-editor/liveEditorUtils.test.ts",
+      "apps/web/src/components/live-editor/useLiveEditorWindowSettings.sync.test.tsx",
+      "apps/web/src/lib/categoryHierarchy.test.ts",
+      "apps/web/src/lib/heatmap-intensity.test.ts",
+      "apps/web/src/lib/toLocalDayKey.test.ts",
+      "apps/web/src/lib/cn.test.ts",
+      "apps/web/src/lib/themes/registry.test.ts",
+      "apps/web/src/lib/themes/contrast.test.ts",
+      "apps/desktop/electron/offline/WorkspaceService.test.ts",
+      "apps/desktop/electron/offline/OfflineEditorIPC.test.ts",
+      "apps/desktop/electron/offline/TokenBroker.test.ts",
+      "apps/desktop/electron/__tests__/ipc-contract.test.ts",
+      "apps/web/src/server/procedures/completionSync.test.ts",
+      "apps/web/src/lib/schemas/settings.test.ts",
+      "scripts/security-patches.test.ts",
+      "scripts/typescript-toolchain.test.ts"
+    ],
+    "packages/eslint-plugin-dslint/package.json": [
+      "packages/eslint-plugin-dslint/tests/rules/token-only.test.ts"
+    ],
+    ".pnpmfile.cjs": [
+      "scripts/typescript-toolchain.test.ts"
+    ],
+    "packages/eslint-plugin-dslint/vitest.config.ts": [
+      "packages/eslint-plugin-dslint/tests/rules/token-only.test.ts"
+    ],
+    "tsconfig.json": [
+      "scripts/typescript-toolchain.test.ts"
+    ],
+    "vitest.config.tools.ts": [
+      "scripts/typescript-toolchain.test.ts",
+      "scripts/security-patches.test.ts"
+    ],
+    "packages/eslint-plugin-dslint/**": [
+      "packages/eslint-plugin-dslint/tests/rules/token-only.test.ts",
+      "packages/eslint-plugin-dslint/tests/rules/class-visitors.test.ts",
+      "packages/eslint-plugin-dslint/tests/cli/css-parser.test.ts",
+      "packages/eslint-plugin-dslint/tests/utils/quoted-config-keys.test.ts",
+      "packages/eslint-plugin-dslint/tests/utils/parse-config-string-entries.test.ts"
     ]
   },
   "guards": [

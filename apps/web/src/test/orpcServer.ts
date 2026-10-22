@@ -244,7 +244,7 @@ const handler = new RPCHandler(testRouter)
  * same serialization and the same error envelope production does — only Postgres
  * and Clerk are replaced.
  * @example
- * beforeAll(() => orpcServer.listen({ onUnhandledRequest: 'error' }))
+ * beforeAll(() => orpcServer.listen({ onUnhandledFrame: 'error' }))
  */
 export const orpcServer = setupServer(
   http.all('*/api/orpc/*', async ({ request }) => {
