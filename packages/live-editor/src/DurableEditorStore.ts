@@ -123,6 +123,7 @@ export class DurableEditorStore {
     this.initializing = true
     this.main = { phase: 'opening', generation: this.main.generation }
     this.current = null
+    this.deferred = null
     this.publish()
     let queued: OfflineEditorSnapshot | null = null
     this.cleanups = [
@@ -631,21 +632,21 @@ export class DurableEditorStore {
     >,
   ): void {
     const { buffer, generation } = pending
+    const deferred =
+      this.deferred?.generation === generation ? this.deferred : null
+    // Command settlement preserves buffers, but only this connection's snapshot can authorize display.
     if (
       workspaceResult &&
+      !this.initializing &&
+      this.main.phase === 'ready' &&
       this.main.generation === generation &&
       workspaceResult.ownerId === buffer.ownerId
     ) {
-      const deferred =
-        this.deferred?.generation === generation ? this.deferred : null
-      const sync =
-        deferred?.sync ??
-        (this.main.phase === 'ready' ? this.main.sync : 'offline')
+      const sync = deferred?.sync ?? this.main.sync
       const workspace =
         deferred && deferred.workspace.revision >= workspaceResult.revision
           ? deferred.workspace
-          : this.main.phase === 'ready' &&
-              this.main.workspace.revision > workspaceResult.revision
+          : this.main.workspace.revision > workspaceResult.revision
             ? this.main.workspace
             : workspaceResult
       this.main = {
@@ -708,7 +709,9 @@ export class DurableEditorStore {
    */
   private receive(snapshot: OfflineEditorSnapshot): void {
     if (this.isOlderSnapshot(snapshot, this.main)) return
+    // A guarded initial snapshot must expose retained writing even while its save remains uncertain.
     if (
+      this.main.phase === 'ready' &&
       snapshot.phase === 'ready' &&
       snapshot.generation === this.main.generation &&
       ((this.pending && this.pending.generation === snapshot.generation) ||

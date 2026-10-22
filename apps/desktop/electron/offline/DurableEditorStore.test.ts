@@ -254,6 +254,162 @@ test.each(['older', 'status', 'revision', 'account', 'prepared'] as const)(
   },
 )
 
+test.each(['before', 'after', 'after-failure'] as const)(
+  'reconnecting preserves its loading or recovery screen when a save reply arrives %s initial reading',
+  async (ordering) => {
+    // Arrange: keep the real durable write separate from delivery of its reply.
+    const fixture = await createFixture('Original writing')
+    for (const text of [
+      'Saved one',
+      'Saved two',
+      'Saved three',
+      'Saved four',
+      'Saved five',
+      'Saved six',
+      'Saved seven',
+      'Saved eight',
+    ]) {
+      fixture.store.edit(text)
+      const delivery = fixture.hold('save')
+      const saving = fixture.store.flush()
+      await delivery.ready()
+      const saved = await fixture.host.snapshot()
+      let release!: () => void
+      vi.spyOn(fixture.host, 'snapshot').mockImplementationOnce(async () => {
+        await new Promise<void>((resolve) => {
+          release = resolve
+        })
+        if (ordering === 'after-failure')
+          throw new Error('Initial reading is unavailable')
+        return saved
+      })
+
+      // Act: a reconnect retains command settlement without trusting it as initial authority.
+      const connecting = fixture.store.connect()
+      try {
+        if (ordering !== 'before') {
+          release()
+          await connecting
+        }
+        delivery.release()
+        await expect(saving).resolves.toBe(true)
+
+        // Assert: the old reply cannot bypass an unresolved or failed initial read.
+        if (ordering !== 'after') {
+          expect(fixture.store.getSnapshot().main.phase).toBe(
+            ordering === 'before' ? 'opening' : 'recovery',
+          )
+          fixture.store.edit('This input must stay blocked')
+          expect(fixture.store.getSnapshot().text).toBe('')
+          await expect(fixture.store.completeAt(0)).resolves.toBe(false)
+        }
+      } finally {
+        release()
+        delivery.release()
+        await Promise.allSettled([connecting, saving])
+      }
+      if (ordering === 'after-failure') await fixture.store.connect()
+      expect(fixture.store.getSnapshot()).toMatchObject({
+        main: { phase: 'ready' },
+        text,
+        save: 'saved',
+      })
+      expect(
+        (await fixture.worker.call('open', null)).draft.rows.map(
+          (row) => row.text,
+        ),
+      ).toEqual([text])
+    }
+  },
+)
+
+test.each([
+  ['storage-failed', 'pending'],
+  ['storage-failed', 'uncertain'],
+  ['storage-failed', 'recovery'],
+  ['worker-unavailable', 'pending'],
+  ['worker-unavailable', 'uncertain'],
+  ['worker-unavailable', 'recovery'],
+  ['invalid-reply', 'pending'],
+  ['invalid-reply', 'uncertain'],
+  ['invalid-reply', 'recovery'],
+  ['timeout', 'pending'],
+  ['timeout', 'uncertain'],
+  ['timeout', 'recovery'],
+] as const)(
+  'reconnecting after %s during %s exposes retained writing, Copy and a durable retry',
+  async (failure, ordering) => {
+    // Arrange: retain an unsaved command while independently controlling its response.
+    const fixture = await createFixture('Original writing')
+    let started!: () => void
+    const commandStarted = new Promise<void>((resolve) => {
+      started = resolve
+    })
+    let release!: () => void
+    fixture.command.mockImplementationOnce(
+      async () =>
+        new Promise((resolve) => {
+          release = (): void =>
+            resolve({
+              ok: false,
+              reason: failure === 'timeout' ? 'storage-failed' : failure,
+            })
+          started()
+        }),
+    )
+    if (failure === 'timeout')
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      fixture.store.edit('Unsaved 日本語\nSecond line')
+      const saving = fixture.store.flush()
+      await commandStarted
+
+      // Act: the guarded snapshot may arrive before, after, or following a failed initial read.
+      if (ordering === 'recovery') {
+        vi.spyOn(fixture.host, 'snapshot').mockRejectedValueOnce(
+          new Error('Initial reading is unavailable'),
+        )
+        await fixture.store.connect()
+        expect(fixture.store.getSnapshot().main.phase).toBe('recovery')
+      } else if (ordering === 'pending') await fixture.store.connect()
+      if (failure === 'timeout') await vi.advanceTimersByTimeAsync(12000)
+      else release()
+      await expect(saving).resolves.toBe(false)
+      if (ordering !== 'pending') await fixture.store.connect()
+
+      // Assert: uncertainty preserves command identity without hiding its recovery actions.
+      expect(fixture.store.getSnapshot()).toMatchObject({
+        main: { phase: 'ready' },
+        text: 'Unsaved 日本語\nSecond line',
+        save: 'failed',
+      })
+      await expect(fixture.store.copyWriting()).resolves.toBe(true)
+      expect(fixture.copyWriting).toHaveBeenCalledWith(
+        0,
+        'Unsaved 日本語\nSecond line',
+      )
+      vi.useRealTimers()
+      await expect(fixture.store.retry()).resolves.toBe(true)
+      expect(fixture.command.mock.calls[1]?.[1].commandId).toBe(
+        fixture.command.mock.calls[0]?.[1].commandId,
+      )
+      expect(fixture.store.getSnapshot()).toMatchObject({
+        main: { phase: 'ready' },
+        text: 'Unsaved 日本語\nSecond line',
+        save: 'saved',
+      })
+      expect(
+        (await fixture.worker.call('open', null)).draft.rows.map(
+          (row) => row.text,
+        ),
+      ).toEqual(['Unsaved 日本語', 'Second line'])
+    } finally {
+      release?.()
+      vi.useRealTimers()
+    }
+  },
+)
+
 test('later typing stays dirty through an older save acknowledgement and is included in the final flush', async () => {
   // Arrange
   const fixture = await createFixture()
