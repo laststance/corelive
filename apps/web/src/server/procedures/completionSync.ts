@@ -75,6 +75,15 @@ function rejected(
  * Applies one sync identity under the existing account/category lock.
  * Visible data, tombstone and immutable receipt commit in the same transaction.
  * Cancellation remains terminal even when it arrives before create or long after Undo.
+ *
+ * ```text
+ * operation -> owner lock -> existing receipt? -> same digest: replay
+ *                                            -> changed digest: conflict
+ * no receipt -> validate/mutate identity -> effect + state + receipt in one TX
+ * absent/active --cancel--> cancelled --new mutation--> still cancelled
+ * transaction failure -> rollback all effects; retry the same operation identity
+ * ```
+ *
  * @example await applySyncOperation(user.id, operation)
  */
 async function applySyncOperation(

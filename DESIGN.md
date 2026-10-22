@@ -300,7 +300,7 @@ The full color system maps onto the existing shadcn/ui tokens. Migration is per-
 - **Input:** transparent bg in light mode, white-on-white feel; focus ring uses `--ring` (amber)
 - **Badge:** pill (full radius), Caption typography (12px / 500 uppercase)
 - **Tooltip:** popover bg, 4px slide-up entrance, 13px sans; max 2 lines, no markdown
-- **Heatmap cell:** `<rect>` with explicit fill from `--hm-0…--hm-4` (resolved per active theme; the component reads them via the `HEATMAP_LEVEL_TOKENS` source-of-truth in `apps/web/src/lib/heatmap-intensity.ts`), role=button when count>0, focus ring identical to other interactive elements
+- **Heatmap cell:** `<rect>` with explicit fill from `--hm-0…--hm-4` (resolved per active theme; the component reads them via the `HEATMAP_LEVEL_TOKENS` source-of-truth in `packages/live-editor/src/heatmap-intensity.ts`), role=button when count>0, focus ring identical to other interactive elements
 
 ## Decisions Log
 

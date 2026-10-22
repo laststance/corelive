@@ -38,6 +38,14 @@ type WorkspaceFileOptions<T> = {
  * the next command to reread the committed file, so its durable command receipt can
  * resolve a lost reply. Recovery files are offered explicitly, never silently loaded.
  *
+ * ```text
+ * serialized command -> read/validate primary -> reduce/validate candidate
+ *   -> preserve previous generation -> write temp -> file sync -> rename
+ *   -> directory sync -> saved acknowledgement
+ * failure -> no acknowledgement -> reread primary + command receipt on retry
+ * invalid primary -> explicit recovery choice (never automatic promotion)
+ * ```
+ *
  * @example
  * const file = new AtomicWorkspaceFile({ directory, ownerId, parse: schema.parse })
  * await file.initialize(initialWorkspace)

@@ -60,6 +60,14 @@ type BrokerOptions = {
  * challenge. Account changes destroy the broker and invalidate all old callbacks.
  * Credentials are returned in memory only and never logged or persisted here.
  *
+ * ```text
+ * acquire(account, generation) -> pending challenge (matching callers coalesce)
+ *   -> restricted document -> exact sender/origin/request/account validation
+ *   -> ready in memory | signed-out | unavailable -> settled
+ * timeout/reset/crash -> unavailable + destroy broker -> next acquire recreates
+ * stale request / foreign sender -> ignored; forbidden navigation -> unavailable
+ * ```
+ *
  * @example
  * const broker = new TokenBroker({ origin, preload })
  * const outcome = await broker.acquire(accountId, accountGeneration)
