@@ -127,7 +127,9 @@ export class AutoUpdater {
   /** Periodic check interval reference for cleanup */
   private periodicCheckInterval: ReturnType<typeof setInterval> | null = null
 
-  constructor() {
+  constructor(
+    private readonly beforeInstall: () => Promise<boolean> = async () => true,
+  ) {
     this.updateAvailable = false
     this.updateDownloaded = false
     this.downloadProgress = null
@@ -338,7 +340,7 @@ export class AutoUpdater {
     })
 
     if (result.response === 0) {
-      autoUpdater.quitAndInstall()
+      await this.quitAndInstall()
     }
   }
 
@@ -508,9 +510,15 @@ export class AutoUpdater {
   /**
    * Force update installation.
    */
-  quitAndInstall(): void {
-    if (this.updateDownloaded) {
+  async quitAndInstall(): Promise<boolean> {
+    if (!this.updateDownloaded) return false
+    try {
+      if (!(await this.beforeInstall())) return false
       autoUpdater.quitAndInstall()
+      return true
+    } catch {
+      log.error('Could not safely prepare writing for the update restart')
+      return false
     }
   }
 

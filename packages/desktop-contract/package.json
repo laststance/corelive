@@ -8,7 +8,14 @@
     "./ipc": "./src/ipc.ts",
     "./electron-api": "./src/electron-api.ts",
     "./client": "./src/client.ts",
-    "./constants": "./src/constants.ts"
+    "./constants": "./src/constants.ts",
+    "./offline-auth": "./src/offline-auth.ts",
+    "./settings": "./src/settings.ts",
+    "./live-editor-constants": "./src/live-editor-constants.ts",
+    "./category": "./src/category.ts",
+    "./offline-workspace": "./src/offline-workspace.ts",
+    "./offline-sync": "./src/offline-sync.ts",
+    "./offline-editor-api": "./src/offline-editor-api.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -19,5 +26,8 @@
     "typescript": "catalog:",
     "vitest": "catalog:",
     "@types/node": "catalog:"
+  },
+  "dependencies": {
+    "zod": "catalog:"
   }
 }

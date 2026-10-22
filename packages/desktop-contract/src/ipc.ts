@@ -11,6 +11,13 @@
 // Shared Types
 // ============================================================================
 
+import type { OfflineAuthRequest, OfflineAuthResult } from './offline-auth'
+import type {
+  OfflineFlushRequest,
+  OfflineIPCChannels,
+} from './offline-editor-api'
+import type { OfflineEditorSnapshot } from './offline-workspace'
+
 /**
  * Auth user payload exchanged on auth IPC channels.
  *
@@ -145,7 +152,9 @@ export interface UpdaterDownloadProgress {
  * const user = await window.electronAPI.auth.getUser()
  * ```
  */
-export interface IPCChannels {
+export interface IPCChannels extends OfflineIPCChannels {
+  'offline-auth-ready': { request: void; response: OfflineAuthRequest | null }
+  'offline-auth-result': { request: OfflineAuthResult; response: boolean }
   // ──────────────────────────────────────────────────────────────────────────
   // Authentication
   // ──────────────────────────────────────────────────────────────────────────
@@ -396,6 +405,13 @@ export interface IPCChannels {
 // ============================================================================
 
 export interface IPCEventChannels {
+  'offline-editor-changed': OfflineEditorSnapshot
+  'offline-editor-flush': OfflineFlushRequest
+  'offline-editor-shown': void
+  'offline-editor-category-created': { generation: number; categoryId: number }
+  'offline-settings-changed': void
+  'offline-settings-manage-categories': void
+  'offline-auth-request': OfflineAuthRequest
   // Sent by {@link OAuthManager}; received in preload-shared/auth-oauth-bridge.ts.
   'oauth-error': { error: string }
   'clerk-sign-in-token': { token: string; provider: string }

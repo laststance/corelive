@@ -6,6 +6,7 @@
  */
 
 import type { AuthUserPayload } from '@corelive/desktop-contract/ipc'
+import type { IpcMainInvokeEvent } from 'electron'
 
 import { log } from '../logger'
 import type { WindowManager } from '../WindowManager'
@@ -18,8 +19,13 @@ import { typedHandle } from './typedHandle'
  */
 export interface AuthHandlerDeps {
   getActiveUser: () => AuthUserPayload | null
-  setActiveUser: (user: AuthUserPayload) => Promise<AuthUserPayload>
-  clearActiveUser: () => void
+  setActiveUser: (
+    user: AuthUserPayload,
+    event: IpcMainInvokeEvent,
+  ) => Promise<AuthUserPayload>
+  clearActiveUser: () => Promise<boolean>
+  sessionUnavailable: () => void
+  authorize: (event: IpcMainInvokeEvent) => boolean
   getWindowManager: () => WindowManager | null
 }
 
@@ -32,11 +38,19 @@ export interface AuthHandlerDeps {
  * registerAuthHandlers({ getActiveUser: () => activeUser, setActiveUser, clearActiveUser, getWindowManager: () => windowManager })
  */
 export function registerAuthHandlers(deps: AuthHandlerDeps): void {
-  typedHandle('auth-get-user', () => deps.getActiveUser())
+  const authorize = (event: IpcMainInvokeEvent): void => {
+    if (!deps.authorize(event))
+      throw new Error('Unauthorized authentication sender')
+  }
+  typedHandle('auth-get-user', (event) => {
+    authorize(event)
+    return deps.getActiveUser()
+  })
 
   typedHandle('auth-set-user', async (event, user) => {
+    authorize(event)
     try {
-      const storedUser = await deps.setActiveUser(user)
+      const storedUser = await deps.setActiveUser(user, event)
       // WindowManager ignores every sender but the login window's own
       // webContents, so this is safe to call for any panel that signs in.
       deps.getWindowManager()?.completeLogin(event.sender)
@@ -47,19 +61,29 @@ export function registerAuthHandlers(deps: AuthHandlerDeps): void {
     }
   })
 
-  typedHandle('auth-logout', () => {
-    deps.clearActiveUser()
+  typedHandle('auth-logout', async (event) => {
+    authorize(event)
+    if (!(await deps.clearActiveUser())) return false
     // Drop a pending login → LiveEditor handoff so the next sign-in hands off again.
     deps.getWindowManager()?.clearLoginHandoff()
     return true
   })
 
-  typedHandle('auth-is-authenticated', () => Boolean(deps.getActiveUser()))
+  typedHandle('auth-session-unavailable', (event) => {
+    authorize(event)
+    deps.sessionUnavailable()
+  })
+
+  typedHandle('auth-is-authenticated', (event) => {
+    authorize(event)
+    return Boolean(deps.getActiveUser())
+  })
 
   // Web-originated sync never hands off: its sender is not the login window.
-  typedHandle('auth-sync-from-web', async (_event, authData) => {
+  typedHandle('auth-sync-from-web', async (event, authData) => {
+    authorize(event)
     try {
-      await deps.setActiveUser(authData)
+      await deps.setActiveUser(authData, event)
       return true
     } catch (error) {
       log.error('Failed to sync auth from web:', error)

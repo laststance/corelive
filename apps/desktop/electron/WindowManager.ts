@@ -18,7 +18,6 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 
 import {
-  AUTH_PATHNAMES,
   ERR_ABORTED,
   HTTP_ERROR_STATUS_MIN,
   LOGIN_WINDOW_HEIGHT_PX,
@@ -38,6 +37,10 @@ import type { WebContents } from 'electron'
 
 import type { ConfigManager } from './ConfigManager'
 import { log } from './logger'
+import {
+  isLocalEditorDocument,
+  LOCAL_EDITOR_URL,
+} from './offline/localEditorOrigin'
 import { clampDimension } from './utils/clampDimension'
 import { isDevToolsEnabled } from './utils/debugMode'
 import type { WindowStateManager, WindowOptions } from './WindowStateManager'
@@ -53,6 +56,8 @@ const __dirname = path.dirname(__filename)
 
 /** How a panel that failed to load is retried, dismissed and parented by {@link WindowManager.recoverPanelFromLoadFailure}. */
 interface PanelLoadRecoveryOptions {
+  /** Bundled asset failures need reinstall guidance, never a connectivity instruction. */
+  localEditor?: boolean
   /** Reloads the panel route; run by each backoff retry and by the dialog's Retry button. */
   retry: () => void
   /** Run when the user picks Close in the recovery dialog. */
@@ -101,17 +106,18 @@ export class WindowManager {
 
   /** Frameless transparent LiveEditor Note panel */
   private liveEditorWindow: BrowserWindow | null
-  /** True after LiveEditor has loaded its protected editor route in this window. */
+  /** True after the bundled editor document has loaded in this window. */
   private liveEditorHasLoadedOnce: boolean
-  /** True while a manual LiveEditor show waits for auth redirect/load settlement. */
+  /** True while the bundled editor assets are loading for a requested reveal. */
   private liveEditorRevealPending: boolean
   /** Cancels the current delayed LiveEditor reveal watcher, if one is active. */
   private cancelLiveEditorReveal: (() => void) | null
-  /** True after LiveEditor was suppressed and must reload `/live-editor` before reveal. */
+  /** True after a cancelled/failed asset load needs retry before reveal. */
   private liveEditorNeedsReloadBeforeReveal: boolean
 
   /** Settings window */
   private settingsWindow: BrowserWindow | null
+  private settingsNeedsReload = false
 
   /** Whether running in development mode */
   private isDev: boolean
@@ -128,15 +134,12 @@ export class WindowManager {
   /** Callback to get tray icon bounds for popover positioning */
   private getTrayBoundsProvider: (() => Electron.Rectangle | null) | null
 
-  /**
-   * True once the startup LiveEditor load was redirected to an auth page (or
-   * failed), so the login window was surfaced in its place. Exposed only through
-   * {@link hasStartupAuthFallback} as test-observable evidence of that decision;
-   * no production code branches on it. Durable for the session.
-   */
-  private startupAuthFallbackOccurred: boolean
-  /** Cancels startup-panel auth gates that have not reached a load decision yet. */
-  private startupPanelLoadCancellations: Set<() => void>
+  /** A pending hide is cancelled by a subsequent show/toggle intent. */
+  private hideRequest = 0
+  private hidePending = false
+  private beforeEditorHide: () => Promise<boolean> = async () => true
+  private onEditorShown: () => void = () => undefined
+  private closingForQuit = false
 
   /** 500 ms blur-guard timer set by `will-resize` to keep the window open during drag. */
   private settingsResizeDebounceTimer: ReturnType<typeof setTimeout> | null
@@ -175,8 +178,6 @@ export class WindowManager {
     this.configManager = configManager
     this.windowStateManager = windowStateManager
     this.getTrayBoundsProvider = null
-    this.startupAuthFallbackOccurred = false
-    this.startupPanelLoadCancellations = new Set()
     this.settingsResizeDebounceTimer = null
     this.settingsPersistDebounceTimer = null
     this.settingsWindowIsResizing = false
@@ -529,37 +530,9 @@ export class WindowManager {
     loginWindow.focus()
   }
 
-  /**
-   * Whether the login window currently exists (and is not destroyed). A
-   * test-observability seam; no production code reads it (`restoreFromTray`
-   * deliberately does not short-circuit on it, see its docstring).
-   *
-   * @returns true while a live login window exists.
-   * @example
-   * expect(windowManager.hasLoginWindow()).toBe(true)
-   */
-  hasLoginWindow(): boolean {
-    return this.loginWindow !== null && !this.loginWindow.isDestroyed()
-  }
-
-  /**
-   * Hand off from the login window to LiveEditor once the login window reports
-   * a signed-in user (`auth-set-user`). Only the login window's own
-   * `webContents` may trigger it, and only once per handoff:
-   *
-   * ```
-   * login window ──auth-set-user──▶ main ──completeLogin(sender)──▶ [pending=true] showLiveEditor() → close login
-   *       ▲                                                                            │
-   *       │ showLoginWindow() (fallback; pending stays set)             did-fail-load / /login bounce
-   *       └────────────────── suppressLiveEditorAuthRedirect ◀─────────────────────────┘
-   * A re-shown login window's auth-set-user arrives while pending → no-op → no loop.
-   * Cleared by: revealLiveEditorNow() (LiveEditor shown + leftover login closed) / auth-logout → clearLoginHandoff()
-   * ```
-   *
-   * @param sender - `event.sender` of the `auth-set-user` IPC.
-   * @returns Nothing.
-   * @example
-   * windowManager.completeLogin(event.sender)
+  /** Reveals the local editor after its exact login window reports a signed-in user.
+   * The local scene owns preparation/locked/recovery feedback; it never hosts a remote auth page.
+   * @example windowManager.completeLogin(event.sender)
    */
   completeLogin(sender: WebContents): void {
     const loginWindow = this.loginWindow
@@ -658,9 +631,12 @@ export class WindowManager {
   ): Promise<void> {
     const messageBoxOptions: Electron.MessageBoxOptions = {
       type: 'warning',
-      message: "Couldn't reach corelive.app",
-      detail:
-        options.httpStatus === undefined
+      message: options.localEditor
+        ? "Couldn't open LiveEditor"
+        : "Couldn't reach corelive.app",
+      detail: options.localEditor
+        ? 'The bundled editor could not be loaded. Retry, or reinstall CoreLive if this continues. Saved writing remains on this Mac.'
+        : options.httpStatus === undefined
           ? 'Check your internet connection, then try again.'
           : `corelive.app returned HTTP ${options.httpStatus}. Try again in a moment.`,
       buttons: ['Retry', 'Close'],
@@ -729,7 +705,7 @@ export class WindowManager {
       __dirname,
       '..',
       'preload',
-      'preload-live-editor.cjs',
+      'preload-offline-editor.cjs',
     )
 
     this.liveEditorWindow = new BrowserWindow({
@@ -743,7 +719,7 @@ export class WindowManager {
         preload: liveEditorPreloadPath,
         webSecurity: true,
         allowRunningInsecureContent: false,
-        sandbox: false,
+        sandbox: true,
         devTools: isDevToolsEnabled(
           this.isDev,
           this.configManager?.get('advanced.enableDevTools', false) ?? false,
@@ -772,7 +748,9 @@ export class WindowManager {
     this.liveEditorRevealPending = false
     this.cancelLiveEditorReveal = null
     this.liveEditorNeedsReloadBeforeReveal = false
-    this.liveEditorWindow.loadURL(liveEditorUrl)
+    void Promise.resolve(this.liveEditorWindow.loadURL(liveEditorUrl)).catch(
+      () => undefined,
+    )
 
     this.liveEditorWindow.on('resize', () => {
       if (this.windowStateManager && this.liveEditorWindow) {
@@ -794,8 +772,13 @@ export class WindowManager {
 
     // 'close' fires before destruction — capture bounds while the window
     // is still alive.
-    this.liveEditorWindow.on('close', () => {
+    this.liveEditorWindow.on('close', (event) => {
       this.saveWindowState()
+      // Ordinary close keeps the current writing available until its save is acknowledged.
+      if (!this.closingForQuit) {
+        event.preventDefault()
+        void this.hideLiveEditor()
+      }
     })
 
     this.liveEditorWindow.on('closed', () => {
@@ -811,6 +794,9 @@ export class WindowManager {
       'render-process-gone',
       (_event, details) => {
         log.error('LiveEditor process gone:', { reason: details.reason })
+        this.cancelPendingLiveEditorReveal()
+        this.liveEditorHasLoadedOnce = false
+        this.liveEditorNeedsReloadBeforeReveal = true
       },
     )
 
@@ -837,6 +823,10 @@ export class WindowManager {
    * windowManager.toggleLiveEditor(() => playOpeningCue())
    */
   toggleLiveEditor(onShown?: () => void): boolean {
+    if (this.hidePending) {
+      this.showLiveEditor(onShown)
+      return true
+    }
     if (!this.liveEditorWindow || this.liveEditorWindow.isDestroyed()) {
       this.createLiveEditorWindow()
       this.showLiveEditor(onShown)
@@ -846,7 +836,9 @@ export class WindowManager {
     // Electron also considers panels covered by another app visible; those need focus.
     if (
       this.liveEditorWindow.isVisible() &&
-      this.liveEditorWindow.isFocused()
+      this.liveEditorWindow.isFocused() &&
+      this.liveEditorHasLoadedOnce &&
+      !this.liveEditorNeedsReloadBeforeReveal
     ) {
       this.hideLiveEditor()
       return false
@@ -865,71 +857,32 @@ export class WindowManager {
     return true
   }
 
-  /**
-   * Show LiveEditor only after its protected route settles; signed-out redirects surface the login window instead.
-   * @param onShown - Optional callback fired after the authenticated panel appears.
-   * @returns void.
-   * @example
-   * windowManager.showLiveEditor(() => playOpeningCue())
+  /** Reveals bundled assets without waiting for authentication or connectivity.
+   * @example windowManager.showLiveEditor(() => playOpeningCue())
    */
   showLiveEditor(onShown?: () => void): void {
-    const liveEditorWindow =
+    this.hideRequest++
+    this.hidePending = false
+    const panel =
       !this.liveEditorWindow || this.liveEditorWindow.isDestroyed()
         ? this.createLiveEditorWindow()
         : this.liveEditorWindow
-
-    this.revealLiveEditorAfterAuthGate(liveEditorWindow, onShown)
-  }
-
-  /**
-   * Reveal a manual LiveEditor open only when it is on the editor route; auth pages are always re-homed to the login window.
-   * @param panel - Hidden LiveEditor window whose current navigation decides whether it can appear.
-   * @param onShown - Optional callback fired only after the panel is visibly shown.
-   * @returns void.
-   * @example
-   * this.revealLiveEditorAfterAuthGate(this.createLiveEditorWindow(), onShown)
-   */
-  private revealLiveEditorAfterAuthGate(
-    panel: BrowserWindow,
-    onShown?: () => void,
-  ): void {
-    if (panel.isDestroyed()) return
-
-    const currentUrl = panel.webContents.getURL()
-
     if (
-      this.liveEditorNeedsReloadBeforeReveal ||
-      (currentUrl && this.isAuthPathname(currentUrl))
+      this.liveEditorHasLoadedOnce &&
+      !this.liveEditorNeedsReloadBeforeReveal
     ) {
-      // The old hidden window is parked on /login (or an error page); reload the
-      // protected editor route so a later signed-in open can reach LiveEditor.
-      this.liveEditorHasLoadedOnce = false
-      this.cancelPendingLiveEditorReveal()
-      this.liveEditorNeedsReloadBeforeReveal = false
-      panel.loadURL(this.getPanelUrl('liveEditor'))
-    }
-
-    if (this.liveEditorHasLoadedOnce) {
       this.revealLiveEditorNow(panel, onShown)
       return
     }
-
-    // A prior manual show is already waiting for the redirect/load decision.
     if (this.liveEditorRevealPending) return
-
-    this.watchManualLiveEditorLoad(panel, onShown)
+    const reload = this.liveEditorNeedsReloadBeforeReveal
+    this.liveEditorNeedsReloadBeforeReveal = false
+    this.watchLocalEditorLoad(panel, onShown)
+    if (reload) void panel.loadURL(LOCAL_EDITOR_URL).catch(() => undefined)
   }
 
-  /**
-   * The single place LiveEditor becomes visible: latch the loaded route, release
-   * the login handoff, close any login window left over from a fallback re-show,
-   * then show + focus. Shared by the cached reveal and both load watchers.
-   *
-   * @param panel - LiveEditor window sitting on its authenticated editor route.
-   * @param onShown - Optional callback fired after the panel is visible.
-   * @returns Nothing.
-   * @example
-   * this.revealLiveEditorNow(panel, onShown)
+  /** Presents the loaded local scene, which owns ready/preparing/locked/recovery states.
+   * @example this.revealLiveEditorNow(panel, onShown)
    */
   private revealLiveEditorNow(
     panel: BrowserWindow,
@@ -938,205 +891,130 @@ export class WindowManager {
     this.liveEditorHasLoadedOnce = true
     this.liveEditorNeedsReloadBeforeReveal = false
     this.loginHandoffPending = false
-    if (this.loginWindow && !this.loginWindow.isDestroyed()) {
+    if (this.loginWindow && !this.loginWindow.isDestroyed())
       this.loginWindow.close()
-    }
     panel.show()
     panel.focus()
+    this.onEditorShown()
     onShown?.()
   }
 
-  /**
-   * Wire the did-navigate / did-finish-load / did-fail-load trio that decides a
-   * hidden LiveEditor load, shared by the startup and manual watchers. Auth pages
-   * and network failures settle as unauthenticated; HTTP 4xx/5xx pages (a
-   * SUCCESSFUL navigation, never `did-fail-load`) keep the watch alive and
-   * self-heal in place through {@link recoverPanelFromLoadFailure}.
-   *
-   * @param panel - Hidden LiveEditor window that has started loading `/live-editor`.
-   * @param onSettled - Receives the one-time authenticated / unauthenticated decision.
-   * @returns A stop function: detaches the listeners and reports whether the watch was still undecided.
-   * @example
-   * const stopWatching = this.watchLiveEditorNavigation(panel, (authenticated) => { ... })
+  /** Retries only broken packaged assets; a network/auth failure cannot replace the editor.
+   * @example this.watchLocalEditorLoad(panel, onShown)
    */
-  private watchLiveEditorNavigation(
-    panel: BrowserWindow,
-    onSettled: (authenticated: boolean) => void,
-  ): () => boolean {
-    const { webContents } = panel
-    const removeListeners: Array<() => void> = []
-    // Guard so the decision is made exactly once per load, even though
-    // `did-navigate`, `did-finish-load` and `did-fail-load` can all fire.
-    let decided = false
-    let latestMainFrameUrl = webContents.getURL() || null
-    // True after an HTTP error page navigation so its did-finish-load is never
-    // mistaken for the editor; the next real navigation clears it.
-    let errorPagePendingFinish = false
-
-    const stopWatching = (): boolean => {
-      if (decided) return false
-      decided = true
-      removeListeners.forEach((remove) => remove())
-      // Any in-flight retry belongs to this watch; forget its budget with it.
-      this.loadRecovery.delete(panel)
-      return true
-    }
-
-    const finish = (authenticated: boolean): void => {
-      if (stopWatching()) onSettled(authenticated)
-    }
-
-    const onDidNavigate = (
-      _event: Electron.Event,
-      url: string,
-      httpResponseCode: number,
-    ): void => {
-      latestMainFrameUrl = url
-      // Auth redirects are terminal: do not let /login render inside LiveEditor.
-      if (this.isAuthPathname(url)) {
-        finish(false)
-        return
-      }
-      errorPagePendingFinish = httpResponseCode >= HTTP_ERROR_STATUS_MIN
-      if (!errorPagePendingFinish) return
-      // corelive.app answered 4xx/5xx: keep the panel hidden and reload this
-      // same window (the watch stays armed), parentless dialog on exhaustion so
-      // an empty transparent panel is never shown as a dialog parent.
-      this.recoverPanelFromLoadFailure(panel, {
-        retry: () => {
-          if (!decided) panel.loadURL(this.getPanelUrl('liveEditor'))
-        },
-        // Close ends this open: drop the still-armed watch so the next toggle
-        // starts a fresh load instead of cancelling a reveal that never comes,
-        // and keep the error page hidden until that reload.
-        dismiss: () => {
-          this.cancelPendingLiveEditorReveal()
-          this.liveEditorNeedsReloadBeforeReveal = true
-        },
-        parent: null,
-        httpStatus: httpResponseCode,
-      })
-    }
-
-    const onDidFinishLoad = (): void => {
-      if (errorPagePendingFinish) return
-      // Trust the route only after load settles; unauthenticated redirects can
-      // report the requested /live-editor URL before landing on /login.
-      const settledUrl = webContents.getURL() || latestMainFrameUrl
-      finish(settledUrl === null ? false : !this.isAuthPathname(settledUrl))
-    }
-
-    const onDidFailLoad = (
-      _event: Electron.Event,
-      errorCode: number,
-      _errorDescription: string,
-      _validatedURL: string,
-      isMainFrame: boolean,
-    ): void => {
-      // Ignore subresource failures and normal redirect cancellations.
-      if (!isMainFrame || errorCode === ERR_ABORTED) return
-      finish(false)
-    }
-
-    webContents.on('did-navigate', onDidNavigate)
-    webContents.on('did-finish-load', onDidFinishLoad)
-    webContents.on('did-fail-load', onDidFailLoad)
-    removeListeners.push(
-      () => webContents.removeListener('did-navigate', onDidNavigate),
-      () => webContents.removeListener('did-finish-load', onDidFinishLoad),
-      () => webContents.removeListener('did-fail-load', onDidFailLoad),
-    )
-
-    return stopWatching
-  }
-
-  /**
-   * Watch a manual LiveEditor open until it either reaches the editor or redirects to auth.
-   * @param panel - LiveEditor BrowserWindow that has started loading `/live-editor`.
-   * @param onShown - Optional callback fired only after an authenticated reveal.
-   * @returns void.
-   * @example
-   * this.watchManualLiveEditorLoad(panel, onShown)
-   */
-  private watchManualLiveEditorLoad(
+  private watchLocalEditorLoad(
     panel: BrowserWindow,
     onShown?: () => void,
   ): void {
+    const { webContents } = panel
+    let stopped = false
+    let failed = false
     this.liveEditorRevealPending = true
-
-    const stopWatching = this.watchLiveEditorNavigation(
-      panel,
-      (authenticated) => {
-        this.liveEditorRevealPending = false
-        this.cancelLiveEditorReveal = null
-        if (panel.isDestroyed()) return
-        if (authenticated) {
-          // Authenticated: now the editor route is safe to expose in LiveEditor.
-          this.revealLiveEditorNow(panel, onShown)
-          return
-        }
-        this.suppressLiveEditorAuthRedirect(panel)
-      },
-    )
-
-    const cancelReveal = (): void => {
-      if (!stopWatching()) return
+    const stop = (): void => {
+      if (stopped) return
+      stopped = true
+      webContents.removeListener('did-finish-load', onLoaded)
+      webContents.removeListener('did-fail-load', onFailed)
+      webContents.removeListener('did-navigate', onNavigate)
+      panel.removeListener('closed', stop)
+      this.loadRecovery.delete(panel)
       this.liveEditorRevealPending = false
-      this.liveEditorHasLoadedOnce = false
-      this.liveEditorNeedsReloadBeforeReveal = true
       this.cancelLiveEditorReveal = null
-      // A toggle-off before load settlement must keep LiveEditor hidden.
+    }
+    const recover = (): void => {
+      if (stopped) return
+      failed = true
+      this.recoverPanelFromLoadFailure(panel, {
+        localEditor: true,
+        retry: () => {
+          if (!stopped) {
+            failed = false
+            void panel.loadURL(LOCAL_EDITOR_URL).catch(() => undefined)
+          }
+        },
+        dismiss: () => {
+          stop()
+          this.liveEditorNeedsReloadBeforeReveal = true
+        },
+        parent: null,
+      })
+    }
+    const onLoaded = (): void => {
+      if (stopped || failed) return
+      if (!isLocalEditorDocument(webContents.getURL())) {
+        recover()
+        return
+      }
+      stop()
+      if (!panel.isDestroyed()) this.revealLiveEditorNow(panel, onShown)
+    }
+    const onFailed = (
+      _event: Electron.Event,
+      code: number,
+      _description: string,
+      _url: string,
+      isMainFrame: boolean,
+    ): void => {
+      if (isMainFrame && code !== ERR_ABORTED) recover()
+    }
+    const onNavigate = (
+      _event: Electron.Event,
+      url: string,
+      status: number,
+    ): void => {
+      if (!isLocalEditorDocument(url) || status >= HTTP_ERROR_STATUS_MIN)
+        recover()
+    }
+    webContents.on('did-finish-load', onLoaded)
+    webContents.on('did-fail-load', onFailed)
+    webContents.on('did-navigate', onNavigate)
+    panel.on('closed', stop)
+    this.cancelLiveEditorReveal = (): void => {
+      stop()
+      this.liveEditorNeedsReloadBeforeReveal = true
       if (!panel.isDestroyed()) panel.hide()
     }
-    this.cancelLiveEditorReveal = cancelReveal
   }
 
-  /**
-   * Hide LiveEditor when it hits auth and show the login window as the only sign-in surface.
-   *
-   * @param panel - LiveEditor BrowserWindow that attempted to host an auth page.
-   * @returns void.
-   * @example
-   * this.suppressLiveEditorAuthRedirect(panel)
-   */
-  private suppressLiveEditorAuthRedirect(panel: BrowserWindow): void {
-    this.liveEditorHasLoadedOnce = false
-    this.liveEditorRevealPending = false
-    this.cancelLiveEditorReveal = null
-    this.liveEditorNeedsReloadBeforeReveal = true
-    panel.hide()
-    // Direct, not restoreFromTray(): that now opens LiveEditor and would loop.
-    this.showLoginWindow()
-  }
-
-  /**
-   * Cancels every pending LiveEditor reveal (manual and startup) when callers toggle it off, reload it, or shut down before navigation settles.
-   *
-   * @returns void.
-   * @example
-   * this.cancelPendingLiveEditorReveal()
+  /** Cancels a delayed reveal when a shortcut toggles off or shutdown begins.
+   * @example this.cancelPendingLiveEditorReveal()
    */
   private cancelPendingLiveEditorReveal(): void {
-    // A reload or toggle-off supersedes any startup gate still waiting on the old load.
-    for (const cancelStartupPanelLoad of [
-      ...this.startupPanelLoadCancellations,
-    ]) {
-      cancelStartupPanelLoad()
-    }
-    this.startupPanelLoadCancellations.clear()
-
-    if (this.cancelLiveEditorReveal) {
-      this.cancelLiveEditorReveal()
-      return
-    }
-
+    this.cancelLiveEditorReveal?.()
     this.liveEditorRevealPending = false
   }
 
-  /** Hide the LiveEditor window without destroying it (instant re-show). */
-  hideLiveEditor(): void {
-    if (this.liveEditorWindow && !this.liveEditorWindow.isDestroyed()) {
-      this.liveEditorWindow.hide()
+  /** Installs main's durable-save handshake before any ordinary hide/close.
+   * @example manager.setBeforeEditorHide(() => runtime.flush())
+   */
+  setBeforeEditorHide(flush: () => Promise<boolean>): void {
+    this.beforeEditorHide = flush
+  }
+
+  /** Refreshes cached categories after a prepared editor becomes visible.
+   * @example manager.setOnEditorShown(() => controller.retryPreparation())
+   */
+  setOnEditorShown(callback: () => void): void {
+    this.onEditorShown = callback
+  }
+
+  /** Saves the live draft before hiding; a failed save leaves recovery actions visible.
+   * @example await windowManager.hideLiveEditor()
+   */
+  async hideLiveEditor(): Promise<void> {
+    const panel = this.liveEditorWindow
+    if (!panel || panel.isDestroyed()) return
+    const request = ++this.hideRequest
+    this.hidePending = true
+    try {
+      if (
+        (await this.beforeEditorHide()) &&
+        request === this.hideRequest &&
+        !panel.isDestroyed()
+      )
+        panel.hide()
+    } finally {
+      if (request === this.hideRequest) this.hidePending = false
     }
   }
 
@@ -1205,7 +1083,7 @@ export class WindowManager {
   }
 
   // ==========================================================================
-  // Startup panel orchestration (nav-watch auth gate)
+  // Panel URLs and local startup
   // ==========================================================================
 
   /**
@@ -1216,13 +1094,11 @@ export class WindowManager {
    * @returns The fully-qualified panel URL.
    * @example
    * this.getPanelUrl('login')      // => 'https://corelive.app/login-shell'
-   * this.getPanelUrl('liveEditor') // => 'https://corelive.app/live-editor'
+   * this.getPanelUrl('liveEditor') // => 'corelive-editor://app/index.html'
    */
   private getPanelUrl(kind: 'login' | 'liveEditor'): string {
     const baseUrl = this.serverUrl || 'https://corelive.app'
-    return kind === 'login'
-      ? `${baseUrl}/login-shell`
-      : `${baseUrl}/live-editor`
+    return kind === 'login' ? `${baseUrl}/login-shell` : LOCAL_EDITOR_URL
   }
 
   /**
@@ -1246,84 +1122,25 @@ export class WindowManager {
     }
   }
 
-  /**
-   * Whether a navigated URL is a Clerk auth page, i.e. the user is not yet
-   * authenticated. A panel that lands here was redirected by proxy.ts.
-   *
-   * @param rawUrl - Full URL from a `did-navigate` event.
-   * @returns true when the pathname is `/login` or `/sign-up`.
-   * @example
-   * this.isAuthPathname('https://corelive.app/login?redirect_url=/live-editor') // true
-   * this.isAuthPathname('https://corelive.app/login-shell')                    // false
-   */
-  private isAuthPathname(rawUrl: string): boolean {
-    try {
-      const { pathname } = new URL(rawUrl)
-      return AUTH_PATHNAMES.includes(pathname)
-    } catch {
-      // A malformed URL can't be an auth page; never crash startup over it.
-      return false
-    }
-  }
-
-  /**
-   * Open the LiveEditor panel as part of Electron startup, gated on auth.
-   *
-   * Why this exists: a cold boot must not flash an empty window when the user
-   * is signed out. We create the panel hidden, watch its first load, and only
-   * `show()` it once it actually renders the editor route (not /login).
-   * Called once from `main.ts`.
-   *
-   * @example
-   * windowManager.openStartupPanel()
+  /** Opens the bundled editor on startup, including offline and signed-out states.
+   * @example windowManager.openStartupPanel()
    */
   openStartupPanel(): void {
-    this.watchStartupPanelLoad(this.createLiveEditorWindow())
+    this.showLiveEditor()
   }
 
-  /**
-   * Whether the startup LiveEditor load was suppressed (auth page or load
-   * failure) and the login window surfaced instead. A test-observability seam;
-   * no production code reads it.
-   *
-   * @returns true once the startup suppress-and-surface decision was made.
-   * @example
-   * if (windowManager.hasStartupAuthFallback()) { ... }
+  /** Returns the actual Settings window for native capability authorization.
+   * @example const settings = windowManager.getSettingsWindow()
    */
-  hasStartupAuthFallback(): boolean {
-    return this.startupAuthFallbackOccurred
+  getSettingsWindow(): BrowserWindow | null {
+    return this.settingsWindow
   }
 
-  /**
-   * Decide the startup panel's fate from its settled load: show it if the load
-   * lands on the editor route, or keep it hidden + surface the login window if
-   * the load redirects to an auth page or fails (offline/timeout). HTTP error
-   * pages retry in place instead (see {@link watchLiveEditorNavigation}).
-   *
-   * Ordering note: {@link createLiveEditorWindow} calls `loadURL` synchronously
-   * *before* this runs. That is safe — `did-navigate` is async, so these
-   * listeners register in the same tick, before the network response arrives.
-   * Do NOT "fix" it by moving `loadURL`.
-   *
-   * @param panel - The freshly created (hidden) LiveEditor window.
+  /** Returns the actual login window for main-frame authentication notifications.
+   * @example const login = windowManager.getLoginWindow()
    */
-  private watchStartupPanelLoad(panel: BrowserWindow): void {
-    const stopWatching = this.watchLiveEditorNavigation(
-      panel,
-      (authenticated) => {
-        this.startupPanelLoadCancellations.delete(stopWatching)
-        if (authenticated) {
-          // Authed: reveal the panel the app starts with.
-          this.revealLiveEditorNow(panel)
-          return
-        }
-        // Signed out or offline: the login window is the only sign-in surface;
-        // LiveEditor reopens from the tray / handoff after sign-in.
-        this.startupAuthFallbackOccurred = true
-        this.suppressLiveEditorAuthRedirect(panel)
-      },
-    )
-    this.startupPanelLoadCancellations.add(stopWatching)
+  getLoginWindow(): BrowserWindow | null {
+    return this.loginWindow
   }
 
   // ==========================================================================
@@ -1335,9 +1152,15 @@ export class WindowManager {
    *
    * @returns The created settings window
    */
-  createSettingsWindow(): BrowserWindow {
+  createSettingsWindow(background = false): BrowserWindow {
     if (this.settingsWindow && !this.settingsWindow.isDestroyed()) {
-      this.settingsWindow.focus()
+      // A preparation timeout may have left a stale/failed remote document; retry that same window.
+      if (background || this.settingsNeedsReload)
+        this.reloadSettings(this.settingsWindow)
+      if (!background) {
+        this.settingsWindow.show()
+        this.settingsWindow.focus()
+      }
       return this.settingsWindow
     }
 
@@ -1419,12 +1242,14 @@ export class WindowManager {
     const settingsUrl = `${baseUrl}/settings`
 
     log.debug('🔧 Loading settings URL:', settingsUrl)
-    this.settingsWindow.loadURL(settingsUrl)
+    this.watchSettingsLoad(this.settingsWindow, background)
+    this.reloadSettings(this.settingsWindow)
 
     // Show when ready
-    this.settingsWindow.once('ready-to-show', () => {
-      this.settingsWindow?.show()
-    })
+    if (!background)
+      this.settingsWindow.once('ready-to-show', () => {
+        this.settingsWindow?.show()
+      })
 
     // Track when the user starts manually dragging a resize handle so the blur
     // handler below does not close the window mid-drag. `will-resize` fires
@@ -1483,6 +1308,7 @@ export class WindowManager {
         this.settingsPersistDebounceTimer = null
       }
       this.settingsWindowIsResizing = false
+      this.settingsNeedsReload = false
       this.settingsWindow = null
     })
 
@@ -1509,9 +1335,60 @@ export class WindowManager {
       this.settingsWindow.setPosition(x, y)
       this.settingsWindow.show()
       this.settingsWindow.focus()
+      if (this.settingsNeedsReload) this.reloadSettings(this.settingsWindow)
     } else {
       this.createSettingsWindow()
     }
+  }
+
+  /** Reloads only the configured Settings route after a preparation timeout or explicit retry.
+   * @example this.reloadSettings(settings)
+   */
+  private reloadSettings(settings: BrowserWindow): void {
+    void Promise.resolve(
+      settings.loadURL(`${this.serverUrl || 'https://corelive.app'}/settings`),
+    ).catch(() => undefined)
+  }
+
+  /** Keeps hidden preparation failures quiet while giving a visible Settings window Retry/Close.
+   * @example this.watchSettingsLoad(settings, true)
+   */
+  private watchSettingsLoad(
+    settings: BrowserWindow,
+    background: boolean,
+  ): void {
+    let failed = false
+    const fail = (httpStatus?: number): void => {
+      failed = true
+      this.settingsNeedsReload = true
+      if (background && !settings.isVisible()) return
+      this.recoverPanelFromLoadFailure(settings, {
+        retry: () => this.reloadSettings(settings),
+        dismiss: () => settings.hide(),
+        parent: settings,
+        httpStatus,
+      })
+    }
+    settings.webContents.on('did-start-loading', () => {
+      failed = false
+    })
+    settings.webContents.on(
+      'did-fail-load',
+      (_event, code, _description, _url, mainFrame) => {
+        if (mainFrame && code !== ERR_ABORTED) fail()
+      },
+    )
+    settings.webContents.on('did-navigate', (_event, _url, status) => {
+      if (status >= HTTP_ERROR_STATUS_MIN) fail(status)
+    })
+    settings.webContents.on('did-finish-load', () => {
+      if (failed) return
+      this.settingsNeedsReload = false
+      this.loadRecovery.delete(settings)
+    })
+    settings.webContents.on('render-process-gone', () => {
+      this.settingsNeedsReload = true
+    })
   }
 
   /**
@@ -1540,12 +1417,21 @@ export class WindowManager {
     })
   }
 
+  /** Allows native updater close events after main has durably drained writing.
+   * macOS closes windows before before-quit during installation, so main's prepareForQuit calls this first.
+   * @example windowManager.allowWindowCloseForQuit()
+   */
+  allowWindowCloseForQuit(): void {
+    this.closingForQuit = true
+  }
+
   /** Saves window state and cancels pending reveals before app shutdown closes every window.
    * @returns Nothing.
    * @example
    * windowManager.cleanup()
    */
   cleanup(): void {
+    this.allowWindowCloseForQuit()
     this.saveWindowState()
 
     // Shutdown must detach load listeners before late navigation can reveal

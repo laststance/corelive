@@ -13,7 +13,7 @@ import { CATHEDRAL } from '../../../scripts/generate-theme-css'
  * snapshot is updated knowingly.
  */
 const globalsCss = readFileSync(
-  resolve(process.cwd(), 'src/globals.css'),
+  resolve(process.cwd(), '../../packages/live-editor/src/styles/base.css'),
   'utf-8',
 )
 

@@ -57,7 +57,7 @@ function getHandler(channel: string): IpcHandler {
  */
 function createDeps(windowManager: WindowManager | null) {
   const setActiveUser = vi.fn(async (user: AuthUserPayload) => user)
-  const clearActiveUser = vi.fn()
+  const clearActiveUser = vi.fn(async () => true)
   return {
     setActiveUser,
     clearActiveUser,
@@ -65,6 +65,8 @@ function createDeps(windowManager: WindowManager | null) {
       getActiveUser: vi.fn(() => null),
       setActiveUser,
       clearActiveUser,
+      authorize: vi.fn(() => true),
+      sessionUnavailable: vi.fn(),
       getWindowManager: vi.fn(() => windowManager),
     },
   }
@@ -100,7 +102,7 @@ describe('registerAuthHandlers', () => {
       emailAddresses: ['qa@example.com'],
       firstName: 'QA',
     })
-    expect(setActiveUser).toHaveBeenCalledWith(USER)
+    expect(setActiveUser).toHaveBeenCalledWith(USER, EVENT)
     expect(windowManager.completeLogin).toHaveBeenCalledWith(SENDER)
   })
 
@@ -179,7 +181,7 @@ describe('registerAuthHandlers', () => {
     await expect(getHandler('auth-set-user')(EVENT, USER)).resolves.toEqual(
       USER,
     )
-    expect(setActiveUser).toHaveBeenCalledWith(USER)
+    expect(setActiveUser).toHaveBeenCalledWith(USER, EVENT)
     await expect(getHandler('auth-logout')(EVENT)).resolves.toBe(true)
   })
 })

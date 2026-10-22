@@ -7,7 +7,12 @@ import { PG_UNIQUE_VIOLATION } from '@/db/constants'
 import { isPgError } from '@/db/isPgError'
 import { parseUtcTimestamp } from '@/db/parseUtcTimestamp'
 import { requireRow } from '@/db/requireRow'
-import { categoryTable, completedTable, importBatchTable } from '@/db/schema'
+import {
+  categoryTable,
+  completedTable,
+  completionSyncStateTable,
+  importBatchTable,
+} from '@/db/schema'
 import { IMPORT_TRANSACTION_TIMEOUT_MS, runTransaction } from '@/db/transaction'
 import { shiftIsoDate } from '@/lib/shiftIsoDate'
 import { toLocalDayKey } from '@/lib/toLocalDayKey'
@@ -482,19 +487,46 @@ export const deleteCompleted = authMiddleware
     // window expiry) cannot both observe the row as deletable. The number of
     // returned rows is the authoritative result; we only do an extra
     // existence read on failure to distinguish NOT_FOUND vs FORBIDDEN.
-    const deletedRows = await db
-      .delete(completedTable)
-      .where(
-        and(
-          eq(completedTable.id, id),
-          eq(completedTable.userId, user.id),
-          gte(
-            completedTable.createdAt,
-            new Date(Date.now() - COMPLETED_UNDO_WINDOW_MS),
+    const deletedRows = await runTransaction(async (tx) => {
+      await lockCategoryOwner(tx, user.id)
+      const rows = await tx
+        .delete(completedTable)
+        .where(
+          and(
+            eq(completedTable.id, id),
+            eq(completedTable.userId, user.id),
+            gte(
+              completedTable.createdAt,
+              new Date(Date.now() - COMPLETED_UNDO_WINDOW_MS),
+            ),
           ),
-        ),
-      )
-      .returning({ id: completedTable.id })
+        )
+        .returning({
+          id: completedTable.id,
+          localCompletionId: completedTable.localCompletionId,
+        })
+      const deleted = rows[0]
+      if (deleted?.localCompletionId) {
+        // Legacy Undo keeps its 60-second condition and invalidates sync replay in the same transaction.
+        await tx
+          .update(completionSyncStateTable)
+          .set({
+            cancelled: true,
+            completedId: null,
+            revision: sql`${completionSyncStateTable.revision} + 1`,
+          })
+          .where(
+            and(
+              eq(completionSyncStateTable.userId, user.id),
+              eq(
+                completionSyncStateTable.completionId,
+                deleted.localCompletionId,
+              ),
+            ),
+          )
+      }
+      return rows
+    })
 
     if (deletedRows.length === 1) {
       return { id }

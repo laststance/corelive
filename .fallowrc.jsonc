@@ -5,6 +5,8 @@
   // Wallaby reads wallaby.conf.js outside the app module graph.
   "entry": [
     "apps/desktop/electron/dev-runner.ts",
+    // Standalone sandbox entry bundled by scripts/build-offline-preloads.mjs.
+    "apps/desktop/electron/preload-offline-editor.ts",
     "apps/desktop/scripts/after-build.js",
     // Run by .github/workflows/db-migrate.yml around `drizzle-kit migrate`, not by a package script.
     "apps/web/scripts/baseline-drizzle-migrations.mjs",
@@ -26,7 +28,7 @@
   // Next.js generates route declarations; theme:generate owns the repeated theme CSS.
   "ignorePatterns": [
     "apps/web/next-env.d.ts",
-    "apps/web/src/lib/themes/generated.css",
+    "packages/live-editor/src/styles/generated.css",
   ],
   "ignoreDependencies": [
     // Next.js loads the CSS optimizer by name.

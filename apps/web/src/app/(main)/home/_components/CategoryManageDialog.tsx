@@ -59,7 +59,7 @@ interface CategoryManageDialogProps {
  * @example
  * if (isCategoryComposing(event)) return
  */
-export function isCategoryComposing(event: KeyboardEvent): boolean {
+function isCategoryComposing(event: KeyboardEvent): boolean {
   return event.nativeEvent.isComposing || event.keyCode === 229
 }
 

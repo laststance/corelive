@@ -102,6 +102,23 @@ shared artifacts. Do not import the owner's Chrome or Electron profile.
 Keep `pnpm validate` and focused `pnpm test:electron`/database checks. There is no
 login E2E test runner, authentication loop, or new E2E CI job in this setup.
 
+### Bundled offline editor
+
+The desktop editor now loads packaged renderer assets and uses an account-owned
+storage worker. Use synthetic account/workspace fixtures for renderer and IPC
+checks; never copy the owner's profile or use their session for refresh tests.
+Inspect the packaged renderer, worker and both standalone offline preloads in
+addition to the native contract tests. Record completion, Undo, save failure and
+recovery navigation, then inspect extracted frames.
+
+The [offline LiveEditor guide](offline-liveeditor.md) covers first preparation,
+completion synchronization, export/recovery, downgrade precautions and retention.
+Its release order is the verified additive database migration, then Web/API
+deployment, then desktop publication.
+Run `pnpm --filter @corelive/desktop benchmark:offline` under the pinned runtime
+for reproducible synthetic volume measurements; distinguish worker acknowledgement
+latency from renderer input latency and native startup latency.
+
 ## Why accessory mode is insufficient
 
 Electron's `app.setActivationPolicy('accessory')` removes the Dock icon and menu

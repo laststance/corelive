@@ -15,6 +15,7 @@ import {
   categoryTable,
   categoryDeletionTable,
   completedTable,
+  completionSyncStateTable,
   todoTable,
   type User,
 } from '@/db/schema'
@@ -448,6 +449,20 @@ export const deleteCategory = authMiddleware
             and(
               eq(completedTable.userId, userId),
               eq(completedTable.categoryId, id),
+            ),
+          )
+        // Changing a sync-owned projection invalidates offline expected revisions atomically.
+        await tx
+          .update(completionSyncStateTable)
+          .set({
+            categoryId: targetId,
+            revision: sql`${completionSyncStateTable.revision} + 1`,
+          })
+          .where(
+            and(
+              eq(completionSyncStateTable.userId, userId),
+              eq(completionSyncStateTable.categoryId, id),
+              eq(completionSyncStateTable.cancelled, false),
             ),
           )
         // The receipt commits with deletion, preserving the chosen destination for other hosts.

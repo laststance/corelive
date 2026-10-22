@@ -30,6 +30,7 @@ const config = [
       '_trials/**',
       // Local release and QA artifacts are not application source.
       'tmp/**',
+      '.gstack/**',
     ],
   },
   ...tsPrefixer,
@@ -132,6 +133,9 @@ const config = [
             // Custom utility classes (defined in globals.css @layer utilities)
             'cathedral-lit',
             'tap-target-24',
+            // Native repair controls use shared theme tokens and accessible hit targets.
+            'offline-action',
+            'offline-field',
             // Tailwind default color palette (temporary - will migrate to tokens)
             'text-red-*',
             'text-blue-*',
@@ -162,6 +166,7 @@ const config = [
     // shadcn/ui, packages, tests は除外
     ignores: [
       'apps/web/src/components/ui/**',
+      'packages/live-editor/src/ui/**',
       'packages/eslint-plugin-dslint/**',
       '**/*.test.ts',
       '**/*.test.tsx',

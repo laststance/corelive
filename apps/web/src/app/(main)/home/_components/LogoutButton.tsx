@@ -11,6 +11,13 @@ export const LogoutButton = function LogoutButton() {
 
   const handleLogout = async (): Promise<void> => {
     try {
+      // Upgraded native clients lock only after their current writing is safely stored.
+      const auth = window.electronAPI?.auth
+      if (
+        typeof auth?.sessionUnavailable === 'function' &&
+        !(await auth.logout())
+      )
+        return
       await signOut()
     } catch (error) {
       log.error('Logout failed:', error)

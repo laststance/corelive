@@ -14,6 +14,12 @@ import {
   getJournal,
 } from './procedures/completed'
 import {
+  syncApply,
+  syncBootstrap,
+  syncCheckpoint,
+  syncReceipts,
+} from './procedures/completionSync'
+import {
   getElectronSettings,
   upsertElectronSettings,
 } from './procedures/electronSettings'
@@ -37,6 +43,10 @@ export const router = {
     delete: deleteCategory,
   },
   completed: {
+    syncApply,
+    syncReceipts,
+    syncCheckpoint,
+    syncBootstrap,
     heatmap: getHeatmap,
     dayDetail: getDayDetail,
     journal: getJournal,

@@ -19,7 +19,7 @@ Categories organize writing and completed history in two levels:
 - In the signed-in LiveEditor picker, search by the main or subcategory name, select the full displayed path, or use **Create category…** and **Manage categories…** without leaving the editor.
 - Completed-history filters include a main category's direct entries and its subcategories. Weekly summaries, daily detail, and year in review group totals by main category with an optional subcategory breakdown. Moving a subcategory changes the grouping of past entries under the current hierarchy; their dates stay the same.
 - Deleting a category moves its direct entries to the destination shown in the confirmation, preserving the entries and their dates. The initial destination is the parent for a subcategory and `General` for a main category. Children of a deleted main category become main categories with their entries still attached; rename any child that conflicts with another main category before deleting.
-- Deletion also preserves unsaved writing in the app or browser that performs it. Other signed-in browsers and native editors rescue their own local drafts into the selected destination when they next refresh while visible, including on focus and every 15 seconds. Draft text stays in each host's local store; failed rescue keeps the source and offers **Retry**. See the [completed maintenance record](docs/ROADMAP.md#completed-maintenance--2026-10-05).
+- Deletion also preserves unsaved writing in the app or browser that performs it. Other signed-in browsers rescue their own local drafts into the selected destination when they next refresh while visible, including on focus and every 15 seconds. The bundled desktop editor retains removed categories and lets you confirm **Move writing** in Details; it refreshes connected category changes within 60 seconds. Draft text stays in each host's local store. See the [offline LiveEditor guide](docs/offline-liveeditor.md) for desktop preparation, synchronization, export, recovery and downgrade instructions, and the [completed maintenance record](docs/ROADMAP.md#completed-maintenance--2026-10-05) for browser behavior.
 
 ## Platform Support
 
@@ -63,14 +63,15 @@ One root pnpm lockfile owns all workspaces. Root commands delegate to their app;
 `pnpm dev` starts only Web, and `pnpm electron:dev` starts Web plus desktop.
 Web-specific framework instructions are in [`apps/web/AGENTS.md`](apps/web/AGENTS.md).
 
-| Directory                       | Responsibility                                                            |
-| ------------------------------- | ------------------------------------------------------------------------- |
-| `apps/web`                      | Next.js, oRPC, Drizzle schema/migrations, renderer and DB tests           |
-| `apps/desktop`                  | Electron main/preload, macOS packaging and native unit tests              |
-| `packages/desktop-contract`     | Browser-safe IPC/preload contracts and native constants used by both apps |
-| `packages/eslint-plugin-dslint` | Design-system ESLint rules                                                |
-| `assets`                        | Canonical icons and shortcut sounds; app outputs are generated            |
-| `scripts`                       | Workspace, asset, environment and Headless QA orchestration               |
+| Directory                       | Responsibility                                                              |
+| ------------------------------- | --------------------------------------------------------------------------- |
+| `apps/web`                      | Next.js, oRPC, Drizzle schema/migrations, renderer and DB tests             |
+| `apps/desktop`                  | Electron main/preload, macOS packaging and native unit tests                |
+| `packages/desktop-contract`     | Browser-safe IPC/preload contracts and native constants used by both apps   |
+| `packages/live-editor`          | Shared editor/input/category/theme presentation and durable desktop adapter |
+| `packages/eslint-plugin-dslint` | Design-system ESLint rules                                                  |
+| `assets`                        | Canonical icons and shortcut sounds; app outputs are generated              |
+| `scripts`                       | Workspace, asset, environment and Headless QA orchestration                 |
 
 Run `pnpm install --frozen-lockfile` from the root. App prebuild hooks generate
 icons/sounds even in a clean checkout. `pnpm clean` removes compiled outputs;
@@ -194,15 +195,15 @@ like `ngrok http --domain=foo.bar-ngrok.app 4991`
 
 ## Desktop Application (Electron - macOS 13+)
 
-This project includes an Electron desktop application that wraps the Next.js web app. **Desktop builds require macOS 13 or later.**
+The Electron desktop application bundles LiveEditor locally and loads Settings and sign-in from the Next.js web app. **Desktop builds require macOS 13 or later.**
 
 ### Desktop features
 
 Beyond the web app, the macOS build adds native surfaces:
 
-- **LiveEditor** — a distraction-light freeform capture window
-- **Login window** — a small fixed-size sign-in shell (`/login-shell`) shown while signed out; after OAuth sign-in it closes and LiveEditor opens. If the panel fails to load, use **Open LiveEditor** on the signed-in recovery screen to retry without signing in again.
-- **Startup** — the app opens LiveEditor at launch, or the login window while signed out; the first launch after upgrading removes retired keys (`window.floating`, `behavior.startup`, the retired `shortcuts.*` toggles, `liveEditor.syncMode` / `lastCategoryId`) from `config.json`
+- **LiveEditor** — a bundled freeform capture window that saves writing locally and reopens offline after one connected account preparation; see the [offline LiveEditor guide](docs/offline-liveeditor.md).
+- **Login window** — a small fixed-size sign-in shell (`/login-shell`) opened by **Sign in**; after OAuth sign-in it closes and LiveEditor opens. If the panel fails to load, use **Open LiveEditor** on the signed-in recovery screen to retry without signing in again.
+- **Startup** — the app opens the bundled LiveEditor at launch. A prepared account can write without a connection; an unprepared Mac shows the preparation state, and explicit sign-out leaves a locked editor with **Sign in**. Existing config migration removes retired keys (`window.floating`, the retired `shortcuts.*` toggles, `liveEditor.syncMode` / `lastCategoryId`) from `config.json`; it preserves the unused `behavior.startup` values for older builds after a downgrade.
 - **Settings** — a native settings window
 - **System tray** — menu-bar access and quick toggles
 - **Always-on-top** — keep LiveEditor above other windows (off by default)
@@ -210,7 +211,7 @@ Beyond the web app, the macOS build adds native surfaces:
 - **Global keyboard shortcuts** — optional system-wide hotkeys, including lone-modifier keys (opt-in, off by default). If a single-modifier shortcut such as Right Option stops after an unfinished start, open Settings and select that shortcut again to retry. Startup keeps the crash guard.
 - **In-app shortcuts** — while any CoreLive window has focus, `⌘N` opens LiveEditor in the browser and `⌘M` minimizes; both release when the app loses focus
 - **Deep links** — `corelive://` URLs open the app
-- **Connection recovery** — if corelive.app can't be reached, or answers with an HTTP error, while the login window or LiveEditor loads, the app retries three times and then shows a native Retry / Close dialog
+- **Load recovery** — the app retries failed local editor loads and failed remote login-window loads three times, then offers a native Retry / Close dialog. Network or authentication failures after account preparation pause completion synchronization while local writing remains available.
 - **Auto-update** — signed, notarized releases update in place. Choose **Download Now** or **Later** when prompted; Settings → Updates shows download progress and offers **Restart to Update** when ready. **Check for Updates** is available in Settings and the app menu.
 
 ### Electron Development
@@ -247,5 +248,5 @@ The built macOS applications (DMG and ZIP) will be available in `apps/desktop/di
 ### Migration verification
 
 See [monorepo QA and deployment ordering](docs/qa/monorepo-2026-10-07.md) for the
-current migration, its Headless verification boundaries, and the additive
+monorepo migration, its Headless verification boundaries, and the additive
 category-deletion receipt migration.

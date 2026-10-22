@@ -34,6 +34,7 @@ import {
   createOAuthBridge,
 } from './preload-shared/auth-oauth-bridge'
 import { exposeTrustedBridge } from './preload-shared/expose-trusted-bridge'
+import { createOfflineSettingsBridge } from './preload-shared/offline-settings-bridge'
 import { sanitizeData } from './preload-shared/sanitize-data'
 
 // `ElectronUserData` / `OAuthCallbackData` now live alongside the bridge
@@ -64,6 +65,7 @@ import { sanitizeData } from './preload-shared/sanitize-data'
  * - TypeScript-friendly structure
  */
 const electronAPI = {
+  offlineSettings: createOfflineSettingsBridge(),
   /**
    * Note: Todo operations removed - WebView architecture uses oRPC via HTTP.
    * The web app (loaded in WebView) handles all data operations through

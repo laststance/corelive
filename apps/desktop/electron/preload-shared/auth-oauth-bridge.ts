@@ -16,6 +16,7 @@
  */
 
 import type {
+  AuthBridge,
   ElectronUserData,
   OAuthCallbackData,
 } from '@corelive/desktop-contract/electron-api'
@@ -36,8 +37,10 @@ import { sanitizeData } from './sanitize-data'
  * @example
  * contextBridge.exposeInMainWorld('electronAPI', { auth: createAuthBridge() })
  */
-export function createAuthBridge() {
+export function createAuthBridge(): AuthBridge {
   return {
+    sessionUnavailable: async (): Promise<void> =>
+      typedInvoke('auth-session-unavailable'),
     /**
      * Get current user.
      */

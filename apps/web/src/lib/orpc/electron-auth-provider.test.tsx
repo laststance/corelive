@@ -133,6 +133,23 @@ describe('ElectronAuthProvider', () => {
     expect(mockSetActive).not.toHaveBeenCalled()
   })
 
+  test('an expired Clerk session pauses upgraded native synchronization without explicitly locking local writing', async () => {
+    // Arrange
+    const unavailable = vi.fn(async () => undefined)
+    window.electronAPI!.auth.sessionUnavailable = unavailable
+
+    // Act
+    render(
+      <ElectronAuthProvider>
+        <span>Settings</span>
+      </ElectronAuthProvider>,
+    )
+
+    // Assert
+    await waitFor(() => expect(unavailable).toHaveBeenCalledOnce())
+    expect(window.electronAPI!.auth.logout).not.toHaveBeenCalled()
+  })
+
   test.each(['live listener', 'main-process backlog', 'temporary listener'])(
     'keeps sign-in tickets out of logs when received through the %s',
     async (deliveryPath) => {

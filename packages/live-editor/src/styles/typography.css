@@ -1,0 +1,48 @@
+@source inline(
+  'type-hero type-h1 type-h2 type-h3 type-body type-small type-caption type-data'
+);
+
+/* DESIGN.md's eight typography tiers use the stock Tailwind font stacks. */
+@utility type-hero {
+  font-family: var(--font-sans);
+  font-size: clamp(40px, 5vw, 64px);
+  font-weight: 600;
+}
+@utility type-h1 {
+  font-family: var(--font-sans);
+  font-size: 36px;
+  font-weight: 600;
+}
+@utility type-h2 {
+  font-family: var(--font-sans);
+  font-size: 24px;
+  font-weight: 500;
+}
+@utility type-h3 {
+  font-family: var(--font-sans);
+  font-size: 18px;
+  font-weight: 600;
+}
+@utility type-body {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 400;
+}
+@utility type-small {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 400;
+}
+@utility type-caption {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+@utility type-data {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}

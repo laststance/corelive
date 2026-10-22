@@ -74,7 +74,8 @@
     "zod": "catalog:",
     "@corelive/desktop-contract": "workspace:*",
     "pino-pretty": "catalog:",
-    "thread-stream": "catalog:"
+    "thread-stream": "catalog:",
+    "@corelive/live-editor": "workspace:*"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",

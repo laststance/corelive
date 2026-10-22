@@ -1,6 +1,7 @@
 'use client'
 
 import { useUser } from '@clerk/nextjs'
+import type { TodayKeepsCount } from '@corelive/live-editor/ember'
 import { useQuery } from '@tanstack/react-query'
 import { useMemo, useSyncExternalStore } from 'react'
 
@@ -22,7 +23,7 @@ import { useLocalDayKey } from './useLocalDayKey'
  * when the account's keeps cannot be reached (query errored with nothing cached
  * — never shown as a 0), otherwise today's count.
  */
-export type TodayKeepsCount = number | null | undefined
+export type { TodayKeepsCount } from '@corelive/live-editor/ember'
 
 /** Server snapshot for the device store — the server has no localStorage, so the count resolves after hydration. */
 const getServerLocalCompletionsSnapshot = (): string | null => null

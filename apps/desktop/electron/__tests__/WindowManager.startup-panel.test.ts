@@ -35,6 +35,7 @@ interface MockBrowserWindow {
   setVisibleOnAllWorkspaces: Spy
   loadURL: Spy
   close: Spy
+  removeListener: Spy
   on: Spy
   once: Spy
   webContents: {
@@ -78,10 +79,12 @@ vi.mock('electron', () => ({
       setOpacity: vi.fn(),
       getOpacity: vi.fn(() => 1),
       setVisibleOnAllWorkspaces: vi.fn(),
-      loadURL: vi.fn((url: string) => {
+      loadURL: vi.fn(async (url: string) => {
         currentUrl = url
+        return Promise.resolve()
       }),
       close: vi.fn(),
+      removeListener: vi.fn(),
       on: vi.fn(),
       once: vi.fn(),
       webContents: {
@@ -100,8 +103,9 @@ vi.mock('electron', () => ({
             }
           },
         ),
-        loadURL: vi.fn((url: string) => {
+        loadURL: vi.fn(async (url: string) => {
           currentUrl = url
+          return Promise.resolve()
         }),
         reload: vi.fn(),
         send: vi.fn(),
@@ -144,7 +148,7 @@ vi.mock('../logger', () => ({
 import { WindowManager } from '../WindowManager'
 
 const SERVER_URL = 'https://corelive.app'
-const LIVE_EDITOR_URL = `${SERVER_URL}/live-editor`
+const LIVE_EDITOR_URL = 'corelive-editor://app/index.html'
 const LOGIN_SHELL_URL = `${SERVER_URL}/login-shell`
 const LOGIN_REDIRECT_URL = `${SERVER_URL}/login?redirect_url=/live-editor`
 
@@ -191,7 +195,7 @@ function fireHttpErrorNavigation(
   panel.fireWebContents('did-navigate', {}, url, httpStatus, 'Error')
 }
 
-describe('WindowManager startup panel nav-watch', () => {
+describe('WindowManager bundled startup panel', () => {
   beforeEach(() => {
     createdWindows.length = 0
   })
@@ -200,80 +204,92 @@ describe('WindowManager startup panel nav-watch', () => {
     vi.clearAllMocks()
   })
 
-  test('keeps a signed-out startup LiveEditor hidden and opens the login window instead', () => {
-    // Arrange: cold boot opens the LiveEditor panel hidden.
-    const windowManager = new WindowManager(SERVER_URL)
-    // Stub the login window so this unit asserts the delegation, not its own job.
-    const showLoginWindow = vi
-      .spyOn(windowManager, 'showLoginWindow')
-      .mockImplementation(() => {})
-    windowManager.openStartupPanel()
-    const panelWindow = getWindow(0)
-
-    // Act: proxy.ts redirected the unauthenticated panel load to /login.
-    panelWindow.fireWebContents('did-navigate', {}, LOGIN_REDIRECT_URL)
-
-    // Assert: panel stays hidden, the login window is surfaced, fallback recorded.
-    expect(panelWindow.win.show).not.toHaveBeenCalled()
-    expect(showLoginWindow).toHaveBeenCalledTimes(1)
-    expect(windowManager.hasStartupAuthFallback()).toBe(true)
-  })
-
-  test('waits for the panel load to settle so auth redirects can win', () => {
+  test('a failed save keeps the editor visible with its recovery actions instead of hiding it', async () => {
     // Arrange
-    const windowManager = new WindowManager(SERVER_URL)
-    const showLoginWindow = vi
-      .spyOn(windowManager, 'showLoginWindow')
-      .mockImplementation(() => {})
-    windowManager.openStartupPanel()
-    const panelWindow = getWindow(0)
+    const manager = new WindowManager(SERVER_URL)
+    manager.showLiveEditor()
+    const editor = getWindow(0)
+    editor.fireWebContents('did-finish-load')
+    manager.setBeforeEditorHide(async () => false)
 
-    // Act: Chromium first reports the requested URL, then proxy.ts redirects
-    // to /login before the load settles.
-    panelWindow.fireWebContents('did-navigate', {}, LIVE_EDITOR_URL)
-    panelWindow.fireWebContents('did-navigate', {}, LOGIN_REDIRECT_URL)
-
-    // Assert: never revealed from the transient panel URL; login window instead.
-    expect(panelWindow.win.show).not.toHaveBeenCalled()
-    expect(showLoginWindow).toHaveBeenCalledTimes(1)
-    expect(windowManager.hasStartupAuthFallback()).toBe(true)
-  })
-
-  test('treats a /sign-up landing as unauthenticated and opens the login window', () => {
-    // Arrange
-    const windowManager = new WindowManager(SERVER_URL)
-    const showLoginWindow = vi
-      .spyOn(windowManager, 'showLoginWindow')
-      .mockImplementation(() => {})
-    windowManager.openStartupPanel()
-    const panelWindow = getWindow(0)
-
-    // Act: the panel ended up on the sign-up page.
-    panelWindow.fireWebContents('did-navigate', {}, `${SERVER_URL}/sign-up`)
+    // Act
+    await manager.hideLiveEditor()
 
     // Assert
-    expect(panelWindow.win.show).not.toHaveBeenCalled()
-    expect(showLoginWindow).toHaveBeenCalledTimes(1)
-    expect(windowManager.hasStartupAuthFallback()).toBe(true)
+    expect(editor.win.hide).not.toHaveBeenCalled()
+    expect(editor.win.loadURL).toHaveBeenCalledWith(
+      'corelive-editor://app/index.html',
+    )
+    expect(createdWindows).toHaveLength(1)
   })
 
-  test('opens the login window when the startup LiveEditor load fails (offline)', () => {
-    // Arrange: LiveEditor has no network-failure recovery of its own, so a
-    // failed load falls back to the login window (which owns the retry dialog).
-    const windowManager = new WindowManager(SERVER_URL)
-    const showLoginWindow = vi
-      .spyOn(windowManager, 'showLoginWindow')
-      .mockImplementation(() => {})
-    windowManager.openStartupPanel()
-    const panelWindow = getWindow(0)
+  test('reopening after a renderer crash reloads bundled assets instead of waiting for an impossible flush', () => {
+    // Arrange
+    const manager = new WindowManager(SERVER_URL)
+    manager.showLiveEditor()
+    const editor = getWindow(0)
+    editor.fireWebContents('did-finish-load')
+    editor.win.isVisible.mockReturnValue(true)
+    editor.win.isFocused.mockReturnValue(true)
+    editor.fireWebContents('render-process-gone', {}, { reason: 'crashed' })
 
-    // Act: main-frame load failure, e.g. net::ERR_NAME_NOT_RESOLVED (-105).
-    fireNetworkLoadFailure(panelWindow, LIVE_EDITOR_URL)
+    // Act
+    const reopened = manager.toggleLiveEditor()
+    editor.fireWebContents('did-finish-load')
 
-    // Assert: failed panel stays hidden, login window surfaced, fallback recorded.
-    expect(panelWindow.win.show).not.toHaveBeenCalled()
-    expect(showLoginWindow).toHaveBeenCalledTimes(1)
-    expect(windowManager.hasStartupAuthFallback()).toBe(true)
+    // Assert
+    expect(reopened).toBe(true)
+    expect(editor.win.loadURL).toHaveBeenCalledTimes(2)
+    expect(editor.win.loadURL).toHaveBeenLastCalledWith(
+      'corelive-editor://app/index.html',
+    )
+    expect(editor.win.hide).not.toHaveBeenCalled()
+  })
+
+  test('a second toggle cancels a pending hide without letting its late save response hide the reopened editor', async () => {
+    // Arrange
+    const manager = new WindowManager(SERVER_URL)
+    manager.showLiveEditor()
+    const editor = getWindow(0)
+    editor.fireWebContents('did-finish-load')
+    editor.win.isVisible.mockReturnValue(true)
+    editor.win.isFocused.mockReturnValue(true)
+    let finish!: (saved: boolean) => void
+    manager.setBeforeEditorHide(
+      async () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+
+    // Act
+    expect(manager.toggleLiveEditor()).toBe(false)
+    expect(manager.toggleLiveEditor()).toBe(true)
+    finish(true)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    // Assert
+    expect(editor.win.hide).not.toHaveBeenCalled()
+    expect(editor.win.show).toHaveBeenCalledTimes(2)
+  })
+
+  test('preparation retries a failed Settings document without displaying or focusing its hidden window', () => {
+    // Arrange
+    const manager = new WindowManager(SERVER_URL)
+    manager.createSettingsWindow(true)
+    const settings = getWindow(0)
+    fireNetworkLoadFailure(settings, `${SERVER_URL}/settings`)
+
+    // Act
+    manager.createSettingsWindow(true)
+
+    // Assert
+    expect(createdWindows).toHaveLength(1)
+    expect(settings.win.loadURL).toHaveBeenCalledTimes(2)
+    expect(settings.win.show).not.toHaveBeenCalled()
+    expect(settings.win.focus).not.toHaveBeenCalled()
+    expect(dialog.showMessageBox).not.toHaveBeenCalled()
   })
 
   test('ignores an aborted load (ERR_ABORTED) during the redirect chain', () => {
@@ -294,7 +310,6 @@ describe('WindowManager startup panel nav-watch', () => {
 
     // Assert: no decision made — the panel was not shown, no fallback recorded.
     expect(panelWindow.win.show).not.toHaveBeenCalled()
-    expect(windowManager.hasStartupAuthFallback()).toBe(false)
   })
 
   test('ignores subresource load failures (isMainFrame false)', () => {
@@ -315,10 +330,9 @@ describe('WindowManager startup panel nav-watch', () => {
 
     // Assert: the panel's fate is undecided; it was not shown, no fallback.
     expect(panelWindow.win.show).not.toHaveBeenCalled()
-    expect(windowManager.hasStartupAuthFallback()).toBe(false)
   })
 
-  test('opens the LiveEditor panel at its own route on startup and reveals it once authenticated', () => {
+  test('opens the LiveEditor panel at its own route on startup and reveals it after its bundled document loads', () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
 
@@ -331,27 +345,7 @@ describe('WindowManager startup panel nav-watch', () => {
     // Assert: LiveEditor loaded its route and was revealed, no fallback recorded.
     expect(panelWindow.win.loadURL).toHaveBeenCalledWith(LIVE_EDITOR_URL)
     expect(panelWindow.win.show).toHaveBeenCalledTimes(1)
-    expect(windowManager.hasStartupAuthFallback()).toBe(false)
     expect(createdWindows).toHaveLength(1)
-  })
-
-  test('keeps a signed-out manual LiveEditor open hidden and opens the login window', () => {
-    // Arrange: a menu/shortcut/manual LiveEditor open does not go through the
-    // startup-only gate, so WindowManager must guard this path itself.
-    const windowManager = new WindowManager(SERVER_URL)
-    const showLoginWindow = vi
-      .spyOn(windowManager, 'showLoginWindow')
-      .mockImplementation(() => {})
-
-    // Act: proxy.ts redirected the protected LiveEditor route to /login.
-    windowManager.showLiveEditor()
-    const liveEditorWindow = getWindow(0)
-    liveEditorWindow.fireWebContents('did-navigate', {}, LOGIN_REDIRECT_URL)
-
-    // Assert: login never renders in LiveEditor; the login window is the sign-in surface.
-    expect(liveEditorWindow.win.show).not.toHaveBeenCalled()
-    expect(liveEditorWindow.win.focus).not.toHaveBeenCalled()
-    expect(showLoginWindow).toHaveBeenCalledTimes(1)
   })
 
   test('reports a shortcut LiveEditor open only after the authenticated panel is visible', () => {
@@ -396,7 +390,7 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(onShown).toHaveBeenCalledTimes(1)
   })
 
-  test('hides the focused LiveEditor when its toggle is invoked again', () => {
+  test('hides the focused LiveEditor when its toggle is invoked again', async () => {
     // Arrange
     const windowManager = new WindowManager(SERVER_URL)
     windowManager.showLiveEditor()
@@ -411,24 +405,9 @@ describe('WindowManager startup panel nav-watch', () => {
 
     // Assert
     expect(didRequestOpen).toBe(false)
+    await Promise.resolve()
     expect(liveEditorWindow.win.hide).toHaveBeenCalledTimes(1)
     expect(liveEditorWindow.win.show).toHaveBeenCalledTimes(1)
-    expect(onShown).not.toHaveBeenCalled()
-  })
-
-  test('does not report a shortcut LiveEditor open when auth keeps the panel hidden', () => {
-    // Arrange
-    const windowManager = new WindowManager(SERVER_URL)
-    vi.spyOn(windowManager, 'showLoginWindow').mockImplementation(() => {})
-    const onShown = vi.fn()
-
-    // Act
-    windowManager.toggleLiveEditor(onShown)
-    const liveEditorWindow = getWindow(0)
-    liveEditorWindow.fireWebContents('did-navigate', {}, LOGIN_REDIRECT_URL)
-
-    // Assert
-    expect(liveEditorWindow.win.show).not.toHaveBeenCalled()
     expect(onShown).not.toHaveBeenCalled()
   })
 
@@ -470,6 +449,28 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(liveEditorWindow.win.show).not.toHaveBeenCalled()
     expect(liveEditorWindow.win.focus).not.toHaveBeenCalled()
     expect(onShown).not.toHaveBeenCalled()
+  })
+
+  test('allows updater window close before before-quit only after durable quit permission', () => {
+    // Arrange
+    const windowManager = new WindowManager(SERVER_URL)
+    windowManager.showLiveEditor()
+    const { win } = getWindow(0)
+    const close = win.on.mock.calls.find(
+      ([event]) => event === 'close',
+    )?.[1] as (event: { preventDefault: () => void }) => void
+    const ordinaryClose = { preventDefault: vi.fn() }
+    close(ordinaryClose)
+    expect(ordinaryClose.preventDefault).toHaveBeenCalledOnce()
+
+    // Act: macOS sends close before before-quit/cleanup during update installation.
+    windowManager.allowWindowCloseForQuit()
+    const updaterClose = { preventDefault: vi.fn() }
+    close(updaterClose)
+
+    // Assert
+    expect(updaterClose.preventDefault).not.toHaveBeenCalled()
+    expect(win.close).not.toHaveBeenCalled()
   })
 
   test('does not reveal or open the login window when startup loads settle after cleanup', () => {
@@ -522,34 +523,6 @@ describe('WindowManager startup panel nav-watch', () => {
     expect(liveEditorWindow.win.focus).toHaveBeenCalledTimes(1)
   })
 
-  test('reloads a suppressed LiveEditor back to its route before revealing it after sign-in', () => {
-    // Arrange: the first open is signed out, leaving the hidden LiveEditor window
-    // sitting on /login until the user signs in from the login window.
-    const windowManager = new WindowManager(SERVER_URL)
-    vi.spyOn(windowManager, 'showLoginWindow').mockImplementation(() => {})
-    windowManager.showLiveEditor()
-    const liveEditorWindow = getWindow(0)
-    liveEditorWindow.fireWebContents('did-navigate', {}, LOGIN_REDIRECT_URL)
-
-    // Act: after sign-in, opening LiveEditor again reloads /live-editor and waits
-    // for that protected route to settle before showing the panel.
-    windowManager.showLiveEditor()
-    liveEditorWindow.fireWebContents('did-navigate', {}, LIVE_EDITOR_URL)
-    liveEditorWindow.fireWebContents('did-finish-load')
-
-    // Assert: the stale /login host was not shown; the real editor route was.
-    expect(liveEditorWindow.win.loadURL).toHaveBeenNthCalledWith(
-      1,
-      LIVE_EDITOR_URL,
-    )
-    expect(liveEditorWindow.win.loadURL).toHaveBeenNthCalledWith(
-      2,
-      LIVE_EDITOR_URL,
-    )
-    expect(liveEditorWindow.win.show).toHaveBeenCalledTimes(1)
-    expect(liveEditorWindow.win.focus).toHaveBeenCalledTimes(1)
-  })
-
   test('locks in the first navigation decision and ignores a later load failure', () => {
     // Arrange: a panel-only cold boot.
     const windowManager = new WindowManager(SERVER_URL)
@@ -569,11 +542,10 @@ describe('WindowManager startup panel nav-watch', () => {
     // fallback was recorded by the stale second event.
     expect(panelWindow.win.show).toHaveBeenCalledTimes(1)
     expect(showLoginWindow).not.toHaveBeenCalled()
-    expect(windowManager.hasStartupAuthFallback()).toBe(false)
   })
 
   describe('restoreFromTray (tray / dock / notification / deep link)', () => {
-    test('opens LiveEditor and reveals it once its protected route lands', () => {
+    test('opens LiveEditor and reveals it after the bundled document loads', () => {
       // Arrange: a tray-resident boot — no window has been created yet.
       const windowManager = new WindowManager(SERVER_URL)
 
@@ -589,25 +561,6 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(liveEditorWindow.win.show).toHaveBeenCalledTimes(1)
       expect(liveEditorWindow.win.focus).toHaveBeenCalledTimes(1)
       expect(createdWindows).toHaveLength(1)
-    })
-
-    test('opens the real login window instead of LiveEditor while signed out (regression)', () => {
-      // Arrange: signed-out tray click. No spies — this proves the fallback
-      // creates and shows a real /login-shell window, not a stub.
-      const windowManager = new WindowManager(SERVER_URL)
-
-      // Act: LiveEditor bounces to /login.
-      windowManager.restoreFromTray()
-      const liveEditorWindow = getWindow(0)
-      liveEditorWindow.fireWebContents('did-navigate', {}, LOGIN_REDIRECT_URL)
-
-      // Assert: LiveEditor stays hidden; the second window is the login shell.
-      const loginWindow = getWindow(1)
-      expect(liveEditorWindow.win.show).not.toHaveBeenCalled()
-      expect(loginWindow.win.loadURL).toHaveBeenCalledWith(LOGIN_SHELL_URL)
-      expect(loginWindow.win.show).toHaveBeenCalledTimes(1)
-      expect(loginWindow.win.focus).toHaveBeenCalledTimes(1)
-      expect(windowManager.hasLoginWindow()).toBe(true)
     })
   })
 
@@ -759,10 +712,9 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(didOpen).toBe(false)
       expect(liveEditorWindow.win.show).not.toHaveBeenCalled()
 
-      // Act: the next open bounces to /login (session lost), the login window
-      // comes back, and the user signs in again.
+      // Act: the user explicitly opens sign-in again; local loading never redirects to login.
       windowManager.toggleLiveEditor()
-      liveEditorWindow.fireWebContents('did-navigate', {}, LOGIN_REDIRECT_URL)
+      windowManager.showLoginWindow()
       const showLiveEditor = vi.spyOn(windowManager, 'showLiveEditor')
       windowManager.completeLogin(senderOf(loginWindow))
 
@@ -770,32 +722,6 @@ describe('WindowManager startup panel nav-watch', () => {
       // off instead of being ignored with a dead login window on screen.
       expect(loginWindow.win.show).toHaveBeenCalledTimes(2)
       expect(showLiveEditor).toHaveBeenCalledTimes(1)
-    })
-
-    test('recovers a failed login handoff through manual LiveEditor opening without repeating sign-in', () => {
-      // Arrange
-      const windowManager = new WindowManager(SERVER_URL)
-      windowManager.showLoginWindow()
-      const loginWindow = getWindow(0)
-      windowManager.completeLogin(senderOf(loginWindow))
-      const liveEditorWindow = getWindow(1)
-      fireNetworkLoadFailure(liveEditorWindow, LIVE_EDITOR_URL)
-      liveEditorWindow.win.loadURL.mockClear()
-      liveEditorWindow.win.show.mockClear()
-      loginWindow.win.close.mockClear()
-
-      // Act: a repeated auth report must stay inert; the recovery button uses showLiveEditor.
-      windowManager.completeLogin(senderOf(loginWindow))
-      expect(liveEditorWindow.win.loadURL).not.toHaveBeenCalled()
-      windowManager.showLiveEditor()
-      liveEditorWindow.fireWebContents('did-navigate', {}, LIVE_EDITOR_URL)
-      liveEditorWindow.fireWebContents('did-finish-load')
-
-      // Assert
-      expect(liveEditorWindow.win.loadURL).toHaveBeenCalledOnce()
-      expect(liveEditorWindow.win.loadURL).toHaveBeenCalledWith(LIVE_EDITOR_URL)
-      expect(liveEditorWindow.win.show).toHaveBeenCalledOnce()
-      expect(loginWindow.win.close).toHaveBeenCalledOnce()
     })
 
     test('reuses the existing login window when showLoginWindow runs twice', () => {
@@ -1070,8 +996,9 @@ describe('WindowManager startup panel nav-watch', () => {
       expect(vi.mocked(dialog.showMessageBox).mock.calls[0]).toHaveLength(1)
       expect(dialog.showMessageBox).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: "Couldn't reach corelive.app",
-          detail: 'corelive.app returned HTTP 503. Try again in a moment.',
+          message: "Couldn't open LiveEditor",
+          detail:
+            'The bundled editor could not be loaded. Retry, or reinstall CoreLive if this continues. Saved writing remains on this Mac.',
           buttons: ['Retry', 'Close'],
         }),
       )
@@ -1169,7 +1096,6 @@ describe('WindowManager startup panel nav-watch', () => {
       // Assert: a 503 is not "signed out" — no login window, no fallback, retry.
       expect(panelWindow.win.show).not.toHaveBeenCalled()
       expect(showLoginWindow).not.toHaveBeenCalled()
-      expect(windowManager.hasStartupAuthFallback()).toBe(false)
       expect(panelWindow.win.loadURL).toHaveBeenCalledTimes(2)
       expect(createdWindows).toHaveLength(1)
     })

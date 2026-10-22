@@ -24,6 +24,7 @@ import { useIsElectron } from '@/components/auth/ElectronLoginForm'
 import { AppUpdateSettings } from '@/components/electron/AppUpdateSettings'
 import { LiveEditorAppearance } from '@/components/electron/LiveEditorAppearance'
 import { LiveEditorSettings } from '@/components/electron/LiveEditorSettings'
+import { OfflineCategoryManagement } from '@/components/electron/OfflineCategoryManagement'
 import {
   LIVE_EDITOR_PIN_SETTING,
   PanelToggle,
@@ -240,6 +241,7 @@ export const ElectronSettingsPage =
         <SettingsSection label="LiveEditor">
           <LiveEditorSettings />
           <LiveEditorAppearance />
+          <OfflineCategoryManagement />
           <PanelToggle
             setting={LIVE_EDITOR_PIN_SETTING}
             label="Keep on top"

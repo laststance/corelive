@@ -86,6 +86,13 @@ export const broadcastCategorySync = (
   draftCategoryId?: number,
   draftRescue?: CategoryDraftRescue,
 ): boolean => {
+  // The bundled editor has a separate origin; native refresh complements same-origin broadcasts.
+  const native =
+    typeof window === 'undefined'
+      ? undefined
+      : window.electronAPI?.offlineSettings
+  if (typeof native?.refreshCategories === 'function')
+    void native.refreshCategories().catch(() => undefined)
   const channel = createCategorySyncChannel()
   if (!channel) {
     return false

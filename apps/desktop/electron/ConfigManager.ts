@@ -106,11 +106,11 @@ interface NotificationsConfig {
 /**
  * Appearance configuration.
  *
- * NOTE: theme + accent color are NOT here. The web app owns theme entirely via
- * localStorage (`storageKey="corelive-theme"`, applied as `data-theme`); the
- * Electron shell only loads the remote site, so a native `appearance.theme` /
- * `accentColor` had zero readers and was removed (would only drift from the
- * real, web-persisted value). Keep appearance config web-localStorage-owned.
+ * Theme and accent color are excluded from config.json. Browsers persist the
+ * theme in localStorage (`storageKey="corelive-theme"`); prepared desktop
+ * accounts cache it in their offline workspace for the bundled editor. The
+ * Settings bridge synchronizes explicit changes. Keep the retired
+ * `appearance.theme` / `accentColor` fields absent to avoid a second source.
  */
 interface AppearanceConfig {
   fontSize: 'small' | 'medium' | 'large'
@@ -208,7 +208,7 @@ function isUnsafeKey(key: string): boolean {
  * them from a raw on-disk/imported config before the merge with defaults.
  */
 const RETIRED_CONFIG_KEYS: Readonly<Record<string, readonly string[]>> = {
-  // T9: the web app owns theme via localStorage; the native shell never read these.
+  // Retired config fields stay absent; active themes use web or workspace preferences.
   appearance: ['theme', 'accentColor'],
   // Floating Navigator retirement (login shell): its window geometry, its
   // shortcuts, and LiveEditor's category sync.
@@ -354,8 +354,7 @@ export class ConfigManager {
         position: 'topRight',
       },
 
-      // theme/accentColor intentionally absent — the web app owns theme via
-      // localStorage (see AppearanceConfig note); native shell never reads it.
+      // Theme preferences live outside config.json; see {@link AppearanceConfig}.
       appearance: {
         fontSize: 'medium',
         compactMode: false,
