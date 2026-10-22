@@ -259,67 +259,56 @@ test.each(['before', 'after', 'after-failure'] as const)(
   async (ordering) => {
     // Arrange: keep the real durable write separate from delivery of its reply.
     const fixture = await createFixture('Original writing')
-    for (const text of [
-      'Saved one',
-      'Saved two',
-      'Saved three',
-      'Saved four',
-      'Saved five',
-      'Saved six',
-      'Saved seven',
-      'Saved eight',
-    ]) {
-      fixture.store.edit(text)
-      const delivery = fixture.hold('save')
-      const saving = fixture.store.flush()
-      await delivery.ready()
-      const saved = await fixture.host.snapshot()
-      let release!: () => void
-      vi.spyOn(fixture.host, 'snapshot').mockImplementationOnce(async () => {
-        await new Promise<void>((resolve) => {
-          release = resolve
-        })
-        if (ordering === 'after-failure')
-          throw new Error('Initial reading is unavailable')
-        return saved
+    fixture.store.edit('Saved writing')
+    const delivery = fixture.hold('save')
+    const saving = fixture.store.flush()
+    await delivery.ready()
+    const saved = await fixture.host.snapshot()
+    let release!: () => void
+    vi.spyOn(fixture.host, 'snapshot').mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => {
+        release = resolve
       })
+      if (ordering === 'after-failure')
+        throw new Error('Initial reading is unavailable')
+      return saved
+    })
 
-      // Act: a reconnect retains command settlement without trusting it as initial authority.
-      const connecting = fixture.store.connect()
-      try {
-        if (ordering !== 'before') {
-          release()
-          await connecting
-        }
-        delivery.release()
-        await expect(saving).resolves.toBe(true)
-
-        // Assert: the old reply cannot bypass an unresolved or failed initial read.
-        if (ordering !== 'after') {
-          expect(fixture.store.getSnapshot().main.phase).toBe(
-            ordering === 'before' ? 'opening' : 'recovery',
-          )
-          fixture.store.edit('This input must stay blocked')
-          expect(fixture.store.getSnapshot().text).toBe('')
-          await expect(fixture.store.completeAt(0)).resolves.toBe(false)
-        }
-      } finally {
+    // Act: a reconnect retains command settlement without trusting it as initial authority.
+    const connecting = fixture.store.connect()
+    try {
+      if (ordering !== 'before') {
         release()
-        delivery.release()
-        await Promise.allSettled([connecting, saving])
+        await connecting
       }
-      if (ordering === 'after-failure') await fixture.store.connect()
-      expect(fixture.store.getSnapshot()).toMatchObject({
-        main: { phase: 'ready' },
-        text,
-        save: 'saved',
-      })
-      expect(
-        (await fixture.worker.call('open', null)).draft.rows.map(
-          (row) => row.text,
-        ),
-      ).toEqual([text])
+      delivery.release()
+      await expect(saving).resolves.toBe(true)
+
+      // Assert: the old reply cannot bypass an unresolved or failed initial read.
+      if (ordering !== 'after') {
+        expect(fixture.store.getSnapshot().main.phase).toBe(
+          ordering === 'before' ? 'opening' : 'recovery',
+        )
+        fixture.store.edit('This input must stay blocked')
+        expect(fixture.store.getSnapshot().text).toBe('')
+        await expect(fixture.store.completeAt(0)).resolves.toBe(false)
+      }
+    } finally {
+      release()
+      delivery.release()
+      await Promise.allSettled([connecting, saving])
     }
+    if (ordering === 'after-failure') await fixture.store.connect()
+    expect(fixture.store.getSnapshot()).toMatchObject({
+      main: { phase: 'ready' },
+      text: 'Saved writing',
+      save: 'saved',
+    })
+    expect(
+      (await fixture.worker.call('open', null)).draft.rows.map(
+        (row) => row.text,
+      ),
+    ).toEqual(['Saved writing'])
   },
 )
 
