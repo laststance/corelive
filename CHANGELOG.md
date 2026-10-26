@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.26.1] - 2026-10-26
+
+### Fixed
+
+- Move LiveEditor by dragging the empty space in its header while keeping Details, Follow Spaces and Close clickable.
+
 ## [0.26.0] - 2026-10-22
 
 ### Added

@@ -346,7 +346,7 @@ function getNotePlaceholder(
   return `Write one thing. ${modifierLabel} Enter keeps it.`
 }
 
-/** Keeps native header geometry independent of save/sync state while preserving window controls.
+/** Keeps native header space draggable and window controls clickable across save/sync states.
  * {@link SharedEditorSurface} provides the host's action slot and window settings.
  * @example <NativeEditorHeader {...props} />
  */
@@ -368,7 +368,7 @@ function NativeEditorHeader({
   } = windowSettings
   return (
     <header
-      className="flex flex-wrap items-center justify-between gap-2"
+      className="flex select-none flex-wrap items-center justify-between gap-2"
       style={DRAG_REGION_STYLE}
     >
       <div className="flex items-center gap-2" style={NO_DRAG_REGION_STYLE}>
@@ -376,27 +376,31 @@ function NativeEditorHeader({
       </div>
       <div
         className="flex min-w-0 flex-1 basis-44 items-center gap-2"
-        style={NO_DRAG_REGION_STYLE}
+        style={DRAG_REGION_STYLE}
       >
+        {/* Exclude only controls; a stretching no-drag wrapper blocks window movement through blank space. */}
         <Switch
           id={spacesInputId}
           checked={spacesTrackingEnabled}
           onCheckedChange={handleSpacesTrackingChange}
           disabled={isUpdatingSpacesTracking}
           aria-label="Show LiveEditor on all Mac desktops"
+          style={NO_DRAG_REGION_STYLE}
         />
 
         <Label
           htmlFor={spacesInputId}
-          className="min-w-0 flex-1 cursor-pointer text-xs text-muted-foreground"
+          className="min-w-0 cursor-pointer text-xs text-muted-foreground"
+          style={NO_DRAG_REGION_STYLE}
         >
           Follow Spaces
         </Label>
         <button
           type="button"
           onClick={closeWindow}
-          className="size-11 shrink-0 rounded-md text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="ml-auto size-11 shrink-0 rounded-md text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
           aria-label="Close LiveEditor"
+          style={NO_DRAG_REGION_STYLE}
         >
           ✕
         </button>
