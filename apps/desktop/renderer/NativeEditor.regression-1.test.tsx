@@ -8,6 +8,7 @@ import type { OfflineEditorAPI } from '@corelive/desktop-contract/offline-editor
 import type { OfflineEditorSnapshot } from '@corelive/desktop-contract/offline-workspace'
 import { UserSettingsStateSchema } from '@corelive/desktop-contract/settings'
 import { DurableEditorStore } from '@corelive/live-editor/store'
+import { SharedEditorSurface } from '@corelive/live-editor/surface'
 import {
   act,
   cleanup,
@@ -16,6 +17,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { NativeEditor } from './NativeEditor'
@@ -380,4 +382,63 @@ test('hidden routine status retains writing, recovery access and the caret acros
   expect(screen.getByRole('textbox', { name: 'Write one thing' })).toBe(field)
   expect(field).toBeVisible()
   await waitFor(() => expect(details).toHaveFocus())
+})
+
+test('the LiveEditor header leaves its empty control-row space available for window dragging', () => {
+  // Arrange
+  const markup = renderToStaticMarkup(
+    <SharedEditorSurface
+      windowSettings={{
+        opacity: 1,
+        spacesTrackingEnabled: false,
+        isUpdatingSpacesTracking: false,
+        handleSpacesTrackingChange: vi.fn(),
+        handleOpacityValueChange: vi.fn(),
+      }}
+      textareaProps={{ value: '', onChange: vi.fn() }}
+      categoryCount={1}
+      categoryPicker={null}
+      settings={UserSettingsStateSchema.parse({})}
+      storageAvailability="ok"
+      nativeHeader={<button type="button">Details</button>}
+      isCategoryListPending={false}
+      isCategoryListError={false}
+      isElectronPanel
+      isMounted
+      isSignedIn
+      isAuthLoaded
+      isSignedOutWeb={false}
+      isLiveEditorConfigReady
+      activeCategoryId={1}
+      isNoteFieldDisabled={false}
+      handleKeepLineClick={vi.fn()}
+      closeWindow={vi.fn()}
+    />,
+  )
+
+  // Act: inert server markup retains Electron CSS that Happy DOM drops during client style assignment.
+  const container = new DOMParser().parseFromString(markup, 'text/html')
+  const header = container.querySelector('header')
+  const spaces = header?.querySelector('[role="switch"]')
+
+  // Assert: Electron excludes every pixel of a no-drag ancestor, including empty space.
+  expect(header?.getAttribute('style')).toBe('-webkit-app-region:drag')
+  expect(spaces?.parentElement?.getAttribute('style')).toBe(
+    '-webkit-app-region:drag',
+  )
+  expect(spaces?.getAttribute('style')).toContain('-webkit-app-region:no-drag')
+  expect(header?.querySelector('label')?.getAttribute('style')).toBe(
+    '-webkit-app-region:no-drag',
+  )
+  // A growing label would turn the blank drag area back into an interactive rectangle.
+  expect(header?.querySelector('label')).not.toHaveClass('flex-1')
+  expect(header?.querySelector('label')).not.toHaveClass('grow')
+  expect(
+    header
+      ?.querySelector('[aria-label="Close LiveEditor"]')
+      ?.getAttribute('style'),
+  ).toBe('-webkit-app-region:no-drag')
+  expect(header?.firstElementChild?.getAttribute('style')).toBe(
+    '-webkit-app-region:no-drag',
+  )
 })
