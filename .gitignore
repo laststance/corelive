@@ -101,3 +101,6 @@ apps/web/public/favicon.ico
 apps/web/public/sounds/
 apps/desktop/public/
 apps/desktop/build/icons/
+
+# Local 1Password references remain private developer configuration.
+.env.*.1password

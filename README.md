@@ -112,6 +112,18 @@ All Next.js environment variables are loaded and validated via `apps/web/src/env
 | `APPLE_TEAM_ID`               | Apple Developer Team ID                     |
 | `GH_TOKEN`                    | GitHub token for release uploads (optional) |
 
+Store `APPLE_APP_SPECIFIC_PASSWORD` as an `op://vault/item/section/field`
+reference in the ignored root `.env.apple.1password`. The desktop packaging
+commands (`electron:build:mac`, `electron:build:dir`, and `electron:publish`)
+resolve it with `op run`; macOS artifact finalization uses the same launcher.
+Keep `APPLE_ID`, `APPLE_TEAM_ID`, and other unmigrated settings in
+`apps/desktop/.env`, but remove the migrated password from both that file and the
+legacy root `.env`. Install 1Password CLI and enable its desktop integration.
+
+CI and explicit environment credentials keep working without a local vault.
+An exported `APPLE_KEYCHAIN_PROFILE` also bypasses password injection. Web builds
+and ordinary desktop development do not receive the notarization password.
+
 ### Database Setup
 
 This project uses PostgreSQL v17 as the database, managed through Docker Compose for local development.
