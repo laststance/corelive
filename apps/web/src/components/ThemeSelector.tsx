@@ -2,6 +2,7 @@
 
 import { Check, Monitor, Moon, Sun } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { useId } from 'react'
 
 import { ThemePreviewSwatch } from '@/components/ThemePreviewSwatch'
 import { Label } from '@/components/ui/label'
@@ -49,6 +50,8 @@ export const ThemeSelector = function ThemeSelector() {
 
   // System only exists for Default, so every other palette gets the helper line.
   const showSystemHint = family !== 'default'
+  // Per-instance id so aria-describedby never points at another picker's hint.
+  const systemHintId = useId()
 
   return (
     // The "Theme" CardTitle collapsed into the APPEARANCE section `<h2>`
@@ -73,9 +76,7 @@ export const ThemeSelector = function ThemeSelector() {
               onValueChange={selectMode}
               className="w-full flex-wrap justify-start gap-2"
               aria-label="Theme mode"
-              aria-describedby={
-                showSystemHint ? 'theme-mode-system-hint' : undefined
-              }
+              aria-describedby={showSystemHint ? systemHintId : undefined}
             >
               {availableModes.map((modeChoice) => {
                 const { label, Icon } = MODE_META[modeChoice]
@@ -95,10 +96,7 @@ export const ThemeSelector = function ThemeSelector() {
             </ToggleGroup>
             {/* Non-Default palettes have no System mode; say where it lives. */}
             {showSystemHint && (
-              <p
-                id="theme-mode-system-hint"
-                className="type-small text-muted-foreground"
-              >
+              <p id={systemHintId} className="type-small text-muted-foreground">
                 To follow your device&apos;s light or dark setting, choose the
                 Default palette.
               </p>
