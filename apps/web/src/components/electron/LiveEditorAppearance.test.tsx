@@ -80,10 +80,10 @@ describe('LiveEditorAppearance — editor presentation', () => {
     // Arrange — the default editor color is the theme foreground.
     const { store, user } = renderLiveEditorAppearance()
 
-    // Act — pick the Amber preset.
-    await user.click(screen.getByRole('radio', { name: 'Amber' }))
+    // Act — pick the Accent preset.
+    await user.click(screen.getByRole('radio', { name: 'Accent' }))
 
-    // Assert — the amber theme token is saved.
+    // Assert — the accent theme token (--primary) is saved.
     expect(store.getState().settings.liveEditorTextColor).toBe('var(--primary)')
   })
 
@@ -120,7 +120,7 @@ describe('LiveEditorAppearance — editor presentation', () => {
     // Assert — every preset radio is unselected...
     expect(screen.getByRole('radio', { name: 'Default' })).not.toBeChecked()
     expect(screen.getByRole('radio', { name: 'Muted' })).not.toBeChecked()
-    expect(screen.getByRole('radio', { name: 'Amber' })).not.toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Accent' })).not.toBeChecked()
     // ...and the custom picker shows the #000000 fallback for the var() token.
     expect(screen.getByLabelText('Custom LiveEditor text color')).toHaveValue(
       '#000000',

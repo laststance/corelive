@@ -60,7 +60,7 @@ function oauthReducer(state: OAuthState, action: OAuthAction): OAuthState {
 }
 
 /**
- * The login window's signed-out sign-in CTA — a single amber "Sign in
+ * The login window's signed-out sign-in CTA — a single primary-coloured "Sign in
  * with Google" button that launches the system-browser OAuth flow.
  *
  * Why Google-only: Google blocks OAuth inside a WebView, so Electron opens the
@@ -70,7 +70,7 @@ function oauthReducer(state: OAuthState, action: OAuthAction): OAuthState {
  * convention and the approved single-CTA design. It is the ONLY consumer of
  * this module; the capability hook below decides whether to render it at all.
  *
- * @returns The amber sign-in button plus a calm trust/error line beneath it.
+ * @returns The `--primary` sign-in button plus a calm trust/error line beneath it.
  * @example
  * <ElectronOAuthButtons />
  */
@@ -201,8 +201,8 @@ export const ElectronOAuthButtons = function ElectronOAuthButtons() {
 
 /**
  * Google "G" glyph as a single-color mark (inherits `currentColor`, so it reads
- * as paper-white on the amber button instead of clashing Google brand colors
- * against Warm Cathedral).
+ * as `--primary-foreground` on the primary button instead of clashing Google
+ * brand colors against the active theme).
  * @returns A 16px monochrome Google logo SVG, hidden from the a11y tree.
  * @example
  * <GoogleMark />

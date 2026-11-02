@@ -12,7 +12,11 @@ import type {
   DurableEditorSnapshot,
 } from '@corelive/live-editor/store'
 import { SharedEditorSurface } from '@corelive/live-editor/surface'
-import { DEFAULT_THEME_ID, isThemeId } from '@corelive/live-editor/themes'
+import { applyThemeAttribute } from '@corelive/live-editor/theme-transition'
+import {
+  DEFAULT_THEME_PREFERENCE,
+  normalizeThemePreference,
+} from '@corelive/live-editor/themes'
 import { useEditorWindowSettings } from '@corelive/live-editor/window-settings'
 import {
   useCallback,
@@ -37,21 +41,27 @@ import { NativeStateScene } from './NativeStateScene'
 
 type ReadySnapshot = Extract<OfflineEditorSnapshot, { phase: 'ready' }>
 
-/** Applies cached theme identity locally; system theme follows OS changes without a network request.
+/**
+ * Applies the cached theme preference locally. The raw workspace value is mapped
+ * through {@link normalizeThemePreference} (legacy `default-*` aliases and unknown
+ * values included) and `system` follows the OS without a network request.
+ * Mounted once by {@link NativeEditor}; re-runs when the stored theme changes.
+ * @param theme - Raw workspace theme preference, or {@link DEFAULT_THEME_PREFERENCE} before the workspace is ready.
  * @example useEditorTheme(preferences.theme)
  */
 function useEditorTheme(theme: string): void {
   useLayoutEffect(() => {
+    const preference = normalizeThemePreference(theme)
     const media = window.matchMedia('(prefers-color-scheme: dark)')
     const apply = (): void => {
-      document.documentElement.dataset.theme =
-        theme === 'system'
+      // `system` resolves to the Default pair, the only family that owns light/dark.
+      applyThemeAttribute(
+        preference === 'system'
           ? media.matches
             ? 'dark'
             : 'light'
-          : isThemeId(theme)
-            ? theme
-            : DEFAULT_THEME_ID
+          : preference,
+      )
     }
     apply()
     media.addEventListener('change', apply)
@@ -77,7 +87,7 @@ export function NativeEditor({
   useEditorTheme(
     snapshot.main.phase === 'ready'
       ? snapshot.main.workspace.preferences.theme
-      : DEFAULT_THEME_ID,
+      : DEFAULT_THEME_PREFERENCE,
   )
   if (snapshot.main.phase !== 'ready') {
     const id = `${snapshot.main.generation}-${snapshot.main.phase}`

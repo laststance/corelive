@@ -15,8 +15,8 @@
  * for the last line of defense to fail in precisely the situation it exists to
  * catch (a root-layout / provider / CSS failure re-triggering through the same
  * import graph). Styling is inline and deliberately plain, but the hex values
- * are hand-matched to the Warm Cathedral light palette so the backstop stays
- * on-brand (warm paper / ink / taupe) without importing a single token.
+ * are hand-matched to the shadcn Default light palette (the applied default
+ * theme) so the backstop matches a fresh install without importing a token.
  *
  * @module app/global-error
  */
@@ -32,17 +32,17 @@ interface GlobalErrorProps {
 
 // Inline, token-free styles: global-error must not depend on globals.css, which
 // may be exactly what failed to load. Plain values keep the backstop standing.
-// The hex values are hand-matched to the Warm Cathedral light palette (the
-// oklch tokens converted to sRGB) so the backstop still feels on-brand without
-// importing a single design token — warm paper, warm ink, warm taupe.
+// The hex values are hand-matched to the shadcn Default light palette (the
+// registry's oklch tokens converted to sRGB), the applied default theme, without
+// importing a single design token.
 const pageStyle = {
   minHeight: '100vh',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
   padding: '24px',
-  backgroundColor: '#faf4ea', // warm paper (≈ --background)
-  color: '#1f1611', // warm ink (≈ --foreground)
+  backgroundColor: '#ffffff', // Default --background, oklch(1 0 0)
+  color: '#0a0a0a', // Default --foreground, oklch(0.145 0 0)
   fontFamily:
     'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
 }
@@ -50,11 +50,11 @@ const pageStyle = {
 const cardStyle = {
   maxWidth: '28rem',
   width: '100%',
-  border: '1px solid #ece3d4', // warm dawn (≈ --border)
+  border: '1px solid #e5e5e5', // Default --border, oklch(0.922 0 0)
   borderRadius: '12px',
-  backgroundColor: '#fffdf8', // warm white, lifts off the page (≈ --card)
+  backgroundColor: '#ffffff', // Default --card, oklch(1 0 0); the border lifts it
   padding: '24px',
-  boxShadow: '0 1px 2px rgba(31, 22, 17, 0.05)',
+  boxShadow: '0 1px 2px rgba(10, 10, 10, 0.05)',
 }
 
 const titleStyle = {
@@ -67,7 +67,7 @@ const descriptionStyle = {
   margin: '0 0 20px',
   fontSize: '0.875rem',
   lineHeight: 1.6,
-  color: '#6c6158', // warm taupe (≈ --muted-foreground), AA on the card (5.9:1)
+  color: '#737373', // Default --muted-foreground, oklch(0.556 0 0); AA on white (4.7:1)
 }
 
 // Row holding the retry + reload escape side by side.
@@ -80,10 +80,10 @@ const actionsStyle = {
 const buttonStyle = {
   appearance: 'none' as const,
   cursor: 'pointer',
-  border: '1px solid #1f1611',
+  border: '1px solid #171717',
   borderRadius: '8px',
-  backgroundColor: '#1f1611', // warm-ink fill, paper text (16:1)
-  color: '#faf4ea',
+  backgroundColor: '#171717', // Default --primary, oklch(0.205 0 0)
+  color: '#fafafa', // Default --primary-foreground, oklch(0.985 0 0)
   fontSize: '0.875rem',
   fontWeight: 500,
   padding: '8px 16px',
@@ -93,8 +93,8 @@ const buttonStyle = {
 const secondaryButtonStyle = {
   ...buttonStyle,
   backgroundColor: 'transparent',
-  color: '#1f1611',
-  border: '1px solid #d8ccba', // warm hairline, calmer than the filled retry
+  color: '#171717',
+  border: '1px solid #e5e5e5', // Default --border hairline, calmer than the filled retry
 }
 
 /**

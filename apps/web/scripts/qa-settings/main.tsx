@@ -20,7 +20,8 @@ let mode = parameters.get('bridge') ?? 'supported'
 let preferences = {
   revision: 0,
   settings: UserSettingsStateSchema.parse({}),
-  theme: 'light',
+  // fresh workspace seed: follow the OS (DEFAULT_THEME_PREFERENCE)
+  theme: 'system',
 }
 const acknowledgements = new Map<string, OfflineSettingsResult>()
 let releasePending: (() => void) | undefined
@@ -154,7 +155,7 @@ if (mode !== 'web') {
 const store = configureStore({ reducer: { settings, electronSettings } })
 const query = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 createRoot(document.getElementById('root')!).render(
-  <ThemeProvider attribute="data-theme" defaultTheme="light" enableSystem>
+  <ThemeProvider attribute="data-theme" defaultTheme="system" enableSystem>
     <QueryClientProvider client={query}>
       <Provider store={store}>
         <OfflineSettingsSync>

@@ -14,7 +14,7 @@
  */
 // The mocked electron `dialog`, asserted on by the recovery tests (the
 // `vi.mock('electron')` factory below is hoisted above this import by Vitest).
-import { dialog, type WebContents } from 'electron'
+import { BrowserWindow, dialog, nativeTheme, type WebContents } from 'electron'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 type Spy = ReturnType<typeof vi.fn>
@@ -138,6 +138,8 @@ vi.mock('electron', () => ({
   dialog: {
     showMessageBox: vi.fn(async () => ({ response: 1 })),
   },
+  // OS appearance read by the login window's pre-paint background.
+  nativeTheme: { shouldUseDarkColors: false },
 }))
 
 vi.mock('../logger', () => ({
@@ -1098,6 +1100,45 @@ describe('WindowManager bundled startup panel', () => {
       expect(showLoginWindow).not.toHaveBeenCalled()
       expect(panelWindow.win.loadURL).toHaveBeenCalledTimes(2)
       expect(createdWindows).toHaveLength(1)
+    })
+  })
+})
+
+describe('login window pre-paint background', () => {
+  beforeEach(() => {
+    createdWindows.length = 0
+  })
+
+  afterEach(() => {
+    Object.assign(nativeTheme, { shouldUseDarkColors: false })
+    vi.clearAllMocks()
+  })
+
+  test('creates the login window with the Default dark background on a dark OS so it never flashes white', () => {
+    // Arrange
+    Object.assign(nativeTheme, { shouldUseDarkColors: true })
+    const windowManager = new WindowManager(SERVER_URL)
+
+    // Act
+    windowManager.showLoginWindow()
+
+    // Assert
+    expect(vi.mocked(BrowserWindow).mock.calls[0]?.[0]).toMatchObject({
+      backgroundColor: '#0a0a0a',
+    })
+  })
+
+  test('creates the login window with a white background on a light OS', () => {
+    // Arrange
+    Object.assign(nativeTheme, { shouldUseDarkColors: false })
+    const windowManager = new WindowManager(SERVER_URL)
+
+    // Act
+    windowManager.showLoginWindow()
+
+    // Assert
+    expect(vi.mocked(BrowserWindow).mock.calls[0]?.[0]).toMatchObject({
+      backgroundColor: '#ffffff',
     })
   })
 })

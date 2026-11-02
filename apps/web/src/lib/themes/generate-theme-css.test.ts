@@ -4,6 +4,7 @@ import { describe, test, expect } from 'vitest'
 import {
   deriveThemeTokens,
   deriveThemeCss,
+  describeThemeCssDrift,
   generateThemesCss,
   staticThemeCss,
   type DerivationSeed,
@@ -44,15 +45,13 @@ const SAMPLE_DARK: DerivationSeed = {
 
 /**
  * A full derived theme (seed + identity) used only to exercise the CSS emission
- * mechanics. Until T7 registers a colored family the only type-valid ThemeId
- * values are 'light'/'dark'; this borrows 'dark' purely to render a block. The
- * real cathedral dark is preserved (skipped by the generator), so this synthetic
- * block never ships.
+ * mechanics. It borrows the 'harbor-dark' id with a sample seed so no registered
+ * theme is involved; it is never added to the registry or shipped.
  */
 const SAMPLE_DERIVED_THEME: DerivedTheme = {
   ...SAMPLE_DARK,
-  family: 'cathedral',
-  id: 'dark',
+  family: 'harbor',
+  id: 'harbor-dark',
   name: 'Sample Derived',
   preview: '#000000',
   colorScheme: 'dark',
@@ -206,7 +205,7 @@ describe('deriveThemeCss / generateThemesCss — CSS emission contract', () => {
 
     // Assert — the (0,2,0) selector is load-bearing; a bare [data-theme] (0,1,0)
     // would tie cathedral's :root and lose on @import source order
-    expect(css.startsWith(":root[data-theme='dark'] {\n")).toBe(true)
+    expect(css.startsWith(":root[data-theme='harbor-dark'] {\n")).toBe(true)
     expect(css.endsWith('\n}')).toBe(true)
   })
 
@@ -224,11 +223,14 @@ describe('deriveThemeCss / generateThemesCss — CSS emission contract', () => {
 
   test('skips preserved cathedral themes and emits one block per derived theme', () => {
     // Arrange / Act — registry cathedral pair is preserved; only the derived block ships
-    const css = generateThemesCss([
-      THEME_REGISTRY.light,
-      THEME_REGISTRY.dark,
-      SAMPLE_DERIVED_THEME,
-    ])
+    const css = generateThemesCss(
+      [
+        THEME_REGISTRY['cathedral-light'],
+        THEME_REGISTRY['cathedral-dark'],
+        SAMPLE_DERIVED_THEME,
+      ],
+      {},
+    )
     const blockCount = css.split(':root[data-theme=').length - 1
 
     // Assert — both cathedral themes skipped, the lone derived theme emitted once
@@ -238,7 +240,10 @@ describe('deriveThemeCss / generateThemesCss — CSS emission contract', () => {
 
   test('emits the header alone when every registered theme is preserved', () => {
     // Arrange / Act — nothing emitted → no blocks
-    const css = generateThemesCss([THEME_REGISTRY.light, THEME_REGISTRY.dark])
+    const css = generateThemesCss(
+      [THEME_REGISTRY['cathedral-light'], THEME_REGISTRY['cathedral-dark']],
+      {},
+    )
     const blockCount = css.split(':root[data-theme=').length - 1
 
     // Assert
@@ -248,14 +253,14 @@ describe('deriveThemeCss / generateThemesCss — CSS emission contract', () => {
 
   test('copies the stock shadcn Default tokens verbatim — no derivation, same selector contract', () => {
     // Arrange / Act
-    const css = staticThemeCss(THEME_REGISTRY['default-light'])
+    const css = staticThemeCss(THEME_REGISTRY.light)
     const declarationCount = css
       .split('\n')
       .filter((line) => line.trim().startsWith('--')).length
 
     // Assert — same (0,2,0) selector as derived themes, the literal values, and
     // the full 36-token block (31 shadcn tokens + the 5 heatmap stops)
-    expect(css.startsWith(":root[data-theme='default-light'] {\n")).toBe(true)
+    expect(css.startsWith(":root[data-theme='light'] {\n")).toBe(true)
     expect(css).toContain('  color-scheme: light;')
     expect(css).toContain('  --background: oklch(1 0 0);')
     expect(css).toContain('  --primary: oklch(0.205 0 0);')
@@ -264,18 +269,175 @@ describe('deriveThemeCss / generateThemesCss — CSS emission contract', () => {
   })
 
   test('emits a static theme alongside derived ones and still skips preserved cathedral', () => {
-    // Arrange / Act
-    const css = generateThemesCss([
-      THEME_REGISTRY['default-dark'],
-      THEME_REGISTRY.light,
-      SAMPLE_DERIVED_THEME,
-    ])
-    const blockCount = css.split(':root[data-theme=').length - 1
+    // Arrange / Act — an empty alias map isolates the per-theme blocks
+    const css = generateThemesCss(
+      [
+        THEME_REGISTRY.dark,
+        THEME_REGISTRY['cathedral-light'],
+        SAMPLE_DERIVED_THEME,
+      ],
+      {},
+    )
 
-    // Assert — Default dark + the derived sample; cathedral light skipped
-    expect(blockCount).toBe(2)
-    expect(css).toContain(":root[data-theme='default-dark'] {")
+    // Assert — Default dark (own block + first-paint media block) and the derived
+    // sample; cathedral light skipped
+    expect(css).toContain(":root[data-theme='dark'] {")
+    expect(css).toContain(":root[data-theme='harbor-dark'] {")
+    expect(css).not.toContain('cathedral')
     expect(css).toContain('  --background: oklch(0.145 0 0);')
+  })
+})
+
+describe('generateThemesCss — Default family block layout (separate blocks, never selector lists)', () => {
+  /** Splits generated CSS into its top-level `selector {` heads, in order. */
+  const blockHeads = (css: string): string[] =>
+    css
+      .split('\n')
+      .filter((line) => /^[^\s/].*\{$/.test(line))
+      .map((line) => line.replace(/ \{$/, ''))
+
+  const registryCss = generateThemesCss(Object.values(THEME_REGISTRY))
+
+  test('emits exactly the six Default blocks first, in a fixed order', () => {
+    // Arrange / Act
+    const heads = blockHeads(registryCss).slice(0, 6)
+
+    // Assert
+    expect(heads).toEqual([
+      ':root',
+      ":root[data-theme='light']",
+      ":root[data-theme='default-light']",
+      ":root[data-theme='dark']",
+      ":root[data-theme='default-dark']",
+      '@media (prefers-color-scheme: dark)',
+    ])
+  })
+
+  test('never joins selectors with a comma so the dslint parser tags each block correctly', () => {
+    // Arrange / Act
+    const headsWithComma = blockHeads(registryCss).filter((head) =>
+      head.includes(','),
+    )
+
+    // Assert
+    expect(headsWithComma).toEqual([])
+  })
+
+  test('declares color-scheme light on every light Default block and dark on every dark one', () => {
+    // Arrange — the first 4 lines after each Default selector include color-scheme
+    const schemeAfter = (head: string): string => {
+      const start = registryCss.indexOf(`${head} {\n`)
+      const afterHead = registryCss.slice(start + head.length + 3)
+      return /color-scheme: (light|dark);/.exec(afterHead)?.[1] ?? 'missing'
+    }
+
+    // Act / Assert
+    expect(schemeAfter(':root')).toBe('light')
+    expect(schemeAfter(":root[data-theme='light']")).toBe('light')
+    expect(schemeAfter(":root[data-theme='default-light']")).toBe('light')
+    expect(schemeAfter(":root[data-theme='dark']")).toBe('dark')
+    expect(schemeAfter(":root[data-theme='default-dark']")).toBe('dark')
+    expect(schemeAfter(':root:not([data-theme])')).toBe('dark')
+  })
+
+  test('paints Default dark tokens inside the prefers-color-scheme media block when no theme attribute is set', () => {
+    // Arrange / Act
+    const mediaStart = registryCss.indexOf(
+      '@media (prefers-color-scheme: dark)',
+    )
+    const mediaBlock = registryCss.slice(
+      mediaStart,
+      registryCss.indexOf(":root[data-theme='harbor-light']"),
+    )
+
+    // Assert
+    expect(mediaBlock).toContain('  :root:not([data-theme]) {')
+    expect(mediaBlock).toContain('    --background: oklch(0.145 0 0);')
+  })
+
+  test('gives the bare :root the Default light palette so unthemed pages never paint amber', () => {
+    // Arrange / Act
+    const bareRootBlock = /^:root \{[^}]*\}/m.exec(registryCss)?.[0] ?? ''
+
+    // Assert
+    expect(bareRootBlock).toContain('--background: oklch(1 0 0);')
+    expect(bareRootBlock).toContain('--primary: oklch(0.205 0 0);')
+  })
+})
+
+describe('generateThemesCss — validation (nothing is produced from a bad registry)', () => {
+  test('throws THEME_INVALID_COLOR naming theme, token and value for an unparsable static token', () => {
+    // Arrange — Default light with a corrupted --primary
+    const brokenDefault = {
+      ...THEME_REGISTRY.light,
+      tokens: { ...THEME_REGISTRY.light.tokens, '--primary': 'not-a-color' },
+    }
+
+    // Act
+    const generate = () => generateThemesCss([brokenDefault], {})
+
+    // Assert
+    expect(generate).toThrow(
+      'THEME_INVALID_COLOR theme=light token=--primary value=not-a-color source=packages/live-editor/src/themes/registry.ts',
+    )
+  })
+
+  test('throws THEME_ALIAS_TARGET when an alias points at a preserved cathedral theme', () => {
+    // Arrange
+    const themes = Object.values(THEME_REGISTRY)
+
+    // Act
+    const generate = () =>
+      generateThemesCss(themes, { 'default-light': 'cathedral-light' })
+
+    // Assert
+    expect(generate).toThrow(
+      'THEME_ALIAS_TARGET alias=default-light target=cathedral-light',
+    )
+  })
+
+  test('throws THEME_ALIAS_TARGET when an alias points at an id that is not in the registry', () => {
+    // Arrange
+    const themes = Object.values(THEME_REGISTRY)
+
+    // Act
+    const generate = () => generateThemesCss(themes, { 'old-id': 'missing-id' })
+
+    // Assert
+    expect(generate).toThrow(
+      'THEME_ALIAS_TARGET alias=old-id target=missing-id',
+    )
+  })
+})
+
+describe('describeThemeCssDrift — theme:check diagnostics', () => {
+  test('names the generated file, the first differing line number and both lines', () => {
+    // Arrange
+    const expected = 'line one\nline two\nexpected three\nline four'
+    const actual = 'line one\nline two\nactual three\nline four'
+
+    // Act
+    const message = describeThemeCssDrift(expected, actual)
+
+    // Assert
+    expect(message).toContain('packages/live-editor/src/styles/generated.css')
+    expect(message).toContain('line 3')
+    expect(message).toContain('expected: expected three')
+    expect(message).toContain('actual:   actual three')
+    expect(message).toContain('pnpm theme:generate')
+  })
+
+  test('bounds each excerpt to one line of at most 200 characters', () => {
+    // Arrange
+    const expected = `${'a'.repeat(500)}\nsecond`
+    const actual = `${'b'.repeat(500)}\nsecond`
+
+    // Act
+    const message = describeThemeCssDrift(expected, actual)
+
+    // Assert
+    expect(message).toContain(`expected: ${'a'.repeat(200)}\n`)
+    expect(message).not.toContain('a'.repeat(201))
   })
 })
 
@@ -304,10 +466,7 @@ const emittedTokens = (theme: ThemeSeed): Record<string, string> => {
 test('ships exactly 10 colored families (5 families × light + dark) and the 2 static Default themes', () => {
   // Arrange / Act / Assert
   expect(DERIVED_THEMES).toHaveLength(10)
-  expect(STATIC_THEMES.map((theme) => theme.id)).toEqual([
-    'default-light',
-    'default-dark',
-  ])
+  expect(STATIC_THEMES.map((theme) => theme.id)).toEqual(['light', 'dark'])
 })
 
 describe('every emitted theme — WCAG AA gate', () => {

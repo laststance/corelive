@@ -13,6 +13,7 @@ import {
 
 import { log } from './logger'
 import { PreferenceTransport } from './offline-settings-transport'
+import { normalizeThemePreference } from './themes/registry'
 
 type Patch = Partial<UserSettingsState>
 type PreferenceCommand = Extract<WorkspaceCommand, { type: 'preferences' }>
@@ -174,12 +175,20 @@ export class OfflinePreferenceSync {
   }
 
   /** Waits for theme hydration and retains later explicit mode/palette edits.
+   * The raw next-themes value is normalized first, so a legacy alias or unknown id
+   * compares equal to the id it means and a normalization-only difference never pushes.
+   * An applied native theme leaves a one-shot echo marker: the first observation after
+   * the apply is the echo when equal and a user change when different.
    * @example sync.themeChanged(theme)
    */
-  themeChanged(theme: string | undefined): void {
-    if (!theme || theme === this.theme) return
-    if (theme === this.applyingTheme) this.applyingTheme = undefined
-    else if (this.theme !== undefined) {
+  themeChanged(rawTheme: string | undefined): void {
+    if (!rawTheme) return
+    const theme = normalizeThemePreference(rawTheme)
+    if (theme === this.theme) return
+    // The echo marker expires on the first differing observation after an apply.
+    const isEcho = theme === this.applyingTheme
+    this.applyingTheme = undefined
+    if (!isEcho && this.theme !== undefined) {
       this.dirtyTheme = theme
       this.startIntent()
     }
@@ -572,9 +581,12 @@ export class OfflinePreferenceSync {
       }
       this.options.applySettings(settings)
       this.observed = { ...this.options.settings() }
-      if (!this.dirtyTheme && this.theme !== native.theme) {
-        this.applyingTheme = native.theme
-        this.options.applyTheme?.(native.theme)
+      // Compare normalized values: a legacy native alias that means the current web
+      // theme is neither applied nor pushed back.
+      const nativeTheme = normalizeThemePreference(native.theme)
+      if (!this.dirtyTheme && this.theme !== nativeTheme) {
+        this.applyingTheme = nativeTheme
+        this.options.applyTheme?.(nativeTheme)
       }
     } finally {
       this.applying = false

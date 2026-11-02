@@ -145,7 +145,7 @@ export const LIVE_EDITOR_TEXT_COLOR_PRESETS: readonly LiveEditorTextColorPreset[
   [
     { id: 'default', label: 'Default', cssValue: 'var(--foreground)' },
     { id: 'muted', label: 'Muted', cssValue: 'var(--muted-foreground)' },
-    { id: 'amber', label: 'Amber', cssValue: 'var(--primary)' },
+    { id: 'accent', label: 'Accent', cssValue: 'var(--primary)' },
   ]
 
 /** Default editor text color — the theme foreground (preserves the prior inherited color). */

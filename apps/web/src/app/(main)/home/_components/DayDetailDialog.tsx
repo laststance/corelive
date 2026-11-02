@@ -175,7 +175,7 @@ function getDayCategoryTotals(
  * Day-detail dialog opened by clicking a Heatmap cell. Renders the day's
  * level band (paper → terracotta), italic state name, voice line, and a
  * compact list of the day's completed tasks. The cathedral-lit halo (soft
- * amber box-shadow ring) only appears on full days (intensity 4); today
+ * `--primary`-tinted box-shadow ring) only appears on full days (intensity 4); today
  * gets a pulse-dot "still going" footer when the count is non-zero.
  *
  * @param date - YYYY-MM-DD date string; null collapses the dialog

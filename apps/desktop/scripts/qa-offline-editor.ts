@@ -57,7 +57,8 @@ await worker.call('prepare', {
   categories,
   preferences: {
     revision: 0,
-    theme: 'light',
+    // fresh workspace seed: follow the OS (DEFAULT_THEME_PREFERENCE)
+    theme: 'system',
     settings: UserSettingsStateSchema.parse({
       liveEditorFontFamily: 'sans',
       liveEditorFontSize: 19,

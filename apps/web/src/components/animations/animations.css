@@ -20,8 +20,6 @@
     --ease-in: cubic-bezier(0.4, 0, 1, 1);
     --ease-out: cubic-bezier(0, 0, 0.2, 1);
     --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
-    --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
-    --ease-elastic: cubic-bezier(0.68, -0.55, 0.265, 1.55);
     --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
 
     /* Z-index for notifications/overlays */
@@ -29,7 +27,6 @@
 
     /* Status colors for animations */
     --color-success: oklch(0.627 0.194 149.214);
-    --color-warning: oklch(0.769 0.188 70.08);
     --color-danger: oklch(0.577 0.245 27.325);
   }
 
@@ -38,7 +35,6 @@
      the light :root values on a dark surface. Mirrors the globals.css dark variant. */
   [data-theme$='dark'] {
     --color-success: oklch(0.696 0.17 162.48);
-    --color-warning: oklch(0.828 0.189 84.429);
     --color-danger: oklch(0.704 0.191 22.216);
   }
 
@@ -123,24 +119,6 @@
     }
   }
 
-  /* Bounce effect */
-  .bounce {
-    animation: microBounce var(--duration-normal) var(--ease-bounce);
-  }
-
-  @keyframes microBounce {
-    0%,
-    100% {
-      transform: translateY(0);
-    }
-    40% {
-      transform: translateY(-10px);
-    }
-    60% {
-      transform: translateY(-5px);
-    }
-  }
-
   /* Checkbox check animation */
   .checkbox-check {
     stroke-dasharray: 16;
@@ -151,24 +129,6 @@
   @keyframes checkboxCheck {
     to {
       stroke-dashoffset: 0;
-    }
-  }
-
-  /* Radio select animation */
-  .radio-select {
-    transform: scale(0);
-    animation: radioSelect var(--duration-fast) var(--ease-bounce) forwards;
-  }
-
-  @keyframes radioSelect {
-    0% {
-      transform: scale(0);
-    }
-    50% {
-      transform: scale(1.2);
-    }
-    100% {
-      transform: scale(1);
     }
   }
 

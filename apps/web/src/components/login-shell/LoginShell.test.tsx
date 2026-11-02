@@ -19,6 +19,17 @@ import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import { LoginShell } from './LoginShell'
 
+// happy-dom drops `color-mix()`, so wiring is asserted with plain rgb stand-ins; the real ramp is pinned in constants.test.ts.
+vi.mock('./constants', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>()
+  return {
+    ...actual,
+    LOGIN_RIBBON_LEVEL_FILLS: [0, 1, 2, 3, 4].map(
+      (n) => `rgb(${n}, ${n}, ${n})`,
+    ),
+  }
+})
+
 // Clerk session, controllable per spec. Signed out by default: that is the
 // state the login window exists for.
 const { clerkUserRef } = vi.hoisted(() => ({
@@ -182,6 +193,31 @@ describe('LoginShell', () => {
     expect(
       screen.getByRole('heading', { name: /your year is waiting/i }),
     ).toBeInTheDocument()
+  })
+
+  test('paints each decorative ribbon cell with the fill for its level', () => {
+    // Arrange: signed-out front door with the oauth bridge present.
+    exposeElectronAPI({ oauth: {} })
+
+    // Act
+    const { container } = render(<LoginShell />)
+
+    // Assert: levels 0,1,1,2,2,3,3,4,4,3 map to the mocked per-level colors.
+    const cells = Array.from(
+      container.querySelectorAll<HTMLElement>('div[aria-hidden="true"] > span'),
+    )
+    expect(cells.map((cell) => cell.style.backgroundColor)).toEqual([
+      'rgb(0, 0, 0)',
+      'rgb(1, 1, 1)',
+      'rgb(1, 1, 1)',
+      'rgb(2, 2, 2)',
+      'rgb(2, 2, 2)',
+      'rgb(3, 3, 3)',
+      'rgb(3, 3, 3)',
+      'rgb(4, 4, 4)',
+      'rgb(4, 4, 4)',
+      'rgb(3, 3, 3)',
+    ])
   })
 
   test('shows the LiveEditor placeholder once signed in, for installs whose main process does not close the window', () => {

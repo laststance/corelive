@@ -56,7 +56,7 @@ async function createWorkspace(
     })),
     preferences: {
       revision: 0,
-      theme: 'warm-cathedral-light',
+      theme: 'cathedral-light',
       settings: {
         ...UserSettingsStateSchema.parse({}),
         liveEditorToastDurationMs: 5000,

@@ -13,7 +13,7 @@
 
 ## Aesthetic Direction
 
-- **Direction:** **Warm Cathedral** — industrial-utilitarian craft warmed by daylight. The Heatmap year is the stained-glass window; accumulated days make the room glow.
+- **Direction:** the concept is self-affirmation. Warmth lives in the heatmap's accumulated days (the stained-glass window); the default chrome is stock shadcn Default (neutral). **Warm Cathedral** — industrial-utilitarian craft warmed by daylight — is one selectable theme, not the applied default.
 - **Decoration level:** **Intentional** — paper-grain noise on backgrounds (≤2% opacity), no decorative blobs, no gradient orbs. Visual weight lives in the Heatmap; chrome stays quiet.
 - **Mood:** Quiet pride. A workshop with a real window, not fluorescent tubes. Studio Ghibli morning, not corporate dashboard.
 - **NOT:** Linear (cold completionism), Notion (feature bloat), Things 3 (precious minimalism), Todoist (KPI scoring), gamified RPG (badges/SFX/confetti).
@@ -21,7 +21,7 @@
 
 ## Presets First, Then Options
 
-corelive ships an **opinionated concept** — the North Star and Warm Cathedral. That concept owns every **default and preset**, so a fresh install is complete and concept-faithful before the user touches a single setting. But the default is a **starting point, not a ceiling** — every aesthetic and UX item is meant to be tuned to the user's own taste.
+corelive ships an **opinionated concept** — the North Star. That concept owns every **default and preset** (the default chrome is shadcn Default), so a fresh install is complete and concept-faithful before the user touches a single setting. But the default is a **starting point, not a ceiling** — every aesthetic and UX item is meant to be tuned to the user's own taste.
 
 **The rule:** ship the concept-faithful default **first** and make it sufficient on its own, **then expose the knob** so the user can change it. Good defaults are never an excuse to withhold a setting.
 
@@ -32,7 +32,7 @@ This holds for **design, features, and UX alike**. The concept owns the default;
 
 **Never deviable: the North Star itself** — self-affirmation over judgment. "Configure everything" means every _aesthetic and UX_ item (theme, sound, motion, layout, copy, density) — a louder theme, an optional sound, a denser layout are all fair game. It does **not** mean an option that grades, shames, or guilts (no opt-in streak-shame, no KPI-percentage mode). Style is infinitely yours to tune; the emotional contract is not.
 
-> **Instances.** **Sound palette** — default is silence (on-concept); every soft cue is configurable per moment, off until the user turns it on. **Theme system** — Warm Cathedral is the default; the colored families are user-selectable, and a stock shadcn **Default** light/dark pair heads the palette list for anyone who wants the un-opinionated look. Next customization? Same shape: ship the concept default, make it sufficient, then let the user tune it.
+> **Instances.** **Sound palette** — default is silence (on-concept); every soft cue is configurable per moment, off until the user turns it on. **Theme system** — the stock shadcn **Default** light/dark pair is the applied default and heads the palette list; Warm Cathedral and the colored families are user-selectable options. Next customization? Same shape: ship the concept default, make it sufficient, then let the user tune it.
 
 ## Typography
 
@@ -57,7 +57,7 @@ This holds for **design, features, and UX alike**. The concept owns the default;
 
 ## Color
 
-OKLCH color space throughout. Departing deliberately from the current cold-neutral baseline to introduce warmth via small chroma values (0.005–0.015) on neutrals plus an amber-warm accent.
+The palette tables in this section (light/dark, approach, semantic) are the **Warm Cathedral theme**'s definition, not the applied default; the applied default is shadcn Default (see Theme System). OKLCH color space throughout. Departing deliberately from the current cold-neutral baseline to introduce warmth via small chroma values (0.005–0.015) on neutrals plus an amber-warm accent.
 
 ### Approach
 
@@ -65,7 +65,7 @@ OKLCH color space throughout. Departing deliberately from the current cold-neutr
 - **Warm neutrals:** every _solid_ neutral surface carries OKLCH chroma ≥0.016 (light) / ≥0.026 (dark) — the golden-hour warm-up (2026-06-03) that pushed the whole UI off clinical white toward late-afternoon light. Earlier values (0.005–0.015) read as "Linear cold". Exception: dark `--border`/`--input` stay translucent white (`oklch(1 0 0 / 8–12%)`); they composite over the warm coal background, so the rendered line reads warm without carrying its own chroma.
 - **Temperature gradient over lightness gradient** for the Heatmap — the eureka. Cooler-empty → hotter-full, not lighter → darker.
 
-### Light mode (primary)
+### Warm Cathedral theme — light mode
 
 | Token                    | Value                   | Role                                                        |
 | ------------------------ | ----------------------- | ----------------------------------------------------------- |
@@ -94,7 +94,7 @@ OKLCH color space throughout. Departing deliberately from the current cold-neutr
 > already passed (dark ink on lifted amber, 6.93:1). Locked by
 > `cathedral-contrast.test.ts`.
 
-### Dark mode
+### Warm Cathedral theme — dark mode
 
 Dark mode is a redesign of the surfaces, not a saturation reduction. The warm undertone (chroma 0.026–0.028 on hue 40–66, raised in the 2026-06-03 golden-hour warm-up from 0.012–0.015) makes the coal glow like embers rather than slate.
 
@@ -136,33 +136,52 @@ This is the project's most consequential color decision. Departs from GitHub's g
 
 ## Theme System
 
-Warm Cathedral is the soul of the product; the colored families are optional self-expression layered _on top of_ it without ever touching it. The ten rules below govern how themes are added, derived, and applied.
+The applied default is shadcn Default (neutral). Warm Cathedral is one selectable theme; never hard-code its amber outside its theme definition. The ten rules below govern how themes are added, derived, and applied.
 
-1. **The default is sacred.** Warm Cathedral light + dark are the untouched default, byte-for-byte. Every other theme is derived, static, or layered; none may alter the cathedral tokens. The cathedral pair stays **hand-authored in `packages/live-editor/src/styles/base.css`** (never machine-generated) — brand safety over DRY.
-2. **14 themes, 7 families.** The stock shadcn **Default** (neutral, listed first in the picker) + Warm Cathedral (the applied default) + five colored families — **Harbor** (calm blue), **Grove** (forest green), **Rose Tea** (dusty rose), **Iris** (soft violet), **Graphite** (near-neutral slate) — each in `{light, dark}`.
+**Id mapping** (migration reference, #213):
+
+| Stored id                            | Meaning                                             |
+| ------------------------------------ | --------------------------------------------------- |
+| `light` / `dark`                     | shadcn Default (was Warm Cathedral before #213)     |
+| `cathedral-light` / `cathedral-dark` | Warm Cathedral (new ids)                            |
+| `default-light` / `default-dark`     | legacy aliases of `light` / `dark` (not `ThemeId`s) |
+| `system` or any unknown value        | System (Default light/dark by OS)                   |
+
+**Theme-safe UI in three steps:**
+
+1. Use semantic token classes (`bg-background text-foreground`, `bg-primary text-primary-foreground`, `text-muted-foreground`, `border-border`), never a hue literal.
+2. View it on Default and Warm Cathedral (Settings fixture `apps/web/scripts/qa-settings`, or `pnpm dev` then Settings > Appearance > Palette). Expected result: neutral on Default light and dark.
+3. Run `pnpm test`; only when the registry changed, also `pnpm theme:generate && pnpm theme:check`.
+
+The guard `apps/web/src/lib/themes/no-hardcoded-amber.test.ts` gives **partial** coverage: it detects `oklch()` literals (hue 30-80, chroma >= 0.1) and Tailwind `amber-` classes in hand-authored UI code; hex, hsl and rgb are not parsed.
+
+1. **Warm Cathedral is sacred.** Warm Cathedral light + dark (`cathedral-light` / `cathedral-dark`) are an untouched, selectable theme, byte-for-byte. Every other theme is derived, static, or layered; none may alter the cathedral tokens. The cathedral pair stays **hand-authored in `packages/live-editor/src/styles/base.css`** (never machine-generated) — brand safety over DRY.
+2. **14 themes, 7 families.** The stock shadcn **Default** (neutral, listed first in the picker, and the applied default) + Warm Cathedral (the opt-in warm palette) + five colored families — **Harbor** (calm blue), **Grove** (forest green), **Rose Tea** (dusty rose), **Iris** (soft violet), **Graphite** (near-neutral slate) — each in `{light, dark}`.
 3. **The registry is the single source of truth.** `packages/live-editor/src/themes/registry.ts` holds every theme as a discriminated union: `PreservedTheme` (cathedral — metadata only), `StaticTheme` (the stock shadcn Default pair — literal tokens emitted verbatim), or `DerivedTheme` (a colored family's accent L/C/H, a neutral tint, and a 5-stop heatmap hue path). `THEMES`, the picker, and `useThemeAxis` all derive from it — never edit them directly.
-4. **Colored families are generated, the default is not.** A build-time generator (`apps/web/scripts/generate-theme-css.ts`) reads the registry and emits static CSS to `packages/live-editor/src/styles/generated.css`, one `:root[data-theme='id']` block per derived or static theme (specificity `0,2,0`, so it beats the cathedral `:root` regardless of `@import` order). The generator **skips every `preserve` theme** — cathedral is never emitted. WCAG math (`culori`) runs at **build/test time only**; it is never shipped in the client bundle. `pnpm theme:generate` regenerates; `theme:check` fails CI if the committed CSS is stale.
+4. **Default and colored families are generated; Warm Cathedral is not.** A build-time generator (`apps/web/scripts/generate-theme-css.ts`) reads the registry and emits static CSS to `packages/live-editor/src/styles/generated.css`, one `:root[data-theme='id']` block per derived or static theme (specificity `0,2,0`, so it beats the cathedral `:root` regardless of `@import` order). The generator **skips every `preserve` theme** — Warm Cathedral is never generated (the Default pair is emitted, with its legacy-alias and first-paint blocks). WCAG math (`culori`) runs at **build/test time only**; it is never shipped in the client bundle. `pnpm theme:generate` regenerates; `theme:check` fails CI if the committed CSS is stale.
 5. **Derivation is systematic, identity is preserved.** A derived family tints its neutral surfaces toward the family hue at the **cathedral lightness ladder** (so AA is L-driven and always holds); the accent is the family's own L/C/H; **fixed-identity tokens — `--destructive`, `--chart-1…5` — are emitted as the cathedral value unchanged for every theme**; foregrounds are contrast-computed for WCAG AA, never hand-picked.
 6. **Graphite is the temperature=pride proof.** Its accent is nearly desaturated (chroma ~0.02), so the **only real chroma on screen is the heatmap bloom**. A near-monochrome chrome with a glowing heatmap is the purest statement of the north star: the year you accumulated is the color.
 7. **The picker is two-axis.** Settings and the sidebar quick-switch both pick a **family** and a **mode** independently. Each family card previews the family's _real_ tokens (surface · accent · text · heatmap ramp) as a **composite swatch reconstructed at runtime from the registry** — never a single hex dot, never the culori library.
-8. **System belongs to the default only.** `System` is OS-managed and maps **only** to the Warm Cathedral light/dark pair (it is a light↔dark axis, not a palette). Colored families expose Light/Dark only; choosing a colored family while on System collapses to an explicit id.
+8. **System follows the Default pair; other families are explicit Light/Dark (next-themes resolves System to the Default ids).** `System` is OS-managed (a light↔dark axis, not a palette). Choosing another family while on System collapses to an explicit id.
 9. **Theme toggle = crossfade.** Switching theme crossfades rather than hard-cutting (Motion table, "Theme toggle"). The **whole UI** — page background/text plus component surfaces (cards, sidebar, popovers) — crossfades together (200ms `ease-out`, gated behind `motion-safe:` — `prefers-reduced-motion` users get an instant change). To keep hover/focus instant, the fade is scoped to a transient `theme-transition` class that `<ThemeTransition>` puts on `<html>` only for the switch window. _Decided 2026-06-11 (design-review #5): broadened from body-only to all surfaces._
-10. **Theme is applied as `data-theme`.** Web browsers persist the selection in `localStorage` (`storageKey="corelive-theme"`), and next-themes sets `data-theme` on `<html>`. Prepared desktop accounts persist the selection in their local workspace; the Settings window synchronizes explicit changes, and the bundled editor applies the cached selection without a network request. Tailwind `dark:` is keyed to the app's `data-theme` (`@custom-variant dark` on `[data-theme$=dark]`); only the `System` selection follows the OS light/dark preference. The retired `appearance.theme`/`accentColor` fields remain unused. An unknown or stale theme id falls back to the default (`ThemeAllowlistGuard` on the web, the local theme adapter in the bundled editor).
+10. **Theme is applied as `data-theme`.** Web browsers persist the selection in `localStorage` (`storageKey="corelive-theme"`), and next-themes sets `data-theme` on `<html>`. Prepared desktop accounts persist the selection in their local workspace; the Settings window synchronizes explicit changes, and the bundled editor applies the cached selection without a network request. Tailwind `dark:` is keyed to the app's `data-theme` (`@custom-variant dark` on `[data-theme$=dark]`); only the `System` selection follows the OS light/dark preference. The retired `appearance.theme`/`accentColor` fields remain unused. An unknown or stale theme id falls back to System (`ThemeAllowlistGuard` on the web, the local theme adapter in the bundled editor).
 
 **Family signatures** (accent hue; full seeds live in the registry):
 
-| Family         | Accent hue      | Character          | Heatmap rest → apex hue |
-| -------------- | --------------- | ------------------ | ----------------------- |
-| Warm Cathedral | ~50 (amber)     | the default craft  | 80 → 40 (light)         |
-| Harbor         | 250             | calm blue          | 235 → 42                |
-| Grove          | 145             | forest green       | 140 → 42                |
-| Rose Tea       | 18              | dusty rose         | 25 → 38                 |
-| Iris           | 292             | soft violet        | 300 → 45                |
-| Graphite       | 250 (~0 chroma) | near-neutral slate | 250 → 42                |
+| Family         | Accent hue      | Character           | Heatmap rest → apex hue |
+| -------------- | --------------- | ------------------- | ----------------------- |
+| Warm Cathedral | ~50 (amber)     | opt-in warm palette | 80 → 40 (light)         |
+| Harbor         | 250             | calm blue           | 235 → 42                |
+| Grove          | 145             | forest green        | 140 → 42                |
+| Rose Tea       | 18              | dusty rose          | 25 → 38                 |
+| Iris           | 292             | soft violet         | 300 → 45                |
+| Graphite       | 250 (~0 chroma) | near-neutral slate  | 250 → 42                |
 
 **Accepted hue collisions** (both AA-pass, separable by chroma/lightness, flagged in-code for design-review): **Grove** accent `145` lands exactly on the fixed `--chart-2` token (`oklch(0.65 0.13 145)`) and beside the app's success-green (`--color-success`, hue ≈149), and a green theme also dilutes green's "success-everywhere" semantic; **Rose Tea** accent `18` sits near the fixed `--destructive` (hue 25). Both ship as deliberate taste calls — the family signature is worth more than perfect hue isolation.
 
 ## Heatmap Invariance Rule
+
+> **The heatmap ramp is content colour (accumulated days) and stays warm on every theme, including Default; decorative surfaces use theme chrome tokens, never `--hm-*`.**
 
 > **The heatmap's temperature = pride. The hot end blooms warm on every theme, forever — it is a CI-enforced invariant, not a guideline.**
 
@@ -295,9 +314,9 @@ Instead of "5-day streak" (creates fragility), display **"shown up 18 days this 
 
 The full color system maps onto the existing shadcn/ui tokens. Migration is per-token, not per-component. Every shadcn primitive in `apps/web/src/components/ui/` keeps working — only the underlying CSS variables change.
 
-- **Button (primary):** amber bg, paper-white text, 8px radius, hover lifts 1px
+- **Button (primary):** `--primary` bg, `--primary-foreground` text, 8px radius, hover lifts 1px
 - **Card:** surface bg, 1px soft border, 12px radius, no shadow by default (shadow only when elevated/dragging)
-- **Input:** transparent bg in light mode, white-on-white feel; focus ring uses `--ring` (amber)
+- **Input:** transparent bg in light mode, white-on-white feel; focus ring uses `--ring`
 - **Badge:** pill (full radius), Caption typography (12px / 500 uppercase)
 - **Tooltip:** popover bg, 4px slide-up entrance, 13px sans; max 2 lines, no markdown
 - **Heatmap cell:** `<rect>` with explicit fill from `--hm-0…--hm-4` (resolved per active theme; the component reads them via the `HEATMAP_LEVEL_TOKENS` source-of-truth in `packages/live-editor/src/heatmap-intensity.ts`), role=button when count>0, focus ring identical to other interactive elements
@@ -335,11 +354,12 @@ The full color system maps onto the existing shadcn/ui tokens. Migration is per-
 | 2026-09-05 | LiveEditor textarea shows no focus line (no ring and no border-color change on focus); the general "focus ring uses `--ring`" Input rule does not apply to it, while the resting 1px `--border` stays                                                                                                                                                                                                        | User call (2026-09-05): the writing surface is the whole panel, so the caret is the focus cue and a `--ring` frame around the panel read as a purple box on Iris dark. Deliberate WCAG 2.4.7 trade-off, documented in code next to the class list                                                                                                                                                                                                                                |
 | 2026-09-05 | Floating Navigator retired into a minimal **login shell** (`/login-shell`; fixed 300×400 with native traffic lights; no keep-on-top, startup-window or ⌘3 surfaces); after sign-in the main process closes it and shows LiveEditor, and the panel's category follows the one shared selection (Follow-OFF users get a one-time reset)                                                                        | A window whose only job is sign-in carries no other chrome; native traffic lights keep it closable even in accessory (hidden-dock) mode, and one shared category selection retires a Follow toggle that lost its meaning once the navigator's list was gone                                                                                                                                                                                                                      |
 | 2026-09-06 | Today Ember restored as the opt-in `Show Today Ember` switch under Settings > Tasks, shared by the web LiveEditor and desktop panel; default OFF, remembered on this device and synced across open windows                                                                                                                                                                                                   | User request: keep the current uncluttered editor by default while allowing the one-cell kept-today feedback. Enabling retains the original lit/unlit colors, 400ms sweep, compact panel cut, and reduced-motion behavior                                                                                                                                                                                                                                                        |
+| 2026-11-02 | Stock shadcn **Default** is the applied default (`light`/`dark` ids; owns `System`); Warm Cathedral becomes one selectable theme (`cathedral-light`/`cathedral-dark`); unknown stored ids fall back to System; the LiveEditor text preset `amber` is renamed `accent`; the login ribbon follows `--primary`/`--muted`; an amber-literal guard test ships (#213)                                              | Owner call (2026-11-02): amber is one theme option in the menu, never the theme colour; Default chrome stays neutral and warmth lives in the heatmap content                                                                                                                                                                                                                                                                                                                     |
 
 ## Implementation Migration Notes
 
 This DESIGN.md describes the target system. Migration from current state (cold-neutral oklch + GitHub green Heatmap) is per-token in `packages/live-editor/src/styles/base.css`. No component code changes are required for the color/spacing migration. Typography loads nothing: the stock Tailwind `font-sans` / `font-mono` stacks are the defaults (no `next/font`, no `@theme` font override). The eight named tiers are available through `type-hero`, `type-h1`, `type-h2`, `type-h3`, `type-body`, `type-small`, `type-caption`, and `type-data` in `packages/live-editor/src/styles/typography.css`. Caption applies uppercase tracking; Data uses tabular numerals.
 
-The Heatmap palette is defined by the `--hm-0…--hm-4` tokens. The stock **Default** family carries the Warm Cathedral ramp verbatim in its registry `tokens` (shadcn ships no heatmap). For the **default Warm Cathedral**, edit them directly in `packages/live-editor/src/styles/base.css` (light and dark). For a **colored family**, change its `heatmapHues` seed in `packages/live-editor/src/themes/registry.ts` and run `pnpm theme:generate` (the generator rewrites `packages/live-editor/src/styles/generated.css`). Either way **no `ContributionGraph.tsx` change is required** — the component resolves the tokens through the `HEATMAP_LEVEL_TOKENS` source-of-truth.
+The Heatmap palette is defined by the `--hm-0…--hm-4` tokens. The stock **Default** family carries the warm ramp verbatim (content colour, not chrome) in its registry `tokens` (shadcn ships no heatmap). For the **Warm Cathedral** theme, edit them directly in `packages/live-editor/src/styles/base.css` (light and dark). For a **colored family**, change its `heatmapHues` seed in `packages/live-editor/src/themes/registry.ts` and run `pnpm theme:generate` (the generator rewrites `packages/live-editor/src/styles/generated.css`). Either way **no `ContributionGraph.tsx` change is required** — the component resolves the tokens through the `HEATMAP_LEVEL_TOKENS` source-of-truth.
 
 The heatmap tooltip uses “N things done — good day” for positive days and “rest day” for empty days. No streak badge is displayed. Server streak fields remain available to preserve the API contract.

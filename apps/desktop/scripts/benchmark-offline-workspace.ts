@@ -59,7 +59,7 @@ async function main(): Promise<void> {
         })),
         preferences: {
           revision: 0,
-          theme: 'warm-cathedral-light',
+          theme: 'cathedral-light',
           settings: UserSettingsStateSchema.parse({}),
         },
         legacyNotes: notes,

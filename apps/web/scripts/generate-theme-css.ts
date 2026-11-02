@@ -3,12 +3,16 @@
  * `packages/live-editor/src/styles/generated.css` with one block per generator-emitted theme:
  * the DERIVED (colored) families and the STATIC shadcn Default pair.
  *
- * Preserved themes (Warm Cathedral light/dark) are SKIPPED: their CSS stays
- * hand-authored in globals.css and is pinned by a snapshot test, so the brand
- * never drifts. Derived themes get their ~36 color tokens computed from OKLCH
+ * Preserved themes (Warm Cathedral `cathedral-light`/`cathedral-dark`) are
+ * SKIPPED: their CSS stays hand-authored in base.css and is pinned by a snapshot
+ * test, so the brand never drifts. Derived themes get their ~36 color tokens computed from OKLCH
  * seed params at the fixed cathedral lightness ladder (this file mirrors that
  * ladder), with `--primary-foreground` contrast-computed (never hardcoded white).
- * Static themes are copied verbatim from their registry `tokens`.
+ * Static themes are copied verbatim from their registry `tokens`. The Default
+ * pair is the applied default, so it is emitted as SEPARATE blocks (never
+ * selector lists, which the dslint CSS parser would mis-tag): bare `:root` and
+ * `[data-theme='light']` plus one block per legacy alias for light; `dark`, the
+ * legacy dark alias and a `prefers-color-scheme: dark` first-paint block for dark.
  *
  * Run via `pnpm theme:generate`. CI re-runs it and fails on any diff, so
  * generated.css can never be stale. BUILD-TIME ONLY (imports culori via
@@ -27,6 +31,7 @@ import { readableForeground } from '../src/lib/themes/contrast'
 import {
   isDerivedTheme,
   isStaticTheme,
+  LEGACY_THEME_ID_ALIASES,
   THEME_REGISTRY,
   type DerivedTheme,
   type StaticTheme,
@@ -36,11 +41,20 @@ import {
 
 const toOklch = converter('oklch')
 
+/** Repo-relative registry path, quoted in validation errors so the fix location is obvious. */
+const REGISTRY_SOURCE_PATH = 'packages/live-editor/src/themes/registry.ts'
+
+/** Longest expected/actual line excerpt printed in a drift diagnostic. */
+const MAX_EXCERPT_LENGTH = 200
+
+/** Repo-relative generated file, quoted in drift diagnostics. */
+const GENERATED_CSS_PATH = 'packages/live-editor/src/styles/generated.css'
+
 /**
- * Cathedral token values, copied verbatim from globals.css `:root` /
- * `[data-theme='dark']`. This is the fixed lightness ladder (neutral L per token)
+ * Cathedral token values, copied verbatim from base.css
+ * `:root[data-theme='cathedral-light']` / `:root[data-theme='cathedral-dark']`. This is the fixed lightness ladder (neutral L per token)
  * plus the fixed-identity palette (destructive, charts) reused by every theme.
- * Cathedral is `preserve` (never recomputed, never drifts) and globals.css is
+ * Cathedral is `preserve` (never recomputed, never drifts) and base.css is
  * pinned by the cathedral snapshot test, so this mirror cannot silently diverge.
  */
 export const CATHEDRAL: Record<ThemeMode, Record<string, string>> = {
@@ -208,10 +222,23 @@ function formatOklch(l: number, c: number, h: number, alpha = 1): string {
   return alpha < 1 ? `${triple} / ${num(alpha * 100)}%)` : `${triple})`
 }
 
-/** Parses a cathedral OKLCH string to the L/C/alpha the ladder rules need. */
-function ladderColor(value: string): { l: number; c: number; alpha: number } {
+/**
+ * Parses a cathedral OKLCH string to the L/C/alpha the ladder rules need.
+ * @param value - A cathedral ladder color.
+ * @param context - Theme id, mode and token, quoted in the error so a bad ladder entry is findable.
+ * @returns the lightness, chroma and alpha of the color.
+ * @throws when the value is not a parsable color.
+ */
+function ladderColor(
+  value: string,
+  context: { themeId: string; mode: ThemeMode; token: string },
+): { l: number; c: number; alpha: number } {
   const parsed = toOklch(value)
-  if (!parsed) throw new Error(`Unparsable cathedral color: ${value}`)
+  if (!parsed) {
+    throw new Error(
+      `Unparsable cathedral color theme=${context.themeId} mode=${context.mode} token=${context.token} value=${value}`,
+    )
+  }
   return { l: parsed.l, c: parsed.c, alpha: parsed.alpha ?? 1 }
 }
 
@@ -237,6 +264,7 @@ export type DerivationSeed = Pick<
  * the accent values produced in pass one). Foreground keys are pre-seeded so the
  * output keeps cathedral token order (stable output = stable generated.css).
  * @param seed - A derived theme's OKLCH derivation params.
+ * @param themeId - Theme id quoted in ladder errors (defaults to `'unknown'` for bare seeds).
  * @returns a map of every cathedral color token to this theme's value.
  * @example
  * deriveThemeTokens({ mode: 'light', accentL: 0.555, accentChroma: 0.135,
@@ -245,9 +273,16 @@ export type DerivationSeed = Pick<
  */
 export function deriveThemeTokens(
   seed: DerivationSeed,
+  themeId = 'unknown',
 ): Record<string, string> {
   const ladder = CATHEDRAL[seed.mode]
   const tokens: Record<string, string> = {}
+  // the id is optional (a DerivationSeed has none); mode + token still pinpoint the ladder entry
+  const ladderContext = (token: string) => ({
+    themeId,
+    mode: seed.mode,
+    token,
+  })
 
   // Pass 1 — everything except computed foregrounds (placeholders hold their slot)
   for (const [token, cathedralValue] of Object.entries(ladder)) {
@@ -266,14 +301,14 @@ export function deriveThemeTokens(
         seed.accentHue,
       )
     } else if (category === 'neutral') {
-      const { l, alpha } = ladderColor(cathedralValue)
+      const { l, alpha } = ladderColor(cathedralValue, ladderContext(token))
       tokens[token] = formatOklch(l, seed.neutralChroma, seed.neutralHue, alpha)
     } else if (category === 'fixed') {
       tokens[token] = cathedralValue
     } else {
       // heatmap: keep the cathedral L/C ramp, swap to the family hue at this stop
       const stop = HEATMAP_TOKENS.indexOf(token)
-      const { l, c } = ladderColor(cathedralValue)
+      const { l, c } = ladderColor(cathedralValue, ladderContext(token))
       tokens[token] = formatOklch(
         l,
         c,
@@ -295,80 +330,243 @@ export function deriveThemeTokens(
 }
 
 /**
+ * Renders a token map as one CSS block under any selector. The shared writer for
+ * every theme block so indentation and token order stay identical.
+ * @param selector - The full selector, e.g. `:root[data-theme='harbor-light']`.
+ * @param colorScheme - Emitted first as `color-scheme` (hints UA form controls).
+ * @param tokens - Token to value map, emitted in insertion order.
+ * @param indent - Leading spaces of the selector line (nested blocks pass 2).
+ * @returns the `selector { ... }` CSS block.
+ * @example
+ * renderBlock(':root', 'light', { '--background': 'oklch(1 0 0)' })
+ * // => ":root {\n  color-scheme: light;\n  --background: oklch(1 0 0);\n}"
+ */
+function renderBlock(
+  selector: string,
+  colorScheme: ThemeMode,
+  tokens: Readonly<Record<string, string>>,
+  indent = 0,
+): string {
+  const outer = ' '.repeat(indent)
+  const inner = ' '.repeat(indent + 2)
+  const lines = [`${inner}color-scheme: ${colorScheme};`]
+  for (const [token, value] of Object.entries(tokens)) {
+    lines.push(`${inner}${token}: ${value};`)
+  }
+  return `${outer}${selector} {\n${lines.join('\n')}\n${outer}}`
+}
+
+/**
  * Renders a token map as one theme's CSS block. Uses `:root[data-theme='id']`
- * (specificity 0,2,0) so an emitted theme always wins over cathedral's `:root`
- * regardless of `@import` order — unlike cathedral's hand-authored
- * `[data-theme='dark']`, which relies on coming after `:root` in globals.css.
+ * (specificity 0,2,0) so an emitted theme always wins over the bare `:root`
+ * regardless of `@import` order.
  * @param theme - The emitted theme's identity (id + color-scheme).
- * @param tokens - Its token→value map, emitted in insertion order.
- * @returns the `:root[data-theme='…'] { … }` CSS block.
+ * @param tokens - Its token to value map, emitted in insertion order.
+ * @returns the `:root[data-theme='...'] { ... }` CSS block.
  * @example
  * renderThemeBlock(harborLight, deriveThemeTokens(harborLight))
- * // => ":root[data-theme='harbor-light'] {\n  color-scheme: light;\n  --background: oklch(0.975 0.012 250);\n  …\n}"
+ * // => ":root[data-theme='harbor-light'] {\n  color-scheme: light;\n  --background: oklch(0.975 0.012 250);\n  ...\n}"
  */
 function renderThemeBlock(
-  theme: Pick<ThemeSeed, 'id' | 'colorScheme'>,
+  theme: { id: string; colorScheme: ThemeMode },
   tokens: Readonly<Record<string, string>>,
 ): string {
-  const lines = [`  color-scheme: ${theme.colorScheme};`]
-  for (const [token, value] of Object.entries(tokens)) {
-    lines.push(`  ${token}: ${value};`)
-  }
-  return `:root[data-theme='${theme.id}'] {\n${lines.join('\n')}\n}`
+  return renderBlock(
+    `:root[data-theme='${theme.id}']`,
+    theme.colorScheme,
+    tokens,
+  )
 }
 
 /**
  * Renders one derived theme as a CSS block (its tokens computed from the seed).
  * @param theme - A derived theme seed.
- * @returns the `:root[data-theme='…'] { … }` CSS block.
+ * @returns the `:root[data-theme='...'] { ... }` CSS block.
  * @example
  * deriveThemeCss(harborLight)
- * // => ":root[data-theme='harbor-light'] {\n  color-scheme: light;\n  --background: oklch(0.975 0.012 250);\n  …\n}"
+ * // => ":root[data-theme='harbor-light'] {\n  color-scheme: light;\n  --background: oklch(0.975 0.012 250);\n  ...\n}"
  */
 export function deriveThemeCss(theme: DerivedTheme): string {
-  return renderThemeBlock(theme, deriveThemeTokens(theme))
+  return renderThemeBlock(theme, deriveThemeTokens(theme, theme.id))
 }
 
 /**
- * Renders one static theme (the stock shadcn Default) as a CSS block — its
- * registry `tokens` copied verbatim, no derivation.
+ * Renders one static theme as its plain `:root[data-theme='id']` block, tokens
+ * copied verbatim (no derivation).
  * @param theme - A static theme seed.
- * @returns the `:root[data-theme='…'] { … }` CSS block.
+ * @returns the `:root[data-theme='...'] { ... }` CSS block.
  * @example
- * staticThemeCss(THEME_REGISTRY['default-light'])
- * // => ":root[data-theme='default-light'] {\n  color-scheme: light;\n  --background: oklch(1 0 0);\n  …\n}"
+ * staticThemeCss(THEME_REGISTRY.light)
+ * // => ":root[data-theme='light'] {\n  color-scheme: light;\n  --background: oklch(1 0 0);\n  ...\n}"
  */
 export function staticThemeCss(theme: StaticTheme): string {
   return renderThemeBlock(theme, theme.tokens)
 }
 
-/** Header marking generated.css as machine-written. */
-const GENERATED_HEADER = `/* AUTO-GENERATED by scripts/generate-theme-css.ts — DO NOT EDIT.
-   Run \`pnpm theme:generate\` to regenerate. Preserved (Warm Cathedral) themes
-   live in globals.css; the derived colored families and the static shadcn
-   Default pair appear here. */`
+/**
+ * Renders the Default family's extra blocks so the neutral palette paints before
+ * (and without) any stored theme. Light gets the bare `:root` fallback; every
+ * legacy alias targeting this theme gets its own block (a stale stored
+ * `default-dark` paints Default on the first frame); dark gets the
+ * `prefers-color-scheme: dark` first-paint block for windows with no attribute
+ * yet (the desktop editor before React mounts). Always separate blocks, never
+ * selector lists: the dslint CSS parser tags a list as the wrong theme.
+ * @param theme - A static Default theme (family `default`).
+ * @param aliases - Legacy alias to target-id map.
+ * @returns the CSS blocks for this theme in emission order.
+ * @example
+ * defaultFamilyBlocks(THEME_REGISTRY.light, LEGACY_THEME_ID_ALIASES)
+ * // => [":root {...}", ":root[data-theme='light'] {...}", ":root[data-theme='default-light'] {...}"]
+ */
+function defaultFamilyBlocks(
+  theme: StaticTheme,
+  aliases: Readonly<Record<string, string>>,
+): string[] {
+  const blocks: string[] = []
+  if (theme.mode === 'light') {
+    blocks.push(renderBlock(':root', theme.colorScheme, theme.tokens))
+  }
+  blocks.push(staticThemeCss(theme))
+  for (const [alias, target] of Object.entries(aliases)) {
+    if (target === theme.id) {
+      blocks.push(
+        renderThemeBlock(
+          { id: alias, colorScheme: theme.colorScheme },
+          theme.tokens,
+        ),
+      )
+    }
+  }
+  if (theme.mode === 'dark') {
+    blocks.push(
+      `@media (prefers-color-scheme: dark) {\n${renderBlock(':root:not([data-theme])', theme.colorScheme, theme.tokens, 2)}\n}`,
+    )
+  }
+  return blocks
+}
 
 /**
- * Builds the full generated.css content from the registry: the header plus one
- * block per emitted theme — static ones verbatim, derived ones computed
- * (preserved themes are skipped). With only cathedral registered, the output is
- * the header alone.
+ * Throws when any color token of an emitted theme is not a parsable color, so a
+ * typo in a static seed (or a derivation bug) fails the generator before any
+ * write instead of shipping an invalid declaration.
+ * @param themes - Registry entries.
+ * @throws `THEME_INVALID_COLOR theme=<id> token=<token> value=<value> source=...`
+ */
+function assertThemeColorsParse(themes: readonly ThemeSeed[]): void {
+  for (const theme of themes) {
+    // preserved themes are hand-authored in base.css, nothing to validate here
+    if (theme.preserve) continue
+    const tokens = isStaticTheme(theme)
+      ? theme.tokens
+      : isDerivedTheme(theme)
+        ? deriveThemeTokens(theme, theme.id)
+        : {}
+    for (const [token, value] of Object.entries(tokens)) {
+      if (!toOklch(value)) {
+        throw new Error(
+          `THEME_INVALID_COLOR theme=${theme.id} token=${token} value=${value} source=${REGISTRY_SOURCE_PATH}`,
+        )
+      }
+    }
+  }
+}
+
+/**
+ * Throws unless every legacy alias points at an emitted (non-preserved) theme,
+ * because the alias CSS block copies that theme's tokens.
+ * @param themes - Registry entries.
+ * @param aliases - Legacy alias to target-id map.
+ * @throws `THEME_ALIAS_TARGET alias=<alias> target=<target>`
+ */
+function assertAliasTargetsEmitted(
+  themes: readonly ThemeSeed[],
+  aliases: Readonly<Record<string, string>>,
+): void {
+  for (const [alias, target] of Object.entries(aliases)) {
+    const targetTheme = themes.find((theme) => theme.id === target)
+    if (!targetTheme || targetTheme.preserve) {
+      throw new Error(`THEME_ALIAS_TARGET alias=${alias} target=${target}`)
+    }
+  }
+}
+
+/** Header marking generated.css as machine-written. */
+const GENERATED_HEADER = `/* AUTO-GENERATED by apps/web/scripts/generate-theme-css.ts — DO NOT EDIT.
+   Run \`pnpm theme:generate\` to regenerate. Preserved (Warm Cathedral) themes
+   live in packages/live-editor/src/styles/base.css; the shadcn Default pair
+   (with its legacy-alias and first-paint blocks) and the derived colored
+   families appear here. */`
+
+/**
+ * Builds the full generated.css content from the registry: the header plus the
+ * blocks of every emitted theme. Static Default themes expand to the bare
+ * `:root`, alias and first-paint blocks; other static and derived themes get one
+ * block each; preserved themes are skipped. Validates colors and alias targets
+ * first, so nothing is produced from a bad registry.
  * @param themes - The registry entries.
+ * @param aliases - Legacy alias map (defaults to the registry's; tests inject bad ones).
  * @returns the complete generated.css file content.
+ * @throws `THEME_INVALID_COLOR` / `THEME_ALIAS_TARGET` for an invalid registry.
  * @example
  * generateThemesCss(Object.values(THEME_REGISTRY))
- * // => header comment + one `:root[data-theme='…'] { … }` block per emitted theme
+ * // => header comment + one block per emitted theme (Default expands to six)
  */
-export function generateThemesCss(themes: readonly ThemeSeed[]): string {
+export function generateThemesCss(
+  themes: readonly ThemeSeed[],
+  aliases: Readonly<Record<string, string>> = LEGACY_THEME_ID_ALIASES,
+): string {
+  assertThemeColorsParse(themes)
+  assertAliasTargetsEmitted(themes, aliases)
   const blocks: string[] = []
   for (const theme of themes) {
-    // Preserved (Warm Cathedral) stays hand-authored in globals.css — emit nothing.
-    if (isStaticTheme(theme)) blocks.push(staticThemeCss(theme))
-    else if (isDerivedTheme(theme)) blocks.push(deriveThemeCss(theme))
+    // Preserved (Warm Cathedral) stays hand-authored in base.css, emit nothing.
+    if (isStaticTheme(theme)) {
+      if (theme.family === 'default') {
+        blocks.push(...defaultFamilyBlocks(theme, aliases))
+      } else {
+        blocks.push(staticThemeCss(theme))
+      }
+    } else if (isDerivedTheme(theme)) blocks.push(deriveThemeCss(theme))
   }
   return blocks.length > 0
     ? `${GENERATED_HEADER}\n\n${blocks.join('\n\n')}\n`
     : `${GENERATED_HEADER}\n`
+}
+
+/**
+ * Explains why generated.css differs from a fresh generation: the first differing
+ * line (1-based) with the expected and actual text, plus the recovery steps.
+ * Used by `--check` so a CI failure is actionable without diffing by hand.
+ * @param expected - Freshly generated content.
+ * @param actual - Content currently on disk.
+ * @returns a multi-line diagnostic, bounded to one line each for expected and actual.
+ * @example
+ * describeThemeCssDrift('a\nb\nc', 'a\nb\nX')
+ * // => message naming generated.css, "line 3", `expected: c`, `actual:   X`
+ */
+export function describeThemeCssDrift(
+  expected: string,
+  actual: string,
+): string {
+  const expectedLines = expected.split('\n')
+  const actualLines = actual.split('\n')
+  const lineCount = Math.max(expectedLines.length, actualLines.length)
+  let firstDifferentIndex = 0
+  while (
+    firstDifferentIndex < lineCount &&
+    expectedLines[firstDifferentIndex] === actualLines[firstDifferentIndex]
+  ) {
+    firstDifferentIndex += 1
+  }
+  const excerpt = (line: string | undefined): string =>
+    line === undefined ? '<end of file>' : line.slice(0, MAX_EXCERPT_LENGTH)
+  return [
+    `Theme CSS is stale: ${GENERATED_CSS_PATH} differs from the registry output.`,
+    `First difference at line ${firstDifferentIndex + 1}:`,
+    `  expected: ${excerpt(expectedLines[firstDifferentIndex])}`,
+    `  actual:   ${excerpt(actualLines[firstDifferentIndex])}`,
+    "Fix: from the repository root run `pnpm theme:generate`, review that file's diff, rerun `pnpm theme:check` and `pnpm test`, then commit.",
+  ].join('\n')
 }
 
 // Write the file when run directly (tsx scripts/generate-theme-css.ts).
@@ -379,13 +577,22 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       import.meta.url,
     ),
   )
-  const generated = generateThemesCss(Object.values(THEME_REGISTRY))
+  // Validation runs inside generateThemesCss, before any write in both modes.
+  let generated: string
+  try {
+    generated = generateThemesCss(Object.values(THEME_REGISTRY))
+  } catch (error) {
+    // keep the original error as `cause` so an unexpected failure stays debuggable
+    throw new Error(
+      `Theme CSS generation failed; nothing was written. ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    )
+  }
   // Validation compares content without modifying the golden file or relying on Git staging.
   if (process.argv.includes('--check')) {
-    if (readFileSync(outPath, 'utf-8') !== generated) {
-      throw new Error(
-        'Theme CSS is stale. Run pnpm theme:generate and commit the result.',
-      )
+    const onDisk = readFileSync(outPath, 'utf-8')
+    if (onDisk !== generated) {
+      throw new Error(describeThemeCssDrift(generated, onDisk))
     }
   } else {
     writeFileSync(outPath, generated, 'utf-8')

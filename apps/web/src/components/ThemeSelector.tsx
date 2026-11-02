@@ -2,6 +2,7 @@
 
 import { Check, Monitor, Moon, Sun } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { useId } from 'react'
 
 import { ThemePreviewSwatch } from '@/components/ThemePreviewSwatch'
 import { Label } from '@/components/ui/label'
@@ -26,9 +27,11 @@ export const MODE_META: Record<
 /**
  * Two-axis theme picker for the Settings page: a mode toggle (Light / Dark /
  * System) plus a family grid whose cards preview each family's real tokens at the
- * current mode. System is offered only for the default Warm Cathedral family
- * (design Fork A — colored families are explicit choices). Picks flow through
- * `useThemeAxis`, which maps the (family, mode) pair to a stored theme id.
+ * current mode. System is offered only for the Default family (design Fork A —
+ * every other family, Warm Cathedral included, is an explicit choice); while a
+ * non-Default palette is active a helper line explains how to follow the device
+ * setting. Picks flow through `useThemeAxis`, which maps the (family, mode) pair
+ * to a stored theme id.
  * @returns the Settings "Theme" section.
  * @example
  * <ThemeSelector />
@@ -40,29 +43,23 @@ export const ThemeSelector = function ThemeSelector() {
     resolvedMode,
     availableModes,
     families,
-    setFamily,
-    setMode,
+    selectMode,
+    selectFamily,
     mounted,
   } = useThemeAxis()
 
-  const handleModeChange = (value: string): void => {
-    // ToggleGroup emits '' when the active item is re-clicked; ignore that so a
-    // mode stays selected, and only react to a mode the active family offers.
-    const next = availableModes.find((modeChoice) => modeChoice === value)
-    if (next) setMode(next)
-  }
-
-  const handleFamilyChange = (value: string): void => {
-    const next = families.find((option) => option.family === value)
-    if (next) setFamily(next.family)
-  }
+  // System only exists for Default, so every other palette gets the helper line.
+  const showSystemHint = family !== 'default'
+  // Per-instance id so aria-describedby never points at another picker's hint.
+  const systemHintId = useId()
 
   return (
     // The "Theme" CardTitle collapsed into the APPEARANCE section `<h2>`
     // (design-review flatten); this renders bare under that header.
     <div className="@container space-y-8">
-      {/* Hold a same-height placeholder until next-themes hydrates, so the
-           selected state never flashes from the default to the stored theme. */}
+      {/* Reserve approximate space until next-themes hydrates, so the selected
+           state never flashes from the default to the stored theme. The height
+           is a close estimate, not an exact match for the loaded picker. */}
       {!mounted ? (
         <div
           aria-hidden
@@ -70,15 +67,16 @@ export const ThemeSelector = function ThemeSelector() {
         />
       ) : (
         <>
-          {/* Mode axis — Light / Dark, plus System for Warm Cathedral only. */}
+          {/* Mode axis — Light / Dark, plus System for the Default family only. */}
           <div className="space-y-3">
             <Label className="settings-label">Mode</Label>
             <ToggleGroup
               type="single"
               value={mode}
-              onValueChange={handleModeChange}
+              onValueChange={selectMode}
               className="w-full flex-wrap justify-start gap-2"
               aria-label="Theme mode"
+              aria-describedby={showSystemHint ? systemHintId : undefined}
             >
               {availableModes.map((modeChoice) => {
                 const { label, Icon } = MODE_META[modeChoice]
@@ -96,6 +94,14 @@ export const ThemeSelector = function ThemeSelector() {
                 )
               })}
             </ToggleGroup>
+            {/* Non-Default palettes have no System mode; name both steps, since
+                picking Default alone keeps the current Light/Dark choice. */}
+            {showSystemHint && (
+              <p id={systemHintId} className="type-small text-muted-foreground">
+                To follow your device&apos;s light or dark setting, choose the
+                Default palette, then select System.
+              </p>
+            )}
           </div>
 
           {/* Family axis — each card previews the family at the current mode. */}
@@ -103,7 +109,7 @@ export const ThemeSelector = function ThemeSelector() {
             <Label className="settings-label">Palette</Label>
             <RadioGroup
               value={family}
-              onValueChange={handleFamilyChange}
+              onValueChange={selectFamily}
               aria-label="Theme palette"
               className="settings-theme-grid auto-rows-fr gap-3"
             >
@@ -128,7 +134,7 @@ export const ThemeSelector = function ThemeSelector() {
 
                     <div
                       className={cn(
-                        'hover:bg-accent/50 flex h-full w-full min-w-0 flex-col gap-2 rounded-lg border p-3 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 motion-reduce:transition-none',
+                        'hover:bg-accent/50 flex h-full w-full min-w-0 flex-col gap-2 rounded-lg border p-3 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-background motion-reduce:transition-none',
                         isActive && 'border-primary ring-2 ring-primary',
                       )}
                     >

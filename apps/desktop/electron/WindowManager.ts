@@ -32,10 +32,14 @@ import {
   SETTINGS_POPOVER_MIN_WIDTH_PX,
   SETTINGS_POPOVER_RESIZE_DEBOUNCE_MS,
 } from '@corelive/desktop-contract/constants'
-import { BrowserWindow, dialog, screen } from 'electron'
+import { BrowserWindow, dialog, nativeTheme, screen } from 'electron'
 import type { WebContents } from 'electron'
 
 import type { ConfigManager } from './ConfigManager'
+import {
+  LOGIN_WINDOW_BACKGROUND_DARK,
+  LOGIN_WINDOW_BACKGROUND_LIGHT,
+} from './constants'
 import { log } from './logger'
 import {
   isLocalEditorDocument,
@@ -400,7 +404,11 @@ export class WindowManager {
       skipTaskbar: true,
       show: false,
       hasShadow: true,
-      backgroundColor: '#ffffff',
+      // Pre-paint color follows the OS appearance (Default theme's System pairing)
+      // so a dark Mac never flashes white before the login shell paints.
+      backgroundColor: nativeTheme.shouldUseDarkColors
+        ? LOGIN_WINDOW_BACKGROUND_DARK
+        : LOGIN_WINDOW_BACKGROUND_LIGHT,
       webPreferences: {
         additionalArguments: [
           `--corelive-app-origin=${this.getWebAppOrigin()}`,

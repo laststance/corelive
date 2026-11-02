@@ -76,4 +76,23 @@ describe('GlobalError (root-layout error boundary)', () => {
     expect(reloadFreshBundle).toHaveBeenCalledTimes(1)
     expect(reset).not.toHaveBeenCalled()
   })
+  test('paints the root error screen in the neutral shadcn Default palette, never the warm Warm Cathedral hex', () => {
+    // Arrange: #213 made shadcn Default the applied default; the backstop must match it.
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    // Act
+    render(<GlobalError error={new Error('boom')} reset={vi.fn()} />)
+
+    // Assert: the card and the primary retry use the Default neutral values.
+    const card = screen.getByRole('alert')
+    const retryButton = screen.getByRole('button', { name: 'Try again' })
+    expect(card).toHaveStyle({
+      backgroundColor: '#ffffff',
+      border: '1px solid #e5e5e5',
+    })
+    expect(retryButton).toHaveStyle({
+      backgroundColor: '#171717',
+      color: '#fafafa',
+    })
+  })
 })
