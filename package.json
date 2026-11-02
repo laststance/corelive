@@ -5,7 +5,6 @@
   "pnpm": {
     "overrides": {
       "minimatch@>=10.0.0 <10.2.6": "10.2.6",
-      "tsup@8.5.1>esbuild": "0.28.2",
       "@esbuild-kit/core-utils>esbuild": "0.25.12",
       "brace-expansion@>=1 <1.1.21": "1.1.21",
       "brace-expansion@>=2 <2.1.7": "2.1.7",
@@ -91,10 +90,10 @@
     "build:assets": "node scripts/build-assets.mjs",
     "test:tools": "vitest run --config vitest.config.tools.ts",
     "test:selected": "node scripts/pregate-tests.mjs",
-    "test:packages": "pnpm --filter eslint-plugin-dslint test && pnpm --filter @corelive/desktop-contract test && pnpm --filter @corelive/live-editor test",
-    "typecheck": "pnpm --filter @corelive/web typecheck && pnpm --filter @corelive/desktop typecheck && pnpm --filter @corelive/desktop-contract typecheck && pnpm --filter eslint-plugin-dslint typecheck && pnpm --filter @corelive/live-editor typecheck",
-    "lint": "cross-env NODE_OPTIONS=--max-old-space-size=8192 eslint . --concurrency=2 --max-warnings 0 && pnpm --filter eslint-plugin-dslint lint",
-    "lint:fix": "cross-env NODE_OPTIONS=--max-old-space-size=8192 eslint . --fix --concurrency=2 --max-warnings 0 && pnpm --filter eslint-plugin-dslint lint",
+    "test:packages": "pnpm --filter @corelive/desktop-contract test && pnpm --filter @corelive/live-editor test",
+    "typecheck": "pnpm --filter @corelive/web typecheck && pnpm --filter @corelive/desktop typecheck && pnpm --filter @corelive/desktop-contract typecheck && pnpm --filter @corelive/live-editor typecheck",
+    "lint": "cross-env NODE_OPTIONS=--max-old-space-size=8192 eslint . --concurrency=2 --max-warnings 0",
+    "lint:fix": "cross-env NODE_OPTIONS=--max-old-space-size=8192 eslint . --fix --concurrency=2 --max-warnings 0",
     "coverage:unit": "pnpm coverage:unit:web && pnpm coverage:unit:electron",
     "coverage:all": "pnpm build:assets && pnpm coverage:unit",
     "prettier": "prettier --ignore-unknown --write .",
@@ -107,7 +106,7 @@
     "fallow:dead-code": "fallow dead-code --fail-on-issues --no-cache",
     "fallow:dupes": "fallow dupes --fail-on-issues --no-cache",
     "fallow:health": "fallow health --complexity --fail-on-issues --no-cache",
-    "validate": "pnpm build:assets && pnpm --filter eslint-plugin-dslint build && concurrently --kill-others-on-fail \"pnpm test\" \"pnpm test:tools\" \"pnpm test:packages\" \"pnpm test:electron\" \"pnpm lint\" \"pnpm build\" \"pnpm electron:build:ts\" \"pnpm typecheck\" \"pnpm theme:check\" \"pnpm check:workspace\" \"pnpm fallow:dead-code\" \"pnpm fallow:dupes\" \"pnpm fallow:health\"",
-    "clean": "rimraf apps/web/.next apps/desktop/dist-electron apps/desktop/dist packages/eslint-plugin-dslint/dist"
+    "validate": "pnpm build:assets && concurrently --kill-others-on-fail \"pnpm test\" \"pnpm test:tools\" \"pnpm test:packages\" \"pnpm test:electron\" \"pnpm lint\" \"pnpm build\" \"pnpm electron:build:ts\" \"pnpm typecheck\" \"pnpm theme:check\" \"pnpm check:workspace\" \"pnpm fallow:dead-code\" \"pnpm fallow:dupes\" \"pnpm fallow:health\"",
+    "clean": "rimraf apps/web/.next apps/desktop/dist-electron apps/desktop/dist"
   }
 }

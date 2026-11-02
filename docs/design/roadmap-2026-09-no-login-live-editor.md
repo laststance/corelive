@@ -306,7 +306,7 @@ finding above. Run with Claude Code or Codex; checkbox as you ship.
 > Electron panel over CDP (panel chrome intact, ⌘ Enter keep + Undo against the
 > account, note persisted through the preload, Floating window picks up the
 > session). Deviations: T14's `max-w-[640px]` / 13px hint became the nearest
-> tokens `max-w-2xl` / `text-sm` (`dslint/token-only` forbids arbitrary values).
+> tokens `max-w-2xl` / `text-sm` (arbitrary values were then linted by `dslint/token-only`, removed in #218 on 2026-11-02).
 > Unplanned fix surfaced by QA: `category.list` now seeds the default "General"
 > for an account the Clerk webhook never reached (or has not reached yet) —
 > without it a first sign-in from `/write` opened locked on "No categories"

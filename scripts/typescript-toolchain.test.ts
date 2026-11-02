@@ -20,7 +20,7 @@ test('workspace type checks use the native TypeScript 7 compiler', () => {
   expect(version.trim()).toBe('Version 7.0.2')
 })
 
-test.each(['@typescript-eslint/parser', 'tsup', 'ts-api-utils'])(
+test.each(['@typescript-eslint/parser', 'ts-api-utils'])(
   '%s can parse TypeScript through its private compiler API',
   (consumer) => {
     // Arrange

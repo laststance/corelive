@@ -192,7 +192,6 @@ export const SkillTreeView = function SkillTreeView() {
     return (
       <div
         data-skill-tree="true"
-        // eslint-disable-next-line dslint/token-only -- skill-tree scoped CSS class from styles.css
         className="st-canvas-bg flex h-full w-full items-center justify-center"
         role="alert"
       >
@@ -207,7 +206,6 @@ export const SkillTreeView = function SkillTreeView() {
     return (
       <div
         data-skill-tree="true"
-        // eslint-disable-next-line dslint/token-only -- skill-tree scoped CSS class from styles.css
         className="st-canvas-bg flex h-full w-full items-center justify-center"
         role="status"
         aria-live="polite"
@@ -226,10 +224,7 @@ export const SkillTreeView = function SkillTreeView() {
             Skill Tree
           </h2>
         </header>
-        <div
-          // eslint-disable-next-line dslint/token-only -- skill-tree scoped CSS class from styles.css
-          className="st-canvas-bg flex flex-1 items-center justify-center"
-        >
+        <div className="st-canvas-bg flex flex-1 items-center justify-center">
           <div className="max-w-md space-y-3 text-center text-[var(--st-cream)]">
             <div className="text-5xl" aria-hidden="true">
               ✨

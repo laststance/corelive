@@ -9,8 +9,7 @@
  * seed params at the fixed cathedral lightness ladder (this file mirrors that
  * ladder), with `--primary-foreground` contrast-computed (never hardcoded white).
  * Static themes are copied verbatim from their registry `tokens`. The Default
- * pair is the applied default, so it is emitted as SEPARATE blocks (never
- * selector lists, which the dslint CSS parser would mis-tag): bare `:root` and
+ * pair is the applied default, so it is emitted as SEPARATE blocks: bare `:root` and
  * `[data-theme='light']` plus one block per legacy alias for light; `dark`, the
  * legacy dark alias and a `prefers-color-scheme: dark` first-paint block for dark.
  *
@@ -409,8 +408,7 @@ export function staticThemeCss(theme: StaticTheme): string {
  * legacy alias targeting this theme gets its own block (a stale stored
  * `default-dark` paints Default on the first frame); dark gets the
  * `prefers-color-scheme: dark` first-paint block for windows with no attribute
- * yet (the desktop editor before React mounts). Always separate blocks, never
- * selector lists: the dslint CSS parser tags a list as the wrong theme.
+ * yet (the desktop editor before React mounts).
  * @param theme - A static Default theme (family `default`).
  * @param aliases - Legacy alias to target-id map.
  * @returns the CSS blocks for this theme in emission order.

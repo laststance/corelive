@@ -59,7 +59,6 @@ export const SkillNodeCircle = function SkillNodeCircle({
   return (
     <g
       ref={ref}
-      // eslint-disable-next-line dslint/token-only -- skill-tree scoped CSS class from styles.css Task 11
       className="st-node-group"
       role="button"
       aria-label={ariaLabel}
@@ -193,7 +192,6 @@ export const SkillNodeCircle = function SkillNodeCircle({
               fill="transparent"
               stroke="var(--st-gold)"
               strokeWidth={0.5}
-              // eslint-disable-next-line dslint/token-only -- skill-tree scoped CSS class from styles.css Task 11
               className="st-mastered-ring"
             />
 

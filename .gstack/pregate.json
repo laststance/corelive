@@ -78,14 +78,8 @@
       "scripts/security-patches.test.ts",
       "scripts/typescript-toolchain.test.ts"
     ],
-    "packages/eslint-plugin-dslint/package.json": [
-      "packages/eslint-plugin-dslint/tests/rules/token-only.test.ts"
-    ],
     ".pnpmfile.cjs": [
       "scripts/typescript-toolchain.test.ts"
-    ],
-    "packages/eslint-plugin-dslint/vitest.config.ts": [
-      "packages/eslint-plugin-dslint/tests/rules/token-only.test.ts"
     ],
     "tsconfig.json": [
       "scripts/typescript-toolchain.test.ts"
@@ -93,13 +87,6 @@
     "vitest.config.tools.ts": [
       "scripts/typescript-toolchain.test.ts",
       "scripts/security-patches.test.ts"
-    ],
-    "packages/eslint-plugin-dslint/**": [
-      "packages/eslint-plugin-dslint/tests/rules/token-only.test.ts",
-      "packages/eslint-plugin-dslint/tests/rules/class-visitors.test.ts",
-      "packages/eslint-plugin-dslint/tests/cli/css-parser.test.ts",
-      "packages/eslint-plugin-dslint/tests/utils/quoted-config-keys.test.ts",
-      "packages/eslint-plugin-dslint/tests/utils/parse-config-string-entries.test.ts"
     ]
   },
   "guards": [

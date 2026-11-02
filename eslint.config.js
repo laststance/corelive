@@ -6,8 +6,6 @@ import tsPrefixer from 'eslint-config-ts-prefixer'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactYouMightNotNeedAnEffect from 'eslint-plugin-react-you-might-not-need-an-effect'
 
-import dslint from './packages/eslint-plugin-dslint/dist/index.js'
-
 const rootDirectory = path.dirname(fileURLToPath(import.meta.url))
 
 const config = [
@@ -26,7 +24,6 @@ const config = [
       '**/dist-electron/**',
       '**/public/**',
       '**/.playwright-mcp/**',
-      'packages/eslint-plugin-dslint/**',
       '_trials/**',
       // Local release and QA artifacts are not application source.
       'tmp/**',
@@ -86,106 +83,6 @@ const config = [
         },
       ],
     },
-  },
-  // Design System Lint - デザイントークン準拠を強制
-  {
-    plugins: { dslint },
-    rules: {
-      'dslint/token-only': [
-        'warn',
-        {
-          tokenSource: path.join(rootDirectory, 'apps/web/tailwind.config.ts'),
-          ignore: [
-            // Tailwind modifiers & pseudo-classes
-            'animate-*',
-            'group',
-            'group-*',
-            'peer',
-            'peer-*',
-            'data-*',
-            'container',
-            // Grid column span — structural layout utility; `gridColumn` isn't in
-            // the token source (only `gridTemplateColumns` → `grid-cols-*` is).
-            'col-span-*',
-            // Typography
-            // Named typography utilities in packages/live-editor/src/styles/typography.css.
-            'type-h3',
-            'type-body',
-            'type-small',
-            'settings-label',
-            'settings-section',
-            'settings-theme-grid',
-            'settings-options',
-            'settings-action-row',
-            'leading-5',
-            'leading-7',
-            '@container',
-            'auto-rows-fr',
-            'basis-44',
-            'offline-status-footer',
-            'antialiased',
-            'subpixel-antialiased',
-            'tabular-nums',
-            // Basic colors
-            'text-white',
-            'text-black',
-            'bg-white',
-            'bg-black',
-            'border-white',
-            'border-black',
-            'text-transparent',
-            'bg-transparent',
-            // Gradients
-            'from-*',
-            'via-*',
-            'to-*',
-            'bg-linear-*',
-            'bg-gradient-*',
-            // Electron window controls
-            'window-drag-region',
-            'no-drag',
-            'drag-handle',
-            // Custom utility classes (defined in globals.css @layer utilities)
-            'cathedral-lit',
-            'tap-target-24',
-            // Native repair controls use shared theme tokens and accessible hit targets.
-            'offline-action',
-            'offline-field',
-            // Tailwind default color palette (temporary - will migrate to tokens)
-            'text-red-*',
-            'text-blue-*',
-            'text-gray-*',
-            'text-green-*',
-            'text-yellow-*',
-            'bg-red-*',
-            'bg-blue-*',
-            'bg-gray-*',
-            'bg-green-*',
-            'bg-yellow-*',
-            'border-red-*',
-            'border-blue-*',
-            'border-gray-*',
-            'border-green-*',
-            'border-t-*',
-            'border-r-*',
-            'border-b-*',
-            'border-l-*',
-            // Custom size utilities
-            'h-100',
-            // Test file patterns
-            'custom-*',
-          ],
-        },
-      ],
-    },
-    // shadcn/ui, packages, tests は除外
-    ignores: [
-      'apps/web/src/components/ui/**',
-      'packages/live-editor/src/ui/**',
-      'packages/eslint-plugin-dslint/**',
-      '**/*.test.ts',
-      '**/*.test.tsx',
-    ],
   },
 ]
 

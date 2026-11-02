@@ -208,8 +208,8 @@ export const KeybindingCaptureInput = function KeybindingCaptureInput({
       data-recording={isRecording || undefined}
       className={cn(
         'w-36 font-mono font-medium tabular-nums',
-        // Recording emphasis uses scale ring tokens (ring-2), not an arbitrary
-        // ring-[3px] — the latter is dslint-exempt only inside components/ui/**.
+        // Recording emphasis uses the scale ring token (ring-2), not an
+        // arbitrary ring-[3px].
         isRecording && 'ring-ring/50 border-ring ring-2',
         className,
       )}

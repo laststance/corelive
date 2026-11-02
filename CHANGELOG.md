@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.28.1] - 2026-11-03
+
+### Removed
+
+- `pnpm lint` and `pnpm validate` no longer build and run the in-repo design-token ESLint plugin (`eslint-plugin-dslint`), so linting starts right away. Tailwind class names are no longer checked for arbitrary values or non-token classes; keep following `DESIGN.md` for tokens. In an existing checkout, run `rm -rf packages/eslint-plugin-dslint && pnpm install` once after pulling.
+
+### Fixed
+
+- The README now names the Node.js version the project pins, 26.12.1.
+
 ## [0.28.0] - 2026-11-02
 
 ### Added

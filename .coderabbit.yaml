@@ -120,11 +120,6 @@ reviews:
         and backward compatibility with existing Electron/web clients. Flag destructive changes
         without a migration plan.
 
-    - path: 'packages/eslint-plugin-dslint/**'
-      instructions: |
-        Custom ESLint plugin enforcing design-token usage (`dslint/token-only`, `dslint/ban-stylelist`).
-        Keep rules aligned with DESIGN.md tokens and Tailwind conventions.
-
     - path: '**/*.{test,spec}.{ts,tsx,mjs}'
       instructions: |
         Tests use Vitest. Prefer DAMP over DRY; use AAA comments.
