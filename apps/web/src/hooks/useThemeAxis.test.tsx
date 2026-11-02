@@ -21,6 +21,8 @@ function ThemeAxisHarness() {
     families,
     setFamily,
     setMode,
+    selectMode,
+    selectFamily,
   } = useThemeAxis()
 
   return (
@@ -30,6 +32,21 @@ function ThemeAxisHarness() {
       <span data-testid="mode">{mode}</span>
       <span data-testid="is-system">{String(isSystem)}</span>
       <span data-testid="modes">{availableModes.join(',')}</span>
+      <button data-testid="select-mode-empty" onClick={() => selectMode('')}>
+        empty mode
+      </button>
+      <button
+        data-testid="select-mode-system"
+        onClick={() => selectMode('system')}
+      >
+        system mode
+      </button>
+      <button
+        data-testid="select-family-unknown"
+        onClick={() => selectFamily('not-a-family')}
+      >
+        unknown family
+      </button>
       {families.map(({ family: familyId }) => (
         <button
           key={familyId}
@@ -241,5 +258,24 @@ describe('useThemeAxis — two-axis (family × mode) theme selection', () => {
       expect(screen.getByTestId('family')).toHaveTextContent('default'),
     )
     expect(screen.getByTestId('active')).toHaveTextContent(/^dark$/)
+  })
+
+  // Value: protects=picker toggle/radio adapters ignore ''/unoffered strings; fails_when=re-click or stale value changes theme; why_new=selectMode/selectFamily untested; seam=none; no_claim=UI wiring
+  test('ignores a re-clicked empty mode, an unoffered System mode on Warm Cathedral and an unknown family', async () => {
+    // Arrange
+    await renderWithStoredTheme('cathedral-dark')
+
+    // Act
+    fireEvent.click(screen.getByTestId('select-mode-empty'))
+    fireEvent.click(screen.getByTestId('select-mode-system'))
+    fireEvent.click(screen.getByTestId('select-family-unknown'))
+
+    // Assert
+    await waitFor(() =>
+      expect(screen.getByTestId('active')).toHaveTextContent(
+        /^cathedral-dark$/,
+      ),
+    )
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe('cathedral-dark')
   })
 })
