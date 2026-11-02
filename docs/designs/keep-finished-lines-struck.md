@@ -80,7 +80,7 @@ Mockup: `projects/laststance-corelive/designs/mockup-20261102/variant-C.png` (th
   2. The title with trailing whitespace removed, as a span with `text-decoration-line: line-through`, a 1px thickness, and `text-decoration-color: var(--muted-foreground)`.
   3. Any trailing whitespace, as undecorated transparent text.
 
-  Consecutive unfinished rows collapse into one undecorated transparent run, and text after the last finished title is not mirrored, because later text never moves earlier glyphs. A note with no finished line mirrors nothing, so the layer's size follows finished rows, not note length.
+  Consecutive unfinished rows collapse into one undecorated transparent run, and text after the last finished title is not mirrored, because later text never moves earlier glyphs. A note with no finished line mirrors no text. The viewport always covers the textarea's padding box; only the mirrored content's DOM size follows finished rows, not note length, because it ends at the last finished title.
 
 - **Wrapped titles.** Because the strike is an inline text decoration, each wrapped fragment ends its line at that fragment's last glyph. No positioned or full-width rules are drawn.
 - **Scroll sync.** The layer's content is translated by `-scrollTop` and `-scrollLeft`. The translation is updated on the textarea's `scroll` event, on value changes, and on resize.
