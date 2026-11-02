@@ -20,8 +20,10 @@ const MIRRORED_TEXT_STYLE: React.CSSProperties = {
 
 /**
  * Keeps the strike viewport on the textarea's padding box and the content at its scroll offset.
- * The viewport is offset by the border and sized to `clientWidth × clientHeight`, so the border
- * and any scrollbar are excluded exactly once.
+ * Geometry is read at sub-pixel precision: under Electron page zoom the field lays out at fractional
+ * CSS pixels, and a mirror sized to the rounded `clientWidth` would wrap a near-limit line one glyph
+ * later than the field, so its strikes would leave their text. The border and any classic scrollbar
+ * are excluded exactly once.
  * @param textarea - The writing field whose geometry is mirrored; null before it mounts.
  * @param viewport - Clip region covering the field's padding box; null before it mounts.
  * @param content - Padded text layer translated by the field's scroll offset; null before it mounts.
@@ -35,10 +37,28 @@ function syncStrikeGeometry(
 ): void {
   // Any missing node means the layer or its field is not mounted yet; there is nothing to align.
   if (!textarea || !viewport || !content) return
-  viewport.style.top = `${textarea.offsetTop + textarea.clientTop}px`
-  viewport.style.left = `${textarea.offsetLeft + textarea.clientLeft}px`
-  viewport.style.width = `${textarea.clientWidth}px`
-  viewport.style.height = `${textarea.clientHeight}px`
+  const fieldBox = textarea.getBoundingClientRect()
+  const wrapperBox = viewport.parentElement?.getBoundingClientRect()
+  const fieldStyle = getComputedStyle(textarea)
+  const borderTop = Number.parseFloat(fieldStyle.borderTopWidth) || 0
+  const borderLeft = Number.parseFloat(fieldStyle.borderLeftWidth) || 0
+  const borderX =
+    borderLeft + (Number.parseFloat(fieldStyle.borderRightWidth) || 0)
+  const borderY =
+    borderTop + (Number.parseFloat(fieldStyle.borderBottomWidth) || 0)
+  // A classic scrollbar takes room inside the border; macOS overlay scrollbars take none.
+  const scrollbarWidth = Math.max(
+    0,
+    textarea.offsetWidth - textarea.clientWidth - Math.round(borderX),
+  )
+  const scrollbarHeight = Math.max(
+    0,
+    textarea.offsetHeight - textarea.clientHeight - Math.round(borderY),
+  )
+  viewport.style.top = `${fieldBox.top - (wrapperBox?.top ?? 0) + borderTop}px`
+  viewport.style.left = `${fieldBox.left - (wrapperBox?.left ?? 0) + borderLeft}px`
+  viewport.style.width = `${fieldBox.width - borderX - scrollbarWidth}px`
+  viewport.style.height = `${fieldBox.height - borderY - scrollbarHeight}px`
   content.style.transform = `translate(${-textarea.scrollLeft}px, ${-textarea.scrollTop}px)`
 }
 

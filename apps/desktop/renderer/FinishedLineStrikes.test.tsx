@@ -3,11 +3,12 @@ import '@testing-library/jest-dom/vitest'
 import { UserSettingsStateSchema } from '@corelive/desktop-contract/settings'
 import { SharedEditorSurface } from '@corelive/live-editor/surface'
 import { splitFinishedLine } from '@corelive/live-editor/utils'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
 afterEach(() => {
   cleanup()
+  vi.unstubAllGlobals()
 })
 
 describe('splitFinishedLine', () => {
@@ -202,4 +203,122 @@ describe('finished-line strikes on the desktop writing field', () => {
     ).not.toBeVisible()
     expect(screen.getByLabelText('Details panel')).toBeVisible()
   })
+
+  // Value: protects=strike layer follows the field's scroll offset and padding box; fails_when=scroll sync or viewport sizing is dropped;
+  // why_new=existing tests cover markup only, never geometry; seam=none; no_claim=real layout (happy-dom stubs box metrics)
+  test('scrolling a long note moves the strikes with the text instead of leaving them behind', () => {
+    // Arrange
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    )
+    const { container } = renderSurface({ text: '- [x] Done', strike: true })
+    const field = container.querySelector('textarea') as HTMLTextAreaElement
+    stubFieldBox(field, {
+      fieldRect: { left: 6, top: 4, width: 302, height: 122 },
+      offsetWidth: 302,
+      clientWidth: 300,
+      offsetHeight: 122,
+      clientHeight: 120,
+      scrollTop: 48,
+    })
+
+    // Act
+    fireEvent.scroll(field)
+
+    // Assert
+    const viewport = container.querySelector<HTMLElement>(
+      '[data-finished-line-strikes]',
+    )
+    const content = viewport?.firstElementChild as HTMLElement
+    expect(viewport?.style.top).toBe('5px')
+    expect(viewport?.style.left).toBe('7px')
+    expect(viewport?.style.width).toBe('300px')
+    expect(viewport?.style.height).toBe('120px')
+    expect(content.style.transform).toBe('translate(0px, -48px)')
+  })
+
+  // Value: protects=a zoomed (fractional-width) field wraps its mirror at the same glyph as the field; fails_when=the mirror width is
+  // rounded to whole pixels, so a near-limit line breaks one glyph later and the strike leaves its text; why_new=the scroll test uses
+  // whole-pixel metrics only; seam=none; no_claim=real glyph layout (happy-dom stubs box metrics; headless QA covers real wrapping)
+  test('a zoomed field with a fractional width keeps the strikes wrapping at the same glyph as the text', () => {
+    // Arrange — Electron page zoom lays the field out at fractional CSS pixels; clientWidth rounds 698.59375 up to 699.
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    )
+    const { container } = renderSurface({ text: '- [x] Done', strike: true })
+    const field = container.querySelector('textarea') as HTMLTextAreaElement
+    stubFieldBox(field, {
+      fieldRect: { left: 0.25, top: 0.5, width: 700.59375, height: 400.5 },
+      offsetWidth: 701,
+      clientWidth: 699,
+      offsetHeight: 401,
+      clientHeight: 399,
+      scrollTop: 0,
+    })
+
+    // Act
+    fireEvent.scroll(field)
+
+    // Assert — the mirror's padding box equals the field's exact padding box, not the rounded clientWidth.
+    const viewport = container.querySelector<HTMLElement>(
+      '[data-finished-line-strikes]',
+    )
+    expect(viewport?.style.width).toBe('698.59375px')
+    expect(viewport?.style.height).toBe('398.5px')
+    expect(viewport?.style.left).toBe('1.25px')
+    expect(viewport?.style.top).toBe('1.5px')
+  })
 })
+
+/**
+ * Stubs the field's box metrics that happy-dom cannot lay out: a 1px border, its fractional border box
+ * relative to a wrapper at the origin, and the integer offset/client sizes the browser would report.
+ * @example stubFieldBox(field, { fieldRect: { left: 6, top: 4, width: 302, height: 122 }, offsetWidth: 302, clientWidth: 300, offsetHeight: 122, clientHeight: 120, scrollTop: 0 })
+ */
+function stubFieldBox(
+  field: HTMLTextAreaElement,
+  metrics: {
+    fieldRect: { left: number; top: number; width: number; height: number }
+    offsetWidth: number
+    clientWidth: number
+    offsetHeight: number
+    clientHeight: number
+    scrollTop: number
+  },
+): void {
+  field.style.borderTopWidth = '1px'
+  field.style.borderRightWidth = '1px'
+  field.style.borderBottomWidth = '1px'
+  field.style.borderLeftWidth = '1px'
+  const { left, top, width, height } = metrics.fieldRect
+  field.getBoundingClientRect = (): DOMRect =>
+    DOMRect.fromRect({ x: left, y: top, width, height })
+  if (field.parentElement)
+    field.parentElement.getBoundingClientRect = (): DOMRect =>
+      DOMRect.fromRect({
+        x: 0,
+        y: 0,
+        width: width + left,
+        height: height + top,
+      })
+  for (const [key, value] of Object.entries({
+    offsetWidth: metrics.offsetWidth,
+    clientWidth: metrics.clientWidth,
+    offsetHeight: metrics.offsetHeight,
+    clientHeight: metrics.clientHeight,
+    scrollTop: metrics.scrollTop,
+    scrollLeft: 0,
+  })) {
+    Object.defineProperty(field, key, { value, configurable: true })
+  }
+}
