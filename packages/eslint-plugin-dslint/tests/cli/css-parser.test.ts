@@ -200,7 +200,7 @@ describe('parseCSSContent — generator contract', () => {
 })
 
 describe('parseCSSContent — @media blocks', () => {
-  test('ignores declarations inside @media so a conditional re-declaration is never tagged as a theme', () => {
+  test('ignores the first-paint fallback rule so a conditional re-declaration is never tagged as a theme', () => {
     // Arrange — the Default dark first-paint block repeats --background under @media
     const css = `
       :root { --background: oklch(1 0 0); }
@@ -217,6 +217,52 @@ describe('parseCSSContent — @media blocks', () => {
 
     // Assert — only the two real blocks remain, each tagged by its own selector
     expect(backgrounds.map((v) => v.theme)).toEqual(['light', 'dark'])
+  })
+
+  test('keeps a custom property declared in an unrelated @media rule, so dslint sync never drops its color', () => {
+    // Arrange — a responsive token that exists only inside a media query
+    const css = `
+      @media (min-width: 768px) {
+        :root { --wide-panel: #123456; }
+      }
+    `
+
+    // Act
+    const variables = parseCSSContent(css)
+
+    // Assert
+    expect(
+      variables.map((v) => ({
+        name: v.name,
+        value: v.value.trim(),
+        theme: v.theme,
+      })),
+    ).toEqual([{ name: '--wide-panel', value: '#123456', theme: 'light' }])
+  })
+
+  test('tags a later theme block with its own id when an @media rule re-declares the same token first', () => {
+    // Arrange — a media-scoped dark block precedes the Harbor light block
+    const css = `
+      :root { --background: #ffffff; }
+      @media (prefers-color-scheme: dark) {
+        [data-theme="dark"] { --background: #000000; }
+      }
+      [data-theme="harbor-light"] { --background: #0000ff; }
+    `
+
+    // Act
+    const backgrounds = parseCSSContent(css).filter(
+      (v) => v.name === '--background',
+    )
+
+    // Assert — Harbor's blue stays Harbor's, never re-labelled as dark
+    expect(
+      backgrounds.map((v) => ({ value: v.value.trim(), theme: v.theme })),
+    ).toEqual([
+      { value: '#ffffff', theme: 'light' },
+      { value: '#000000', theme: 'dark' },
+      { value: '#0000ff', theme: 'harbor-light' },
+    ])
   })
 })
 

@@ -94,11 +94,12 @@ export const ThemeSelector = function ThemeSelector() {
                 )
               })}
             </ToggleGroup>
-            {/* Non-Default palettes have no System mode; say where it lives. */}
+            {/* Non-Default palettes have no System mode; name both steps, since
+                picking Default alone keeps the current Light/Dark choice. */}
             {showSystemHint && (
               <p id={systemHintId} className="type-small text-muted-foreground">
                 To follow your device&apos;s light or dark setting, choose the
-                Default palette.
+                Default palette, then select System.
               </p>
             )}
           </div>

@@ -29,6 +29,13 @@ export interface CSSVariable {
 }
 
 /**
+ * Selector of the theme generator's first-paint fallback: it re-declares the
+ * Default dark tokens under `@media (prefers-color-scheme: dark)` for a page that
+ * has no `data-theme` yet, so it is a conditional copy, never a theme of its own.
+ */
+const FIRST_PAINT_FALLBACK_SELECTOR = ':root:not([data-theme])'
+
+/**
  * Parse a CSS file and extract CSS variable definitions
  * @param cssPath - Path to the CSS file
  * @returns Array of CSS variables found
@@ -57,13 +64,16 @@ export function parseCSSContent(content: string): CSSVariable[] {
     // to 'base'. css-tree visits declarations in source order but does not
     // expose the parent rule's selector, so the owning theme is assigned in
     // pass 2 by matching each variable back to its selector block.
-    // Declarations inside `@media` blocks are skipped: they are conditional
-    // re-declarations of an existing theme (e.g. the Default dark first-paint
-    // block under `prefers-color-scheme`), not a theme of their own, and the
-    // regex pass below could never match them to a block.
+    // Only the first-paint fallback rule is skipped: its declarations repeat the
+    // Default dark tokens and pass 2 could never match its selector to a block,
+    // so collecting them would leave stray 'base' entries. Every other rule —
+    // including ones nested in `@media` — is collected exactly as before.
     csstree.walk(ast, {
       enter(node: csstree.CssNode) {
-        if (node.type === 'Atrule' && node.name === 'media') {
+        if (
+          node.type === 'Rule' &&
+          csstree.generate(node.prelude) === FIRST_PAINT_FALLBACK_SELECTOR
+        ) {
           return csstree.walk.skip
         }
         if (node.type !== 'Declaration') return

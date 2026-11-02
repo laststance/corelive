@@ -13,7 +13,7 @@ import { ThemeSelector } from './ThemeSelector'
 
 const STORAGE_KEY = 'corelive-theme'
 const HINT =
-  "To follow your device's light or dark setting, choose the Default palette."
+  "To follow your device's light or dark setting, choose the Default palette, then select System."
 
 /** Renders the picker with a pre-seeded stored theme and waits for hydration. */
 const renderWithStoredTheme = async (stored: string): Promise<void> => {
