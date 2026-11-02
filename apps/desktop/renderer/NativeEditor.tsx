@@ -12,6 +12,7 @@ import type {
   DurableEditorSnapshot,
 } from '@corelive/live-editor/store'
 import { SharedEditorSurface } from '@corelive/live-editor/surface'
+import { applyThemeAttribute } from '@corelive/live-editor/theme-transition'
 import {
   DEFAULT_THEME_PREFERENCE,
   normalizeThemePreference,
@@ -54,12 +55,13 @@ function useEditorTheme(theme: string): void {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
     const apply = (): void => {
       // `system` resolves to the Default pair, the only family that owns light/dark.
-      document.documentElement.dataset.theme =
+      applyThemeAttribute(
         preference === 'system'
           ? media.matches
             ? 'dark'
             : 'light'
-          : preference
+          : preference,
+      )
     }
     apply()
     media.addEventListener('change', apply)
