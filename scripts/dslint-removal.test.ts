@@ -9,12 +9,13 @@ import { expect, test } from 'vitest'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 test('the workspace has no eslint-plugin-dslint package to install or build', () => {
-  // Arrange
+  // Arrange — pnpm only treats a directory with a manifest as a workspace package;
+  // gitignored dist/ or node_modules/ left by an older checkout are not one.
   const packageDirectory = path.join(root, 'packages/eslint-plugin-dslint')
   // Act
-  const packageExists = existsSync(packageDirectory)
+  const manifestExists = existsSync(path.join(packageDirectory, 'package.json'))
   // Assert
-  expect(packageExists).toBe(false)
+  expect(manifestExists).toBe(false)
 })
 
 test.each([
