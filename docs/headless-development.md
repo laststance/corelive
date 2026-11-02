@@ -196,7 +196,7 @@ framework. Two practical runners are Lume and Tart:
 | Runner | Quiet launch                                                   | Native operation channel                 | Setup status                                         |
 | ------ | -------------------------------------------------------------- | ---------------------------------------- | ---------------------------------------------------- |
 | Lume   | `lume run corelive-qa --detach --display none`                 | Guest SSH plus guest VNC/computer driver | Documented option; not installed or provisioned here |
-| Tart   | `tart run corelive-qa --no-graphics --no-audio --no-clipboard` | Guest agent commands and loopback VNC    | Provisioned and verified on 2026-10-02               |
+| Tart   | `tart run corelive-qa --no-graphics --no-audio --no-clipboard` | Guest agent commands and loopback VNC    | Verified 2026-10-02; guest removed 2026-10-06        |
 
 These examples assume an already provisioned guest. `--display none`/`--no-graphics`
 hides the host viewer; the guest still has its own desktop. For GUI automation,
@@ -233,9 +233,13 @@ profile does not provide desktop isolation.
 
 ## Verified local native environment
 
-Tart 2.32.1 and the `corelive-qa` guest are preserved outside disposable worktrees
-under `~/.local/share/corelive-qa`. The guest runs macOS 26.6.2 with two CPUs and
-4096 MiB of memory. It has its own user and a QA-only CoreLive build. Rebuild and
+Tart 2.32.1 and the QA harness files (`monorepo/prepare-native.mjs`,
+`monorepo/native-updater.py`) are preserved outside disposable worktrees under
+`~/.local/share/corelive-qa`. The `corelive-qa` guest itself was removed on
+2026-10-06 (`tart list` is empty and `vms/vms` holds nothing; checked 2026-11-03), so
+native VM QA first needs a re-provisioned guest; recreating one pulls a macOS image of
+more than 20 GB onto the host, so ask the owner first. The removed guest ran macOS
+26.6.2 with two CPUs and 4096 MiB of memory. It had its own user and a QA-only CoreLive build. Rebuild and
 transfer the application when source changes; the installed guest build is a
 snapshot, not a live checkout.
 
