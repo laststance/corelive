@@ -278,10 +278,87 @@ describe('finished-line strikes on the desktop writing field', () => {
     expect(viewport?.style.left).toBe('1.25px')
     expect(viewport?.style.top).toBe('1.5px')
   })
+
+  // Value: protects=a zoomed field whose border is a fractional CSS width still mirrors its exact padding box; fails_when=integer
+  // rounding of offsetWidth/clientWidth/border is mistaken for a 1px scrollbar and the mirror wraps a glyph early; why_new=the other
+  // geometry tests use whole-pixel borders; seam=none; no_claim=real glyph layout (happy-dom stubs box metrics)
+  test('a zoomed field with fractional borders keeps the strikes on the text instead of inventing a scrollbar gap', () => {
+    // Arrange — at 1.5x device pixels a 1-device-pixel border is 0.666667 CSS px; offset/client sizes still round to integers.
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    )
+    const { container } = renderSurface({ text: '- [x] Done', strike: true })
+    const field = container.querySelector('textarea') as HTMLTextAreaElement
+    stubFieldBox(field, {
+      fieldRect: { left: 0, top: 0, width: 700.6, height: 400.6 },
+      offsetWidth: 701,
+      clientWidth: 699,
+      offsetHeight: 401,
+      clientHeight: 399,
+      scrollTop: 0,
+      borderPx: 0.666667,
+    })
+
+    // Act
+    fireEvent.scroll(field)
+
+    // Assert — 700.6 - 2 × 0.666667, not one pixel less.
+    const viewport = container.querySelector<HTMLElement>(
+      '[data-finished-line-strikes]',
+    )
+    expect(Number.parseFloat(viewport?.style.width ?? '')).toBeCloseTo(
+      699.266666,
+      5,
+    )
+    expect(Number.parseFloat(viewport?.style.height ?? '')).toBeCloseTo(
+      399.266666,
+      5,
+    )
+  })
+
+  // Value: protects=a classic (always-shown) scrollbar is excluded from the mirror so text wraps where the field wraps;
+  // fails_when=the scrollbar gutter is treated as text width; why_new=other geometry tests have no scrollbar; seam=none;
+  // no_claim=the scrollbar's exact fractional width (falls back to the rounded clientWidth)
+  test('a field showing a classic scrollbar keeps the strikes clear of the scrollbar gutter', () => {
+    // Arrange
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    )
+    const { container } = renderSurface({ text: '- [x] Done', strike: true })
+    const field = container.querySelector('textarea') as HTMLTextAreaElement
+    stubFieldBox(field, {
+      fieldRect: { left: 0, top: 0, width: 702, height: 402 },
+      offsetWidth: 702,
+      clientWidth: 685,
+      offsetHeight: 402,
+      clientHeight: 400,
+      scrollTop: 0,
+    })
+
+    // Act
+    fireEvent.scroll(field)
+
+    // Assert
+    const viewport = container.querySelector<HTMLElement>(
+      '[data-finished-line-strikes]',
+    )
+    expect(viewport?.style.width).toBe('685px')
+    expect(viewport?.style.height).toBe('400px')
+  })
 })
 
 /**
- * Stubs the field's box metrics that happy-dom cannot lay out: a 1px border, its fractional border box
+ * Stubs the field's box metrics that happy-dom cannot lay out: its border (1px unless given), its fractional border box
  * relative to a wrapper at the origin, and the integer offset/client sizes the browser would report.
  * @example stubFieldBox(field, { fieldRect: { left: 6, top: 4, width: 302, height: 122 }, offsetWidth: 302, clientWidth: 300, offsetHeight: 122, clientHeight: 120, scrollTop: 0 })
  */
@@ -294,12 +371,15 @@ function stubFieldBox(
     offsetHeight: number
     clientHeight: number
     scrollTop: number
+    /** Border width on every side in CSS px; defaults to the field's 1px. */
+    borderPx?: number
   },
 ): void {
-  field.style.borderTopWidth = '1px'
-  field.style.borderRightWidth = '1px'
-  field.style.borderBottomWidth = '1px'
-  field.style.borderLeftWidth = '1px'
+  const border = `${metrics.borderPx ?? 1}px`
+  field.style.borderTopWidth = border
+  field.style.borderRightWidth = border
+  field.style.borderBottomWidth = border
+  field.style.borderLeftWidth = border
   const { left, top, width, height } = metrics.fieldRect
   field.getBoundingClientRect = (): DOMRect =>
     DOMRect.fromRect({ x: left, y: top, width, height })

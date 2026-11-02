@@ -3,6 +3,7 @@ import * as React from 'react'
 import { useEffect, useLayoutEffect, useRef } from 'react'
 
 import { cn } from './cn'
+import { MAX_BOX_ROUNDING_ERROR_PX } from './constants'
 import { splitFinishedLine } from './liveEditorUtils'
 
 /** Hairline strike drawn over a finished title only; the token keeps every theme correct. */
@@ -46,19 +47,23 @@ function syncStrikeGeometry(
     borderLeft + (Number.parseFloat(fieldStyle.borderRightWidth) || 0)
   const borderY =
     borderTop + (Number.parseFloat(fieldStyle.borderBottomWidth) || 0)
-  // A classic scrollbar takes room inside the border; macOS overlay scrollbars take none.
-  const scrollbarWidth = Math.max(
-    0,
-    textarea.offsetWidth - textarea.clientWidth - Math.round(borderX),
-  )
-  const scrollbarHeight = Math.max(
-    0,
-    textarea.offsetHeight - textarea.clientHeight - Math.round(borderY),
-  )
+  // Integer offset/client sizes and a fractional (zoomed) border differ by up to a pixel from rounding
+  // alone; only a larger gap is a classic scrollbar. macOS overlay scrollbars take no room at all.
+  const hasVerticalScrollbar =
+    textarea.offsetWidth - textarea.clientWidth - borderX >
+    MAX_BOX_ROUNDING_ERROR_PX
+  const hasHorizontalScrollbar =
+    textarea.offsetHeight - textarea.clientHeight - borderY >
+    MAX_BOX_ROUNDING_ERROR_PX
   viewport.style.top = `${fieldBox.top - (wrapperBox?.top ?? 0) + borderTop}px`
   viewport.style.left = `${fieldBox.left - (wrapperBox?.left ?? 0) + borderLeft}px`
-  viewport.style.width = `${fieldBox.width - borderX - scrollbarWidth}px`
-  viewport.style.height = `${fieldBox.height - borderY - scrollbarHeight}px`
+  // A classic scrollbar's fractional width is not exposed, so that rare case keeps the rounded client size.
+  viewport.style.width = hasVerticalScrollbar
+    ? `${textarea.clientWidth}px`
+    : `${fieldBox.width - borderX}px`
+  viewport.style.height = hasHorizontalScrollbar
+    ? `${textarea.clientHeight}px`
+    : `${fieldBox.height - borderY}px`
   content.style.transform = `translate(${-textarea.scrollLeft}px, ${-textarea.scrollTop}px)`
 }
 
