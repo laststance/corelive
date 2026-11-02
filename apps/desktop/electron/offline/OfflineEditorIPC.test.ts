@@ -63,7 +63,7 @@ function createFixture() {
   } as unknown as IpcMainInvokeEvent
   const preferences = {
     revision: 0,
-    theme: 'warm-cathedral-light',
+    theme: 'cathedral-light',
     settings: UserSettingsStateSchema.parse({}),
   }
   let snapshot: OfflineEditorSnapshot = {
@@ -252,7 +252,7 @@ test('Settings receives only preferences after a patch, never the account draft'
   expect(result).toMatchObject({
     ok: true,
     generation: 1,
-    preferences: { theme: 'warm-cathedral-light' },
+    preferences: { theme: 'cathedral-light' },
   })
   expect(JSON.stringify(result)).not.toContain('PRIVATE DRAFT')
   expect(result).not.toHaveProperty('workspace')

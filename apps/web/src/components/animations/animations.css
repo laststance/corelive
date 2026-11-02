@@ -29,7 +29,6 @@
 
     /* Status colors for animations */
     --color-success: oklch(0.627 0.194 149.214);
-    --color-warning: oklch(0.769 0.188 70.08);
     --color-danger: oklch(0.577 0.245 27.325);
   }
 
@@ -38,7 +37,6 @@
      the light :root values on a dark surface. Mirrors the globals.css dark variant. */
   [data-theme$='dark'] {
     --color-success: oklch(0.696 0.17 162.48);
-    --color-warning: oklch(0.828 0.189 84.429);
     --color-danger: oklch(0.704 0.191 22.216);
   }
 

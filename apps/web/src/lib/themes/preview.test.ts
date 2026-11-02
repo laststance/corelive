@@ -98,7 +98,7 @@ describe('theme preview swatches match the generated CSS the user will actually 
     ])
   })
 
-  test.each(['default-light', 'default-dark'] as const)(
+  test.each(['light', 'dark'] as const)(
     '%s preview equals the literal shadcn tokens the generator emits verbatim',
     (id) => {
       // Arrange — a static theme's registry `tokens` ARE what generated.css emits
@@ -109,11 +109,11 @@ describe('theme preview swatches match the generated CSS the user will actually 
   )
 
   test.each(['light', 'dark'] as const)(
-    'cathedral %s preview equals the generator-exported CATHEDRAL map (verbatim globals.css)',
+    'cathedral %s preview equals the generator-exported CATHEDRAL map (verbatim base.css)',
     (mode) => {
-      // Arrange — cathedral is hand-authored; the generator mirrors globals.css in
-      // CATHEDRAL, and the default family uses the FLAT id ('light'/'dark').
-      const id: ThemeId = mode
+      // Arrange — cathedral is hand-authored; the generator mirrors base.css in
+      // CATHEDRAL, and its ids are 'cathedral-light' / 'cathedral-dark'.
+      const id: ThemeId = `cathedral-${mode}`
       // Act / Assert
       expectPreviewMatchesTokens(id, CATHEDRAL[mode])
     },

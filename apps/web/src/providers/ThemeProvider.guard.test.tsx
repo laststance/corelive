@@ -1,4 +1,5 @@
-import { render, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
+import { useTheme } from 'next-themes'
 import { describe, test, expect, beforeEach } from 'vitest'
 
 import { ThemeProvider } from './ThemeProvider'
@@ -14,7 +15,7 @@ describe('ThemeProvider — heals a tampered persisted theme end to end', () => 
     document.documentElement.removeAttribute('data-theme')
   })
 
-  test('rewrites an unregistered persisted theme to the default after mount', async () => {
+  test('rewrites an unregistered persisted theme to system after mount', async () => {
     // Arrange — a stale/tampered id next-themes would otherwise apply verbatim
     // ('sunset' is not a registered family — mimics a downgrade that dropped one)
     window.localStorage.setItem(STORAGE_KEY, 'sunset-dark')
@@ -28,7 +29,7 @@ describe('ThemeProvider — heals a tampered persisted theme end to end', () => 
 
     // Assert — the guard persists the correction back to storage
     await waitFor(() => {
-      expect(window.localStorage.getItem(STORAGE_KEY)).toBe('light')
+      expect(window.localStorage.getItem(STORAGE_KEY)).toBe('system')
     })
   })
 
@@ -44,6 +45,50 @@ describe('ThemeProvider — heals a tampered persisted theme end to end', () => 
     )
 
     // Assert — a real choice is never clobbered by the guard
+    await waitFor(() => {
+      expect(window.localStorage.getItem(STORAGE_KEY)).toBe('dark')
+    })
+  })
+})
+
+describe('ThemeProvider — fresh state follows the OS', () => {
+  /** Prints the theme preference next-themes currently holds. */
+  function ThemeProbe() {
+    const { theme } = useTheme()
+    return <p data-testid="stored-theme">{theme}</p>
+  }
+
+  beforeEach(() => {
+    window.localStorage.clear()
+    document.documentElement.removeAttribute('data-theme')
+  })
+
+  test('starts on system when nothing is stored so a fresh install is not stuck on a fixed palette', async () => {
+    // Arrange / Act
+    render(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    )
+
+    // Assert
+    await waitFor(() => {
+      expect(screen.getByTestId('stored-theme')).toHaveTextContent('system')
+    })
+  })
+
+  test('rewrites a legacy default-dark preference to dark so the pick survives the id swap', async () => {
+    // Arrange
+    window.localStorage.setItem(STORAGE_KEY, 'default-dark')
+
+    // Act
+    render(
+      <ThemeProvider>
+        <div>app</div>
+      </ThemeProvider>,
+    )
+
+    // Assert
     await waitFor(() => {
       expect(window.localStorage.getItem(STORAGE_KEY)).toBe('dark')
     })

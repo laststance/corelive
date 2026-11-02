@@ -679,3 +679,133 @@ test('leaving Settings during a sent write retains its identity and newer edits 
   })
   expect(fixture.sync.getSnapshot().status).toBe('saved')
 })
+
+/** Native preferences carrying a chosen theme string, for theme-boundary cases. */
+const nativePreferencesWithTheme = (theme: string) => ({
+  generation: 2,
+  preferences: {
+    revision: 4,
+    theme,
+    settings: UserSettingsStateSchema.parse({}),
+  },
+})
+
+test('a legacy native default-dark applies as dark and is never pushed back as a user change', async () => {
+  // Arrange
+  const fixture = createFixture()
+  fixture.read.mockResolvedValue(nativePreferencesWithTheme('default-dark'))
+
+  // Act
+  fixture.sync.themeChanged('light')
+  await vi.waitFor(() =>
+    expect(fixture.applyTheme).toHaveBeenCalledWith('dark'),
+  )
+  fixture.sync.themeChanged('dark')
+  await vi.waitFor(() => expect(fixture.read).toHaveBeenCalled())
+
+  // Assert — the echo of the applied value pushes nothing
+  expect(fixture.patch).not.toHaveBeenCalled()
+  expect(fixture.prepare).not.toHaveBeenCalled()
+})
+
+test('a real web theme change after a legacy native hydration pushes exactly once', async () => {
+  // Arrange
+  const fixture = createFixture()
+  fixture.read.mockResolvedValue(nativePreferencesWithTheme('default-dark'))
+  fixture.sync.themeChanged('light')
+  await vi.waitFor(() =>
+    expect(fixture.applyTheme).toHaveBeenCalledWith('dark'),
+  )
+  fixture.sync.themeChanged('dark')
+
+  // Act
+  fixture.sync.themeChanged('harbor-dark')
+  await vi.waitFor(() => expect(fixture.patch).toHaveBeenCalledOnce())
+
+  // Assert
+  expect(fixture.patch).toHaveBeenCalledWith(
+    'account-a',
+    2,
+    expect.objectContaining({ theme: 'harbor-dark' }),
+  )
+})
+
+test('a web default-light is pushed to native as light', async () => {
+  // Arrange — native already has dark, web is observed on dark first
+  const fixture = createFixture()
+  fixture.sync.themeChanged('dark')
+  await vi.waitFor(() => expect(fixture.read).toHaveBeenCalled())
+
+  // Act
+  fixture.sync.themeChanged('default-light')
+  await vi.waitFor(() => expect(fixture.patch).toHaveBeenCalledOnce())
+
+  // Assert
+  expect(fixture.patch).toHaveBeenCalledWith(
+    'account-a',
+    2,
+    expect.objectContaining({ theme: 'light' }),
+  )
+})
+
+test('a user pick observed before the echo of an applied native theme is not swallowed by the stale echo marker', async () => {
+  // Arrange — native dark is applied to a web that was on light
+  const fixture = createFixture()
+  fixture.sync.themeChanged('light')
+  await vi.waitFor(() =>
+    expect(fixture.applyTheme).toHaveBeenCalledWith('dark'),
+  )
+
+  // Act — the user picks harbor-light before the echo arrives, then dark
+  fixture.sync.themeChanged('harbor-light')
+  await vi.waitFor(() => expect(fixture.patch).toHaveBeenCalledOnce())
+  fixture.sync.themeChanged('dark')
+  await vi.waitFor(() => expect(fixture.patch).toHaveBeenCalledTimes(2))
+
+  // Assert — the final dark pick was treated as a user change and pushed
+  expect(fixture.patch).toHaveBeenLastCalledWith(
+    'account-a',
+    2,
+    expect.objectContaining({ theme: 'dark' }),
+  )
+})
+
+test('first preparation seeds system when the web theme is system', async () => {
+  // Arrange
+  const fixture = createFixture()
+  fixture.read.mockResolvedValue({ generation: 2, preferences: null })
+
+  // Act
+  fixture.sync.themeChanged('system')
+  await vi.waitFor(() => expect(fixture.prepare).toHaveBeenCalledOnce())
+
+  // Assert
+  expect(fixture.prepare).toHaveBeenCalledWith(
+    'account-a',
+    2,
+    expect.objectContaining({ theme: 'system' }),
+  )
+})
+
+test.each([
+  { web: 'light', native: 'system' },
+  { web: 'dark', native: 'system' },
+  { web: 'system', native: 'light' },
+  { web: 'system', native: 'dark' },
+])(
+  'native $native is applied to a clean web theme of $web',
+  async ({ web, native }) => {
+    // Arrange
+    const fixture = createFixture()
+    fixture.read.mockResolvedValue(nativePreferencesWithTheme(native))
+
+    // Act
+    fixture.sync.themeChanged(web)
+    await vi.waitFor(() =>
+      expect(fixture.applyTheme).toHaveBeenCalledWith(native),
+    )
+
+    // Assert
+    expect(fixture.patch).not.toHaveBeenCalled()
+  },
+)

@@ -74,7 +74,7 @@ describe('settings survive an app update', () => {
           },
         }),
       )
-      window.localStorage.setItem('corelive-theme', 'dark')
+      window.localStorage.setItem('corelive-theme', 'cathedral-dark')
       window.localStorage.setItem('unrelated-note', 'Keep my note')
 
       // Act
@@ -109,7 +109,9 @@ describe('settings survive an app update', () => {
         showInMenuBar: false,
         startAtLogin: true,
       })
-      expect(window.localStorage.getItem('corelive-theme')).toBe('dark')
+      expect(window.localStorage.getItem('corelive-theme')).toBe(
+        'cathedral-dark',
+      )
       expect(window.localStorage.getItem('unrelated-note')).toBe('Keep my note')
       expect(window.localStorage.getItem(STORAGE_KEY)).not.toContain(
         'soundMoments',

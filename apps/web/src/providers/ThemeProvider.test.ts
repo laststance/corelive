@@ -3,13 +3,13 @@ import { describe, test, expect } from 'vitest'
 import { THEMES, THEME_META } from './ThemeProvider'
 
 describe('ThemeProvider picker metadata', () => {
-  test('derives picker metadata from the registry for every theme, matching the stock Default pair, the Warm Cathedral defaults, and the colored families', () => {
+  test('derives picker metadata from the registry for every theme, matching the stock Default pair, the Warm Cathedral option, and the colored families', () => {
     // Arrange / Act / Assert — hard-coded so the derived (`as`-cast) map can never silently drift
     expect(THEME_META).toEqual({
-      'default-light': { name: 'Default Light', preview: '#ffffff' },
-      'default-dark': { name: 'Default Dark', preview: '#0a0a0a' },
-      light: { name: 'Light', preview: '#ffffff' },
-      dark: { name: 'Dark', preview: '#1a1a1a' },
+      light: { name: 'Default Light', preview: '#ffffff' },
+      dark: { name: 'Default Dark', preview: '#0a0a0a' },
+      'cathedral-light': { name: 'Warm Cathedral Light', preview: '#ffffff' },
+      'cathedral-dark': { name: 'Warm Cathedral Dark', preview: '#1a1a1a' },
       'harbor-light': { name: 'Harbor Light', preview: '#2776be' },
       'harbor-dark': { name: 'Harbor Dark', preview: '#57a3ef' },
       'grove-light': { name: 'Grove Light', preview: '#3b8040' },

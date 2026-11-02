@@ -40,7 +40,7 @@ const category = {
 } as const
 const preferences = {
   revision: 0,
-  theme: 'warm-cathedral-dark',
+  theme: 'cathedral-dark',
   settings: UserSettingsStateSchema.parse({
     liveEditorFontFamily: 'sans',
     liveEditorFontSize: 19,
@@ -442,7 +442,7 @@ test('a prepared Mac opens its writing and saved appearance without waiting for 
     generation: 0,
     workspace: {
       preferences: {
-        theme: 'warm-cathedral-dark',
+        theme: 'cathedral-dark',
         settings: { liveEditorFontSize: 19 },
       },
       draft: { rows: [{ text: 'Writing survives offline startup' }] },
@@ -949,7 +949,7 @@ test('first preparation waits for hydrated Settings and publishes readiness only
   expect(controller.getSnapshot()).toMatchObject({
     workspace: {
       preferences: {
-        theme: 'warm-cathedral-dark',
+        theme: 'cathedral-dark',
         settings: { liveEditorFontFamily: 'sans', liveEditorFontSize: 19 },
       },
       draft: { rows: [{ text: 'Imported only after preparation' }] },

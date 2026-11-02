@@ -14,15 +14,16 @@ import {
 } from '@/components/auth/ElectronOAuthButtons'
 import { Button } from '@/components/ui/button'
 import { useMounted } from '@/hooks/use-mounted'
-import { HEATMAP_LEVEL_TOKENS } from '@/lib/heatmap-intensity'
+
+import { LOGIN_RIBBON_LEVEL_FILLS } from './constants'
 
 /**
- * Decorative heatmap "ribbon" — a warming ramp (rest → cathedral-lit) of the
- * north-star temperature gradient, the year the returning user is picking back
- * up. Each `level` indexes HEATMAP_LEVEL_TOKENS (the heatmap source-of-truth),
- * so it resolves per active theme + light/dark mode via the `--hm-*` tokens with
- * zero extra wiring. Stable ids keep it from ever reordering; it is purely
- * decorative, so the row is `aria-hidden`.
+ * Decorative "ribbon" — a theme-following ramp (rest → accent) standing in for
+ * the year the returning user is picking back up. Each `level` indexes
+ * {@link LOGIN_RIBBON_LEVEL_FILLS}, which mixes `--primary` into `--muted`, so
+ * it is neutral on Default, cream → amber on Warm Cathedral and the family
+ * accent on colored themes with no `--hm-*` dependency. Stable ids keep it from
+ * ever reordering; it is purely decorative, so the row is `aria-hidden`.
  */
 const HEATMAP_RIBBON_CELLS = [
   { id: 'dawn-a', level: 0 },
@@ -44,7 +45,7 @@ const HEATMAP_RIBBON_CELLS = [
  * @returns
  * - A desktop-only notice in a plain browser tab
  * - "Loading…" until Clerk resolves
- * - The "Warm Cathedral" front door: native OAuth buttons, or a web-app fallback when a frozen preload lacks the oauth bridge
+ * - The signed-out front door: native OAuth buttons, or a web-app fallback when a frozen preload lacks the oauth bridge
  * - A signed-in placeholder
  * @example
  * <LoginShell />
@@ -132,8 +133,8 @@ export const LoginShell = function LoginShell() {
     )
   }
 
-  // The approved "Warm Cathedral" front door (Variant A): an editorial headline
-  // over the accumulated-warmth heatmap motif, carrying the north star — "your
+  // The approved front door (Variant A): an editorial headline
+  // over a theme-following ribbon motif, carrying the north star — "your
   // year is waiting", never a KPI gate. `pt-10` clears the native traffic lights
   // that overlay the top edge of the hidden-title-bar window.
   return (
@@ -166,13 +167,13 @@ export const LoginShell = function LoginShell() {
 
       {/* Push the motif + footer to the bottom edge of the window. */}
       <div className="mt-auto space-y-3 pt-6">
-        {/* Accumulated-warmth heatmap ribbon — decorative north-star motif. */}
+        {/* Theme-following ribbon — decorative north-star motif. */}
         <div className="flex gap-1" aria-hidden="true">
           {HEATMAP_RIBBON_CELLS.map((cell) => (
             <span
               key={cell.id}
               className="h-2.5 flex-1 rounded-sm"
-              style={{ backgroundColor: HEATMAP_LEVEL_TOKENS[cell.level] }}
+              style={{ backgroundColor: LOGIN_RIBBON_LEVEL_FILLS[cell.level] }}
             />
           ))}
         </div>

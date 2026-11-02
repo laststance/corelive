@@ -8,6 +8,7 @@ import {
   getThemeId,
   getThemeMode,
   isThemeId,
+  normalizeThemePreference,
   THEME_FAMILY_IDS,
   THEME_FAMILY_LABEL,
   THEME_REGISTRY,
@@ -17,9 +18,6 @@ import type { ThemeFamilyId, ThemeId, ThemeMode } from '@/lib/themes/registry'
 /** Mode axis of the picker: the two real modes plus the OS-managed "system". */
 export type ThemeModeChoice = ThemeMode | 'system'
 
-/** Every mode-axis choice — the complete key set for stable handler maps. */
-export const THEME_MODE_CHOICES: ThemeModeChoice[] = ['light', 'dark', 'system']
-
 /** One option on the family axis — a family id with its display label. */
 export interface ThemeFamilyOption {
   family: ThemeFamilyId
@@ -28,7 +26,7 @@ export interface ThemeFamilyOption {
 
 /** State + actions for the two-axis (family × mode) theme picker. */
 export interface ThemeAxis {
-  /** The active family (Warm Cathedral while on System — System maps to it). */
+  /** The active family (Default while on System — System maps to it). */
   family: ThemeFamilyId
   /** The active mode for the mode axis: `light` / `dark` / `system`. */
   mode: ThemeModeChoice
@@ -38,38 +36,53 @@ export interface ThemeAxis {
   resolvedMode: ThemeMode
   /** The concrete theme id currently applied (e.g. `harbor-dark`). */
   activeId: ThemeId
-  /** Modes offered for the active family — only Warm Cathedral exposes System. */
+  /** Modes offered for the active family — only Default exposes System. */
   availableModes: ThemeModeChoice[]
   /** Every family, default-first, for the family axis. */
   families: ThemeFamilyOption[]
   /** Switch family, keeping the current mode (System → that family, explicit). */
   setFamily: (family: ThemeFamilyId) => void
-  /** Switch mode, keeping the current family (System → Warm Cathedral). */
+  /** Switch mode, keeping the current family (System → the Default pair). */
   setMode: (mode: ThemeModeChoice) => void
+  /** Radio/toggle-group adapter: applies a raw string if it is an offered mode, else ignores it. */
+  selectMode: (value: string) => void
+  /** Radio-group adapter: applies a raw string if it is a known family, else ignores it. */
+  selectFamily: (value: string) => void
   /** False until mounted — render a disabled/placeholder state until then. */
   mounted: boolean
 }
 
 /**
  * Drives the two-axis theme picker (Settings page + sidebar quick-switch), turning
- * next-themes' single stored id into an independent (family, mode) selection and
- * back. Encapsulates the Fork-A System rule (decided in the design gate): System
- * is OS-managed and maps ONLY to the default Warm Cathedral light/dark pair, so
- * colored families never expose System and choosing System resets to the default.
+ * next-themes' single stored value into an independent (family, mode) selection
+ * and back. Encapsulates the System rule: System is OS-managed and maps ONLY to the
+ * Default light/dark pair (next-themes resolves System to the names `light`/`dark`,
+ * which the Default family owns), so other families never expose System and
+ * choosing System selects the Default pair. The raw stored value is read through
+ * {@link normalizeThemePreference}, so a legacy alias or unknown value is reflected
+ * immediately, before the allowlist guard repairs storage.
  * @returns the {@link ThemeAxis} state and `setFamily`/`setMode` actions.
  * @example
  * const { family, mode, setFamily, setMode, families } = useThemeAxis()
  * setFamily('harbor') // → 'harbor-light' or 'harbor-dark', preserving the mode
- * setMode('system')   // → OS-managed Warm Cathedral
+ * setMode('system')   // → OS-managed Default pair
  */
 export function useThemeAxis(): ThemeAxis {
-  const { theme, resolvedTheme, setTheme } = useTheme()
+  const { theme, resolvedTheme, systemTheme, setTheme } = useTheme()
   const mounted = useMounted()
 
-  const isSystem = theme === 'system'
-  // While on System next-themes resolves to the flat light/dark (cathedral) id;
-  // otherwise the stored id is the concrete theme. Guard stale/undefined values.
-  const rawActiveId = isSystem ? resolvedTheme : theme
+  const normalizedTheme = normalizeThemePreference(theme)
+  const isSystem = normalizedTheme === 'system'
+  // Concrete value behind the picker, by precedence:
+  // - stored 'system': next-themes' resolved OS mode
+  // - unknown raw value that normalizes to System: next-themes' resolvedTheme would
+  //   echo the unknown raw string, so use the OS mode (systemTheme) instead
+  // - otherwise the normalized id itself
+  const rawActiveId = isSystem
+    ? theme === 'system'
+      ? resolvedTheme
+      : systemTheme
+    : normalizedTheme
   const activeId: ThemeId = isThemeId(rawActiveId)
     ? rawActiveId
     : DEFAULT_THEME_ID
@@ -78,9 +91,9 @@ export function useThemeAxis(): ThemeAxis {
   const resolvedMode = getThemeMode(activeId)
   const mode: ThemeModeChoice = isSystem ? 'system' : resolvedMode
 
-  // Only the default family is OS-managed; colored families are explicit choices.
+  // Only the Default family is OS-managed; every other family is an explicit choice.
   const availableModes: ThemeModeChoice[] =
-    family === 'cathedral' ? ['light', 'dark', 'system'] : ['light', 'dark']
+    family === 'default' ? ['light', 'dark', 'system'] : ['light', 'dark']
 
   const families = THEME_FAMILY_IDS.map((familyId) => ({
     family: familyId,
@@ -88,8 +101,8 @@ export function useThemeAxis(): ThemeAxis {
   }))
 
   const setFamily = (nextFamily: ThemeFamilyId): void => {
-    // Re-picking the default while on System keeps the OS-managed pairing.
-    if (nextFamily === 'cathedral' && isSystem) {
+    // Re-picking Default while on System keeps the OS-managed pairing.
+    if (nextFamily === 'default' && isSystem) {
       setTheme('system')
       return
     }
@@ -98,12 +111,24 @@ export function useThemeAxis(): ThemeAxis {
   }
 
   const setMode = (nextMode: ThemeModeChoice): void => {
-    // System is OS-managed and family-agnostic → the default Warm Cathedral pair.
+    // System is OS-managed and family-agnostic → the Default pair.
     if (nextMode === 'system') {
       setTheme('system')
       return
     }
     setTheme(getThemeId(family, nextMode))
+  }
+
+  // Radix groups emit plain strings (and '' when a toggle is re-clicked); narrow
+  // them to offered values instead of casting, ignoring anything else.
+  const selectMode = (value: string): void => {
+    const next = availableModes.find((modeChoice) => modeChoice === value)
+    if (next) setMode(next)
+  }
+
+  const selectFamily = (value: string): void => {
+    const next = families.find((option) => option.family === value)
+    if (next) setFamily(next.family)
   }
 
   return {
@@ -116,6 +141,8 @@ export function useThemeAxis(): ThemeAxis {
     families,
     setFamily,
     setMode,
+    selectMode,
+    selectFamily,
     mounted,
   }
 }

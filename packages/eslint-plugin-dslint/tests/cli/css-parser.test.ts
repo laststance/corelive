@@ -199,6 +199,27 @@ describe('parseCSSContent — generator contract', () => {
   })
 })
 
+describe('parseCSSContent — @media blocks', () => {
+  test('ignores declarations inside @media so a conditional re-declaration is never tagged as a theme', () => {
+    // Arrange — the Default dark first-paint block repeats --background under @media
+    const css = `
+      :root { --background: oklch(1 0 0); }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme]) { --background: oklch(0.145 0 0); }
+      }
+      :root[data-theme='dark'] { --background: oklch(0.145 0 0); }
+    `
+
+    // Act
+    const backgrounds = parseCSSContent(css).filter(
+      (v) => v.name === '--background',
+    )
+
+    // Assert — only the two real blocks remain, each tagged by its own selector
+    expect(backgrounds.map((v) => v.theme)).toEqual(['light', 'dark'])
+  })
+})
+
 describe('extractColorVariables', () => {
   test('keeps color-valued variables and drops var() aliases and calc() values', () => {
     // Arrange — two color forms plus a var alias and a calc expression. The

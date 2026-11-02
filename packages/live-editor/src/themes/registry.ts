@@ -2,11 +2,13 @@
  * Theme registry — the single source of truth for every theme CoreLive ships.
  *
  * Framework-agnostic (no `'use client'`) so the build-time CSS generator, unit
- * tests, Electron, and the React provider can all import it. The brand
- * "cathedral" family is the untouched Warm Cathedral light/dark (hand-authored
- * in styles/base.css); the stock shadcn "default" family is a {@link StaticTheme}
- * (literal tokens, emitted verbatim); colored families get added here as one
- * DerivedTheme seed each, without touching any consumer. Exists so theme
+ * tests, Electron, and the React provider can all import it. The stock shadcn
+ * "default" family is the APPLIED default: a {@link StaticTheme} (literal tokens,
+ * emitted verbatim) that owns the flat `light`/`dark` ids, so next-themes' System
+ * resolution lands on it. The "cathedral" family is the untouched Warm Cathedral
+ * light/dark (hand-authored in styles/base.css, one selectable option like any
+ * other family); colored families get added here as one DerivedTheme seed each,
+ * without touching any consumer. Exists so theme
  * identity lives in one place instead of being hardcoded across the provider,
  * the picker, chart.tsx, and styles/base.css.
  */
@@ -16,9 +18,9 @@ export type ThemeMode = 'light' | 'dark'
 
 /**
  * A color identity. Each family ships a light + dark pair. `default` is the stock
- * shadcn/ui neutral palette, verbatim, listed first in the picker. The brand
- * "cathedral" family keeps the flat `light`/`dark` ids for zero migration; the
- * colored families tint neutrals toward their accent hue and re-aim the heatmap's
+ * shadcn/ui neutral palette, verbatim, listed first in the picker, and owns the
+ * flat `light`/`dark` ids. The brand "cathedral" family (Warm Cathedral) is one
+ * selectable option with `cathedral-*` ids; the colored families tint neutrals toward their accent hue and re-aim the heatmap's
  * rest→warm-apex hue path, while the heatmap L/C ramp and the warm
  * chart/destructive identity stay fixed across every family (design decision #15).
  */
@@ -33,12 +35,14 @@ export type ThemeFamilyId =
 
 /**
  * Stored theme id — the value next-themes persists to localStorage and writes
- * to the `data-theme` attribute. Cathedral keeps the flat `light`/`dark` ids for
- * zero migration; colored families use the `${family}-${mode}` shape (the
- * template auto-expands when a family is added to `ThemeFamilyId`).
+ * to the `data-theme` attribute. The Default family owns the flat `light`/`dark`
+ * ids (so next-themes' System resolves to it); every other family, Warm Cathedral
+ * included, uses the `${family}-${mode}` shape (the template auto-expands when a
+ * family is added to `ThemeFamilyId`). `default-light`/`default-dark` are NOT
+ * ids: they are legacy aliases, see {@link LEGACY_THEME_ID_ALIASES}.
  */
 export type ThemeId =
-  'light' | 'dark' | `${Exclude<ThemeFamilyId, 'cathedral'>}-${ThemeMode}`
+  'light' | 'dark' | `${Exclude<ThemeFamilyId, 'default'>}-${ThemeMode}`
 
 /** Identity + picker metadata carried by every theme, preserved or derived. */
 interface ThemeBase {
@@ -146,7 +150,7 @@ export type ThemeSeed = PreservedTheme | DerivedTheme | StaticTheme
  * @param seed - Any registry entry.
  * @returns true only for a {@link StaticTheme}.
  * @example
- * isStaticTheme(THEME_REGISTRY['default-light']) // => true
+ * isStaticTheme(THEME_REGISTRY.light)            // => true (Default light)
  * isStaticTheme(THEME_REGISTRY['harbor-light'])  // => false
  */
 export function isStaticTheme(seed: ThemeSeed): seed is StaticTheme {
@@ -159,30 +163,32 @@ export function isStaticTheme(seed: ThemeSeed): seed is StaticTheme {
  * @returns true only for a {@link DerivedTheme} (not preserved, not static).
  * @example
  * isDerivedTheme(THEME_REGISTRY['harbor-light'])  // => true
- * isDerivedTheme(THEME_REGISTRY.light)            // => false (preserved)
- * isDerivedTheme(THEME_REGISTRY['default-light']) // => false (static)
+ * isDerivedTheme(THEME_REGISTRY['cathedral-light']) // => false (preserved)
+ * isDerivedTheme(THEME_REGISTRY.light)               // => false (static)
  */
 export function isDerivedTheme(seed: ThemeSeed): seed is DerivedTheme {
   return !seed.preserve && !isStaticTheme(seed)
 }
 
 /**
- * Every theme, keyed by its stored id: the stock shadcn Default pair first, the
- * untouched Warm Cathedral light/dark, then the colored families (one
+ * Every theme, keyed by its stored id: the stock shadcn Default pair first (the
+ * flat `light`/`dark` ids), the untouched Warm Cathedral `cathedral-light` /
+ * `cathedral-dark`, then the colored families (one
  * DerivedTheme per family/mode).
  */
 export const THEME_REGISTRY = {
   // ── Default — the stock shadcn/ui "neutral" palette, verbatim ─────────────────
   // Tokens copied from https://ui.shadcn.com/r/colors/neutral.json (Tailwind v4,
   // OKLCH), the same values `shadcn init` writes for baseColor "neutral". Listed
-  // FIRST so the palette picker leads with the un-opinionated pair; the APPLIED
-  // default for a fresh install stays Warm Cathedral (DEFAULT_THEME_ID). shadcn
-  // ships no heatmap, so `--hm-*` reuse the cathedral ramp — the temperature=pride
-  // invariant holds here exactly as it does for Graphite (neutral room, warm bloom).
-  'default-light': {
+  // FIRST so the palette picker leads with the un-opinionated pair, and it owns
+  // the flat `light`/`dark` ids: the APPLIED default for a fresh install (System
+  // follows these two, DEFAULT_THEME_PREFERENCE). shadcn ships no heatmap, so
+  // `--hm-*` reuse the Warm Cathedral ramp — the temperature=pride invariant holds
+  // here exactly as it does for Graphite (neutral room, warm bloom).
+  light: {
     family: 'default',
     mode: 'light',
-    id: 'default-light',
+    id: 'light',
     name: 'Default Light',
     preview: '#ffffff',
     colorScheme: 'light',
@@ -227,10 +233,10 @@ export const THEME_REGISTRY = {
       '--hm-4': 'oklch(0.55 0.16 40)',
     },
   },
-  'default-dark': {
+  dark: {
     family: 'default',
     mode: 'dark',
-    id: 'default-dark',
+    id: 'dark',
     name: 'Default Dark',
     preview: '#0a0a0a',
     colorScheme: 'dark',
@@ -276,20 +282,20 @@ export const THEME_REGISTRY = {
     },
   },
 
-  light: {
+  'cathedral-light': {
     family: 'cathedral',
     mode: 'light',
-    id: 'light',
-    name: 'Light',
+    id: 'cathedral-light',
+    name: 'Warm Cathedral Light',
     preview: '#ffffff',
     colorScheme: 'light',
     preserve: true,
   },
-  dark: {
+  'cathedral-dark': {
     family: 'cathedral',
     mode: 'dark',
-    id: 'dark',
-    name: 'Dark',
+    id: 'cathedral-dark',
+    name: 'Warm Cathedral Dark',
     preview: '#1a1a1a',
     colorScheme: 'dark',
     preserve: true,
@@ -472,8 +478,36 @@ export const THEME_REGISTRY = {
   },
 } satisfies Record<ThemeId, ThemeSeed>
 
-/** The theme applied when nothing is stored or the stored id is unknown. */
+/**
+ * The concrete Default light id, for places that need a {@link ThemeId} before
+ * `system` can resolve (SSR, pre-mount). It is NOT the stored-preference default:
+ * a fresh or unknown stored value means {@link DEFAULT_THEME_PREFERENCE}.
+ * @see DEFAULT_THEME_PREFERENCE - use that when choosing what to store or apply.
+ */
 export const DEFAULT_THEME_ID: ThemeId = 'light'
+
+/**
+ * The stored-preference default: with nothing (or something unknown) stored, the
+ * OS picks Default light or Default dark. Used as next-themes `defaultTheme`, as
+ * the heal target for unknown stored values, and by the desktop editor before
+ * the workspace is ready.
+ * @see DEFAULT_THEME_ID - use that where a concrete id is required.
+ */
+export const DEFAULT_THEME_PREFERENCE = 'system'
+
+/**
+ * Retired stored ids and the current id each one means. `default-light` /
+ * `default-dark` were the Default family's ids before it took the flat
+ * `light`/`dark`; they are not {@link ThemeId}s any more, only read-side aliases.
+ * The generator also reads this map to keep their CSS selectors alive so a stale
+ * stored alias still paints Default on the first frame.
+ * @see normalizeThemePreference
+ */
+export const LEGACY_THEME_ID_ALIASES: Readonly<Record<string, ThemeId>> =
+  Object.freeze({
+    'default-light': 'light',
+    'default-dark': 'dark',
+  })
 
 /**
  * Narrows an arbitrary value to a known theme id, so a stale or tampered
@@ -482,9 +516,10 @@ export const DEFAULT_THEME_ID: ThemeId = 'light'
  * @param value - Any value, typically read from localStorage or user input.
  * @returns true only when `value` is a registered theme id.
  * @example
- * isThemeId('dark')   // => true
- * isThemeId('harbor') // => false (not registered)
- * isThemeId(undefined)// => false
+ * isThemeId('dark')         // => true
+ * isThemeId('harbor')       // => false (not registered)
+ * isThemeId('default-dark') // => false (legacy alias, see {@link normalizeThemePreference})
+ * isThemeId(undefined)      // => false
  */
 export function isThemeId(value: unknown): value is ThemeId {
   return typeof value === 'string' && Object.hasOwn(THEME_REGISTRY, value)
@@ -495,7 +530,36 @@ export const THEME_IDS: ThemeId[] =
   Object.keys(THEME_REGISTRY).filter(isThemeId)
 
 /**
- * Resolves a theme id (flat `light`/`dark` or a future `${family}-${mode}`) to
+ * Maps any stored or synced theme value onto the one contract shared by web and
+ * desktop: a registered {@link ThemeId} or `system`. Exists because storage is
+ * untrusted (stale builds, tampering, legacy aliases) and both the web guard and
+ * the desktop editor must agree on what each raw value means. Called by the web
+ * allowlist guard, `useThemeAxis`, the offline-settings sync boundary and the
+ * desktop editor.
+ * @param value - Any raw value (localStorage, workspace preference, user input).
+ * @returns
+ * - `'system'` for `'system'`, non-strings and unknown/blank strings
+ * - the aliased id for a {@link LEGACY_THEME_ID_ALIASES} key
+ * - the value itself when it is a registered {@link ThemeId}
+ * @example
+ * normalizeThemePreference('default-dark')  // => 'dark'
+ * normalizeThemePreference('cathedral-dark')// => 'cathedral-dark'
+ * normalizeThemePreference('cathedral-lite')// => 'system'
+ * normalizeThemePreference(undefined)       // => 'system'
+ */
+export function normalizeThemePreference(value: unknown): ThemeId | 'system' {
+  if (typeof value !== 'string') return DEFAULT_THEME_PREFERENCE
+  // legacy aliases first: they are not registry keys, so isThemeId would reject them
+  if (Object.hasOwn(LEGACY_THEME_ID_ALIASES, value)) {
+    return LEGACY_THEME_ID_ALIASES[value] ?? DEFAULT_THEME_PREFERENCE
+  }
+  if (isThemeId(value)) return value
+  // 'system' and every unknown/blank string heal to the OS-following default
+  return DEFAULT_THEME_PREFERENCE
+}
+
+/**
+ * Resolves a theme id (flat `light`/`dark` or a `${family}-${mode}`) to
  * its light/dark axis, so mode-aware consumers (Sonner, the `dark:` variant, the
  * unknown-id fallback) read the axis without parsing ids themselves.
  * @param id - A theme id, or undefined before hydration.
@@ -518,27 +582,28 @@ export function getThemeMode(id: string | undefined): ThemeMode {
 /**
  * Builds the stored id for a (family, mode) pair, so the two-axis picker (T8) can
  * turn a family choice + the current mode into a registry id without string
- * templating at the call site. Cathedral uses the flat `light`/`dark` ids; every
- * other family uses `${family}-${mode}`.
+ * templating at the call site. Default uses the flat `light`/`dark` ids; every
+ * other family (Warm Cathedral included) uses `${family}-${mode}`.
  * @param family - A theme family id.
  * @param mode - The light/dark axis.
  * @returns the stored theme id for that family and mode.
  * @example
- * getThemeId('cathedral', 'dark') // => 'dark'
- * getThemeId('harbor', 'light')   // => 'harbor-light' (once 'harbor' is registered)
+ * getThemeId('default', 'dark')   // => 'dark'
+ * getThemeId('cathedral', 'dark') // => 'cathedral-dark'
+ * getThemeId('harbor', 'light')   // => 'harbor-light'
  */
 export function getThemeId(family: ThemeFamilyId, mode: ThemeMode): ThemeId {
-  if (family === 'cathedral') return mode
+  if (family === 'default') return mode
   return `${family}-${mode}`
 }
 
 /**
  * Human-readable family names for the two-axis theme picker (T8). The brand
- * family carries the name "Warm Cathedral" — its ids are the flat
- * `light`/`dark`, so the label is NOT derivable by stripping the mode from a
- * theme name. Insertion order IS the picker order: the stock shadcn "Default"
- * first, then Warm Cathedral (what a fresh install applies), then the colored
- * families.
+ * family carries the name "Warm Cathedral" — its theme names are
+ * "Warm Cathedral Light/Dark", so the label is spelled out rather than derived.
+ * Insertion order IS the picker order: the stock shadcn "Default" first (what a
+ * fresh install applies), then Warm Cathedral (one selectable option), then the
+ * colored families.
  * @example
  * THEME_FAMILY_LABEL.default   // => 'Default'
  * THEME_FAMILY_LABEL.cathedral // => 'Warm Cathedral'

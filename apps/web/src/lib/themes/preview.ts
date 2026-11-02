@@ -97,11 +97,11 @@ const CATHEDRAL_PREVIEW: Record<ThemeMode, ThemePreview> = {
  *   each an `oklch(...)` string ready for a CSS `background`/`color` value.
  * @example
  * getThemePreview('harbor-light').accent // => 'oklch(0.555 0.135 250)'
- * getThemePreview('light').surface       // => 'oklch(0.975 0.016 80)'
+ * getThemePreview('cathedral-light').surface // => 'oklch(0.975 0.016 80)'
  */
 export function getThemePreview(id: ThemeId): ThemePreview {
   const seed = THEME_REGISTRY[id]
-  // Cathedral is hand-authored — reuse its exact globals.css swatches.
+  // Cathedral is hand-authored — reuse its exact base.css swatches.
   if (seed.preserve) return CATHEDRAL_PREVIEW[seed.mode]
 
   // A static theme carries literal tokens — the same values generated.css emits.

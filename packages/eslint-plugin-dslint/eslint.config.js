@@ -9,7 +9,14 @@ export default defineConfig([
   { ignores: ['dist/**'] },
   ...tsPrefixer,
   {
-    files: ['tsup.config.ts', 'vitest.config.ts', 'eslint.config.js'],
+    // Tests sit outside the emit root (rootDir: src), so they use the
+    // eslint-only tsconfig like the build configs.
+    files: [
+      'tsup.config.ts',
+      'vitest.config.ts',
+      'eslint.config.js',
+      'tests/**/*.ts',
+    ],
     languageOptions: {
       parserOptions: {
         // Keep the build config typed without expanding the package's emit root.

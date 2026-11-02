@@ -5,7 +5,7 @@ import type { ThemeProviderProps as NextThemesProviderProps } from 'next-themes'
 import React from 'react'
 
 import {
-  DEFAULT_THEME_ID,
+  DEFAULT_THEME_PREFERENCE,
   THEME_IDS,
   THEME_REGISTRY,
 } from '@/lib/themes/registry'
@@ -54,7 +54,8 @@ export const ThemeProvider = function ThemeProvider({
   return (
     <NextThemesProvider
       attribute="data-theme"
-      defaultTheme={DEFAULT_THEME_ID}
+      // Nothing stored → follow the OS (Default light/dark), never a fixed id.
+      defaultTheme={DEFAULT_THEME_PREFERENCE}
       enableSystem
       enableColorScheme={false}
       disableTransitionOnChange={false}
@@ -62,8 +63,8 @@ export const ThemeProvider = function ThemeProvider({
       storageKey="corelive-theme"
       {...props}
     >
-      {/* Self-heals a stale/tampered persisted theme back to the default
-           (next-themes does not validate its own localStorage value). */}
+      {/* Self-heals a stale/legacy/tampered persisted theme to its normalized
+           value (next-themes does not validate its own localStorage value). */}
       <ThemeAllowlistGuard />
       {/* Crossfades the whole UI during a theme switch by toggling a transient
            class on <html>, without animating every hover/focus interaction. */}

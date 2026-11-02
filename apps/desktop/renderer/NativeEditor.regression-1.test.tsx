@@ -23,7 +23,10 @@ import { afterEach, expect, test, vi } from 'vitest'
 import { NativeEditor } from './NativeEditor'
 
 const stores: DurableEditorStore[] = []
+const originalMatchMedia = window.matchMedia
 afterEach(() => {
+  window.matchMedia = originalMatchMedia
+  document.documentElement.removeAttribute('data-theme')
   cleanup()
   for (const store of stores.splice(0)) store.disconnect()
   vi.useRealTimers()
@@ -37,6 +40,7 @@ function mountEditor(
   paginated = false,
   removed = false,
   showStatus = true,
+  theme = 'light',
 ) {
   const shown = new Set<() => void>()
   const snapshot: OfflineEditorSnapshot = {
@@ -59,7 +63,7 @@ function mountEditor(
       ],
       preferences: {
         revision: 0,
-        theme: 'light',
+        theme,
         settings: UserSettingsStateSchema.parse({
           liveEditorShowStatusBar: showStatus,
         }),
@@ -442,3 +446,59 @@ test('the LiveEditor header leaves its empty control-row space available for win
     '-webkit-app-region:no-drag',
   )
 })
+
+/** Makes `prefers-color-scheme: dark` report the given OS appearance. */
+function stubOsAppearance(isDark: boolean): void {
+  window.matchMedia = ((query: string) => ({
+    matches: query.includes('dark') ? isDark : !isDark,
+    media: query,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  })) as unknown as typeof window.matchMedia
+}
+
+test('before the workspace is ready the editor follows a dark OS instead of painting light', async () => {
+  // Arrange — a workspace that never becomes ready keeps the pre-ready state
+  stubOsAppearance(true)
+
+  // Act
+  mountEditor('preparing')
+
+  // Assert
+  expect(document.documentElement.dataset.theme).toBe('dark')
+})
+
+test('before the workspace is ready the editor follows a light OS', () => {
+  // Arrange
+  stubOsAppearance(false)
+
+  // Act
+  mountEditor('preparing')
+
+  // Assert
+  expect(document.documentElement.dataset.theme).toBe('light')
+})
+
+test.each([
+  { stored: 'system', isDark: true, expected: 'dark' },
+  { stored: 'system', isDark: false, expected: 'light' },
+  { stored: 'default-dark', isDark: false, expected: 'dark' },
+  { stored: 'default-light', isDark: true, expected: 'light' },
+  { stored: 'dark', isDark: false, expected: 'dark' },
+  { stored: 'cathedral-light', isDark: true, expected: 'cathedral-light' },
+  { stored: 'harbor-dark', isDark: false, expected: 'harbor-dark' },
+  { stored: 'cathedral-lite', isDark: true, expected: 'dark' },
+])(
+  'applies stored theme $stored on an OS with dark=$isDark as $expected',
+  async ({ stored, isDark, expected }) => {
+    // Arrange
+    stubOsAppearance(isDark)
+
+    // Act
+    mountEditor('ready', false, false, true, stored)
+    await screen.findByRole('textbox', { name: 'Write one thing' })
+
+    // Assert
+    expect(document.documentElement.dataset.theme).toBe(expected)
+  },
+)

@@ -6,8 +6,9 @@ import { describe, test, expect } from 'vitest'
 import { CATHEDRAL } from '../../../scripts/generate-theme-css'
 
 /**
- * Brand pin for the Warm Cathedral default. The theme generator deliberately
- * SKIPS preserved themes (cathedral light/dark stay hand-authored in globals.css),
+ * Brand pin for Warm Cathedral (one selectable theme, not the applied default).
+ * The theme generator deliberately SKIPS preserved themes (cathedral light/dark
+ * stay hand-authored in base.css as `:root[data-theme='cathedral-light|dark']`),
  * so nothing regenerates them — this snapshot is what guarantees they never drift.
  * If a change here is intentional, it is a deliberate brand change and the
  * snapshot is updated knowingly.
@@ -17,23 +18,23 @@ const globalsCss = readFileSync(
   'utf-8',
 )
 
-/** Pulls a single `selector { … }` block (no nested braces) out of globals.css. */
+/** Pulls a single `selector { … }` block (no nested braces) out of base.css. */
 const extractBlock = (pattern: RegExp): string => {
   const match = globalsCss.match(pattern)
   if (!match) throw new Error(`block not found for ${String(pattern)}`)
   return match[0]
 }
 
-describe('Warm Cathedral default CSS — byte-for-byte brand pin', () => {
-  test('keeps the :root (cathedral light) token block unchanged', () => {
+describe('Warm Cathedral CSS — byte-for-byte brand pin', () => {
+  test("keeps the :root[data-theme='cathedral-light'] token block unchanged", () => {
     // Arrange / Act
-    const rootBlock = extractBlock(/:root \{[^}]*\}/)
+    const rootBlock = extractBlock(
+      /:root\[data-theme='cathedral-light'\] \{[^}]*\}/,
+    )
 
     // Assert
     expect(rootBlock).toMatchInlineSnapshot(`
-      ":root {
-        color-scheme: light;
-        --radius: 0.625rem;
+      ":root[data-theme='cathedral-light'] {
         /* Warm Cathedral — light theme · golden-hour neutrals (warmed paper, dawn, amber, terracotta).
            Neutral surfaces carry OKLCH chroma 0.016–0.024 (was 0.005–0.01) so the room reads as
            late-afternoon light, not clinical white. Accent/text/heatmap are unchanged. WCAG AA holds
@@ -79,13 +80,15 @@ describe('Warm Cathedral default CSS — byte-for-byte brand pin', () => {
     `)
   })
 
-  test("keeps the [data-theme='dark'] (cathedral dark) token block unchanged", () => {
+  test("keeps the :root[data-theme='cathedral-dark'] token block unchanged", () => {
     // Arrange / Act
-    const darkBlock = extractBlock(/\[data-theme='dark'\] \{[^}]*\}/)
+    const darkBlock = extractBlock(
+      /:root\[data-theme='cathedral-dark'\] \{[^}]*\}/,
+    )
 
     // Assert
     expect(darkBlock).toMatchInlineSnapshot(`
-      "[data-theme='dark'] {
+      ":root[data-theme='cathedral-dark'] {
         color-scheme: dark;
         /* Warm Cathedral — dark theme · golden-hour neutrals (warm coal, ember, copper, warm sun).
            Coal surfaces carry OKLCH chroma 0.026–0.028 (was 0.012–0.015) so the dark room glows like
@@ -133,13 +136,13 @@ describe('Warm Cathedral default CSS — byte-for-byte brand pin', () => {
   })
 })
 
-describe('generator cathedral ladder mirrors globals.css', () => {
-  test('emits every cathedral token at the globals.css value so derived themes never derive from a stale ladder', () => {
+describe('generator cathedral ladder mirrors base.css', () => {
+  test('emits every cathedral token at the base.css value so derived themes never derive from a stale ladder', () => {
     // Arrange — the generator hardcodes the cathedral L/C ladder; it must match
     // the hand-authored source, or colored families (T7) would derive wrong values
     const drifted: string[] = []
 
-    // Act — every ladder entry must appear verbatim in globals.css
+    // Act — every ladder entry must appear verbatim in base.css
     for (const mode of ['light', 'dark'] as const) {
       for (const [tokenName, value] of Object.entries(CATHEDRAL[mode])) {
         if (!globalsCss.includes(`${tokenName}: ${value};`)) {
@@ -153,9 +156,9 @@ describe('generator cathedral ladder mirrors globals.css', () => {
   })
 })
 
-describe('generator ladder covers every globals.css color token (reverse drift-guard)', () => {
-  // --radius is a layout token (only in :root, absent from the dark block); the
-  // color ladder deliberately omits it, so it is excluded from this coverage check.
+describe('generator ladder covers every base.css color token (reverse drift-guard)', () => {
+  // --radius is a layout token (bare :root only, not in the cathedral blocks); the
+  // color ladder deliberately omits it, so it stays excluded from this coverage check.
   const LAYOUT_TOKENS_NOT_IN_LADDER = ['--radius']
 
   /** Every `--token` name declared in a CSS block, in source order. */
@@ -169,9 +172,11 @@ describe('generator ladder covers every globals.css color token (reverse drift-g
 
   test('classifies every cathedral light token so derived themes never derive from a stale ladder', () => {
     // Arrange
-    const block = extractBlock(/:root \{[^}]*\}/)
+    const block = extractBlock(
+      /:root\[data-theme='cathedral-light'\] \{[^}]*\}/,
+    )
 
-    // Act — globals.css light tokens the generator ladder fails to carry
+    // Act — base.css light tokens the generator ladder fails to carry
     const missing = declaredTokens(block).filter(
       (token) =>
         !LAYOUT_TOKENS_NOT_IN_LADDER.includes(token) &&
@@ -184,9 +189,9 @@ describe('generator ladder covers every globals.css color token (reverse drift-g
 
   test('classifies every cathedral dark token so derived themes never derive from a stale ladder', () => {
     // Arrange
-    const block = extractBlock(/\[data-theme='dark'\] \{[^}]*\}/)
+    const block = extractBlock(/:root\[data-theme='cathedral-dark'\] \{[^}]*\}/)
 
-    // Act — globals.css dark tokens the generator ladder fails to carry
+    // Act — base.css dark tokens the generator ladder fails to carry
     const missing = declaredTokens(block).filter(
       (token) =>
         !LAYOUT_TOKENS_NOT_IN_LADDER.includes(token) &&

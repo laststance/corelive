@@ -90,9 +90,12 @@ pnpm qa:browser video-start .gstack/headless-browser/editor.webm
 # Exercise the relevant page controls.
 pnpm qa:browser video-stop
 ffmpeg -i .gstack/headless-browser/editor.webm \
-  -vf fps=2 .gstack/headless-browser/frame_%03d.png
+  -fps_mode passthrough .gstack/headless-browser/frame_%04d.png
 pnpm qa:browser close
 ```
+
+Extract every recorded frame (`-fps_mode passthrough`). Sampling with `-vf fps=2`
+misses any transition shorter than 500 ms, such as the 200 ms theme crossfade.
 
 Inspect the extracted frames. Renderer video does not include Cocoa chrome,
 macOS menu bars, the Dock, or native dialogs. Keep private account data out of

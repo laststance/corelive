@@ -57,9 +57,16 @@ export function parseCSSContent(content: string): CSSVariable[] {
     // to 'base'. css-tree visits declarations in source order but does not
     // expose the parent rule's selector, so the owning theme is assigned in
     // pass 2 by matching each variable back to its selector block.
+    // Declarations inside `@media` blocks are skipped: they are conditional
+    // re-declarations of an existing theme (e.g. the Default dark first-paint
+    // block under `prefers-color-scheme`), not a theme of their own, and the
+    // regex pass below could never match them to a block.
     csstree.walk(ast, {
-      visit: 'Declaration',
-      enter(node) {
+      enter(node: csstree.CssNode) {
+        if (node.type === 'Atrule' && node.name === 'media') {
+          return csstree.walk.skip
+        }
+        if (node.type !== 'Declaration') return
         // Only CSS custom properties (names starting with `--`)
         if (
           typeof node.property === 'string' &&
