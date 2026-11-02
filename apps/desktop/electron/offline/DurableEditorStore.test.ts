@@ -717,3 +717,143 @@ test('an explicit native reveal releases the exit input barrier after a successf
   expect(fixture.store.getSnapshot().exitPending).toBe(false)
   expect(fixture.store.getSnapshot().save).toBe('saved')
 })
+
+test('Cmd+Enter on a finished line in keep mode sends nothing and shows no error', async () => {
+  // Arrange — keep mode ("Clear finished lines" off) with a typed finished row.
+  const fixture = await createFixture('- [x] Already done\nSecond')
+
+  // Act
+  const completed = await fixture.store.completeAt(3)
+
+  // Assert
+  expect(completed).toBe(false)
+  expect(
+    fixture.command.mock.calls.filter(
+      ([, command]) => command.type === 'complete',
+    ),
+  ).toHaveLength(0)
+  expect(fixture.store.getSnapshot().text).toBe('- [x] Already done\nSecond')
+  expect(fixture.store.getSnapshot().error).toBeNull()
+  expect(fixture.store.getSnapshot().save).toBe('saved')
+  expect(fixture.store.getSnapshot().notice).toBeNull()
+})
+
+test('switching to keep mode while a save is in flight ends the completion silently without sending it', async () => {
+  // Arrange — clear mode, an unsaved edit, and a held save acknowledgement.
+  const fixture = await createFixture('- [x] Typed\nSecond', true)
+  fixture.store.edit('- [x] Typed\nSecond!', { start: 18, end: 18 })
+  const save = fixture.hold('save')
+
+  // Act — the owner switches to keep mode in Settings while the save waits.
+  const completing = fixture.store.completeAt(3)
+  await save.ready()
+  await fixture.apply(0, {
+    type: 'preferences',
+    commandId: randomUUID(),
+    expectedRevision: 0,
+    patch: { liveEditorClearOnComplete: false },
+  })
+  save.release()
+
+  // Assert
+  await expect(completing).resolves.toBe(false)
+  expect(
+    fixture.command.mock.calls.filter(
+      ([, command]) => command.type === 'complete',
+    ),
+  ).toHaveLength(0)
+  expect(fixture.store.getSnapshot().error).toBeNull()
+  expect(fixture.store.getSnapshot().text).toBe('- [x] Typed\nSecond!')
+})
+
+test('a finished-line refusal from the native side ends the completion silently instead of reporting a save failure', async () => {
+  // Arrange — clear mode passes the renderer guard; the native side refuses after a late switch.
+  const fixture = await createFixture('- [x] Typed\nSecond', true)
+  fixture.command.mockImplementation(async (generation, command) =>
+    command.type === 'complete'
+      ? { ok: false, reason: 'finished-line' }
+      : fixture.apply(generation, command),
+  )
+
+  // Act
+  const completed = await fixture.store.completeAt(3)
+
+  // Assert
+  expect(completed).toBe(false)
+  expect(fixture.store.getSnapshot().error).toBeNull()
+  expect(fixture.store.getSnapshot().save).not.toBe('failed')
+  expect(fixture.store.getSnapshot().text).toBe('- [x] Typed\nSecond')
+})
+
+test('a keep-mode switch that lands while Cmd+Enter is in flight takes effect once the native side refuses the finished line', async () => {
+  // Arrange — clear mode passes the renderer guard; Settings switches to keep mode before main reads the row.
+  const fixture = await createFixture('- [x] Typed\nSecond', true)
+  fixture.command.mockImplementationOnce(async (generation, command) => {
+    await fixture.apply(generation, {
+      type: 'preferences',
+      commandId: randomUUID(),
+      expectedRevision: 0,
+      patch: { liveEditorClearOnComplete: false },
+    })
+    return fixture.apply(generation, command)
+  })
+
+  // Act
+  const completed = await fixture.store.completeAt(3)
+  const pressedAgain = await fixture.store.completeAt(3)
+
+  // Assert — the renderer adopted keep mode, so the second press sends nothing.
+  expect(completed).toBe(false)
+  expect(pressedAgain).toBe(false)
+  const { main } = fixture.store.getSnapshot()
+  if (main.phase !== 'ready') throw new Error('Workspace not ready')
+  expect(main.workspace.preferences.settings.liveEditorClearOnComplete).toBe(
+    false,
+  )
+  expect(
+    fixture.command.mock.calls.filter(
+      ([, command]) => command.type === 'complete',
+    ),
+  ).toHaveLength(1)
+  expect(fixture.store.getSnapshot().text).toBe('- [x] Typed\nSecond')
+  expect(fixture.store.getSnapshot().error).toBeNull()
+})
+
+test('retrying a lost Cmd+Enter reply that the native side now refuses as finished clears the save failure', async () => {
+  // Arrange — the completion reply is lost, then the owner switches to keep mode.
+  const fixture = await createFixture('- [x] Typed\nSecond', true)
+  fixture.command.mockImplementationOnce(async () => {
+    throw new Error('Lost reply')
+  })
+  await expect(fixture.store.completeAt(3)).resolves.toBe(false)
+  expect(fixture.store.getSnapshot().save).toBe('failed')
+  await fixture.apply(0, {
+    type: 'preferences',
+    commandId: randomUUID(),
+    expectedRevision: 0,
+    patch: { liveEditorClearOnComplete: false },
+  })
+
+  // Act — a native exit flushes, which retries the retained completion first.
+  const flushed = await fixture.store.flush()
+
+  // Assert — nothing was completed and the editor reports saved, so exit is not refused.
+  expect(flushed).toBe(true)
+  expect(fixture.store.getSnapshot().save).toBe('saved')
+  expect(fixture.store.getSnapshot().error).toBeNull()
+  expect(fixture.store.getSnapshot().text).toBe('- [x] Typed\nSecond')
+  expect((await fixture.worker.call('open', null)).pendingCount).toBe(0)
+})
+
+test('clear mode still records a typed finished line from Cmd+Enter', async () => {
+  // Arrange
+  const fixture = await createFixture('- [x] Typed\nSecond', true)
+
+  // Act
+  const completed = await fixture.store.completeAt(3)
+
+  // Assert
+  expect(completed).toBe(true)
+  expect(fixture.store.getSnapshot().text).toBe('Second')
+  expect(fixture.store.getSnapshot().notice).toMatchObject({ title: 'Typed' })
+})

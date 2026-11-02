@@ -224,11 +224,11 @@ test('created categories are forwarded to the current native account and rejecte
   await waitFor(() =>
     expect(fixture.categoryCreated).toHaveBeenCalledWith('account-a', 2, 2),
   )
-  expect(
-    await screen.findByText(
-      'Category created. Select it after reconnecting LiveEditor.',
-    ),
-  ).toBeVisible()
+  // Sonner inserts the toast at opacity 0 and reveals it once its mount effect runs.
+  const notice = await screen.findByText(
+    'Category created. Select it after reconnecting LiveEditor.',
+  )
+  await waitFor(() => expect(notice).toBeVisible())
   expect(readCategories().find((category) => category.id === 2)?.name).toBe(
     'Reading',
   )

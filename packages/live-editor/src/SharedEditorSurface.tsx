@@ -12,6 +12,7 @@ import * as React from 'react'
 import { useId } from 'react'
 
 import { cn } from './cn'
+import { FinishedLineStrikes } from './FinishedLineStrikes'
 import { useCoarsePointer } from './hooks/useCoarsePointer'
 import { isApplePlatform } from './isApplePlatform'
 import { COMPLETED_TITLE_MAX_LENGTH } from './liveEditorUtils'
@@ -129,6 +130,11 @@ export interface SharedEditorSurfaceProps {
   isLiveEditorConfigReady: boolean
   activeCategoryId: number | null
   isNoteFieldDisabled: boolean
+  /**
+   * Draws a hairline strike over every finished (`- [x]`) title. The desktop editor
+   * passes keep mode ("Clear finished lines" off); other hosts leave it unset.
+   */
+  strikeFinishedLines?: boolean
   handleKeepLineClick: () => void
   closeWindow: () => void
 }
@@ -160,6 +166,7 @@ export function SharedEditorSurface({
   isLiveEditorConfigReady,
   activeCategoryId,
   isNoteFieldDisabled,
+  strikeFinishedLines = false,
   handleKeepLineClick,
   closeWindow,
 }: SharedEditorSurfaceProps) {
@@ -169,8 +176,6 @@ export function SharedEditorSurface({
   const opacityInputId = useId()
   const spacesInputId = useId()
 
-  const { liveEditorFontFamily, liveEditorFontSize, liveEditorTextColor } =
-    settings
   // The field is disabled until its note is ready. On the web that disabled
   // field IS the first-paint stand-in (design review DR5) — same placeholder,
   // same styling, no spinner — and turns live once Clerk resolves.
@@ -263,45 +268,16 @@ export function SharedEditorSurface({
         )}
       </div>
       {details}
-      <textarea
-        {...textareaProps}
-        hidden={details !== undefined}
-        id={noteInputId}
-        aria-label={NOTE_FIELD_LABEL}
+      <EditorNoteField
+        textareaProps={textareaProps}
+        isHidden={details !== undefined}
+        noteInputId={noteInputId}
         placeholder={placeholder}
-        disabled={isNoteFieldDisabled}
-        maxLength={noteMaxLength}
-        // LiveEditor is messy quick-capture — the native red spellcheck underlines
-        // make unfinished / mixed-language fragments feel "corrected" and noisy, so
-        // we keep the writing surface calm by disabling them. Only the correction
-        // overlay is suppressed; typing / IME / save are unaffected (#128).
-        spellCheck={false}
-        // Token slots only (design review DR8): the web surface inherits the
-        // visitor's theme through --card / --border / --ring; the panel keeps its
-        // translucent look. The web stand-in is not dimmed while disabled — it is
-        // the first paint, not a loading state.
-        className={cn(
-          // No focus line on purpose (Raphtalia, 2026-09-05): the writing surface
-          // is the whole panel, so the caret is the focus cue. `outline-none`
-          // drops the UA ring on both hosts; keep it if you re-add a ring so the
-          // two never stack. Deliberate WCAG 2.4.7 trade-off for this textarea.
-          'min-h-16 min-w-0 flex-1 resize-none rounded-lg border outline-none',
-          isElectronPanel
-            ? 'bg-background/60 p-3 disabled:opacity-50'
-            : 'border-border bg-card p-4 disabled:cursor-default',
-          // The saved face is a stock Tailwind utility (see the class map).
-          LIVE_EDITOR_FONT_FAMILY_CLASS[liveEditorFontFamily],
-        )}
-        // Inline (not a useMemo) — a fresh style object on an intrinsic element is
-        // free. Spread NO_DRAG_REGION_STYLE first (load-bearing: keeps the
-        // textarea outside the frameless drag region), then layer the saved
-        // size and color. lineHeight is unitless so spacing scales with the size.
-        style={{
-          ...NO_DRAG_REGION_STYLE,
-          fontSize: `${liveEditorFontSize}px`,
-          lineHeight: LIVE_EDITOR_LINE_HEIGHT,
-          color: liveEditorTextColor,
-        }}
+        isNoteFieldDisabled={isNoteFieldDisabled}
+        noteMaxLength={noteMaxLength}
+        isElectronPanel={isElectronPanel}
+        settings={settings}
+        strikeFinishedLines={strikeFinishedLines}
       />
 
       {/* Touch has no Cmd+Enter (design review DR9): a 44px button under the
@@ -484,6 +460,104 @@ function EditorCategoryControls({
             {Math.round(opacity * 100)}%
           </span>
         </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The writing field plus its finished-line strike layer, sharing one set of text metrics.
+ * Split from {@link SharedEditorSurface} so the overlay can never drift from the field's
+ * padding, font and line height. The wrapper hides with Details while the field stays mounted.
+ *
+ * @param props - The field's controller props, visibility and the strike switch.
+ * @returns The positioned field wrapper.
+ * @example <EditorNoteField {...fieldProps} strikeFinishedLines />
+ */
+function EditorNoteField({
+  textareaProps,
+  isHidden,
+  noteInputId,
+  placeholder,
+  isNoteFieldDisabled,
+  noteMaxLength,
+  isElectronPanel,
+  settings,
+  strikeFinishedLines,
+}: Pick<
+  SharedEditorSurfaceProps,
+  'textareaProps' | 'isNoteFieldDisabled' | 'isElectronPanel' | 'settings'
+> & {
+  isHidden: boolean
+  noteInputId: string
+  placeholder: string
+  noteMaxLength: number
+  strikeFinishedLines: boolean
+}) {
+  const { liveEditorFontFamily, liveEditorFontSize, liveEditorTextColor } =
+    settings
+  // One source for the field's text metrics: the strike overlay must wrap exactly like the field.
+  const noteFieldPaddingClass = isElectronPanel ? 'p-3' : 'p-4'
+  const noteFieldFontClass = LIVE_EDITOR_FONT_FAMILY_CLASS[liveEditorFontFamily]
+  const noteFieldFontStyle: React.CSSProperties = {
+    fontSize: `${liveEditorFontSize}px`,
+    lineHeight: LIVE_EDITOR_LINE_HEIGHT,
+  }
+  // The wrapper positions the strike overlay over the field. It hides with Details
+  // while the field stays mounted, so its value, caret and IME state survive.
+  return (
+    <div
+      hidden={isHidden}
+      className="relative flex min-h-16 min-w-0 flex-1 flex-col"
+    >
+      <textarea
+        {...textareaProps}
+        id={noteInputId}
+        aria-label={NOTE_FIELD_LABEL}
+        placeholder={placeholder}
+        disabled={isNoteFieldDisabled}
+        maxLength={noteMaxLength}
+        // LiveEditor is messy quick-capture — the native red spellcheck underlines
+        // make unfinished / mixed-language fragments feel "corrected" and noisy, so
+        // we keep the writing surface calm by disabling them. Only the correction
+        // overlay is suppressed; typing / IME / save are unaffected (#128).
+        spellCheck={false}
+        // Token slots only (design review DR8): the web surface inherits the
+        // visitor's theme through --card / --border / --ring; the panel keeps its
+        // translucent look. The web stand-in is not dimmed while disabled — it is
+        // the first paint, not a loading state.
+        className={cn(
+          // No focus line on purpose (Raphtalia, 2026-09-05): the writing surface
+          // is the whole panel, so the caret is the focus cue. `outline-none`
+          // drops the UA ring on both hosts; keep it if you re-add a ring so the
+          // two never stack. Deliberate WCAG 2.4.7 trade-off for this textarea.
+          'min-h-16 min-w-0 flex-1 resize-none rounded-lg border outline-none',
+          noteFieldPaddingClass,
+          isElectronPanel
+            ? 'bg-background/60 disabled:opacity-50'
+            : 'border-border bg-card disabled:cursor-default',
+          // The saved face is a stock Tailwind utility (see the class map).
+          noteFieldFontClass,
+        )}
+        // Inline (not a useMemo) — a fresh style object on an intrinsic element is
+        // free. Spread NO_DRAG_REGION_STYLE first (load-bearing: keeps the
+        // textarea outside the frameless drag region), then layer the saved
+        // size and color. lineHeight is unitless so spacing scales with the size.
+        style={{
+          ...NO_DRAG_REGION_STYLE,
+          ...noteFieldFontStyle,
+          color: liveEditorTextColor,
+        }}
+      />
+      {strikeFinishedLines && (
+        <FinishedLineStrikes
+          text={
+            typeof textareaProps.value === 'string' ? textareaProps.value : ''
+          }
+          paddingClassName={noteFieldPaddingClass}
+          fontClassName={noteFieldFontClass}
+          fontStyle={noteFieldFontStyle}
+        />
       )}
     </div>
   )

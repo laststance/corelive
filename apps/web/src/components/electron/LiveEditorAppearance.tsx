@@ -259,7 +259,8 @@ export const LiveEditorAppearance =
               className="type-small leading-5 text-muted-foreground"
             >
               Once you finish a line, tuck it away after the undo moment — so
-              the page clears as you go. Off keeps every line in place.
+              the page clears as you go. Off keeps finished lines in place until
+              you delete them.
             </p>
           </div>
           <Switch

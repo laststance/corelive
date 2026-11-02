@@ -189,8 +189,8 @@ test('failed draft rescue retains the old cursor and its visible Retry replays t
   // Act
   const retry = await screen.findByRole('button', { name: 'Retry' })
 
-  // Assert
-  expect(retry).toBeVisible()
+  // Assert — sonner inserts the toast at opacity 0 and reveals it once its mount effect runs.
+  await waitFor(() => expect(retry).toBeVisible())
   expect(requestInputs).toEqual([41])
   expect(localStorage.getItem(cursorKey)).toBe('41')
 

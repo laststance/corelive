@@ -87,8 +87,9 @@ describe('LoginShell', () => {
       'If LiveEditor does not open, check your connection and try again.',
     )
     expect(screen.queryByTestId('oauth-buttons')).not.toBeInTheDocument()
+    // The async transition re-enables the button in a later commit, which can land after the click resolves.
     expect(
-      screen.getByRole('button', { name: 'Open LiveEditor' }),
+      await screen.findByRole('button', { name: 'Open LiveEditor' }),
     ).toBeEnabled()
   })
 
@@ -109,8 +110,9 @@ describe('LoginShell', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       "Couldn't open LiveEditor. Try again.",
     )
+    // The alert commits inside the action; the idle button only returns once the whole transition settles.
     expect(
-      screen.getByRole('button', { name: 'Open LiveEditor' }),
+      await screen.findByRole('button', { name: 'Open LiveEditor' }),
     ).toBeEnabled()
   })
 

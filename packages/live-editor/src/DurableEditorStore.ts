@@ -42,6 +42,8 @@ type PendingCommand = {
   submittedRows: DraftRow[]
   noticeTitle?: string
   rebaseAttempts?: number
+  /** Set when saveThrough resends this retained command after its reply was lost. */
+  isRetryAfterLostReply?: boolean
 }
 export type CompletionNotice = { id: string; title: string; undoUntil: number }
 export interface DurableEditorSnapshot {
@@ -286,6 +288,21 @@ export class DurableEditorStore {
     })
   }
 
+  /**
+   * Reports keep mode ("Clear finished lines" off) from the latest main snapshot.
+   * {@link DurableEditorStore.completeAt} reads it before queuing and again before sending.
+   * @returns
+   * - true: finished rows stay in place, so completing one again is refused
+   * - false: clear mode, or no prepared workspace yet
+   * @example if (intent.kind === 'checked' && this.isKeepMode()) return false
+   */
+  private isKeepMode(): boolean {
+    return (
+      this.main.phase === 'ready' &&
+      !this.main.workspace.preferences.settings.liveEditorClearOnComplete
+    )
+  }
+
   /** Captures a keep intent now; mark/clear/count/Undo feedback follows only a durable ACK.
    * @example await store.completeAt(textarea.selectionStart)
    */
@@ -294,6 +311,8 @@ export class DurableEditorStore {
     if (!buffer || buffer.composing || this.main.phase !== 'ready') return false
     const intent = getKeepLineIntent(rowsText(buffer.rows), caret)
     if (!intent) return false
+    // Keep mode leaves finished rows struck in place; Cmd+Enter on one is a silent no-op.
+    if (intent.kind === 'checked' && this.isKeepMode()) return false
     const row = buffer.rows[intent.lineIndex]
     if (!row || row.completionId || this.completing.has(row.id)) return false
     const generation = buffer.generation
@@ -327,6 +346,8 @@ export class DurableEditorStore {
             buffer,
             'The line changed before it could be completed. Try again.',
           )
+        // Settings can switch to keep mode while the save above is in flight; recheck before sending.
+        if (intent.kind === 'checked' && this.isKeepMode()) return false
         const result = await this.send({
           buffer,
           generation,
@@ -500,6 +521,7 @@ export class DurableEditorStore {
         uncertain.generation = generation
         uncertain.buffer.generation = generation
       }
+      uncertain.isRetryAfterLostReply = true
       if (!(await this.send(uncertain))) return false
     }
     if (
@@ -573,9 +595,26 @@ export class DurableEditorStore {
       )
     } finally {
       if (this.pending === pending) this.pending = null
+      this.releaseDeferredSnapshot()
       this.reconcileCurrent()
       this.publish()
     }
+  }
+
+  /**
+   * Hands a main snapshot held back during a command to {@link DurableEditorStore.receive} once the command settles.
+   * Only a successful reply consumed it before, so a definite refusal (e.g. `finished-line` right after a
+   * keep-mode switch) left the renderer on the older settings until the next notification.
+   * Called from {@link DurableEditorStore.send}'s settlement; `receive` defers it again while the owner is still
+   * uncertain or composing.
+   * @returns Nothing; may replace `this.main` and reconcile the current buffer.
+   * @example this.releaseDeferredSnapshot()
+   */
+  private releaseDeferredSnapshot(): void {
+    if (!this.deferred || this.pending) return
+    const deferred = this.deferred
+    this.deferred = null
+    this.receive(deferred)
   }
 
   /** Rebases a definite save rejection but retains the exact command after an uncertain storage outcome.
@@ -586,6 +625,13 @@ export class DurableEditorStore {
     reason: string,
   ): Promise<boolean> {
     const { buffer, generation, command } = pending
+    // Main refused completing an already finished row in keep mode: an intentional no-op, not a save failure.
+    if (reason === 'finished-line' && command.type === 'complete') {
+      this.uncertain.delete(buffer.ownerId)
+      // A fresh Cmd+Enter stays a no-op (false). A retried lost reply is now settled (true), so saveThrough
+      // continues to the save whose ACK clears the failure that lost reply recorded.
+      return pending.isRetryAfterLostReply === true
+    }
     // A definite revision conflict can rebase a save; an unknown result must keep its command identity.
     if (
       reason === 'revision-conflict' &&

@@ -137,6 +137,18 @@ describe('LiveEditorAppearance — editor presentation', () => {
     ).not.toBeChecked()
   })
 
+  test('describes keeping finished lines without promising a strike an older desktop app cannot draw', () => {
+    // Arrange / Act
+    renderLiveEditorAppearance()
+
+    // Assert — the copy stays true for every installed app version (updates can be postponed).
+    const description = screen.getByText(
+      'Once you finish a line, tuck it away after the undo moment — so the page clears as you go. Off keeps finished lines in place until you delete them.',
+    )
+    expect(description).toBeVisible()
+    expect(description.textContent).not.toMatch(/strike|struck/i)
+  })
+
   test('opts into clearing finished LiveEditor lines when its switch is turned on', async () => {
     // Arrange
     const { store, user } = renderLiveEditorAppearance()

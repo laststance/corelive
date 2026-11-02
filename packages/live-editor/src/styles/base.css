@@ -191,6 +191,7 @@
       background-color 200ms ease-out,
       border-color 200ms ease-out,
       color 200ms ease-out,
+      text-decoration-color 200ms ease-out,
       fill 200ms ease-out,
       stroke 200ms ease-out;
   }
