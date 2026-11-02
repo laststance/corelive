@@ -742,15 +742,21 @@ describe('offline writing and completion transactions', () => {
       service.execute(completionCommand(state, completionA, 1)),
     ).rejects.toMatchObject({ reason: 'invalid-row' })
 
-    // Deliberately rewriting the occurrence releases its duplicate guard. (In keep mode a pasted
-    // `- [x]` row is already finished and stays refused; see "keep mode leaves finished lines in place".)
+    // Deliberately rewriting the occurrence releases its duplicate guard, including pasted checked text.
+    // Clear mode is where a pasted `- [x]` row may complete; keep mode refuses it (see "keep mode leaves finished lines in place").
+    state = await reopened.execute({
+      type: 'preferences',
+      commandId: randomUUID(),
+      expectedRevision: state.preferences.revision,
+      patch: { liveEditorClearOnComplete: true },
+    })
     state = await reopened.execute({
       type: 'save',
       commandId: randomUUID(),
       categoryId: 1,
       baseRevision: state.drafts['1']!.revision,
       rows: state.drafts['1']!.rows.map((row, index) =>
-        index === 0 ? { id: row.id, text: '- [ ] A different task' } : row,
+        index === 0 ? { id: row.id, text: '- [x] A different task' } : row,
       ),
     })
     state = await reopened.execute(completionCommand(state, completionB))
