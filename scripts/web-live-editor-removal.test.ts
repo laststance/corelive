@@ -174,15 +174,17 @@ function findRemovalViolations(
 }
 
 /**
- * Extracts module specifiers from one source line (static, side-effect, dynamic and require imports).
+ * Extracts module specifiers from one source line (static, side-effect, dynamic and require imports, plus Vitest module mocks).
  * @param text - One line of source.
  * @returns The quoted specifiers on that line; comments and plain strings are ignored.
  * @example
  * importSpecifiers("import { x } from '@/lib/live-editor/constants'") // => ['@/lib/live-editor/constants']
+ * importSpecifiers("vi.mock('@/components/live-editor/LiveEditor')") // => ['@/components/live-editor/LiveEditor']
  */
 function importSpecifiers(text: string): string[] {
+  // `vi.mock('…')` and friends name a module as surely as an import does.
   const specifierPattern =
-    /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*)(['"])([^'"]+)\1/g
+    /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*|\bvi\.(?:mock|doMock|unmock|doUnmock|importActual|importMock)\s*(?:<[^>]*>\s*)?\(\s*)(['"])([^'"]+)\1/g
   return [...text.matchAll(specifierPattern)].map((found) => found[2] ?? '')
 }
 
@@ -314,13 +316,31 @@ describe('the removal guard explains each violation', () => {
     ])
   })
 
-  test('ignores redirect strings, the allowed files and non-source files', () => {
+  test('reports a Vitest mock of a deleted module at its line', () => {
+    // Arrange
+    const sources: Record<string, string> = {
+      'apps/web/src/hooks/useDraft.test.ts':
+        "import { test } from 'vitest'\nvi.mock('@/components/live-editor/LiveEditor', () => ({}))\nawait vi.importActual<typeof import('x')>('@/lib/live-editor/constants')\n",
+    }
+
+    // Act
+    const report = findRemovalViolations(
+      Object.keys(sources),
+      (file) => sources[file] ?? '',
+    ).map(formatViolation)
+
+    // Assert
+    expect(report).toEqual([
+      'WEB_LE_REMOVED_IMPORT apps/web/src/hooks/useDraft.test.ts:2 @/components/live-editor/LiveEditor — The web LiveEditor was removed in #215; edit apps/desktop/renderer or packages/live-editor instead, then rerun pnpm test:tools.',
+      'WEB_LE_REMOVED_IMPORT apps/web/src/hooks/useDraft.test.ts:3 @/lib/live-editor/constants — The web LiveEditor was removed in #215; edit apps/desktop/renderer or packages/live-editor instead, then rerun pnpm test:tools.',
+    ])
+  })
+
+  test('ignores redirect strings and non-source files', () => {
     // Arrange
     const sources: Record<string, string> = {
       'apps/web/next.config.js':
         "{ source: '/live-editor', destination: '/home', permanent: false }\n",
-      'apps/web/src/nextConfigRedirects.test.ts':
-        "import nextConfig from '../next.config.js' // app/live-editor/ is gone\n",
       'apps/web/public/notes.txt': 'preload-live-editor\n',
     }
 
@@ -332,6 +352,28 @@ describe('the removal guard explains each violation', () => {
 
     // Assert
     expect(report).toEqual([])
+  })
+
+  test('skips an allowed file even when it names a removed module and the panel preload', () => {
+    // Arrange: the same line would be two violations in any other file.
+    const violatingLine =
+      "import { NOTE_KEY } from '@/lib/live-editor/constants' // preload-live-editor\n"
+    const sources: Record<string, string> = {
+      'apps/web/src/nextConfigRedirects.test.ts': violatingLine,
+      'apps/web/src/hooks/useDraft.ts': violatingLine,
+    }
+
+    // Act
+    const report = findRemovalViolations(
+      Object.keys(sources),
+      (file) => sources[file] ?? '',
+    ).map((violation) => `${violation.code} ${violation.file}`)
+
+    // Assert
+    expect(report).toEqual([
+      'WEB_LE_REMOVED_IMPORT apps/web/src/hooks/useDraft.ts',
+      'WEB_LE_BUILD_ENTRY apps/web/src/hooks/useDraft.ts',
+    ])
   })
 
   test('fails with WEB_LE_GIT_UNAVAILABLE and the git diagnostics when files cannot be listed', () => {
