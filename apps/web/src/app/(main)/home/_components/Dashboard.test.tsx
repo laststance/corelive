@@ -1,4 +1,4 @@
-// Value: protects=Home heatmap/journal refresh while the desktop app writes elsewhere; fails_when=Dashboard stops mounting useDashboardFreshness (silent staleness); why_new=hook test never renders Dashboard; seam=none; no_claim=card layout and loading copy
+// Value: protects=Home heatmap refresh while the desktop app writes elsewhere; fails_when=Dashboard stops mounting useDashboardFreshness (silent staleness); why_new=hook test never renders Dashboard; seam=none; no_claim=card layout, loading copy and the journal change check (hook test)
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
@@ -39,13 +39,13 @@ afterEach(() => {
 })
 
 describe('Dashboard', () => {
-  test('re-reads the completed journal on its own while Home stays open', async () => {
+  test('re-reads the activity heatmap on its own while Home stays open', async () => {
     // Arrange
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: Infinity } },
     })
-    const journalKey = orpc.completed.journal.key()
-    client.setQueryData(journalKey, { fixture: 'old journal' })
+    const heatmapKey = orpc.completed.heatmap.key()
+    client.setQueryData(heatmapKey, { fixture: 'old heatmap' })
     render(
       <QueryClientProvider client={client}>
         <Dashboard />
@@ -53,7 +53,7 @@ describe('Dashboard', () => {
     )
     await act(async () => {})
     expect(screen.getByText('journal-card')).toBeVisible()
-    expect(client.getQueryState(journalKey)?.isInvalidated).toBe(false)
+    expect(client.getQueryState(heatmapKey)?.isInvalidated).toBe(false)
 
     // Act
     await act(async () => {
@@ -61,6 +61,6 @@ describe('Dashboard', () => {
     })
 
     // Assert
-    expect(client.getQueryState(journalKey)?.isInvalidated).toBe(true)
+    expect(client.getQueryState(heatmapKey)?.isInvalidated).toBe(true)
   })
 })

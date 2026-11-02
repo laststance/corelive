@@ -11,8 +11,8 @@ import {
 } from './useDashboardFreshness'
 
 const INTERVAL_MS = 1_000
-/** invalidateCategoryViews invalidates category list, completed.* and home bootstrap. */
-const INVALIDATIONS_PER_REFRESH = 3
+/** One refresh invalidates the category list, heatmap, day detail and home bootstrap. */
+const INVALIDATIONS_PER_REFRESH = 4
 
 /**
  * Pins `document.visibilityState` for the spec.
@@ -47,6 +47,31 @@ function mountFreshness(intervalMs: number = INTERVAL_MS): QueryClient {
   return client
 }
 
+/**
+ * Makes the next refresh of one cached view come back with different data, as a new completion would.
+ * @param client - The client the hook refreshes.
+ * @param changedKey - The view whose refetch returns `changedData`.
+ * @param changedData - What the refetch stores.
+ * @returns Nothing; later invalidations pass through to the real client.
+ * @example
+ * changeDataOnRefresh(client, orpc.completed.heatmap.key(), { total: 2 })
+ */
+function changeDataOnRefresh(
+  client: QueryClient,
+  changedKey: readonly unknown[],
+  changedData: unknown,
+): void {
+  const invalidate = client.invalidateQueries.bind(client)
+  vi.spyOn(client, 'invalidateQueries').mockImplementation(
+    async (filters, options) => {
+      // Stand in for the refetch: the server answers with newer data.
+      if (JSON.stringify(filters?.queryKey) === JSON.stringify(changedKey))
+        client.setQueryData(changedKey, changedData)
+      return invalidate(filters, options)
+    },
+  )
+}
+
 beforeEach(() => {
   vi.useFakeTimers()
   setVisibility('visible')
@@ -65,11 +90,63 @@ describe('useDashboardFreshness', () => {
     expect(DASHBOARD_REFRESH_INTERVAL_MS).toBe(15_000)
   })
 
-  test('marks completed-journal queries stale after one visible interval', async () => {
+  test('marks the activity heatmap stale after one visible interval', async () => {
+    // Arrange
+    const client = mountFreshness()
+    const heatmapKey = orpc.completed.heatmap.key()
+    client.setQueryData(heatmapKey, { total: 1 })
+
+    // Act
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(INTERVAL_MS)
+    })
+
+    // Assert
+    expect(client.getQueryState(heatmapKey)?.isInvalidated).toBe(true)
+  })
+
+  test('leaves the loaded journal pages alone when no completion moved', async () => {
     // Arrange
     const client = mountFreshness()
     const journalKey = orpc.completed.journal.key()
+    client.setQueryData(orpc.completed.heatmap.key(), { total: 1 })
+    client.setQueryData(journalKey, { fixture: 'three loaded pages' })
+
+    // Act
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(INTERVAL_MS)
+    })
+
+    // Assert
+    expect(client.getQueryState(journalKey)?.isInvalidated).toBe(false)
+  })
+
+  test('re-reads the journal when the refreshed heatmap shows a new completion', async () => {
+    // Arrange
+    const client = mountFreshness()
+    const heatmapKey = orpc.completed.heatmap.key()
+    const journalKey = orpc.completed.journal.key()
+    client.setQueryData(heatmapKey, { total: 1 })
     client.setQueryData(journalKey, { fixture: 'old journal' })
+    changeDataOnRefresh(client, heatmapKey, { total: 2 })
+
+    // Act
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(INTERVAL_MS)
+    })
+
+    // Assert
+    expect(client.getQueryState(journalKey)?.isInvalidated).toBe(true)
+  })
+
+  test('re-reads the journal when the refreshed category list changed', async () => {
+    // Arrange
+    const client = mountFreshness()
+    const categoryKey = orpc.category.list.key()
+    const journalKey = orpc.completed.journal.key()
+    client.setQueryData(categoryKey, { categories: ['General', 'Reading'] })
+    client.setQueryData(journalKey, { fixture: 'old journal' })
+    changeDataOnRefresh(client, categoryKey, { categories: ['General'] })
 
     // Act
     await act(async () => {
@@ -84,8 +161,8 @@ describe('useDashboardFreshness', () => {
     // Arrange
     setVisibility('hidden')
     const client = mountFreshness()
-    const journalKey = orpc.completed.journal.key()
-    client.setQueryData(journalKey, { fixture: 'old journal' })
+    const heatmapKey = orpc.completed.heatmap.key()
+    client.setQueryData(heatmapKey, { total: 1 })
 
     // Act
     await act(async () => {
@@ -93,14 +170,14 @@ describe('useDashboardFreshness', () => {
     })
 
     // Assert
-    expect(client.getQueryState(journalKey)?.isInvalidated).toBe(false)
+    expect(client.getQueryState(heatmapKey)?.isInvalidated).toBe(false)
   })
 
   test('refreshes when the window regains focus', async () => {
     // Arrange
     const client = mountFreshness()
-    const journalKey = orpc.completed.journal.key()
-    client.setQueryData(journalKey, { fixture: 'old journal' })
+    const heatmapKey = orpc.completed.heatmap.key()
+    client.setQueryData(heatmapKey, { total: 1 })
 
     // Act
     await act(async () => {
@@ -108,14 +185,14 @@ describe('useDashboardFreshness', () => {
     })
 
     // Assert
-    expect(client.getQueryState(journalKey)?.isInvalidated).toBe(true)
+    expect(client.getQueryState(heatmapKey)?.isInvalidated).toBe(true)
   })
 
   test('refreshes when the tab becomes visible again', async () => {
     // Arrange
     const client = mountFreshness()
-    const journalKey = orpc.completed.journal.key()
-    client.setQueryData(journalKey, { fixture: 'old journal' })
+    const heatmapKey = orpc.completed.heatmap.key()
+    client.setQueryData(heatmapKey, { total: 1 })
 
     // Act
     await act(async () => {
@@ -123,7 +200,7 @@ describe('useDashboardFreshness', () => {
     })
 
     // Assert
-    expect(client.getQueryState(journalKey)?.isInvalidated).toBe(true)
+    expect(client.getQueryState(heatmapKey)?.isInvalidated).toBe(true)
   })
 
   test('drops interval, focus and visibility triggers that arrive during one pending refresh', async () => {
