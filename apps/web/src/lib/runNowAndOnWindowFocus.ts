@@ -7,21 +7,27 @@
  * {@link usePanelSetting} and {@link LiveEditorSettings}.
  *
  * @param run - Work to repeat (typically a native preference re-read). Receives
- *   `isStale`, which turns true once the returned cleanup has run so late
- *   async results can be discarded.
- * @returns Cleanup that detaches the focus listener and marks runs stale.
+ *   `isStale`, which turns true once a newer run has started or the returned
+ *   cleanup has run, so a slower earlier read can never overwrite a newer one.
+ * @returns Cleanup that detaches the focus listener and marks every run stale.
  * @example
  * useCycleEffect(() => runNowAndOnWindowFocus((isStale) => void reload(isStale)), [])
  */
 export function runNowAndOnWindowFocus(
   run: (isStale: () => boolean) => void,
 ): () => void {
-  let stale = false
-  const runOnce = (): void => run(() => stale)
+  let isCleanedUp = false
+  let latestRunId = 0
+  const runOnce = (): void => {
+    latestRunId += 1
+    const runId = latestRunId
+    // Only the most recent run may apply its result.
+    run(() => isCleanedUp || runId !== latestRunId)
+  }
   runOnce()
   window.addEventListener('focus', runOnce)
   return (): void => {
-    stale = true
+    isCleanedUp = true
     window.removeEventListener('focus', runOnce)
   }
 }
