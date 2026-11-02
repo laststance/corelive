@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.28.0] - 2026-11-02
+
+### Added
+
+- When a palette without a System mode is active, Settings explains how to follow your device's light or dark setting. Choose the Default palette, then select System.
+
+### Changed
+
+- CoreLive now starts in the neutral shadcn Default palette and follows your Mac's light or dark setting. Warm Cathedral, the amber palette, is still available in Settings under Appearance and Palette.
+- If you used Warm Cathedral before this update, CoreLive moves you to Default once. To bring it back, choose Warm Cathedral in Settings. Stored theme names change too: Default is now `light` and `dark` (the old `default-light` and `default-dark` still work), and Warm Cathedral is `cathedral-light` and `cathedral-dark`.
+- The sign-in window and its ribbon follow the active theme, so a dark Mac no longer shows a white window before sign-in.
+- The LiveEditor text color preset "Amber" is now "Accent" and uses your palette's accent color.
+
+### Fixed
+
+- Switching themes in the desktop LiveEditor now fades smoothly instead of snapping. With Reduce Motion on, it switches instantly.
+- The screen shown when CoreLive cannot load now uses neutral colors that match the default theme.
+
 ## [0.27.0] - 2026-11-02
 
 ### Added
