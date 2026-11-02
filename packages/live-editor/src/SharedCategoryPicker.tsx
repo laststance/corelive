@@ -160,7 +160,7 @@ export function SharedCategoryPicker({
               }
             />
             <CommandList
-              className="max-h-none min-h-0 flex-1 overflow-hidden [&_[cmdk-list-sizer]]:flex [&_[cmdk-list-sizer]]:h-full [&_[cmdk-list-sizer]]:flex-col" // eslint-disable-line dslint/token-only -- cmdk internal list layout keeps actions visible
+              className="max-h-none min-h-0 flex-1 overflow-hidden [&_[cmdk-list-sizer]]:flex [&_[cmdk-list-sizer]]:h-full [&_[cmdk-list-sizer]]:flex-col" // Keep category actions visible while the category list scrolls.
             >
               <div className="min-h-0 flex-1 overflow-y-auto">
                 {isLoading && (

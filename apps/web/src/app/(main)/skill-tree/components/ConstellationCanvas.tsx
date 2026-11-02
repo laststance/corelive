@@ -124,7 +124,6 @@ export const ConstellationCanvas = function ConstellationCanvas({
     // comment in SkillNodeCircle.tsx (the <title> child there is the
     // SVG-AAM canonical accessible-name source for each button).
     <svg
-      // eslint-disable-next-line dslint/token-only -- skill-tree scoped CSS class from styles.css Task 11
       className="st-canvas-bg"
       viewBox={`0 0 ${VIEWBOX} ${VIEWBOX}`}
       width="100%"
@@ -172,7 +171,6 @@ export const ConstellationCanvas = function ConstellationCanvas({
             cy={y}
             r={2}
             fill="var(--st-gold)"
-            // eslint-disable-next-line dslint/token-only -- skill-tree scoped CSS class from styles.css Task 11
             className={`st-twinkle-star ${
               i === 1
                 ? 'st-twinkle-star--delay-1'

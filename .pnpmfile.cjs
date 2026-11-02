@@ -12,7 +12,6 @@ const compilerApiConsumers = new Set([
   'typescript-eslint',
   'ts-api-utils',
   'ts-node',
-  'tsup',
 ])
 
 module.exports = {

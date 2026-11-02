@@ -124,8 +124,8 @@ export const ThemeSelector = function ThemeSelector() {
                     className="relative block h-full min-w-0 cursor-pointer"
                   >
                     {/* sr-only radio is the `peer`; the card below shows its
-                           keyboard focus via peer-focus-visible (standard variant,
-                           so it stays token-only / dslint-clean). */}
+                           keyboard focus via peer-focus-visible (a standard
+                           Tailwind variant, no arbitrary selector). */}
                     <RadioGroupItem
                       id={`theme-family-${familyId}`}
                       value={familyId}

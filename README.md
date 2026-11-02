@@ -11,7 +11,7 @@ CoreLive is a personal task tracker and LiveEditor archive whose centerpiece is 
 
 ## Documentation
 
-The design system (typography, color, motion, voice) is in **[`DESIGN.md`](DESIGN.md)**. The product roadmap is in [`docs/ROADMAP.md`](docs/ROADMAP.md), and per-feature design notes live under [`docs/design/`](docs/design/). See [`docs/settings-audit.md`](docs/settings-audit.md) for settings consumers, [`AGENTS.md`](AGENTS.md) for development and same-PR resolution rules, and the [design-system lint package](packages/eslint-plugin-dslint/README.md) for its rules. Release changes are recorded in [`CHANGELOG.md`](CHANGELOG.md).
+The design system (typography, color, motion, voice) is in **[`DESIGN.md`](DESIGN.md)**. The product roadmap is in [`docs/ROADMAP.md`](docs/ROADMAP.md), and per-feature design notes live under [`docs/design/`](docs/design/). See [`docs/settings-audit.md`](docs/settings-audit.md) for settings consumers, [`AGENTS.md`](AGENTS.md) for development and same-PR resolution rules. Release changes are recorded in [`CHANGELOG.md`](CHANGELOG.md).
 
 Categories organize writing and completed history in two levels:
 
@@ -35,7 +35,7 @@ This project supports:
 ### Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
-- [Node.js](https://nodejs.org/) (24.20.0; pinned in `mise.toml` and CI)
+- [Node.js](https://nodejs.org/) (26.12.1; pinned in `mise.toml` and CI)
 - [mise](https://mise.jdx.dev/getting-started.html), installed and activated in your shell so all development commands use the pinned Node.js version
 - [pnpm](https://pnpm.io/)
 - [Clerk](https://clerk.com/)
@@ -47,7 +47,7 @@ This project supports:
 2. Run `mise install` to install the pinned Node.js version
 3. Run `mise exec -- pnpm install` to install the dependencies
 
-The commands below assume mise is activated in your shell. After `mise install`, confirm that `node --version` prints `v24.20.0` before continuing.
+The commands below assume mise is activated in your shell. After `mise install`, confirm that `node --version` prints `v26.12.1` before continuing.
 
 ### Headless development and QA
 
@@ -63,15 +63,14 @@ One root pnpm lockfile owns all workspaces. Root commands delegate to their app;
 `pnpm dev` starts only Web, and `pnpm electron:dev` starts Web plus desktop.
 Web-specific framework instructions are in [`apps/web/AGENTS.md`](apps/web/AGENTS.md).
 
-| Directory                       | Responsibility                                                              |
-| ------------------------------- | --------------------------------------------------------------------------- |
-| `apps/web`                      | Next.js, oRPC, Drizzle schema/migrations, renderer and DB tests             |
-| `apps/desktop`                  | Electron main/preload, macOS packaging and native unit tests                |
-| `packages/desktop-contract`     | Browser-safe IPC/preload contracts and native constants used by both apps   |
-| `packages/live-editor`          | Shared editor/input/category/theme presentation and durable desktop adapter |
-| `packages/eslint-plugin-dslint` | Design-system ESLint rules                                                  |
-| `assets`                        | Canonical icons and shortcut sounds; app outputs are generated              |
-| `scripts`                       | Workspace, asset, environment and Headless QA orchestration                 |
+| Directory                   | Responsibility                                                              |
+| --------------------------- | --------------------------------------------------------------------------- |
+| `apps/web`                  | Next.js, oRPC, Drizzle schema/migrations, renderer and DB tests             |
+| `apps/desktop`              | Electron main/preload, macOS packaging and native unit tests                |
+| `packages/desktop-contract` | Browser-safe IPC/preload contracts and native constants used by both apps   |
+| `packages/live-editor`      | Shared editor/input/category/theme presentation and durable desktop adapter |
+| `assets`                    | Canonical icons and shortcut sounds; app outputs are generated              |
+| `scripts`                   | Workspace, asset, environment and Headless QA orchestration                 |
 
 Run `pnpm install --frozen-lockfile` from the root. App prebuild hooks generate
 icons/sounds even in a clean checkout. `pnpm clean` removes compiled outputs;
@@ -199,6 +198,8 @@ Run `pnpm validate` before committing. Alongside tests, lint, the build, and typ
 | `pnpm fallow:health`    | Function complexity and estimated change risk         |
 
 The same three checks run for pull requests and pushes to `main` in `.github/workflows/fallow.yml`, following the setup in [Skills Desktop](https://github.com/laststance/skills-desktop). Fallow is pinned in `package.json`; `.fallowrc.jsonc` uses its installed schema and documents the Electron entry points, generated files, indirect runtime dependencies, and component-catalog exports. Tests remain in the dependency graph, but their repeated fixtures are excluded from duplication checks. Complexity limits are 40 cyclomatic, 40 cognitive, and 120 CRAP, using Fallow's static coverage estimate rather than a machine-local coverage report.
+
+`pnpm lint` does not check Tailwind class names: arbitrary values and non-token classes are not linted. Follow [`DESIGN.md`](DESIGN.md) for tokens; `pnpm theme:check` only compares the generated theme CSS.
 
 ### Ngrok
 

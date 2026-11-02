@@ -18,11 +18,6 @@ const owners = [
   },
   { prefix: 'apps/web/', directory: 'apps/web', config: 'vitest.config.ts' },
   {
-    prefix: 'packages/eslint-plugin-dslint/',
-    directory: 'packages/eslint-plugin-dslint',
-    config: 'vitest.config.ts',
-  },
-  {
     prefix: 'packages/desktop-contract/',
     directory: 'packages/desktop-contract',
     config: null,

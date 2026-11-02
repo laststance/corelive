@@ -685,7 +685,7 @@ function CategoryDeletion({
               void confirm()
             }}
             disabled={busy || !destination || conflicts.length > 0}
-            className="text-destructive-foreground hover:bg-destructive/90 bg-destructive" // eslint-disable-line dslint/token-only -- inherited shadcn destructive token
+            className="text-destructive-foreground hover:bg-destructive/90 bg-destructive"
           >
             {state.rescuing
               ? 'Moving writing…'
@@ -755,7 +755,7 @@ export function CategoryManageDialog({
             )
               event.preventDefault()
           }}
-          className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)] sm:max-w-md" // eslint-disable-line dslint/token-only -- viewport header and scroll body
+          className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)] sm:max-w-md" // Keep the header visible and scroll the body within the viewport.
         >
           <DialogHeader>
             <DialogTitle>Manage Categories</DialogTitle>

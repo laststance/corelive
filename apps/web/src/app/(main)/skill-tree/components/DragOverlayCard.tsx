@@ -21,7 +21,6 @@ export const DragOverlayCard = function DragOverlayCard({
 }) {
   return (
     <div
-      // eslint-disable-next-line dslint/token-only -- skill-tree card dimensions not in design tokens
       className="pointer-events-none min-w-[200px] max-w-[260px] rounded-lg border border-[var(--st-gold)] bg-[var(--st-surface)] p-3 text-left text-sm text-[var(--st-cream)] shadow-2xl"
       style={{ transform: 'rotate(-2deg)' }}
     >

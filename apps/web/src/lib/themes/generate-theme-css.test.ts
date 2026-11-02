@@ -288,7 +288,7 @@ describe('deriveThemeCss / generateThemesCss — CSS emission contract', () => {
   })
 })
 
-describe('generateThemesCss — Default family block layout (separate blocks, never selector lists)', () => {
+describe('generateThemesCss — Default family block layout', () => {
   /** Splits generated CSS into its top-level `selector {` heads, in order. */
   const blockHeads = (css: string): string[] =>
     css
@@ -311,16 +311,6 @@ describe('generateThemesCss — Default family block layout (separate blocks, ne
       ":root[data-theme='default-dark']",
       '@media (prefers-color-scheme: dark)',
     ])
-  })
-
-  test('never joins selectors with a comma so the dslint parser tags each block correctly', () => {
-    // Arrange / Act
-    const headsWithComma = blockHeads(registryCss).filter((head) =>
-      head.includes(','),
-    )
-
-    // Assert
-    expect(headsWithComma).toEqual([])
   })
 
   test('declares color-scheme light on every light Default block and dark on every dark one', () => {

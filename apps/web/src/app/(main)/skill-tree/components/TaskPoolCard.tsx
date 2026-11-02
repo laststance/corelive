@@ -41,7 +41,6 @@ export const TaskPoolCard = function TaskPoolCard({
       ref={ref}
       type="button"
       tabIndex={0}
-      // eslint-disable-next-line dslint/token-only -- skill-tree card dimensions not in design tokens
       className="min-w-[200px] max-w-[260px] rounded-lg border border-[var(--st-border-rune)] bg-[var(--st-surface)] p-3 text-left text-sm text-[var(--st-cream)] shadow-md transition-shadow hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[var(--st-arcane)]"
       style={style}
       aria-label={`Completed task: ${text}. Press space to pick up.`}

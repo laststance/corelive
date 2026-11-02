@@ -16,8 +16,8 @@ verification records; they are not current requirements or proof of new changes.
 ## Start the environment
 
 The workspace uses TypeScript 7 for application type checks and Next.js builds.
-`.pnpmfile.cjs` gives compiler-API consumers (including typescript-eslint and
-tsup) their own TypeScript 6 dependency until those tools support the native API.
+`.pnpmfile.cjs` gives compiler-API consumers (including typescript-eslint) their
+own TypeScript 6 dependency until those tools support the native API.
 The Electron loader fixture uses `@typescript/typescript6` for transpilation.
 `scripts/typescript-toolchain.test.ts` verifies the native compiler and the
 private compiler APIs together. Keep the hook in dependency installation inputs.
