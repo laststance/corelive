@@ -11,7 +11,7 @@ Design record: [docs/design/roadmap-2026-09-no-login-live-editor.md](design/road
 ## Now
 
 - **Removed by #215 (2026-11-03):** the public `/write` route, the web `LiveEditorAPI` host and local store (PR-1), and `completed.importLocal` + `LocalKeepMergeSync` (PR-3). The desktop app is the only writing surface; Home shows each line checked off there.
-- **PR-2 — `TodayEmber` + `useTodayKeeps()` — shipped and removed 2026-09-05.** The one cell above the editor ("N things kept today" / "Nothing kept yet today") was cut as unnecessary the day it shipped. Nothing replaces it: no count sits above the editor, at 0 or at N. Keeps still land in the device store / the account exactly as PR-1 and PR-3 describe.
+- **PR-2 — web `TodayEmber` + `useTodayKeeps()` — shipped and removed 2026-09-05.** The web editor's one cell above the editor ("N things kept today" / "Nothing kept yet today") was cut as unnecessary the day it shipped, and the web editor itself is gone since #215. The desktop panel keeps its own Today Ember above the native editor, shown when Settings ▸ LiveEditor ▸ Show Today Ember is on (default off). Keeps land in the desktop app's local workspace and sync to the account.
 
 ## Next
 
