@@ -37,7 +37,7 @@ export function isTrustedAppNavigation(
  * {@link setupSecurity} permits this document redirect while {@link exposeTrustedBridge} withholds native APIs.
  * The production Frontend API host is verified from the public Clerk key on corelive.app.
  * @returns Whether this main-frame redirect is a bounded Clerk handshake.
- * @example isTrustedClerkHandshake('https://clerk.corelive.app/v1/client/handshake?redirect_url=https%3A%2F%2Fcorelive.app%2Flive-editor', 'https://corelive.app') // true
+ * @example isTrustedClerkHandshake('https://clerk.corelive.app/v1/client/handshake?redirect_url=https%3A%2F%2Fcorelive.app%2Fhome', 'https://corelive.app') // true
  */
 export function isTrustedClerkHandshake(
   navigationUrl: string,

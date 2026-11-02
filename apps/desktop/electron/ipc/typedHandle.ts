@@ -25,16 +25,15 @@ import type { ArgsOf } from './types'
  *   typedHandle('app-version', () => app.getVersion())
  *
  *   // Single-arg handler
- *   typedHandle('live-editor-note-get', (_event, categoryId) => {
- *     // categoryId: number
- *     return getLiveEditorNote(configManager, categoryId)
+ *   typedHandle('live-editor-window-set-opacity', (_event, value) => {
+ *     // value: number
+ *     return applyOpacity(value)
  *   })
  *
  *   // Tuple-arg handler (multiple positional args)
- *   typedHandle('live-editor-note-set', (_event, categoryId, text) => {
- *     // categoryId: number; text: string
- *     setLiveEditorNote(configManager, categoryId, text)
- *     return true
+ *   typedHandle('config-set', (_event, path, value) => {
+ *     // path: string; value: unknown
+ *     return configManager.set(path, value)
  *   })
  */
 export function typedHandle<C extends IPCChannel>(

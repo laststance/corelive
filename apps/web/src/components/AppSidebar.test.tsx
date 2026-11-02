@@ -31,25 +31,7 @@ vi.mock('@/components/auth/ElectronLoginForm', () => ({
 }))
 
 describe('AppSidebar', () => {
-  test('offers a way into LiveEditor, the only surface that creates tasks', () => {
-    // Arrange
-    render(
-      <SidebarProvider>
-        <AppSidebar />
-      </SidebarProvider>,
-    )
-
-    // Act
-    const liveEditorLink = screen.getByRole('link', { name: /LiveEditor/i })
-
-    // Assert: without this entry a browser user has no route to LiveEditor at
-    // all — Home is a read-only dashboard since the Todo write paths were
-    // retired, so the sidebar is the only inbound link. It points at the public
-    // web host (/write); /live-editor is the Electron panel's protected route.
-    expect(liveEditorLink).toHaveAttribute('href', '/write')
-  })
-
-  test('keeps Home and Skill Tree reachable alongside LiveEditor', () => {
+  test('keeps Home and Skill Tree reachable and offers no LiveEditor entry', () => {
     // Arrange
     render(
       <SidebarProvider>
@@ -64,5 +46,6 @@ describe('AppSidebar', () => {
     // Assert
     expect(home).toHaveAttribute('href', '/home')
     expect(skillTree).toHaveAttribute('href', '/skill-tree')
+    expect(screen.queryByRole('link', { name: /LiveEditor/i })).toBeNull()
   })
 })

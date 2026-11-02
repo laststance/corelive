@@ -386,17 +386,18 @@ export class DeepLinkManager {
   }
 
   /**
-   * Handle create task action — opens LiveEditor, the only task-creation
-   * surface left after the Todo write vertical was retired. NO task is created
-   * here (the user types it in LiveEditor), so this stays a navigation, not a
-   * mutation. The link's `title`/`description`/`priority`/`dueDate` params are
-   * intentionally dropped: they pre-filled a create form that no longer exists,
-   * and LiveEditor is a free-text editor with no fields to seed.
+   * Handle create task action — surfaces the desktop LiveEditor panel, the only
+   * task-writing surface. It adds NO reveal of its own: {@link DeepLinkManager.handleDeepLink}
+   * already calls {@link DeepLinkManager.ensureWindowVisible} once for every non-OAuth link, which
+   * shows the panel (or the login window while signed out). NO task is created
+   * (the user types it in LiveEditor). The link's `title`/`description`/
+   * `priority`/`dueDate` params are intentionally dropped: LiveEditor is a
+   * free-text editor with no fields to seed.
    *
    * @param _params - Pre-decoded URL parameters; unused, see above.
    */
   async handleCreateAction(_params: Record<string, string>): Promise<void> {
-    this.openInBrowser('/live-editor')
+    log.debug('Create link: LiveEditor surfaced by ensureWindowVisible')
   }
 
   /**

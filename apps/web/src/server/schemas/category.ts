@@ -21,6 +21,23 @@ export {
 } from '@corelive/desktop-contract/category'
 
 /**
+ * Machine-readable reasons carried in `ORPCError.data.reason` when
+ * `category.delete` answers `NOT_FOUND`, so the manager dialog can tell a
+ * vanished source from a vanished destination without parsing messages.
+ * Raised by {@link deleteCategory}; read by the category manager UI.
+ * @example
+ * throw new ORPCError('NOT_FOUND', { data: { reason: CATEGORY_DELETE_NOT_FOUND_REASON.source } })
+ */
+export const CATEGORY_DELETE_NOT_FOUND_REASON = {
+  source: 'CATEGORY_NOT_FOUND',
+  destination: 'DESTINATION_NOT_FOUND',
+} as const
+
+/** Union of the `data.reason` values `category.delete` attaches to `NOT_FOUND`. */
+export type CategoryDeleteNotFoundReason =
+  (typeof CATEGORY_DELETE_NOT_FOUND_REASON)[keyof typeof CATEGORY_DELETE_NOT_FOUND_REASON]
+
+/**
  * Schema for creating a new category.
  * @param name - Category display name (1-30 chars)
  * @param color - One of the predefined color options (defaults to 'blue')

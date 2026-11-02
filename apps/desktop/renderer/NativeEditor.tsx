@@ -312,8 +312,6 @@ function PreparedEditor({
         <SharedCategoryPicker
           categories={workspace.categories}
           activeCategoryId={workspace.selectedCategoryId}
-          isSignedIn
-          isElectronPanel
           onCategoryValueChange={(value) => void select(Number(value))}
           actionsDisabled={!online}
           onManage={() => void run(async () => store.host.manageCategories())}
@@ -334,7 +332,6 @@ function PreparedEditor({
           />
         ) : undefined
       }
-      storageAvailability="ok"
       nativeHeader={<NativeHeaderActions {...statusProps} />}
       nativeFooter={
         settings.liveEditorShowStatusBar ? (
@@ -358,11 +355,7 @@ function PreparedEditor({
       }
       isCategoryListPending={false}
       isCategoryListError={false}
-      isElectronPanel
       isMounted
-      isSignedIn
-      isAuthLoaded
-      isSignedOutWeb={false}
       isLiveEditorConfigReady
       activeCategoryId={workspace.selectedCategoryId}
       isNoteFieldDisabled={state.exitPending}

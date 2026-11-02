@@ -49,7 +49,7 @@ pnpm qa:browser screenshot
 pnpm qa:browser close
 ```
 
-`open` defaults to the public `http://localhost:4991/write` page. Start Next.js
+`open` defaults to the public landing page `http://localhost:4991/`. Start Next.js
 alone for ordinary development; `pnpm dev` does not start Electron. The wrapper
 uses the repo-local CLI, explicit headless Chromium, an in-memory profile, and a
 session name derived from the absolute checkout path. Sibling worktrees therefore
@@ -72,14 +72,17 @@ Do not use those scripts to launch additional browsers or operate the host.
 ## Operate the page and capture motion
 
 Read a fresh snapshot before using its element references. For example, replace
-`e12` with the current textbox reference:
+`e12` with the current reference of the landing page's **Login** link:
 
 ```sh
-pnpm qa:browser fill e12 'A small local win'
-pnpm qa:browser press Meta+Enter
 pnpm qa:browser snapshot
-pnpm qa:browser reload
+pnpm qa:browser click e12
+pnpm qa:browser snapshot
+pnpm qa:browser goto http://localhost:4991/write   # redirects to /home, then /login while signed out
 ```
+
+Writing happens only in the desktop app; exercise the LiveEditor renderer through
+`pnpm qa:offline-editor` below.
 
 Screenshots, snapshots, and CLI artifacts go under the ignored
 `.gstack/headless-browser/` directory. Record a dynamic flow rather than infer its

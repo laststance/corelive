@@ -9,7 +9,11 @@ import {
   invalidateCategoryViews,
 } from '@/lib/category-sync-channel'
 import { orpc } from '@/lib/orpc/client-query'
-import type { CategoryWithCount } from '@/server/schemas/category'
+import {
+  CATEGORY_DELETE_NOT_FOUND_REASON,
+  type CategoryDeleteNotFoundReason,
+  type CategoryWithCount,
+} from '@/server/schemas/category'
 
 /**
  * Response structure for category list queries.
@@ -41,6 +45,32 @@ const notifyCategoryWriteFailed = (error: unknown): void => {
       ? error.message
       : CATEGORY_WRITE_FALLBACK_MESSAGE,
   )
+}
+
+/**
+ * Reads which category a failed `category.delete` could not find.
+ *
+ * Lets {@link useCategoryMutations} stay silent for a retried delete whose first
+ * attempt already succeeded, and lets the delete dialog tell that case apart
+ * from a vanished destination. Called from the delete mutation's `onError` and
+ * the delete dialog's catch block.
+ *
+ * @param error - Whatever the delete mutation rejected with.
+ * @returns The server-declared reason, or null for any other failure.
+ * @example
+ * getCategoryDeleteNotFoundReason(error) // => 'CATEGORY_NOT_FOUND'
+ */
+export function getCategoryDeleteNotFoundReason(
+  error: unknown,
+): CategoryDeleteNotFoundReason | null {
+  if (!(error instanceof ORPCError) || error.code !== 'NOT_FOUND') return null
+  const data: unknown = error.data
+  if (typeof data !== 'object' || data === null || !('reason' in data))
+    return null
+  return data.reason === CATEGORY_DELETE_NOT_FOUND_REASON.source ||
+    data.reason === CATEGORY_DELETE_NOT_FOUND_REASON.destination
+    ? data.reason
+    : null
 }
 
 /**
@@ -211,7 +241,16 @@ export function useCategoryMutations() {
         }
       })
     },
-    onError: (error) => notifyCategoryWriteFailed(error),
+    onError: (error) => {
+      // A retried delete whose first attempt already succeeded finds nothing to
+      // delete; the dialog closes quietly, so no failure toast.
+      if (
+        getCategoryDeleteNotFoundReason(error) ===
+        CATEGORY_DELETE_NOT_FOUND_REASON.source
+      )
+        return
+      notifyCategoryWriteFailed(error)
+    },
     onSettled: async () => {
       await invalidateCategoryViews(queryClient)
       // Other windows hold their own category list; the delete reassigns

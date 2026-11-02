@@ -94,7 +94,7 @@ test.each([
   },
 )
 
-test('opens the public editor with the owned session and configuration', () => {
+test('opens the public landing page with the owned session and configuration', () => {
   // Arrange + Act
   const result = runQaBrowser([])
   const output: { args: string[] } = JSON.parse(result.stdout)
@@ -104,7 +104,22 @@ test('opens the public editor with the owned session and configuration', () => {
   expect(output.args[0]).toMatch(/^-s=corelive-headless-[a-f0-9]{10}$/)
   expect(output.args.slice(1)).toEqual([
     'open',
-    'http://localhost:4991/write',
+    'http://localhost:4991/',
+    `--config=${path.join(fixtureRoot, '.playwright/cli.config.json')}`,
+    '--idle-timeout=300000',
+  ])
+})
+
+test('opens an explicitly requested page instead of the landing page', () => {
+  // Arrange + Act
+  const result = runQaBrowser(['open', 'http://localhost:4991/login'])
+  const output: { args: string[] } = JSON.parse(result.stdout)
+
+  // Assert
+  expect(result.status).toBe(0)
+  expect(output.args.slice(1)).toEqual([
+    'open',
+    'http://localhost:4991/login',
     `--config=${path.join(fixtureRoot, '.playwright/cli.config.json')}`,
     '--idle-timeout=300000',
   ])

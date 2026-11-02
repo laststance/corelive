@@ -2,10 +2,6 @@ import type { IPCChannel } from '@corelive/desktop-contract/ipc'
 import { OFFLINE_IPC_ARGUMENT_SCHEMAS } from '@corelive/desktop-contract/offline-editor-api'
 import { z } from 'zod'
 
-// Mirror renderer-side caps (`COMPLETED_TITLE_MAX_LENGTH * LIVE_EDITOR_NOTE_LINES_PER_CAP`)
-// without importing from `src/` (Electron tsconfig excludes it). If the
-// renderer constants change, update both this and `src/lib/constants/live-editor.ts`.
-const LIVE_EDITOR_NOTE_MAX_LENGTH = 255 * 200
 // Electron accelerator strings are short tokens like "CommandOrControl+Shift+B".
 // 64 is generous and bounds memory/log noise from malformed payloads.
 const SHORTCUT_ACCELERATOR_MAX_LENGTH = 64
@@ -195,14 +191,6 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   ]),
   'live-editor-get-visible-on-all-workspaces': z.tuple([]),
   'live-editor-set-visible-on-all-workspaces': z.tuple([z.boolean()]),
-
-  'live-editor-note-get': z.tuple([z.number().int().positive()]),
-  // Cap text length to mirror the renderer textarea `maxLength`. A compromised
-  // renderer cannot starve disk by sending megabytes of note text.
-  'live-editor-note-set': z.tuple([
-    z.number().int().positive(),
-    z.string().max(LIVE_EDITOR_NOTE_MAX_LENGTH),
-  ]),
 
   'live-editor-config-get-shortcut': z.tuple([]),
   'live-editor-config-set-shortcut': z.tuple([

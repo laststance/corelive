@@ -7,8 +7,6 @@ import {
 } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
-import { NATIVE_WINDOW_PREFERENCES_STORAGE_KEY } from '@/lib/live-editor/constants'
-
 import { LiveEditorSettings } from './LiveEditorSettings'
 
 const getOpacityMock = vi.fn()
@@ -390,7 +388,50 @@ describe('LiveEditorSettings', () => {
     ).toBeNull()
   })
 
-  test('a successful native preferences refresh clears load errors while retaining an unrelated config failure', async () => {
+  test('shows the opacity saved elsewhere when the Settings window regains focus', async () => {
+    // Arrange: opacity loads at 70%, then another surface saves 40%.
+    installLiveEditorBridge({ opacity: 0.7, shortcut: 'Alt+Space' })
+    render(<LiveEditorSettings />)
+    expect(await screen.findByText('70%')).toBeVisible()
+    getOpacityMock.mockResolvedValue(0.4)
+
+    // Act
+    fireEvent.focus(window)
+
+    // Assert
+    expect(await screen.findByText('40%')).toBeVisible()
+  })
+
+  test('keeps the chosen opacity when focus returns while its save is still in flight', async () => {
+    // Arrange: the opacity save hangs while the disk still holds 70%.
+    installLiveEditorBridge({ opacity: 0.7, shortcut: 'Alt+Space' })
+    let finishSave: (applied: number) => void = () => {}
+    setOpacityMock.mockImplementation(
+      async () =>
+        new Promise<number>((resolve) => {
+          finishSave = resolve
+        }),
+    )
+    render(<LiveEditorSettings />)
+    const slider = await screen.findByRole('slider', {
+      name: 'LiveEditor window opacity',
+    })
+    slider.focus()
+    fireEvent.keyDown(slider, { key: 'ArrowLeft' })
+    fireEvent.keyUp(slider, { key: 'ArrowLeft' })
+    await waitFor(() => expect(setOpacityMock).toHaveBeenCalledTimes(1))
+
+    // Act
+    fireEvent.focus(window)
+    await waitFor(() => expect(getOpacityMock).toHaveBeenCalledTimes(2))
+
+    // Assert
+    expect(screen.queryByText('70%')).toBeNull()
+    finishSave(0.65)
+    expect(await screen.findByText('65%')).toBeVisible()
+  })
+
+  test('a successful native preferences re-read on window focus clears load errors while retaining an unrelated config failure', async () => {
     // Arrange: both preference reads fail before a separate config action fails.
     installLiveEditorBridge({ opacity: 0.7, shortcut: 'Alt+Space' })
     getOpacityMock.mockRejectedValueOnce(new Error('Opacity unavailable'))
@@ -406,17 +447,8 @@ describe('LiveEditorSettings', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open config.json' }))
     expect(await screen.findByText('Failed to open config file')).toBeVisible()
 
-    // Act: a remote window's preference version triggers successful native reads.
-    window.localStorage.setItem(
-      NATIVE_WINDOW_PREFERENCES_STORAGE_KEY,
-      'recovered-native-preferences',
-    )
-    fireEvent(
-      window,
-      new StorageEvent('storage', {
-        key: NATIVE_WINDOW_PREFERENCES_STORAGE_KEY,
-      }),
-    )
+    // Act: the Settings window regains focus and the native reads now succeed.
+    fireEvent.focus(window)
 
     // Assert: only the successfully reloaded sources lose their error messages.
     await waitFor(() => {

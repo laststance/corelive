@@ -1,5 +1,3 @@
-import type { LiveEditorLineIndex } from './liveEditorUtils'
-
 export type TextEditRange = Readonly<{
   /** Inclusive character offset before the textarea edit. */
   start: number
@@ -120,16 +118,4 @@ export function createLineRemapper(
     if (index < previous.length - suffix) return null
     return index + next.length - previous.length
   }
-}
-
-/** Re-indexes one unchanged completion occurrence; edited/ambiguous rows lose their identity.
- * @example remapTrackedLineIndex('header\ntask', 'new\nheader\ntask', 1)
- */
-export function remapTrackedLineIndex(
-  previousText: string,
-  nextText: string,
-  index: LiveEditorLineIndex,
-  range?: TextEditRange,
-): LiveEditorLineIndex | null {
-  return createLineRemapper(previousText, nextText, range)(index)
 }

@@ -101,10 +101,16 @@ export function holdRequests(): () => void {
  * @example
  * requireCategory(12) // => { id: 12, name: 'Work', … }
  */
-function requireCategory(id: number): CategoryWithCount {
+function requireCategory(
+  id: number,
+  reason?: 'CATEGORY_NOT_FOUND' | 'DESTINATION_NOT_FOUND',
+): CategoryWithCount {
   const existing = categories.find((category) => category.id === id)
   if (!existing) {
-    throw new ORPCError('NOT_FOUND', { message: 'Category not found' })
+    throw new ORPCError('NOT_FOUND', {
+      message: 'Category not found',
+      ...(reason === undefined ? {} : { data: { reason } }),
+    })
   }
   return existing
 }
@@ -204,7 +210,7 @@ const remove = os
     }),
   )
   .handler(({ input }) => {
-    const existing = requireCategory(input.id)
+    const existing = requireCategory(input.id, 'CATEGORY_NOT_FOUND')
     if (existing.isDefault) {
       throw new ORPCError('FORBIDDEN', {
         message: 'Cannot delete the default category',
@@ -217,7 +223,7 @@ const remove = os
       categories.find((category) => category.isDefault)?.id
     if (!movedToCategoryId || movedToCategoryId === input.id)
       throw new ORPCError('BAD_REQUEST')
-    requireCategory(movedToCategoryId)
+    requireCategory(movedToCategoryId, 'DESTINATION_NOT_FOUND')
     const promotedCategoryIds = categories
       .filter((category) => category.parentId === input.id)
       .map((category) => category.id)

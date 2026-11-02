@@ -11,7 +11,7 @@ import type { IPCChannel, IPCChannels } from '@corelive/desktop-contract/ipc'
  * @example
  *   ArgsOf<'auth-get-user'>           // []
  *   ArgsOf<'auth-sync-from-web'>      // [AuthUserPayload]
- *   ArgsOf<'live-editor-note-set'>    // [number, string]
+ *   ArgsOf<'config-set'>              // [path: string, value: unknown]
  */
 export type ArgsOf<C extends IPCChannel> =
   IPCChannels[C]['request'] extends void

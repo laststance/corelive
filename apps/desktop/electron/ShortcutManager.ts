@@ -30,7 +30,6 @@ import {
   type ShortcutOpenSoundController,
 } from './ShortcutOpenSoundPlayer'
 import { isSameAccelerator } from './utils/isSameAccelerator'
-import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
 import type { WindowManager } from './WindowManager'
 
 // ============================================================================
@@ -323,7 +322,7 @@ export class ShortcutManager {
 
   /**
    * Binds Cmd+N / Cmd+M while any CoreLive window (LiveEditor, Settings, login) is focused; already-bound ids are skipped.
-   * Cmd+N opens the browser `/live-editor` even from the panel or Settings — intended: the browser page is the task-creation surface.
+   * Cmd+N shows the desktop LiveEditor panel even from Settings — intended: the panel is the task-writing surface.
    * @returns One registration result per contextual shortcut attempted.
    * @example
    * shortcutManager.registerContextualShortcuts() // => [{ id: 'newTask', success: true }, ...]
@@ -828,16 +827,15 @@ export class ShortcutManager {
   }
 
   /**
-   * Opens the browser `/live-editor` (the only task-creation surface) on Cmd+N; fired by the contextual binding.
+   * Shows the desktop LiveEditor panel on Cmd+N (create, reveal, or keep visible and focused — never toggles it hidden); fired by the contextual binding.
    * @returns Nothing; failures are logged, never thrown into the shortcut callback.
    * @example
    * shortcutManager.handleNewTaskShortcut()
    */
   handleNewTaskShortcut(): void {
     try {
-      // Browser only: surfacing the LiveEditor panel too would open the same
-      // note in two places at once. Mirrors the deep-link create-task route.
-      openWebAppInBrowser(this.windowManager.getWebAppOrigin(), '/live-editor')
+      // Panel only: showLiveEditor never hides an already-visible panel.
+      this.windowManager.showLiveEditor()
 
       if (this.notificationManager) {
         this.notificationManager.showNotification(

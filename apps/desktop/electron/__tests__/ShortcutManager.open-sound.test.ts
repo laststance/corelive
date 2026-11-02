@@ -12,12 +12,14 @@ vi.mock('electron', () => ({
   },
 }))
 
-// The browser handoff is an OS side effect; capture the call instead.
+// The browser handoff is an OS side effect; capture the call so tests can
+// assert Cmd+N never uses it.
 vi.mock('../utils/openWebAppInBrowser', () => ({
   openWebAppInBrowser: vi.fn(),
 }))
 
 import type { ConfigManager } from '../ConfigManager'
+import type { NotificationManager } from '../NotificationManager'
 import ShortcutManager from '../ShortcutManager'
 import type { ShortcutOpenSoundController } from '../ShortcutOpenSoundPlayer'
 import { openWebAppInBrowser } from '../utils/openWebAppInBrowser'
@@ -260,10 +262,35 @@ describe('ShortcutManager new-task shortcut', () => {
     vi.clearAllMocks()
   })
 
-  test('opens /live-editor in the browser without surfacing any Electron window (regression)', () => {
-    // Arrange: Cmd+N used to call restoreFromTray, which now shows LiveEditor —
-    // that would open the panel AND the browser tab at once.
+  test('Cmd+N shows the desktop LiveEditor panel once and never opens the browser', () => {
+    // Arrange
     const harness = createWindowManager(vi.fn(() => true))
+    const notificationManager = { showNotification: vi.fn() }
+    const shortcutManager = new ShortcutManager(
+      harness.windowManager,
+      notificationManager as unknown as NotificationManager,
+      createConfigManager(true),
+    )
+
+    // Act
+    shortcutManager.handleNewTaskShortcut()
+
+    // Assert
+    expect(harness.showLiveEditor).toHaveBeenCalledTimes(1)
+    expect(openWebAppInBrowser).not.toHaveBeenCalled()
+    expect(notificationManager.showNotification).toHaveBeenCalledWith(
+      'New Task',
+      'Opening LiveEditor',
+      { silent: true },
+    )
+  })
+
+  test('Cmd+N with the panel already visible keeps it open instead of toggling it hidden', () => {
+    // Arrange: toggleLiveEditor would hide a visible panel; showLiveEditor must be used.
+    const toggleLiveEditor = vi.fn(() => false)
+    const harness = createWindowManager(toggleLiveEditor)
+    const hide = vi.fn()
+    Object.assign(harness.windowManager, { hide })
     const shortcutManager = new ShortcutManager(
       harness.windowManager,
       null,
@@ -274,11 +301,9 @@ describe('ShortcutManager new-task shortcut', () => {
     shortcutManager.handleNewTaskShortcut()
 
     // Assert
-    expect(openWebAppInBrowser).toHaveBeenCalledWith(
-      'https://corelive.app',
-      '/live-editor',
-    )
+    expect(harness.showLiveEditor).toHaveBeenCalledTimes(1)
+    expect(toggleLiveEditor).not.toHaveBeenCalled()
+    expect(hide).not.toHaveBeenCalled()
     expect(harness.restoreFromTray).not.toHaveBeenCalled()
-    expect(harness.showLiveEditor).not.toHaveBeenCalled()
   })
 })

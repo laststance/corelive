@@ -13,7 +13,6 @@ import type { MenuItemConstructorOptions, MessageBoxOptions } from 'electron'
 import type { AutoUpdater } from './AutoUpdater'
 import type { ConfigManager } from './ConfigManager'
 import { log } from './logger'
-import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
 import type { WindowManager } from './WindowManager'
 
 // ============================================================================
@@ -306,22 +305,21 @@ export class MenuManager {
   // Menu action handlers
 
   /**
-   * Opens LiveEditor in the browser — the File ▸ New Task item. Targets
-   * `/live-editor` because it is the only surface that creates tasks now; Home
-   * became a read-only completion dashboard when the Todo write vertical was
-   * retired. No `restoreFromTray` (unlike the global new-task shortcut in
-   * ShortcutManager): a menu click already comes from a focused window, so
-   * there's no tray-resident state to surface.
-   * @returns Nothing; logs and no-ops if the WindowManager (origin source) is absent.
+   * Shows the desktop LiveEditor panel — the File ▸ New Task item. The panel
+   * is the only task-writing surface (the web LiveEditor was deleted in #215),
+   * and {@link WindowManager.showLiveEditor} creates it, reveals it when hidden
+   * or keeps it visible and focused when already open (never toggles it hidden).
+   * Signed out, the panel shows its own prepare/sign-in scene.
+   * @returns Nothing; logs and no-ops if the WindowManager is absent.
    * @example
-   * this.createNewTask() // opens https://corelive.app/live-editor
+   * this.createNewTask() // shows the LiveEditor panel
    */
   createNewTask(): void {
     if (!this.windowManager) {
       log.warn('[MenuManager] windowManager unavailable; cannot open New Task')
       return
     }
-    openWebAppInBrowser(this.windowManager.getWebAppOrigin(), '/live-editor')
+    this.windowManager.showLiveEditor()
   }
 
   /** Toggle the LiveEditor Note window via WindowManager. */
@@ -413,7 +411,7 @@ export class MenuManager {
       type: 'info',
       title: `About ${app.getName()}`,
       message: `${app.getName()} ${version}`,
-      detail: `A modern TODO application with desktop integration.
+      detail: `Write tasks in LiveEditor, check them off, and see every finished line on your Activity Heatmap.
 
 Built with:
 • Electron ${electronVersion}

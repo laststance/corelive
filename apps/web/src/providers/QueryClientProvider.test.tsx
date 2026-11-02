@@ -18,12 +18,6 @@ import {
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { PERSISTED_QUERY_STORAGE_KEY } from '@/lib/constants/query'
-import {
-  LOCAL_COMPLETIONS_STORAGE_KEY,
-  LOCAL_NOTE_STORAGE_KEY,
-} from '@/lib/live-editor/constants'
-import { getLocalCompletionsSnapshot } from '@/lib/live-editor/localCompletionStore'
-import { getLocalNote } from '@/lib/live-editor/localNoteStore'
 import { createQueryClient } from '@/lib/query/createQueryClient'
 import { STORAGE_KEY as REDUX_STORAGE_KEY } from '@/lib/redux/store'
 
@@ -31,6 +25,10 @@ const authState = vi.hoisted(() => ({ isLoaded: true, isSignedIn: true }))
 vi.mock('@clerk/nextjs', () => ({ useAuth: () => authState }))
 
 import { QueryClientProvider } from './QueryClientProvider'
+
+/** Browser-local keys the persisted-cache reset must leave untouched (no longer written by the app). */
+const LOCAL_NOTE_STORAGE_KEY = 'corelive.local-note.v1'
+const LOCAL_COMPLETIONS_STORAGE_KEY = 'corelive.local-completions.v1'
 
 const clients = new Set<QueryClient>()
 const queryKey = ['persisted-journal']
@@ -177,11 +175,11 @@ describe('QueryClientProvider persistence', () => {
     expect(localStorage.getItem(PERSISTED_QUERY_STORAGE_KEY)).not.toContain(
       'Old cache',
     )
-    expect(JSON.stringify({ '0': getLocalNote(0) })).toBe(
+    expect(localStorage.getItem(LOCAL_NOTE_STORAGE_KEY)).toBe(
       '{"0":"My unfinished note"}',
     )
     expect(localStorage.getItem(REDUX_STORAGE_KEY)).toBe('{"theme":"dark"}')
-    expect(getLocalCompletionsSnapshot()).toBe(
+    expect(localStorage.getItem(LOCAL_COMPLETIONS_STORAGE_KEY)).toBe(
       '{"version":1,"items":[{"id":"keep-1","title":"Keep this task","completedAt":"2026-09-30T09:00:00.000Z"}]}',
     )
   })
@@ -336,7 +334,7 @@ describe('QueryClientProvider persistence', () => {
     }
     expect(currentClient.getQueryData(queryKey)).toBeUndefined()
     expect(screen.getByText('Empty session')).toBeVisible()
-    expect(JSON.stringify({ '0': getLocalNote(0) })).toBe(
+    expect(localStorage.getItem(LOCAL_NOTE_STORAGE_KEY)).toBe(
       '{"0":"Preserved draft"}',
     )
   })

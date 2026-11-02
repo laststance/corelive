@@ -672,7 +672,7 @@ export class WindowManager {
 
   /**
    * Create the LiveEditor Note window — a frameless, transparent, always-on-top
-   * panel that loads `${baseUrl}/live-editor`.
+   * panel that loads the bundled offline editor (`corelive-editor://app/index.html`).
    *
    * Why frameless + transparent: the panel sits over other apps as a calm
    * scratchpad; the renderer paints its own chrome (titlebar, opacity slider).

@@ -15,8 +15,12 @@ import settings from '@/lib/redux/slices/settingsSlice'
 import { ThemeProvider } from '@/providers/ThemeProvider'
 import '@/globals.css'
 
+import { installHomeFixture } from './homeFixture'
+
 const parameters = new URLSearchParams(location.search)
 let mode = parameters.get('bridge') ?? 'supported'
+// `?view=home` renders Home's sidebar and Completed card, which only ever run in a browser.
+const isHomeView = parameters.get('view') === 'home'
 let preferences = {
   revision: 0,
   settings: UserSettingsStateSchema.parse({}),
@@ -142,7 +146,7 @@ const bridge = {
     quitAndInstall: async () => undefined,
   },
 }
-if (mode !== 'web') {
+if (mode !== 'web' && !isHomeView) {
   Object.defineProperty(window, 'electronAPI', {
     value: bridge,
     configurable: true,
@@ -154,15 +158,18 @@ if (mode !== 'web') {
 }
 const store = configureStore({ reducer: { settings, electronSettings } })
 const query = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+const homeFixture = isHomeView ? installHomeFixture(parameters) : null
 createRoot(document.getElementById('root')!).render(
   <ThemeProvider attribute="data-theme" defaultTheme="system" enableSystem>
     <QueryClientProvider client={query}>
       <Provider store={store}>
-        <OfflineSettingsSync>
-          <main className="mx-auto max-w-2xl space-y-12 px-4 py-6 sm:px-6">
-            <ElectronSettingsPage />
-          </main>
-        </OfflineSettingsSync>
+        {homeFixture ?? (
+          <OfflineSettingsSync>
+            <main className="mx-auto max-w-2xl space-y-12 px-4 py-6 sm:px-6">
+              <ElectronSettingsPage />
+            </main>
+          </OfflineSettingsSync>
+        )}
       </Provider>
     </QueryClientProvider>
   </ThemeProvider>,

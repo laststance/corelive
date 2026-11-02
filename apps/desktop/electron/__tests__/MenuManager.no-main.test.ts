@@ -1,4 +1,4 @@
-import { Menu } from 'electron'
+import { dialog, Menu, shell } from 'electron'
 import type { MenuItemConstructorOptions } from 'electron'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
@@ -12,7 +12,11 @@ import type { WindowManager } from '../WindowManager'
 // setApplicationMenu records that a menu was actually installed — both let the
 // test assert on the built menu rather than the native menu bar it can't see.
 vi.mock('electron', () => ({
-  app: { getName: vi.fn(() => 'CoreLive'), quit: vi.fn() },
+  app: {
+    getName: vi.fn(() => 'CoreLive'),
+    getVersion: vi.fn(() => '1.2.3'),
+    quit: vi.fn(),
+  },
   BrowserWindow: { getFocusedWindow: vi.fn(() => null) },
   dialog: {
     showMessageBox: vi.fn(),
@@ -99,6 +103,7 @@ function createStubWindowManager(): WindowManager {
     getWebAppOrigin: vi.fn(() => 'https://corelive.app'),
     openSettings: vi.fn(),
     toggleLiveEditor: vi.fn(),
+    showLiveEditor: vi.fn(),
   } as unknown as WindowManager
 }
 
@@ -106,6 +111,8 @@ describe('MenuManager builds the application menu without a main window', () => 
   beforeEach(() => {
     vi.mocked(Menu.buildFromTemplate).mockClear()
     vi.mocked(Menu.setApplicationMenu).mockClear()
+    vi.mocked(dialog.showMessageBox).mockClear()
+    vi.mocked(shell.openExternal).mockClear()
   })
 
   afterEach(() => {
@@ -162,5 +169,58 @@ describe('MenuManager builds the application menu without a main window', () => 
     expect(settingsItem).toBeDefined()
     expect(collectLabels([appMenu])).not.toContain('Preferences...')
     expect(stubWindowManager.openSettings).toHaveBeenCalledTimes(1)
+  })
+
+  test('File > New Task shows the desktop LiveEditor panel once and never opens the browser', () => {
+    // Arrange
+    const menuManager = new MenuManager()
+    const stubWindowManager = createStubWindowManager()
+    menuManager.initialize(stubWindowManager, {} as unknown as ConfigManager)
+    const newTaskItem = findItemByLabel(lastBuiltTemplate(), 'New Task')
+
+    // Act: invoke the real template item's click handler.
+    ;(newTaskItem?.click as () => void)?.()
+
+    // Assert
+    expect(stubWindowManager.showLiveEditor).toHaveBeenCalledTimes(1)
+    expect(shell.openExternal).not.toHaveBeenCalled()
+  })
+
+  test('File > New Task with the panel already visible keeps it open instead of toggling it hidden', () => {
+    // Arrange: a visible panel must stay visible; toggle/hide would close it.
+    const menuManager = new MenuManager()
+    const stubWindowManager = createStubWindowManager()
+    menuManager.initialize(stubWindowManager, {} as unknown as ConfigManager)
+    const newTaskItem = findItemByLabel(lastBuiltTemplate(), 'New Task')
+
+    // Act
+    ;(newTaskItem?.click as () => void)?.()
+
+    // Assert
+    expect(stubWindowManager.showLiveEditor).toHaveBeenCalledTimes(1)
+    expect(stubWindowManager.toggleLiveEditor).not.toHaveBeenCalled()
+  })
+
+  test('About dialog first line describes writing in LiveEditor, not a TODO application', () => {
+    // Arrange
+    const menuManager = new MenuManager()
+    menuManager.initialize(
+      createStubWindowManager(),
+      {} as unknown as ConfigManager,
+    )
+
+    // Act
+    menuManager.showAboutDialog()
+
+    // Assert
+    const options = vi.mocked(dialog.showMessageBox).mock.calls[0]?.[0]
+    expect(options).toMatchObject({
+      detail: expect.stringMatching(
+        /^Write tasks in LiveEditor, check them off, and see every finished line on your Activity Heatmap\.\n/,
+      ),
+    })
+    expect(options).not.toMatchObject({
+      detail: expect.stringContaining('TODO'),
+    })
   })
 })

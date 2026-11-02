@@ -19,7 +19,7 @@ import {
   listCategories,
   updateCategory,
 } from './category'
-import { createCompleted, getDayDetail, getJournal } from './completed'
+import { getDayDetail, getJournal } from './completed'
 import { describeIfDb } from './describeIfDb'
 
 vi.setConfig({ testTimeout: 30_000 })
@@ -32,6 +32,25 @@ function authOptions(clerkId: string) {
   return {
     context: { headers: new Headers({ Authorization: `Bearer ${clerkId}` }) },
   }
+}
+
+/** Writes a Completed row straight to the table, because no router procedure creates one any more (desktop sync does).
+ * @param userId - Owner of the row.
+ * @param categoryId - Category the row is filed under.
+ * @param title - Observable title.
+ * @returns The inserted row.
+ * @example const entry = await insertCompleted(userId, work.id, 'Stay')
+ */
+async function insertCompleted(
+  userId: number,
+  categoryId: number,
+  title: string,
+) {
+  const [row] = await db
+    .insert(completedTable)
+    .values({ userId, categoryId, title, completedAt: new Date() })
+    .returning()
+  return row!
 }
 
 /** Provisions General through the real bootstrap so every hierarchy scenario starts from a writing-ready account.
@@ -313,11 +332,7 @@ describeIfDb(
           createdAt: oldDate,
         })
         .returning()
-      const child = await call(
-        createCompleted,
-        { categoryId: corelive.id, title: 'Child' },
-        options,
-      )
+      const child = await insertCompleted(userId, corelive.id, 'Child')
       // Act
       const deleted = await call(deleteCategory, { id: work.id }, options)
       // Assert
@@ -526,18 +541,10 @@ describeIfDb(
       // Arrange
       const { options, userId, work, corelive, client } =
         await arrangeHierarchy()
-      const first = await call(
-        createCompleted,
-        { categoryId: corelive.id, title: 'First' },
-        options,
-      )
+      const first = await insertCompleted(userId, corelive.id, 'First')
       // Act
       const response = await call(deleteCategory, { id: corelive.id }, options)
-      const second = await call(
-        createCompleted,
-        { categoryId: client.id, title: 'Second' },
-        options,
-      )
+      const second = await insertCompleted(userId, client.id, 'Second')
       await call(
         deleteCategory,
         { id: client.id, targetCategoryId: work.id },
@@ -557,18 +564,14 @@ describeIfDb(
 
     test('retains the complete hierarchy and entries when child promotion would conflict with a main category', async () => {
       // Arrange
-      const { options, work, corelive } = await arrangeHierarchy()
+      const { options, userId, work, corelive } = await arrangeHierarchy()
       await call(createCategory, { name: 'CoreLive' }, options)
       const sameNamedChild = await call(
         createCategory,
         { name: 'Work', parentId: work.id },
         options,
       )
-      const entry = await call(
-        createCompleted,
-        { categoryId: work.id, title: 'Stay' },
-        options,
-      )
+      const entry = await insertCompleted(userId, work.id, 'Stay')
       // Act
       const deletion = call(deleteCategory, { id: work.id }, options)
       // Assert
@@ -592,13 +595,9 @@ describeIfDb(
 
     test('rejects foreign or self destinations without moving entries', async () => {
       // Arrange
-      const { options, work } = await arrangeHierarchy()
+      const { options, userId, work } = await arrangeHierarchy()
       const other = await arrangeAccount()
-      const entry = await call(
-        createCompleted,
-        { categoryId: work.id, title: 'Stay' },
-        options,
-      )
+      const entry = await insertCompleted(userId, work.id, 'Stay')
       // Act / Assert
       await expect(
         call(
@@ -619,6 +618,40 @@ describeIfDb(
         .from(completedTable)
         .where(eq(completedTable.id, entry.id))
       expect(record?.categoryId).toBe(work.id)
+    })
+
+    test('answers NOT_FOUND with reason CATEGORY_NOT_FOUND when the category to delete is already gone, so a retried delete can close quietly', async () => {
+      // Arrange
+      const { options, work } = await arrangeHierarchy()
+      await call(deleteCategory, { id: work.id }, options)
+
+      // Act
+      const retry = call(deleteCategory, { id: work.id }, options)
+
+      // Assert
+      await expect(retry).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+        data: { reason: 'CATEGORY_NOT_FOUND' },
+      })
+    })
+
+    test('answers NOT_FOUND with reason DESTINATION_NOT_FOUND when the chosen destination does not exist, so the dialog stays open', async () => {
+      // Arrange
+      const { options, work } = await arrangeHierarchy()
+      const other = await arrangeAccount()
+
+      // Act
+      const deletion = call(
+        deleteCategory,
+        { id: work.id, targetCategoryId: other.general.id },
+        options,
+      )
+
+      // Assert
+      await expect(deletion).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+        data: { reason: 'DESTINATION_NOT_FOUND' },
+      })
     })
 
     test('filters parent history across pages with one count and current parent metadata, then follows a moved child', async () => {
@@ -715,104 +748,5 @@ describeIfDb(
       )
       expect(rows[0]?.count).toBe(0)
     })
-
-    test('retains a Keep when it completes before category deletion, and refuses Keeps after deletion', async () => {
-      // Arrange
-      const { options, work, general } = await arrangeHierarchy()
-      // Act
-      const kept = await call(
-        createCompleted,
-        { categoryId: work.id, title: 'Before deletion' },
-        options,
-      )
-      await call(deleteCategory, { id: work.id }, options)
-      const late = call(
-        createCompleted,
-        { categoryId: work.id, title: 'After deletion' },
-        options,
-      )
-      // Assert
-      const [record] = await db
-        .select()
-        .from(completedTable)
-        .where(eq(completedTable.id, kept.id))
-      expect(record?.categoryId).toBe(general.id)
-      await expect(late).rejects.toMatchObject({ code: 'NOT_FOUND' })
-    })
-    test.each(['keep-first', 'delete-first'] as const)(
-      'orders overlapping Keep and deletion without losing a record (%s)',
-      async (order) => {
-        // Arrange — a real row lock queues both API transactions in a known order.
-        const { options, work, general, userId } = await arrangeHierarchy()
-        const holder = await db.$client.connect()
-        const requests: Promise<unknown>[] = []
-        try {
-          const { rows } = await holder.query<{ pid: number }>(
-            'SELECT pg_backend_pid() AS pid',
-          )
-          const holderPid = rows[0]?.pid
-          if (holderPid === undefined)
-            throw new Error('Lock holder backend PID was not returned')
-          await holder.query('BEGIN')
-          await holder.query(
-            'SELECT id FROM "User" WHERE id = $1 FOR NO KEY UPDATE',
-            [userId],
-          )
-          const keep = async () =>
-            call(
-              createCompleted,
-              { categoryId: work.id, title: 'Concurrent Keep' },
-              options,
-            )
-          const remove = async () =>
-            call(deleteCategory, { id: work.id }, options)
-          requests.push(order === 'keep-first' ? keep() : remove())
-          let firstWaitingPid = 0
-          await vi.waitFor(async () => {
-            const result = await db.$client.query<{ pid: number }>(
-              'SELECT pid FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid)) AND query LIKE $2',
-              [holderPid, '%FROM "User" WHERE id =%'],
-            )
-            expect(result.rows).toHaveLength(1)
-            firstWaitingPid = result.rows[0]!.pid
-          })
-          requests.push(order === 'keep-first' ? remove() : keep())
-          // Attach rejection handlers before unblocking so a losing Keep never appears unhandled.
-          const outcomes = Promise.allSettled(requests)
-          await vi.waitFor(async () => {
-            const result = await db.$client.query<{ count: number }>(
-              'SELECT count(*)::int AS count FROM pg_stat_activity WHERE query LIKE $3 AND ($1 = ANY(pg_blocking_pids(pid)) OR $2 = ANY(pg_blocking_pids(pid)))',
-              [holderPid, firstWaitingPid, '%FROM "User" WHERE id =%'],
-            )
-            expect(result.rows[0]?.count).toBe(2)
-          })
-          // Act
-          await holder.query('COMMIT')
-          const settled = await outcomes
-          // Assert
-          expect(settled[0]?.status).toBe('fulfilled')
-          const entries = await db
-            .select()
-            .from(completedTable)
-            .where(eq(completedTable.userId, userId))
-          if (order === 'keep-first') {
-            expect(settled[1]?.status).toBe('fulfilled')
-            expect(
-              entries.map((entry) => [entry.title, entry.categoryId]),
-            ).toEqual([['Concurrent Keep', general.id]])
-          } else {
-            expect(settled[1]).toMatchObject({
-              status: 'rejected',
-              reason: { code: 'NOT_FOUND' },
-            })
-            expect(entries).toEqual([])
-          }
-        } finally {
-          await holder.query('ROLLBACK')
-          holder.release()
-          await Promise.allSettled(requests)
-        }
-      },
-    )
   },
 )

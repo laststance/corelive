@@ -780,8 +780,8 @@ async function createWindow(): Promise<void> {
 /**
  * Strip user-authored LiveEditor note text from a config snapshot before
  * exposing it via generic config snapshot channels. The note map is personal
- * scratch content and only the dedicated `live-editor-note-get` channel should
- * surface it. Any other window sees only LiveEditor metadata.
+ * scratch content that no IPC channel surfaces any more (legacy notes are kept
+ * only as migration evidence). Any window sees only LiveEditor metadata.
  *
  * @param snapshot - The full config object as returned by `ConfigManager.getAll()`.
  * @returns A shallow clone with `liveEditor.notes` removed.
@@ -848,8 +848,8 @@ function setupIPCHandlers(): void {
   // LiveEditor Window IPC handlers
   //
   // Why a separate block: LiveEditor is a frameless transparent panel with
-  // its own preload; window/note channels live together so the contract
-  // between preload-live-editor.ts and main.ts is easy to audit.
+  // its own preload; window channels live together so the contract
+  // between preload-offline-editor.ts and main.ts is easy to audit.
   // ────────────────────────────────────────────────────────────────────────
   typedHandle('live-editor-window-show', () => {
     if (!windowManager) return
@@ -899,14 +899,6 @@ function setupIPCHandlers(): void {
       log.error('Failed to set LiveEditor window bounds:', error)
       return false
     }
-  })
-
-  // The old config remains migration evidence; the upgraded app never writes two note stores.
-  typedHandle('live-editor-note-get', () => {
-    throw new Error('Use the prepared workspace')
-  })
-  typedHandle('live-editor-note-set', () => {
-    throw new Error('Use the prepared workspace')
   })
 
   /**
@@ -1034,9 +1026,8 @@ function setupIPCHandlers(): void {
     }
     const result = configManager.getSection(section)
     if (section === 'liveEditor' && result && typeof result === 'object') {
-      // Strip free-text notes from the generic getter; anyone asking for the
-      // LiveEditor section gets only metadata. The dedicated `live-editor-note-get`
-      // channel is the single read path for note text.
+      // Strip free-text legacy notes from the generic getter; anyone asking
+      // for the LiveEditor section gets only metadata.
       const { notes: _notes, ...rest } = result as Record<string, unknown>
       return rest
     }

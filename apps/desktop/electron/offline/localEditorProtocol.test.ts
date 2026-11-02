@@ -52,7 +52,7 @@ test('bundled editor assets load without a network transport and retain a restri
 })
 
 test.each([
-  'https://corelive.app/live-editor',
+  'https://corelive.app/home',
   'corelive-editor://app/frame.html',
   'corelive-editor://app/index.html?account=other',
   'corelive-editor://app/index.html#other',

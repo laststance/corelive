@@ -69,14 +69,14 @@ afterEach(async () => {
       .delete(electronSettingsTable)
       .where(eq(electronSettingsTable.userId, user.id))
     await db.delete(categoryTable).where(eq(categoryTable.userId, user.id))
-    // Skill trees, assignments, and import batches cascade from this isolated user.
+    // Skill trees and assignments cascade from this isolated user.
     await db.delete(userTable).where(eq(userTable.id, user.id))
   }
   createdClerkIds.clear()
 })
 
 describeIfDb('v2 RPC transport with real PostgreSQL', () => {
-  test('preserves all 17 procedure paths and Date inputs/outputs across the five router groups', async () => {
+  test('preserves all 14 procedure paths and Date inputs/outputs across the five router groups', async () => {
     // Arrange
     const clerkId = `test_transport_${randomUUID()}`
     createdClerkIds.add(clerkId)
@@ -96,20 +96,21 @@ describeIfDb('v2 RPC transport with real PostgreSQL', () => {
       id: createdCategory.id,
       data: { name: 'Updated transport category' },
     })
-    const completed = await client.completed.create({
-      categoryId: createdCategory.id,
-      title: 'Direct completion',
-    })
-    const imported = await client.completed.importLocal({
-      batchId: 'transport-batch',
-      items: [
-        {
-          localId: 'transport-keep',
-          title: 'Imported completion',
-          completedAt,
-        },
-      ],
-    })
+    // Completed rows are written straight to the table: no router procedure creates them any more (desktop sync does).
+    await db.insert(completedTable).values([
+      {
+        userId: createdCategory.userId,
+        categoryId: createdCategory.id,
+        title: 'Direct completion',
+        completedAt: new Date(),
+      },
+      {
+        userId: createdCategory.userId,
+        categoryId: createdCategory.id,
+        title: 'Legacy completion',
+        completedAt,
+      },
+    ])
     const journal = await client.completed.journal({
       limit: 20,
       offset: 0,
@@ -152,9 +153,6 @@ describeIfDb('v2 RPC transport with real PostgreSQL', () => {
       nodeId: tree.nodes[0]!.id,
       todoId: todo!.id,
     })
-    const removedCompletion = await client.completed.delete({
-      id: completed.id,
-    })
     const removedCategory = await client.category.delete({
       id: createdCategory.id,
     })
@@ -162,14 +160,8 @@ describeIfDb('v2 RPC transport with real PostgreSQL', () => {
     // Assert
     expect(updatedCategory.name).toBe('Updated transport category')
     expect(createdCategory.createdAt).toBeInstanceOf(Date)
-    expect(completed.createdAt).toBeInstanceOf(Date)
-    expect(imported).toEqual({
-      batchId: 'transport-batch',
-      imported: 1,
-      alreadyImported: false,
-    })
     expect(journal.entries.map((entry) => entry.title)).toEqual([
-      'Imported completion',
+      'Legacy completion',
     ])
     expect(journal.entries[0]!.completedAt).toEqual(
       new Date('2026-09-30T09:00:00.000Z'),
@@ -190,7 +182,6 @@ describeIfDb('v2 RPC transport with real PostgreSQL', () => {
     expect(pool.map((entry) => entry.text)).toEqual(['Completed skill task'])
     expect(assignment.createdAt).toBeInstanceOf(Date)
     expect(removedAssignment?.todoText).toBe('Completed skill task')
-    expect(removedCompletion.id).toBe(completed.id)
     expect(removedCategory).toEqual({
       success: true,
       movedToCategoryId: defaultCategory.id,

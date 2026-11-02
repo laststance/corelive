@@ -1,5 +1,5 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
-import { CheckCircle2 } from 'lucide-react'
+import { CheckCircle2, Download } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import type { DateRange } from 'react-day-picker'
 import { match } from 'ts-pattern'
@@ -23,6 +23,7 @@ import {
   COMPLETED_JOURNAL_PAGE_SIZE,
 } from '@/lib/constants/completed'
 import { LOCAL_DAY_QUERY_ANCHOR_TIME } from '@/lib/constants/date'
+import { MAC_DOWNLOAD_URL } from '@/lib/constants/macDownload'
 import { orpc } from '@/lib/orpc/client-query'
 import { getUnfilteredCompletedJournalInput } from '@/lib/utils/getUnfilteredCompletedJournalInput'
 import {
@@ -189,7 +190,9 @@ export const CompletedTodos = function CompletedTodos({
   const total = data?.pages[0]?.total ?? 0
   const journalContent = match({
     hasEntries: allEntries.length > 0,
-    isError,
+    // A failed background refetch keeps the already-loaded history on screen;
+    // the error block is only for "nothing loaded at all".
+    isError: isError && data === undefined,
     isLoading,
   })
     .with({ isLoading: true }, () => (
@@ -217,10 +220,24 @@ export const CompletedTodos = function CompletedTodos({
           </>
         ) : (
           <>
-            <p>No wins logged yet</p>
-            <p className="text-xs">
-              Check a line off in LiveEditor — it&apos;ll appear here
-            </p>
+            <div className="space-y-1">
+              <p className="text-foreground">Your year starts here</p>
+              <p className="text-sm text-muted-foreground">
+                Check a line off in the CoreLive desktop app — it&apos;ll appear
+                here
+              </p>
+            </div>
+            <Button variant="outline" asChild>
+              <a
+                href={MAC_DOWNLOAD_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Download aria-hidden="true" />
+                Get Mac app
+                <span className="sr-only">(opens GitHub in a new tab)</span>
+              </a>
+            </Button>
           </>
         )}
       </div>

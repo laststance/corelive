@@ -10,7 +10,6 @@ import { requireRow } from '@/db/requireRow'
 import {
   categoryTable,
   completedTable,
-  importBatchTable,
   todoTable,
   userTable,
 } from '@/db/schema'
@@ -38,7 +37,7 @@ function authContext(clerkId: string) {
 
 // Track every clerkId a test touches so afterEach can delete the user and all
 // FK-dependent rows in a safe order (User has no onDelete cascade from
-// Completed/Todo/Category; ImportBatch cascades with the user).
+// Completed/Todo/Category).
 const createdClerkIds = new Set<string>()
 
 function freshClerkId(): string {
@@ -131,9 +130,6 @@ afterEach(async () => {
     // FK-safe teardown: child rows before the user.
     await db.delete(completedTable).where(eq(completedTable.userId, user.id))
     await db.delete(todoTable).where(eq(todoTable.userId, user.id))
-    await db
-      .delete(importBatchTable)
-      .where(eq(importBatchTable.userId, user.id))
     await db.delete(categoryTable).where(eq(categoryTable.userId, user.id))
     await db.delete(userTable).where(eq(userTable.id, user.id))
   }

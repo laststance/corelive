@@ -24,8 +24,6 @@ export interface PickerCategory {
 export interface SharedCategoryPickerProps {
   categories: PickerCategory[]
   activeCategoryId: number | null
-  isSignedIn: boolean | undefined
-  isElectronPanel: boolean
   onCategoryValueChange: (value: string) => void
   isLoading?: boolean
   isError?: boolean
@@ -41,13 +39,11 @@ export interface SharedCategoryPickerProps {
  *
  * @param categories - Current category rows; pending IDs remain visible but unselectable.
  * @example
- * <LiveEditorCategoryPicker categories={categories} activeCategoryId={12} isSignedIn isElectronPanel={false} onCategoryValueChange={setCategory} />
+ * <SharedCategoryPicker categories={categories} activeCategoryId={12} onCategoryValueChange={setCategory} />
  */
 export function SharedCategoryPicker({
   categories,
   activeCategoryId,
-  isSignedIn,
-  isElectronPanel,
   onCategoryValueChange,
   isLoading = false,
   isError = false,
@@ -104,11 +100,7 @@ export function SharedCategoryPicker({
             aria-expanded={state.open}
             aria-label={`Writing category: ${activePath}`}
             title={activePath}
-            disabled={!categories.length && !isSignedIn}
-            className={cn(
-              'justify-between gap-1 text-xs font-normal',
-              isElectronPanel ? 'h-7 w-40 max-w-full' : 'min-h-11 w-44',
-            )}
+            className="h-7 w-40 max-w-full justify-between gap-1 text-xs font-normal"
           >
             <span className="flex min-w-0 flex-1 items-center gap-1">
               {activeParent && (
@@ -198,14 +190,14 @@ export function SharedCategoryPicker({
                         ? 'Current writing category'
                         : undefined
                     }
-                    disabled={isSignedIn ? category.id <= 0 : false}
+                    disabled={category.id <= 0}
                     className={cn(
                       'min-h-11 break-words',
                       !state.query.trim() && category.parentId ? 'pl-6' : '',
                     )}
                     onSelect={() => {
-                      // The local signed-out ID is valid only in the implicit public-writing flow.
-                      if (isSignedIn && category.id <= 0) return
+                      // Pending (optimistic) IDs are not selectable until confirmed.
+                      if (category.id <= 0) return
                       onCategoryValueChange(String(category.id))
                       setState((current) => ({ ...current, open: false }))
                     }}
@@ -228,37 +220,35 @@ export function SharedCategoryPicker({
                   </CommandItem>
                 ))}
               </div>
-              {isSignedIn && (
-                <div className="shrink-0 border-t p-1">
-                  {actionsDisabled && (
-                    <p className="px-2 py-1 text-xs text-muted-foreground">
-                      Connect to manage categories.
-                    </p>
-                  )}
-                  {onCreate && (
-                    <CommandItem
-                      value="action:create"
-                      className="min-h-11"
-                      disabled={actionsDisabled}
-                      onSelect={() => openAction('create')}
-                    >
-                      <Plus className="size-4" />
-                      Create category…
-                    </CommandItem>
-                  )}
-                  {onManage && (
-                    <CommandItem
-                      value="action:manage"
-                      className="min-h-11"
-                      disabled={actionsDisabled}
-                      onSelect={() => openAction('manage')}
-                    >
-                      <Settings2 className="size-4" />
-                      Manage categories…
-                    </CommandItem>
-                  )}
-                </div>
-              )}
+              <div className="shrink-0 border-t p-1">
+                {actionsDisabled && (
+                  <p className="px-2 py-1 text-xs text-muted-foreground">
+                    Connect to manage categories.
+                  </p>
+                )}
+                {onCreate && (
+                  <CommandItem
+                    value="action:create"
+                    className="min-h-11"
+                    disabled={actionsDisabled}
+                    onSelect={() => openAction('create')}
+                  >
+                    <Plus className="size-4" />
+                    Create category…
+                  </CommandItem>
+                )}
+                {onManage && (
+                  <CommandItem
+                    value="action:manage"
+                    className="min-h-11"
+                    disabled={actionsDisabled}
+                    onSelect={() => openAction('manage')}
+                  >
+                    <Settings2 className="size-4" />
+                    Manage categories…
+                  </CommandItem>
+                )}
+              </div>
             </CommandList>
           </Command>
         </PopoverContent>

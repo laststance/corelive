@@ -2,24 +2,20 @@
 import { randomUUID } from 'node:crypto'
 
 import { call } from '@orpc/server'
-import { and, count, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { db } from '@/db'
-import { PG_FOREIGN_KEY_VIOLATION } from '@/db/constants'
-import { isPgError } from '@/db/isPgError'
 import { requireRow } from '@/db/requireRow'
 import {
   categoryTable,
   completedTable,
-  importBatchTable,
   todoTable,
   userTable,
 } from '@/db/schema'
 import { settleBehindHeldTransaction } from '@/test/heldTransaction'
 
 import { deleteCategory, listCategories, updateCategory } from './category'
-import { importLocalCompleted } from './completed'
 import { describeIfDb } from './describeIfDb'
 
 /**
@@ -78,31 +74,11 @@ afterEach(async () => {
     // FK-safe teardown: child rows before the user.
     await db.delete(completedTable).where(eq(completedTable.userId, user.id))
     await db.delete(todoTable).where(eq(todoTable.userId, user.id))
-    await db
-      .delete(importBatchTable)
-      .where(eq(importBatchTable.userId, user.id))
     await db.delete(categoryTable).where(eq(categoryTable.userId, user.id))
     await db.delete(userTable).where(eq(userTable.id, user.id))
   }
   createdClerkIds.clear()
 })
-
-/**
- * Reads the `cause` an oRPC error carries, where the underlying database or helper error lives.
- * @param settled - Outcome of a call run through {@link settleBehindHeldTransaction}.
- * @returns The rejection's `cause`, or `undefined` when the call resolved or carried none.
- * @example
- * readFailureCause({ error: new ORPCError('INTERNAL_SERVER_ERROR', { cause: dbError }) }) // => dbError
- */
-function readFailureCause(
-  settled: { value: unknown } | { error: unknown },
-): unknown {
-  if (!('error' in settled)) return undefined
-  const { error } = settled
-  return typeof error === 'object' && error !== null && 'cause' in error
-    ? error.cause
-    : undefined
-}
 
 describeIfDb('rows that vanish mid-request (real PostgreSQL)', () => {
   test('fails the rename instead of reporting a phantom success when another request deletes the category first', async () => {
@@ -168,55 +144,5 @@ describeIfDb('rows that vanish mid-request (real PostgreSQL)', () => {
         cause: { message: 'category.delete matched no row' },
       },
     })
-  })
-
-  test('rolls the whole import back when its category disappears mid-write, so a retry lands instead of being reported as already imported', async () => {
-    // Arrange
-    const { clerkId, userId, general } = await arrangeAccount()
-    const batchId = randomUUID()
-    const input = {
-      batchId,
-      items: [
-        {
-          localId: 'keep-1',
-          title: 'push-ups',
-          completedAt: new Date('2026-09-01T09:00:00.000Z'),
-        },
-      ],
-    }
-
-    // Act — the category lookup still sees "General"; the row insert parks on its
-    // foreign key and then violates it once the delete commits.
-    const settled = await settleBehindHeldTransaction({
-      holdLocks: async (tx) => {
-        await tx.delete(categoryTable).where(eq(categoryTable.id, general.id))
-      },
-      startCall: async () =>
-        call(importLocalCompleted, input, authContext(clerkId)),
-    })
-    const [batchRowsAfterFailure] = await db
-      .select({ value: count() })
-      .from(importBatchTable)
-      .where(
-        and(
-          eq(importBatchTable.userId, userId),
-          eq(importBatchTable.id, `${userId}:${batchId}`),
-        ),
-      )
-    const retry = await call(importLocalCompleted, input, authContext(clerkId))
-
-    // Assert — the failed attempt left no batch marker behind, so the retry imports the keep.
-    expect(settled).toMatchObject({
-      error: {
-        code: 'INTERNAL_SERVER_ERROR',
-        message: 'Failed to import local completions',
-      },
-    })
-    // The category the batch was filed under vanished, so the row insert broke a foreign key.
-    expect(isPgError(readFailureCause(settled), PG_FOREIGN_KEY_VIOLATION)).toBe(
-      true,
-    )
-    expect(batchRowsAfterFailure?.value).toBe(0)
-    expect(retry).toEqual({ batchId, imported: 1, alreadyImported: false })
   })
 })
