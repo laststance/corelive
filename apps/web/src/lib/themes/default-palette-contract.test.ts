@@ -58,12 +58,12 @@ const CHROME_TOKENS = [
 /** Verbatim stock-shadcn exemptions from the chroma limit, with the reason. */
 const CHROMA_EXEMPTIONS: ReadonlyArray<{
   themeId: string
-  token: string
+  variable: string
   reason: string
 }> = [
   {
     themeId: 'dark',
-    token: '--sidebar-primary',
+    variable: '--sidebar-primary',
     reason:
       'stock shadcn Default dark blue (oklch(0.488 0.243 264.376)), kept verbatim',
   },
@@ -126,25 +126,25 @@ function parseBlocks(css: string): CssBlock[] {
  */
 function findChromaViolations(themeId: string, block: CssBlock): string[] {
   const location = `theme=${themeId} selector=${block.selector}`
-  return CHROME_TOKENS.flatMap((token) => {
+  return CHROME_TOKENS.flatMap((variable) => {
     if (
       CHROMA_EXEMPTIONS.some(
-        (entry) => entry.themeId === themeId && entry.token === token,
+        (entry) => entry.themeId === themeId && entry.variable === variable,
       )
     ) {
       return []
     }
-    const value = block.declarations.get(token)
+    const value = block.declarations.get(variable)
     const color = value === undefined ? undefined : toOklch(parse(value))
     if (value === undefined || !color) {
       return [
-        `DEFAULT_CHROMA_TOKEN_MISSING ${location} token=${token} value=${value ?? '(absent)'} is absent or unparsable file=${GENERATED_CSS_PATH}\n${RECOVERY_LINE}`,
+        `DEFAULT_CHROMA_TOKEN_MISSING ${location} variable=${variable} value=${value ?? '(absent)'} is absent or unparsable file=${GENERATED_CSS_PATH}\n${RECOVERY_LINE}`,
       ]
     }
     const chroma = color.c ?? 0
     return chroma > CHROMA_LIMIT
       ? [
-          `DEFAULT_CHROMA_LIMIT ${location} token=${token} value=${value} chroma=${chroma.toFixed(3)} limit=${CHROMA_LIMIT} file=${GENERATED_CSS_PATH}\n${RECOVERY_LINE}`,
+          `DEFAULT_CHROMA_LIMIT ${location} variable=${variable} value=${value} chroma=${chroma.toFixed(3)} limit=${CHROMA_LIMIT} file=${GENERATED_CSS_PATH}\n${RECOVERY_LINE}`,
         ]
       : []
   })
@@ -157,8 +157,9 @@ function findChromaViolations(themeId: string, block: CssBlock): string[] {
  * @returns one message per warm token.
  */
 function findWarmTokens(themeId: string, block: CssBlock): string[] {
-  return Array.from(block.declarations).flatMap(([token, value]) => {
-    if (token.startsWith('--hm-') || token.startsWith('--chart-')) return []
+  return Array.from(block.declarations).flatMap(([variable, value]) => {
+    if (variable.startsWith('--hm-') || variable.startsWith('--chart-'))
+      return []
     const color = toOklch(parse(value))
     const hue = color?.h ?? 0
     const isWarm =
@@ -167,7 +168,7 @@ function findWarmTokens(themeId: string, block: CssBlock): string[] {
       hue <= WARM_HUE_MAX
     return isWarm
       ? [
-          `DEFAULT_WARM_TOKEN theme=${themeId} selector=${block.selector} token=${token} value=${value} file=${GENERATED_CSS_PATH}\n${RECOVERY_LINE}`,
+          `DEFAULT_WARM_TOKEN theme=${themeId} selector=${block.selector} variable=${variable} value=${value} file=${GENERATED_CSS_PATH}\n${RECOVERY_LINE}`,
         ]
       : []
   })
@@ -204,7 +205,7 @@ describe('Default palette contract (generated.css)', () => {
   test('lists the Default dark --sidebar-primary stock-shadcn blue as the only chroma exemption', () => {
     // Arrange / Act
     const exemptions = CHROMA_EXEMPTIONS.map(
-      (entry) => `${entry.themeId} ${entry.token}`,
+      (entry) => `${entry.themeId} ${entry.variable}`,
     )
 
     // Assert
@@ -239,7 +240,7 @@ describe('Default palette contract (generated.css)', () => {
     expect(bareEntries).toEqual(lightEntries)
   })
 
-  test('reports a planted chromatic --primary with theme, selector, token, value, chroma, limit and file', () => {
+  test('reports a planted chromatic --primary with theme, selector, variable, value, chroma, limit and file', () => {
     // Arrange
     const [block] = parseBlocks(
       ":root[data-theme='light'] { --primary: oklch(0.6 0.15 55); }",
@@ -250,9 +251,9 @@ describe('Default palette contract (generated.css)', () => {
 
     // Assert
     expect(
-      messages.find((message) => message.includes('token=--primary ')),
+      messages.find((message) => message.includes('variable=--primary ')),
     ).toBe(
-      "DEFAULT_CHROMA_LIMIT theme=light selector=:root[data-theme='light'] token=--primary value=oklch(0.6 0.15 55) chroma=0.150 limit=0.02 file=packages/live-editor/src/styles/generated.css\n" +
+      "DEFAULT_CHROMA_LIMIT theme=light selector=:root[data-theme='light'] variable=--primary value=oklch(0.6 0.15 55) chroma=0.150 limit=0.02 file=packages/live-editor/src/styles/generated.css\n" +
         RECOVERY_LINE,
     )
   })
@@ -271,7 +272,7 @@ describe('Default palette contract (generated.css)', () => {
     expect(
       messages.some((message) =>
         message.includes(
-          'token=--foreground value=(absent) is absent or unparsable',
+          'variable=--foreground value=(absent) is absent or unparsable',
         ),
       ),
     ).toBe(true)
@@ -288,6 +289,6 @@ describe('Default palette contract (generated.css)', () => {
 
     // Assert
     expect(messages).toHaveLength(1)
-    expect(messages[0]).toContain('token=--accent value=oklch(0.7 0.14 60)')
+    expect(messages[0]).toContain('variable=--accent value=oklch(0.7 0.14 60)')
   })
 })
