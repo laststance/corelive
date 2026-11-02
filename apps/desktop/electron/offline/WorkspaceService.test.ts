@@ -742,14 +742,15 @@ describe('offline writing and completion transactions', () => {
       service.execute(completionCommand(state, completionA, 1)),
     ).rejects.toMatchObject({ reason: 'invalid-row' })
 
-    // Deliberately rewriting the occurrence releases its duplicate guard, including pasted checked text.
+    // Deliberately rewriting the occurrence releases its duplicate guard. (In keep mode a pasted
+    // `- [x]` row is already finished and stays refused; see "keep mode leaves finished lines in place".)
     state = await reopened.execute({
       type: 'save',
       commandId: randomUUID(),
       categoryId: 1,
       baseRevision: state.drafts['1']!.revision,
       rows: state.drafts['1']!.rows.map((row, index) =>
-        index === 0 ? { id: row.id, text: '- [x] A different task' } : row,
+        index === 0 ? { id: row.id, text: '- [ ] A different task' } : row,
       ),
     })
     state = await reopened.execute(completionCommand(state, completionB))
@@ -1537,4 +1538,76 @@ test('retrying a rejected dependency queues one new operation while keeping the 
   expect(Object.values(retried.outbox)[0]!.operation.operationId).not.toBe(
     operation.operationId,
   )
+})
+
+describe('keep mode leaves finished lines in place', () => {
+  test('completing a typed finished line in keep mode is refused as finished-line and records nothing', async () => {
+    // Arrange
+    const fixture = await createWorkspace('- [x] Typed done\nLater', false)
+    const state = await fixture.file.read()
+
+    // Act
+    const completing = fixture.service.execute(completionCommand(state))
+
+    // Assert
+    await expect(completing).rejects.toMatchObject({ reason: 'finished-line' })
+    const after = await fixture.file.read()
+    expect(Object.keys(after.completions)).toEqual([])
+    expect(after.drafts['1']!.rows.map((row) => row.text)).toEqual([
+      '- [x] Typed done',
+      'Later',
+    ])
+  })
+
+  test('clear mode still records and clears a typed finished line', async () => {
+    // Arrange
+    const fixture = await createWorkspace('- [x] Typed done\nLater', true)
+
+    // Act
+    const state = await fixture.service.execute(
+      completionCommand(await fixture.file.read()),
+    )
+
+    // Assert
+    expect(Object.keys(state.completions)).toEqual([completionA])
+    expect(state.completions[completionA]!.title).toBe('Typed done')
+    expect(state.drafts['1']!.rows.map((row) => row.text)).toEqual(['Later'])
+  })
+
+  test('a stale revision is still reported as a revision conflict before the finished-line refusal', async () => {
+    // Arrange
+    const fixture = await createWorkspace('- [x] Typed done\nLater', false)
+    const state = await fixture.file.read()
+    const command = completionCommand(state)
+    if (command.type !== 'complete')
+      throw new Error('Expected a complete command')
+
+    // Act
+    const completing = fixture.service.execute({
+      ...command,
+      baseRevision: command.baseRevision + 1,
+    })
+
+    // Assert
+    await expect(completing).rejects.toMatchObject({
+      reason: 'revision-conflict',
+    })
+  })
+
+  test('completing an unfinished line in keep mode still records it and leaves it struck in place', async () => {
+    // Arrange
+    const fixture = await createWorkspace('- [ ] Write notes\nLater', false)
+
+    // Act
+    const state = await fixture.service.execute(
+      completionCommand(await fixture.file.read()),
+    )
+
+    // Assert
+    expect(Object.keys(state.completions)).toEqual([completionA])
+    expect(state.drafts['1']!.rows.map((row) => row.text)).toEqual([
+      '- [x] Write notes',
+      'Later',
+    ])
+  })
 })

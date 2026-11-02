@@ -100,6 +100,47 @@ export function parseCheckboxLine(
   }
 }
 
+/** A checked checkbox row split so a strike can cover only its visible title. */
+export type FinishedLineParts = Readonly<{
+  /** Indentation plus the `- [x] ` marker and any spaces before the title — never struck. */
+  prefix: string
+  /** The title from its first to its last visible character — the only struck part. */
+  title: string
+  /** Spaces/tabs after the title — kept out of the strike so the line ends at the last glyph. */
+  trailing: string
+}>
+
+/**
+ * Splits a checked checkbox row into marker, title and trailing whitespace for the
+ * finished-line strike. Uses the same grammar as {@link parseCheckboxLine}, so a row
+ * is struck exactly when the complete command would read it as finished.
+ * Called by the editor surface's strike overlay for every rendered row.
+ *
+ * @param line - One raw row of the note (no trailing newline).
+ * @returns
+ * - Checked row: its prefix, title and trailing whitespace (concatenation equals `line`)
+ * - Unchecked, plain, blank or empty-title row: null
+ * @example
+ * splitFinishedLine('  - [x] ship it  ')
+ * // → { prefix: '  - [x] ', title: 'ship it', trailing: '  ' }
+ * splitFinishedLine('- [ ] ship it') // → null
+ */
+export function splitFinishedLine(line: string): FinishedLineParts | null {
+  const parsed = parseCheckboxLine(line, 0)
+  // Only a finished row is struck; unchecked and plain rows stay undecorated.
+  if (!parsed?.checked) return null
+  const titleStart = line.indexOf(
+    parsed.title,
+    parsed.leadingWhitespace.length + '- [x] '.length,
+  )
+  const titleEnd = titleStart + parsed.title.length
+  return {
+    prefix: line.slice(0, titleStart),
+    title: parsed.title,
+    trailing: line.slice(titleEnd),
+  }
+}
+
 /**
  * Walk the full document and collect every checkbox line.
  *

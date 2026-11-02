@@ -294,6 +294,8 @@ function PreparedEditor({
       noteMaxLength={getDraftInputLimit(workspace.draft)}
       windowSettings={windowSettings}
       textareaProps={input.textareaProps}
+      // Keep mode ("Clear finished lines" off) leaves finished rows in place, struck through.
+      strikeFinishedLines={!settings.liveEditorClearOnComplete}
       settings={settings}
       categoryCount={workspace.categories.length}
       categoryPicker={

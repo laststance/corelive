@@ -32,6 +32,7 @@ export class WorkspaceCommandError extends Error {
       | 'category-unavailable'
       | 'undo-expired'
       | 'invalid-row'
+      | 'finished-line'
       | 'record-unavailable'
       | 'conflict-unavailable',
   ) {
@@ -491,6 +492,13 @@ export class WorkspaceService {
 
     if (!checkbox && !markPlainLineCompleted(row.text, 0))
       throw new WorkspaceCommandError('invalid-row')
+
+    // Keep mode leaves finished rows struck in place; completing one again is a refused no-op.
+    if (
+      checkbox?.checked &&
+      !state.preferences.settings.liveEditorClearOnComplete
+    )
+      throw new WorkspaceCommandError('finished-line')
 
     const title = normalizeCompletedTitle(checkbox?.title ?? row.text)
 
