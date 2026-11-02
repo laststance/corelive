@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.29.0] - 2026-11-03
+
+### Changed
+
+- In the desktop app, ⌘N, File ▸ New Task and `corelive://create` now open the LiveEditor panel instead of a browser tab. If the panel is already open, it stays open and comes to the front.
+- Home refreshes itself every 15 seconds while it is visible, and again when you come back to the tab, so lines you check off in the desktop app appear without reloading.
+- Before you have logged anything, Home says "Your year starts here" and links to the Mac app download.
+- Settings reads the LiveEditor preferences again each time its window comes back into focus, so a change made elsewhere shows up there.
+- About CoreLive now reads "Write tasks in LiveEditor, check them off, and see every finished line on your Activity Heatmap."
+
+### Fixed
+
+- When a category you delete is already gone (for example, a retry after a lost response), the delete dialog now closes without an error. When the category you chose to move its entries into is gone, the dialog stays open, says so, and selects your default category again.
+- If refreshing your history in the background fails, Home keeps showing the entries it already loaded instead of replacing them with an error.
+
+### Removed
+
+- The web LiveEditor is gone. Write and check off tasks in the CoreLive desktop app; corelive.app shows what you finished. Links to `/write`, `/live-editor` and `/braindump` now open Home, and the sidebar no longer has a LiveEditor item.
+- Writing kept only in a browser by the web LiveEditor, including completions it had not uploaded yet, is not carried over.
+
 ## [0.28.1] - 2026-11-03
 
 ### Removed
