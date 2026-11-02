@@ -9,8 +9,8 @@ describe('preload document navigation boundary', () => {
   test.each([
     ['https://corelive.app/settings', 'https://corelive.app', true],
     ['https://www.corelive.app/login-shell', 'https://corelive.app', true],
-    ['https://corelive.app/live-editor', 'https://www.corelive.app', true],
-    ['http://localhost:4991/write', 'http://localhost:4991', true],
+    ['https://corelive.app/home', 'https://www.corelive.app', true],
+    ['http://localhost:4991/home', 'http://localhost:4991', true],
     ['http://127.0.0.1:4992/', 'http://localhost:4991', false],
     ['https://untrusted.example/', 'https://corelive.app', false],
     ['https://corelive.app.untrusted.example/', 'https://corelive.app', false],
@@ -33,12 +33,12 @@ describe('preload document navigation boundary', () => {
 
 test.each([
   [
-    'https://clerk.corelive.app/v1/client/handshake?redirect_url=https%3A%2F%2Fwww.corelive.app%2Flive-editor',
+    'https://clerk.corelive.app/v1/client/handshake?redirect_url=https%3A%2F%2Fwww.corelive.app%2Fhome',
     'https://corelive.app',
     true,
   ],
   [
-    'https://fixture.clerk.accounts.dev/v1/client/handshake?redirect_url=http%3A%2F%2Flocalhost%3A4991%2Flive-editor',
+    'https://fixture.clerk.accounts.dev/v1/client/handshake?redirect_url=http%3A%2F%2Flocalhost%3A4991%2Fhome',
     'http://localhost:4991',
     true,
   ],

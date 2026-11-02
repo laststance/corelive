@@ -113,7 +113,6 @@ function mountEditor(clearOnComplete: boolean, savedText: string) {
       getVisibleOnAllWorkspaces: async () => false,
       setVisibleOnAllWorkspaces: async (enabled) => enabled,
     },
-    note: { get: async () => '', set: async () => undefined },
   }
   const store = new DurableEditorStore(host)
   stores.push(store)

@@ -1,6 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query'
 
-import type { CategoryDraftRescue } from '@/lib/live-editor/appendCategoryDraft'
 import { orpc } from '@/lib/orpc/client-query'
 
 const CATEGORY_SYNC_CHANNEL_NAME = 'corelive-category-sync'
@@ -9,8 +8,6 @@ const CATEGORY_SYNC_SENDER_ID = crypto.randomUUID()
 
 type CategorySyncMessage = Readonly<{
   type: typeof CATEGORY_SYNC_EVENT_TYPE
-  draftCategoryId?: number
-  draftRescue?: CategoryDraftRescue
   senderId?: string
 }>
 
@@ -49,30 +46,7 @@ const isCategorySyncMessage = (data: unknown): data is CategorySyncMessage => {
   return (
     'type' in data &&
     data.type === CATEGORY_SYNC_EVENT_TYPE &&
-    (!('draftRescue' in data) || isCategoryDraftRescue(data.draftRescue)) &&
-    (!('senderId' in data) || typeof data.senderId === 'string') &&
-    (!('draftCategoryId' in data) ||
-      (typeof data.draftCategoryId === 'number' &&
-        Number.isInteger(data.draftCategoryId) &&
-        data.draftCategoryId > 0))
-  )
-}
-
-/** Validates local peer rescue evidence before {@link subscribeToCategorySync} forwards it.
- * @param value - Unknown BroadcastChannel payload.
- * @returns Whether immutable rescue fields are strings.
- * @example isCategoryDraftRescue({ receipt: 'source:1', baseText: 'existing', text: 'rescued' })
- */
-function isCategoryDraftRescue(value: unknown): value is CategoryDraftRescue {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'receipt' in value &&
-    typeof value.receipt === 'string' &&
-    'baseText' in value &&
-    typeof value.baseText === 'string' &&
-    'text' in value &&
-    typeof value.text === 'string'
+    (!('senderId' in data) || typeof data.senderId === 'string')
   )
 }
 
@@ -82,10 +56,7 @@ function isCategoryDraftRescue(value: unknown): value is CategoryDraftRescue {
  * @example
  * broadcastCategorySync() // => true
  */
-export const broadcastCategorySync = (
-  draftCategoryId?: number,
-  draftRescue?: CategoryDraftRescue,
-): boolean => {
+export const broadcastCategorySync = (): boolean => {
   // The bundled editor has a separate origin; native refresh complements same-origin broadcasts.
   const native =
     typeof window === 'undefined'
@@ -101,8 +72,6 @@ export const broadcastCategorySync = (
   channel.postMessage({
     type: CATEGORY_SYNC_EVENT_TYPE,
     senderId: CATEGORY_SYNC_SENDER_ID,
-    ...(draftCategoryId === undefined ? {} : { draftCategoryId }),
-    ...(draftRescue === undefined ? {} : { draftRescue }),
   } satisfies CategorySyncMessage)
   channel.close()
   return true
@@ -116,9 +85,7 @@ export const broadcastCategorySync = (
  * const cleanup = subscribeToCategorySync(() => queryClient.invalidateQueries())
  * cleanup()
  */
-export const subscribeToCategorySync = (
-  onSync: (draftCategoryId?: number, draftRescue?: CategoryDraftRescue) => void,
-): (() => void) => {
+export const subscribeToCategorySync = (onSync: () => void): (() => void) => {
   const channel = createCategorySyncChannel()
   if (!channel) {
     return (): void => {}
@@ -126,15 +93,7 @@ export const subscribeToCategorySync = (
 
   const handleMessage = (event: MessageEvent): void => {
     if (isCategorySyncMessage(event.data)) {
-      // The deleting window already applied its append; only peers reconcile the payload.
-      onSync(
-        event.data.senderId === CATEGORY_SYNC_SENDER_ID
-          ? undefined
-          : event.data.draftCategoryId,
-        event.data.senderId === CATEGORY_SYNC_SENDER_ID
-          ? undefined
-          : event.data.draftRescue,
-      )
+      onSync()
     }
   }
 

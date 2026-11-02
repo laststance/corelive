@@ -38,16 +38,27 @@ const nextConfig = {
   transpilePackages: ['@corelive/desktop-contract'],
   images: { unoptimized: true },
   /**
-   * Redirects installed pre-rename Electron clients to the canonical route when they request a retired URL.
-   * @returns {Promise<Array<{source: string, destination: string, permanent: boolean}>>} Permanent compatibility redirects.
-   * @example (await nextConfig.redirects())[1] // => { source: '/floating-navigator', destination: '/login-shell', permanent: true }
+   * Redirects retired URLs (the removed web LiveEditor routes and the pre-rename Electron routes) to their canonical replacement.
+   * LiveEditor routes use temporary redirects so a cached 308 never outlives a future route.
+   * @returns {Promise<Array<{source: string, destination: string, permanent: boolean}>>} Compatibility redirects.
+   * @example (await nextConfig.redirects())[3] // => { source: '/floating-navigator', destination: '/login-shell', permanent: true }
    */
   async redirects() {
     return [
       {
         source: '/braindump',
-        destination: '/live-editor',
-        permanent: true,
+        destination: '/home',
+        permanent: false,
+      },
+      {
+        source: '/write',
+        destination: '/home',
+        permanent: false,
+      },
+      {
+        source: '/live-editor',
+        destination: '/home',
+        permanent: false,
       },
       {
         source: '/floating-navigator',

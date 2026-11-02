@@ -19,7 +19,7 @@ afterEach(() => {
 describe('browser oRPC transport', () => {
   test('posts to the current origin API endpoint with a Clerk session token instead of a public user identifier', async () => {
     // Arrange
-    window.location.href = 'https://corelive.example/write'
+    window.location.href = 'https://corelive.example/home'
     Object.defineProperty(window, 'Clerk', {
       configurable: true,
       value: {

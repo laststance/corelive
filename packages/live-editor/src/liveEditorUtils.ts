@@ -17,7 +17,7 @@
  * Why a separate utils file: parsing/serialization stays pure so the editor
  * component can stay focused on UI/IPC orchestration and is easy to unit-test.
  *
- * @module components/live-editor/liveEditorUtils
+ * @module liveEditorUtils
  */
 
 import type { CompletionSyncOperation } from '@corelive/desktop-contract/offline-workspace'
@@ -30,7 +30,7 @@ import type { CompletionSyncOperation } from '@corelive/desktop-contract/offline
  */
 const CHECKBOX_LINE_REGEX = /^([ \t]*)- \[([ x])\] (.+)$/
 
-/** Maximum allowed Completed.title length, mirroring `CreateCompletedSchema`. */
+/** Maximum allowed Completed.title length, mirroring the `varchar(255)` title column in `apps/web/src/db/schema.ts`. */
 export const COMPLETED_TITLE_MAX_LENGTH = 255
 
 /**

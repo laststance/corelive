@@ -190,12 +190,15 @@ export interface ElectronAPI {
    * LiveEditor Note window configuration from the Settings window's UI.
    *
    * Mirrors the `LiveEditorAPI` exposed inside the LiveEditor window itself
-   * (`preload-live-editor.ts`), but only includes the surface a settings page
-   * needs (no per-category note CRUD). All methods log + return safe defaults
-   * on failure rather than throwing.
+   * (`preload-offline-editor.ts`), but only includes the surface a settings page
+   * needs. All methods log + return safe defaults on failure rather than
+   * throwing.
    */
   liveEditor?: LiveEditorSettingsAPI
-  /** @deprecated Pre-rename installed clients expose this namespace; use `liveEditor`. */
+  /**
+   * Legacy alias of {@link ElectronAPI.liveEditor} for pre-rename installed preloads.
+   * @deprecated Use `liveEditor`.
+   */
   brainDump?: LiveEditorSettingsAPI
 }
 
@@ -228,11 +231,11 @@ export interface ElectronEnv {
 }
 
 /**
- * LiveEditor API exposed via contextBridge in preload-live-editor.ts.
+ * LiveEditor API exposed via contextBridge in preload-offline-editor.ts.
  *
  * Provides:
+ * - `workspace.*` — the offline editor's durable workspace commands
  * - `window.*` — frameless panel controls (close/opacity/bounds)
- * - `note.*`   — per-category text persistence
  * - `spaces.*` — macOS Spaces tracking for the panel
  */
 export interface LiveEditorAPI {
@@ -261,12 +264,6 @@ export interface LiveEditorAPI {
       height: number
     }) => Promise<void>
   }
-  note: {
-    /** Read persisted note text for a category (empty string when none). */
-    get: (categoryId: number) => Promise<string>
-    /** Persist note text for a category. */
-    set: (categoryId: number, text: string) => Promise<void>
-  }
   spaces: {
     /** Read whether LiveEditor follows macOS Spaces. */
     getVisibleOnAllWorkspaces: () => Promise<boolean>
@@ -276,7 +273,7 @@ export interface LiveEditorAPI {
 }
 
 /**
- * LiveEditor environment information exposed via preload-live-editor.ts.
+ * LiveEditor environment information exposed via preload-offline-editor.ts.
  */
 export interface LiveEditorEnv {
   /** Whether running in Electron */
@@ -311,21 +308,11 @@ declare global {
      */
     liveEditorAPI?: LiveEditorAPI
 
-    /** @deprecated Pre-rename installed preload alias; use `liveEditorAPI`. */
-    brainDumpAPI?: LiveEditorAPI
-
     /**
      * LiveEditor environment information.
      * Only available when running in the LiveEditor window.
      */
     liveEditorEnv?: LiveEditorEnv
-
-    /** @deprecated Pre-rename installed preload hint; use `liveEditorEnv`. */
-    brainDumpEnv?: {
-      isElectron: boolean
-      isBrainDump: boolean
-      platform: string
-    }
   }
 }
 

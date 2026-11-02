@@ -152,7 +152,7 @@ import { WindowManager } from '../WindowManager'
 const SERVER_URL = 'https://corelive.app'
 const LIVE_EDITOR_URL = 'corelive-editor://app/index.html'
 const LOGIN_SHELL_URL = `${SERVER_URL}/login-shell`
-const LOGIN_REDIRECT_URL = `${SERVER_URL}/login?redirect_url=/live-editor`
+const LOGIN_REDIRECT_URL = `${SERVER_URL}/login?redirect_url=/home`
 
 /**
  * Returns the Nth created window, failing the test if none exists. Narrows away
@@ -961,7 +961,7 @@ describe('WindowManager bundled startup panel', () => {
       windowManager.showLiveEditor()
       const liveEditorWindow = getWindow(0)
 
-      // Act: /live-editor answered 503, then the backoff fires.
+      // Act: /home answered 503, then the backoff fires.
       fireHttpErrorNavigation(liveEditorWindow, LIVE_EDITOR_URL, 503)
       vi.runOnlyPendingTimers()
 

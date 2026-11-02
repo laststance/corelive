@@ -82,15 +82,10 @@ function renderSurface({
       categoryCount={1}
       categoryPicker={null}
       settings={UserSettingsStateSchema.parse({ liveEditorFontSize: 18 })}
-      storageAvailability="ok"
       details={details}
       isCategoryListPending={false}
       isCategoryListError={false}
-      isElectronPanel
       isMounted
-      isSignedIn
-      isAuthLoaded
-      isSignedOutWeb={false}
       isLiveEditorConfigReady
       activeCategoryId={1}
       isNoteFieldDisabled={false}

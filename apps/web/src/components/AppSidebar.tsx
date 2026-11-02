@@ -5,7 +5,6 @@ import {
   Search,
   Home as HomeIcon,
   Sparkles,
-  PenLine,
   Plus,
   Settings,
   ChevronDown,
@@ -46,8 +45,7 @@ import {
   SidebarMenuItem,
   SidebarSeparator,
 } from '@/components/ui/sidebar'
-
-const GITHUB_REPO = 'laststance/corelive'
+import { MAC_DOWNLOAD_URL } from '@/lib/constants/macDownload'
 
 /**
  * The shared application sidebar used across all `(main)` routes.
@@ -60,9 +58,6 @@ export const AppSidebar = function AppSidebar() {
   const router = useRouter()
   const pathname = usePathname()
   const [manageDialogOpen, setManageDialogOpen] = useState(false)
-
-  // Web deployment versions can precede a desktop release; the release page always points to published installers.
-  const macDownloadUrl = `https://github.com/${GITHUB_REPO}/releases/latest`
 
   const handleOpenSettings = (): void => {
     router.push('/settings')
@@ -150,7 +145,7 @@ export const AppSidebar = function AppSidebar() {
                       <DropdownMenuSeparator />
                       <DropdownMenuItem asChild>
                         <a
-                          href={macDownloadUrl}
+                          href={MAC_DOWNLOAD_URL}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center gap-2"
@@ -187,18 +182,6 @@ export const AppSidebar = function AppSidebar() {
                     <Link href="/home">
                       <HomeIcon className="h-4 w-4" />
                       <span>Home</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  {/* LiveEditor is the only surface that creates keeps, so the
-                       web needs a way in — Home is a read-only dashboard. /write
-                       is the public web host; /live-editor stays the Electron
-                       panel's protected route. */}
-                  <SidebarMenuButton asChild isActive={pathname === '/write'}>
-                    <Link href="/write">
-                      <PenLine className="h-4 w-4" />
-                      <span>LiveEditor</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

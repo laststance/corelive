@@ -1,8 +1,4 @@
-import {
-  defaultShouldDehydrateQuery,
-  hashKey,
-  QueryClient,
-} from '@tanstack/react-query'
+import { hashKey, QueryClient } from '@tanstack/react-query'
 
 import {
   QUERY_CACHE_RETENTION_MS,
@@ -27,11 +23,6 @@ export function createQueryClient(): QueryClient {
         gcTime: QUERY_CACHE_RETENTION_MS,
       },
       dehydrate: {
-        // `meta: { persist: false }` keeps a query out of the persisted cache and
-        // SSR dehydration — for day-relative answers (the Today Ember's one-day
-        // total) that must never be replayed from an older day.
-        shouldDehydrateQuery: (query) =>
-          defaultShouldDehydrateQuery(query) && query.meta?.persist !== false,
         serializeData(data) {
           return serializer.serialize(data)
         },

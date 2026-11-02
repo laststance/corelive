@@ -11,10 +11,6 @@ import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useMounted } from '@/hooks/use-mounted'
-import {
-  notifyNativeWindowPreferencesChanged,
-  useNativeWindowPreferencesVersion,
-} from '@/hooks/useNativeWindowPreferencesVersion'
 import { useShortcutCapture } from '@/hooks/useShortcutCapture'
 import {
   type LiveEditorOpacity,
@@ -23,6 +19,7 @@ import {
   LIVE_EDITOR_OPACITY_STEP,
 } from '@/lib/constants/live-editor'
 import { log } from '@/lib/logger'
+import { runNowAndOnWindowFocus } from '@/lib/runNowAndOnWindowFocus'
 import { cn } from '@/lib/utils'
 
 /**
@@ -67,7 +64,6 @@ export const LiveEditorSettings = function LiveEditorSettings({
   className,
   children,
 }: LiveEditorSettingsProps): React.ReactElement {
-  const preferencesVersion = useNativeWindowPreferencesVersion()
   const opacityId = useId()
   const shortcutId = useId()
   const secondaryShortcutId = useId()
@@ -89,6 +85,11 @@ export const LiveEditorSettings = function LiveEditorSettings({
   // Last successfully persisted opacity — a rollback target so we don't restore
   // the in-flight optimistic value (held in `opacity`) while the IPC call pends.
   const lastGoodOpacityRef = useRef<LiveEditorOpacity>(1.0)
+  // Saves currently awaiting the main process, per control group. A focus
+  // re-read skips a group while its save is in flight so it cannot clobber the
+  // optimistic value the visitor just chose.
+  const opacitySavesInFlightRef = useRef(0)
+  const shortcutSavesInFlightRef = useRef(0)
   // Shortcut capture (optimistic set + conflict rollback) via the shared hook;
   // persists over the `liveEditor` bridge.
   const {
@@ -96,9 +97,15 @@ export const LiveEditorSettings = function LiveEditorSettings({
     setLoadedShortcut,
     capture: handleShortcutCapture,
   } = useShortcutCapture({
-    persist: async (accelerator) =>
-      getLiveEditorSettingsAPI()?.setShortcut(accelerator) ??
-      Promise.resolve(undefined),
+    persist: async (accelerator) => {
+      shortcutSavesInFlightRef.current += 1
+      try {
+        return await (getLiveEditorSettingsAPI()?.setShortcut(accelerator) ??
+          Promise.resolve(undefined))
+      } finally {
+        shortcutSavesInFlightRef.current -= 1
+      }
+    },
     onError: (text) => setError('shortcuts', text),
   })
   // Second, equally-live key for the same toggle. `setShortcutSecondary` is
@@ -110,13 +117,22 @@ export const LiveEditorSettings = function LiveEditorSettings({
     setLoadedShortcut: setLoadedSecondaryShortcut,
     capture: handleSecondaryShortcutCapture,
   } = useShortcutCapture({
-    persist: async (accelerator) =>
-      getLiveEditorSettingsAPI()?.setShortcutSecondary?.(accelerator) ??
-      Promise.resolve(undefined),
+    persist: async (accelerator) => {
+      shortcutSavesInFlightRef.current += 1
+      try {
+        return await (getLiveEditorSettingsAPI()?.setShortcutSecondary?.(
+          accelerator,
+        ) ?? Promise.resolve(undefined))
+      } finally {
+        shortcutSavesInFlightRef.current -= 1
+      }
+    },
     onError: (text) => setError('shortcuts', text),
   })
 
-  // Reload native values on mount and after a save in either open window.
+  // Reload native values on mount and whenever this window regains focus (the
+  // Settings popover hides on blur and persists, so another surface may have
+  // saved meanwhile). Saves from this window update the controls directly.
   // The non-Electron branch is rendered via the early-return below, so it
   // never observes `isReady`; we only flip it after the IPC fetch resolves.
   useCycleEffect(() => {
@@ -133,46 +149,45 @@ export const LiveEditorSettings = function LiveEditorSettings({
     )
       return
 
-    let cancelled = false
-
-    // Load failures belong beside their controls, even when another group loads successfully.
-    void Promise.all([
-      api
-        .getOpacity()
-        .then((op) => {
-          if (cancelled) return
-          setOpacity(op)
-          lastGoodOpacityRef.current = op
-          setError('opacity', null)
-        })
-        .catch((loadError: unknown) => {
-          log.error('Failed to load LiveEditor opacity:', loadError)
-          if (!cancelled) setError('opacity', 'Failed to load window opacity')
-        }),
+    const load = async (isStale: () => boolean): Promise<unknown> =>
+      // Load failures belong beside their controls, even when another group loads successfully.
       Promise.all([
-        api.getShortcut(),
-        // Older preloads lack the second slot, so keep its capture box hidden.
-        api.getShortcutSecondary?.() ?? '',
-      ])
-        .then(([sc, secondarySc]) => {
-          if (cancelled) return
-          setLoadedShortcut(sc)
-          setLoadedSecondaryShortcut(secondarySc)
-          setError('shortcuts', null)
-        })
-        .catch((loadError: unknown) => {
-          log.error('Failed to load LiveEditor shortcuts:', loadError)
-          if (!cancelled)
-            setError('shortcuts', 'Failed to load toggle shortcuts')
-        }),
-    ]).finally(() => {
-      if (!cancelled) setIsReady(true)
-    })
+        api
+          .getOpacity()
+          .then((op) => {
+            if (isStale() || opacitySavesInFlightRef.current > 0) return
+            setOpacity(op)
+            lastGoodOpacityRef.current = op
+            setError('opacity', null)
+          })
+          .catch((loadError: unknown) => {
+            log.error('Failed to load LiveEditor opacity:', loadError)
+            if (!isStale()) setError('opacity', 'Failed to load window opacity')
+          }),
+        Promise.all([
+          api.getShortcut(),
+          // Older preloads lack the second slot, so keep its capture box hidden.
+          api.getShortcutSecondary?.() ?? '',
+        ])
+          .then(([sc, secondarySc]) => {
+            if (isStale() || shortcutSavesInFlightRef.current > 0) return
+            setLoadedShortcut(sc)
+            setLoadedSecondaryShortcut(secondarySc)
+            setError('shortcuts', null)
+          })
+          .catch((loadError: unknown) => {
+            log.error('Failed to load LiveEditor shortcuts:', loadError)
+            if (!isStale())
+              setError('shortcuts', 'Failed to load toggle shortcuts')
+          }),
+      ]).finally(() => {
+        if (!isStale()) setIsReady(true)
+      })
 
-    return (): void => {
-      cancelled = true
-    }
-  }, [preferencesVersion])
+    return runNowAndOnWindowFocus((isStale) => {
+      void load(isStale)
+    })
+  }, [])
 
   const handleOpacityChange = (values: number[]): void => {
     const next = values[0]
@@ -184,18 +199,20 @@ export const LiveEditorSettings = function LiveEditorSettings({
     const next = values[0]
     if (next === undefined) return
     setError('opacity', null)
+    opacitySavesInFlightRef.current += 1
     try {
       const applied = await getLiveEditorSettingsAPI()?.setOpacity(next)
       const persisted = typeof applied === 'number' ? applied : next
       setOpacity(persisted)
       lastGoodOpacityRef.current = persisted
-      notifyNativeWindowPreferencesChanged()
     } catch (err) {
       log.error('Failed to update LiveEditor opacity:', err)
       // Roll back to the last value the main process confirmed, not the
       // in-flight optimistic value held in `opacity` state.
       setOpacity(lastGoodOpacityRef.current)
       setError('opacity', 'Failed to update opacity')
+    } finally {
+      opacitySavesInFlightRef.current -= 1
     }
   }
 

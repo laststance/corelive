@@ -10,7 +10,6 @@ import {
   categoryTable,
   completedTable,
   electronSettingsTable,
-  importBatchTable,
   nodeAssignmentTable,
   skillTreeTable,
   todoTable,
@@ -21,7 +20,6 @@ import { settleBehindHeldTransaction } from '@/test/heldTransaction'
 import { DEFAULT_CATEGORY_SEED } from '../schemas/category'
 
 import { createCategory, listCategories, updateCategory } from './category'
-import { importLocalCompleted } from './completed'
 import { describeIfDb } from './describeIfDb'
 import { getElectronSettings } from './electronSettings'
 import { assignTask, getMyTree, unassignTask } from './skillTree'
@@ -119,9 +117,6 @@ afterEach(async () => {
       .where(eq(electronSettingsTable.userId, user.id))
     await db.delete(completedTable).where(eq(completedTable.userId, user.id))
     await db.delete(todoTable).where(eq(todoTable.userId, user.id))
-    await db
-      .delete(importBatchTable)
-      .where(eq(importBatchTable.userId, user.id))
     await db.delete(categoryTable).where(eq(categoryTable.userId, user.id))
     await db.delete(userTable).where(eq(userTable.id, user.id))
   }
@@ -236,75 +231,6 @@ describeIfDb('constraint-violation catch sites (real PostgreSQL)', () => {
         settled.value.categories.map((category) => category.name),
     ).toEqual(['General'])
     expect(await countCategories(user!.id)).toBe(1)
-  })
-
-  test('files an import under the existing category when the default "General" name is already taken by a non-default one', async () => {
-    // Arrange — General exists but is NOT the default, so seeding a default General collides.
-    const clerkId = freshClerkId()
-    const [user] = await db.insert(userTable).values({ clerkId }).returning()
-    const [nonDefaultGeneral] = await db
-      .insert(categoryTable)
-      .values({
-        name: 'General',
-        color: 'blue',
-        isDefault: false,
-        userId: user!.id,
-      })
-      .returning()
-
-    // Act
-    const result = await call(
-      importLocalCompleted,
-      {
-        batchId: randomUUID(),
-        items: [
-          {
-            localId: 'keep-1',
-            title: 'push-ups',
-            completedAt: new Date('2026-09-01T09:00:00Z'),
-          },
-        ],
-      },
-      authContext(clerkId),
-    )
-
-    // Assert
-    expect(result.imported).toBe(1)
-    const rows = await db
-      .select()
-      .from(completedTable)
-      .where(eq(completedTable.userId, user!.id))
-    expect(rows.map((row) => row.categoryId)).toEqual([nonDefaultGeneral!.id])
-    expect(await countCategories(user!.id)).toBe(1)
-  })
-
-  test('reports alreadyImported and adds no rows when the same import batch is sent twice', async () => {
-    // Arrange
-    const clerkId = freshClerkId()
-    const batchId = randomUUID()
-    const input = {
-      batchId,
-      items: [
-        {
-          localId: 'keep-1',
-          title: 'push-ups',
-          completedAt: new Date('2026-09-01T09:00:00Z'),
-        },
-      ],
-    }
-    await call(importLocalCompleted, input, authContext(clerkId))
-
-    // Act
-    const retry = await call(importLocalCompleted, input, authContext(clerkId))
-
-    // Assert
-    expect(retry).toEqual({ batchId, imported: 0, alreadyImported: true })
-    const user = await readUser(clerkId)
-    const [rowCount] = await db
-      .select({ value: count() })
-      .from(completedTable)
-      .where(eq(completedTable.userId, user.id))
-    expect(rowCount?.value).toBe(1)
   })
 
   test('returns the row another request created first when the first Electron settings read races an insert', async () => {

@@ -33,17 +33,20 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useUpdateEffect } from '@/hooks/use-update-effect'
-import { useCategoryMutations } from '@/hooks/useCategoryMutations'
+import {
+  getCategoryDeleteNotFoundReason,
+  useCategoryMutations,
+} from '@/hooks/useCategoryMutations'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { getColorDotClass } from '@/lib/category-colors'
 import {
   createCategoryHierarchy,
   getCategoryPath,
 } from '@/lib/categoryHierarchy'
-import { rescueCategoryDraft } from '@/lib/live-editor/rescueCategoryDraft'
 import { orpc } from '@/lib/orpc/client-query'
 import {
   CATEGORY_COLORS,
+  CATEGORY_DELETE_NOT_FOUND_REASON,
   type CategoryColor,
   type CategoryWithCount,
 } from '@/server/schemas/category'
@@ -530,7 +533,8 @@ function CategoryEditor({
 }
 
 /**
- * Holds destructive confirmation until the current-device draft and server transaction succeed.
+ * Holds destructive confirmation until the server delete transaction succeeds.
+ * Writing in the desktop app is not touched here: each Mac keeps its own draft and asks where to keep it after it syncs.
  * @example
  * <CategoryDeletion category={work} categories={categories} onClose={closeConfirmation} />
  */
@@ -550,9 +554,9 @@ function CategoryDeletion({
     categories.find((candidate) => candidate.isDefault)?.id ??
     null
   const [state, setState] = useState({
+    // null means "use the freshest default", e.g. after the chosen destination vanished.
     destinationId: defaultId,
     error: '',
-    rescuing: false,
   })
   const isSubmitting = useRef(false)
   const children = categories.filter(
@@ -567,39 +571,42 @@ function CategoryDeletion({
         candidate.name === child.name,
     ),
   )
-  const busy = state.rescuing || deleteMutation.isPending
+  const busy = deleteMutation.isPending
+  const selectedDestinationId = state.destinationId ?? defaultId
   const destination = categories.find(
     (candidate) =>
-      candidate.id === state.destinationId &&
+      candidate.id === selectedDestinationId &&
       candidate.id !== category.id &&
       candidate.id > 0,
   )
   const confirm = async (): Promise<void> => {
     if (isSubmitting.current || !destination || conflicts.length) return
     isSubmitting.current = true
-    let didRequestDelete = false
-    setState((current) => ({ ...current, rescuing: true, error: '' }))
+    setState((current) => ({ ...current, error: '' }))
     try {
-      // Both local deletion and remote replay preserve writing through the same durable rescue.
-      await rescueCategoryDraft(category.id, destination.id)
-      setState((current) => ({ ...current, rescuing: false }))
-      didRequestDelete = true
       await deleteMutation.mutateAsync({
         id: category.id,
         targetCategoryId: destination.id,
       })
-      // Stream acknowledgement retires this rescue only after every local preservation step completes.
       onClose()
     } catch (failure) {
+      const reason = getCategoryDeleteNotFoundReason(failure)
+      // The first attempt already deleted it (lost response): nothing left to do.
+      if (reason === CATEGORY_DELETE_NOT_FOUND_REASON.source) {
+        onClose()
+        return
+      }
       setState((current) => ({
         ...current,
-        error: didRequestDelete
-          ? categoryFormError(failure)
-          : 'Could not move your writing on this device. Nothing was deleted. Retry.',
+        error: categoryFormError(failure),
+        // The destination vanished: fall back to the refreshed default; any other failure keeps the choice for retry.
+        destinationId:
+          reason === CATEGORY_DELETE_NOT_FOUND_REASON.destination
+            ? null
+            : current.destinationId,
       }))
     } finally {
       isSubmitting.current = false
-      setState((current) => ({ ...current, rescuing: false }))
     }
   }
   return (
@@ -620,9 +627,8 @@ function CategoryDeletion({
             {destination
               ? getCategoryPath(destination, categories)
               : 'your selected category'}
-            . Your entries will be kept. Writing saved in this app or browser
-            will move too. Other signed-in apps, browsers, and devices preserve
-            their own local drafts when they next refresh.
+            . Your entries will be kept. Writing in the desktop app stays on
+            each Mac. After it syncs, you choose where to keep it.
           </AlertDialogDescription>
         </AlertDialogHeader>
         {children.length > 0 && (
@@ -641,7 +647,7 @@ function CategoryDeletion({
         <Label htmlFor={destinationSelectId}>Move entries to</Label>
         <Select
           value={
-            state.destinationId === null ? '' : String(state.destinationId)
+            selectedDestinationId === null ? '' : String(selectedDestinationId)
           }
           onValueChange={(value) =>
             setState((current) => ({
@@ -672,10 +678,9 @@ function CategoryDeletion({
           </SelectContent>
         </Select>
         {state.error && (
-          <div role="alert" className="space-y-1 text-sm text-destructive">
-            <p>{state.error}</p>
-            <p>Your original draft is retained.</p>
-          </div>
+          <p role="alert" className="text-sm text-destructive">
+            {state.error}
+          </p>
         )}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
@@ -687,11 +692,7 @@ function CategoryDeletion({
             disabled={busy || !destination || conflicts.length > 0}
             className="text-destructive-foreground hover:bg-destructive/90 bg-destructive"
           >
-            {state.rescuing
-              ? 'Moving writing…'
-              : deleteMutation.isPending
-                ? 'Deleting…'
-                : 'Delete'}
+            {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

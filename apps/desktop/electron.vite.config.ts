@@ -111,10 +111,6 @@ export default defineConfig({
             import.meta.dirname,
             'electron/preload-login.ts',
           ),
-          'preload-live-editor': resolve(
-            import.meta.dirname,
-            'electron/preload-live-editor.ts',
-          ),
           'preload-offline-auth': resolve(
             import.meta.dirname,
             'electron/preload-offline-auth.ts',

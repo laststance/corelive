@@ -134,3 +134,77 @@ test('switching a parent history to direct entries starts a fresh first page wit
   )
   client.clear()
 })
+
+test('an empty history invites the visitor to write in the desktop app and links to the Mac download', async () => {
+  // Arrange
+  journal.mockResolvedValue({
+    entries: [],
+    total: 0,
+    nextOffset: null,
+    hasMore: false,
+  })
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  })
+
+  // Act
+  render(
+    <QueryClientProvider client={client}>
+      <CompletedTodos categories={CATEGORIES} />
+    </QueryClientProvider>,
+  )
+
+  // Assert
+  expect(await screen.findByText('Your year starts here')).toBeVisible()
+  expect(
+    screen.getByText(
+      "Check a line off in the CoreLive desktop app — it'll appear here",
+    ),
+  ).toBeVisible()
+  const downloadLink = screen.getByRole('link', {
+    name: 'Get Mac app (opens GitHub in a new tab)',
+  })
+  expect(downloadLink).toHaveAttribute(
+    'href',
+    'https://github.com/laststance/corelive/releases/latest',
+  )
+  expect(downloadLink).toHaveAttribute('target', '_blank')
+  client.clear()
+})
+
+test('a failed background refetch keeps the loaded history visible instead of an error block', async () => {
+  // Arrange
+  journal.mockResolvedValueOnce({
+    entries: [
+      {
+        source: 'completed',
+        id: 1,
+        title: 'Shipped the thing',
+        completedAt: new Date('2026-10-01T09:00:00Z'),
+        category: { id: 1, name: 'Work', color: 'blue', parent: null },
+      },
+    ],
+    total: 1,
+    nextOffset: null,
+    hasMore: false,
+  })
+  journal.mockRejectedValue(new Error('network down'))
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+  })
+  render(
+    <QueryClientProvider client={client}>
+      <CompletedTodos categories={CATEGORIES} />
+    </QueryClientProvider>,
+  )
+  await screen.findByText('Shipped the thing')
+
+  // Act
+  await client.refetchQueries()
+
+  // Assert
+  await waitFor(() => expect(journal).toHaveBeenCalledTimes(2))
+  expect(screen.getByText('Shipped the thing')).toBeVisible()
+  expect(screen.queryByText('An error occurred')).toBeNull()
+  client.clear()
+})

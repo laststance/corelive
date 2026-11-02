@@ -1,18 +1,11 @@
 /**
  * @fileoverview The dialog runs on the real {@link useCategoryMutations}, the
  * real TanStack cache and the real oRPC client; MSW answers `/api/orpc/*`.
- * Assertions read the server's table and the device's localStorage, not a spy —
+ * Assertions read the server's table, not a spy —
  * a stubbed mutation would report the call and prove nothing landed.
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import {
-  act,
-  cleanup,
-  render,
-  screen,
-  waitFor,
-  within,
-} from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { toast } from 'sonner'
@@ -27,13 +20,7 @@ import {
   vi,
 } from 'vitest'
 
-import * as CategorySyncModule from '@/lib/category-sync-channel'
-import {
-  getCategoryDraftRescueReceipt,
-  prepareCategoryDraftRescueReceipt,
-} from '@/lib/live-editor/categoryDraftRescueReceipts'
-import { CATEGORY_DRAFT_RESCUE_STORAGE_KEY } from '@/lib/live-editor/constants'
-import { getLocalNote, setLocalNote } from '@/lib/live-editor/localNoteStore'
+import type * as CategorySyncModule from '@/lib/category-sync-channel'
 import { orpc } from '@/lib/orpc/client-query'
 import type { CategoryWithCount } from '@/server/schemas/category'
 import {
@@ -91,94 +78,6 @@ const defaultCategory = buildCategory({
 })
 
 /**
- * Installs an Electron bridge whose note store fails the way a bad disk read or
- * write does. `preload-live-editor.ts` re-throws both by design, and the web
- * host cannot reject at all (localStorage degrades to memory), so this is the
- * only shape that reaches the rescue's failure path.
- * @param failingCall - `'read'` fails every read; `'write'` fails every write,
- *   so the text never reaches the default category.
- * @returns The bridge's note table, to assert what survived on the device.
- * @example
- * const notes = installFailingLiveEditorBridge('read')
- */
-function installFailingLiveEditorBridge(
-  failingCall: 'read' | 'write',
-): Map<number, string> {
-  const notes = new Map<number, string>([[12, 'half a thought']])
-  window.liveEditorAPI = {
-    window: {
-      close: async (): Promise<void> => {},
-      setOpacity: async (): Promise<void> => {},
-      getOpacity: async () => 1,
-      getBounds: async () => null,
-      setBounds: async (): Promise<void> => {},
-    },
-    note: {
-      get: async (categoryId) => {
-        if (failingCall === 'read') throw new Error('Failed to read note')
-        return notes.get(categoryId) ?? ''
-      },
-      set: async (categoryId, text): Promise<void> => {
-        if (failingCall === 'write') throw new Error('Failed to write note')
-        notes.set(categoryId, text)
-      },
-    },
-    spaces: {
-      getVisibleOnAllWorkspaces: async () => false,
-      setVisibleOnAllWorkspaces: async (enabled) => enabled,
-    },
-  }
-  return notes
-}
-
-/**
- * Installs a bridge that never resolves the doomed category's read until the
- * spec releases it, making the window between confirming a delete and the
- * rescue finishing real enough to click into.
- * @returns The bridge's note table, plus one resolver per read it was asked
- *   for — the count is how many rescues actually started.
- * @example
- * const { notes, heldReads } = installHeldReadLiveEditorBridge()
- */
-function installHeldReadLiveEditorBridge(): {
-  notes: Map<number, string>
-  heldReads: Array<(text: string) => void>
-} {
-  const notes = new Map<number, string>([
-    [1, 'already here'],
-    [12, 'half a thought'],
-  ])
-  const heldReads: Array<(text: string) => void> = []
-  window.liveEditorAPI = {
-    window: {
-      close: async (): Promise<void> => {},
-      setOpacity: async (): Promise<void> => {},
-      getOpacity: async () => 1,
-      getBounds: async () => null,
-      setBounds: async (): Promise<void> => {},
-    },
-    note: {
-      // Only the doomed category hangs; the default still reads normally, so
-      // the append itself is never what this spec is waiting on.
-      get: async (categoryId) =>
-        categoryId === 12
-          ? new Promise<string>((resolve) => {
-              heldReads.push(resolve)
-            })
-          : Promise.resolve(notes.get(categoryId) ?? ''),
-      set: async (categoryId, text): Promise<void> => {
-        notes.set(categoryId, text)
-      },
-    },
-    spaces: {
-      getVisibleOnAllWorkspaces: async () => false,
-      setVisibleOnAllWorkspaces: async (enabled) => enabled,
-    },
-  }
-  return { notes, heldReads }
-}
-
-/**
  * Opens the dialog over a server holding the given rows and waits for the list
  * to arrive, so no spec asserts against an empty first render.
  * @param categories - Rows the fake `category.list` should return.
@@ -221,11 +120,6 @@ afterAll(() => orpcServer.close())
 beforeEach(() => {
   vi.clearAllMocks()
   resetOrpcServer()
-  // The draft store is real localStorage, and happy-dom keeps one per file.
-  localStorage.clear()
-  // Back to the web host; a spec that installed a failing bridge keeps it
-  // otherwise, and happy-dom's window outlives the test.
-  delete window.liveEditorAPI
 })
 
 describe('CategoryManageDialog create row', () => {
@@ -433,256 +327,6 @@ describe('CategoryManageDialog row actions', () => {
   })
 })
 
-describe('CategoryManageDialog draft rescue', () => {
-  test('moves an unsaved draft into the default category before deleting', async () => {
-    // Arrange — the doomed category holds text the server never sees. Deleting
-    // without moving it strands the text in device storage forever, because the
-    // note key is the category id and that id is about to stop existing.
-    const user = userEvent.setup()
-    setLocalNote(1, 'already here')
-    setLocalNote(12, 'half a thought')
-    await renderDialog([defaultCategory, buildCategory()])
-
-    // Act
-    await user.click(screen.getByRole('button', { name: 'Delete Work' }))
-    await user.click(screen.getByRole('button', { name: 'Delete' }))
-
-    // Assert — read back from the same localStorage the editor reads.
-    await waitFor(() => {
-      expect(getLocalNote(1)).toBe('already here\nhalf a thought')
-    })
-    // The doomed copy is left behind on purpose. Wiping it is the one move here
-    // that can destroy text: a rejected delete restores the category with its
-    // draft, and the retry skips the re-append, so the wipe would take away the
-    // last reachable copy. The orphan is unreachable and ids never repeat.
-    expect(getLocalNote(12)).toBe('half a thought')
-    await waitFor(() => {
-      expect(readCategories().map((category) => category.name)).toEqual([
-        'General',
-      ])
-    })
-  })
-
-  test('rescues a draft that is only a fragment of a line the default already holds', async () => {
-    // Arrange — the guard against re-appending compares the doomed draft with
-    // the default's text. Compare it loosely and notes disappear: "milk" reads
-    // as already rescued because "buy milk today" contains those letters, and
-    // the delete then orphans the only copy of it.
-    const user = userEvent.setup()
-    setLocalNote(1, 'buy milk today')
-    setLocalNote(12, 'milk')
-    await renderDialog([defaultCategory, buildCategory()])
-
-    // Act
-    await user.click(screen.getByRole('button', { name: 'Delete Work' }))
-    await user.click(screen.getByRole('button', { name: 'Delete' }))
-
-    // Assert — it arrives as its own line, because it is its own note. Both
-    // reads are polled: `readCategories` hits the MSW table, and the server
-    // delete lands after the append, so asserting it outside the wait races.
-    await waitFor(() => {
-      expect(getLocalNote(1)).toBe('buy milk today\nmilk')
-      expect(readCategories().map((category) => category.name)).toEqual([
-        'General',
-      ])
-    })
-  })
-
-  test('appends the rescued draft once when the delete is confirmed twice', async () => {
-    // Arrange — the doomed read is held open on purpose. A bridge that resolves
-    // normally finishes the whole rescue between the two clicks, and this spec
-    // would then pass against code with no guard at all.
-    const user = userEvent.setup()
-    const { notes, heldReads } = installHeldReadLiveEditorBridge()
-    await renderDialog([defaultCategory, buildCategory()])
-
-    // Act — confirm, then confirm again while the first rescue is still
-    // reading. The action button is a Close, so the confirmation is already
-    // gone, the row is still listed, and `isPending` is still false.
-    await user.click(screen.getByRole('button', { name: 'Delete Work' }))
-    await user.click(screen.getByRole('button', { name: 'Delete' }))
-    expect(
-      screen.getByRole('button', { name: 'Moving writing…' }),
-    ).toBeDisabled()
-
-    // Assert — the second confirmation started no second rescue. Counting reads
-    // rather than diffing the merged text keeps this independent of how two
-    // concurrent appends would happen to interleave.
-    expect(heldReads).toHaveLength(1)
-
-    // And the one rescue that did run lands the draft exactly once.
-    heldReads.forEach((releaseRead) => releaseRead('half a thought'))
-    await waitFor(() => {
-      expect(notes.get(1)).toBe('already here\nhalf a thought')
-    })
-    // The ignored confirmation is silent: nothing failed, so nothing is said.
-    expect(toast.error).not.toHaveBeenCalled()
-    await waitFor(() => {
-      expect(readCategories().map((category) => category.name)).toEqual([
-        'General',
-      ])
-    })
-  })
-
-  test('keeps the category when its draft cannot be moved off the device', async () => {
-    // Arrange — the Electron note bridge rejects, so nothing reached safety.
-    // Deleting anyway would strand the text under an id nothing can reach,
-    // which is the loss the dialog promises does not happen.
-    const user = userEvent.setup()
-    installFailingLiveEditorBridge('read')
-    await renderDialog([defaultCategory, buildCategory()])
-
-    // Act
-    await user.click(screen.getByRole('button', { name: 'Delete Work' }))
-    await user.click(screen.getByRole('button', { name: 'Delete' }))
-
-    // Assert — the confirmation is a Radix Close, so it is already gone by the
-    // time the rescue rejects; the toast is the only channel left to say the
-    // delete was abandoned. Asserted, because the source comment claims it.
-    expect(screen.getByRole('alertdialog')).toBeVisible()
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Your original draft is retained',
-    )
-    expect(readCategories().map((category) => category.name)).toEqual([
-      'General',
-      'Work',
-    ])
-  })
-
-  test('keeps the category when the rescued draft cannot be written to the default', async () => {
-    // Arrange — the read works but the write into the default rejects, so the
-    // text reached nowhere. Deleting on a half-finished rescue would strand it
-    // under an id nothing can reach, same as a failed read.
-    const user = userEvent.setup()
-    const notes = installFailingLiveEditorBridge('write')
-    await renderDialog([defaultCategory, buildCategory()])
-
-    // Act
-    await user.click(screen.getByRole('button', { name: 'Delete Work' }))
-    await user.click(screen.getByRole('button', { name: 'Delete' }))
-
-    // Assert — Work survives, still holding the only copy of its draft.
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Your original draft is retained',
-    )
-    expect(readCategories().map((category) => category.name)).toEqual([
-      'General',
-      'Work',
-    ])
-    expect(notes.get(12)).toBe('half a thought')
-  })
-
-  test('leaves the draft in its own category when the delete is rejected', async () => {
-    // Arrange — the server refuses the delete. Wiping the doomed copy before
-    // knowing that would take the draft away from a category that still
-    // exists: the same loss the rescue is here to prevent, only quieter.
-    const user = userEvent.setup()
-    setLocalNote(1, 'already here')
-    setLocalNote(12, 'half a thought')
-    await renderDialog([defaultCategory, buildCategory()])
-    // Armed after renderDialog, never before: it calls resetOrpcServer, which disarms.
-    armNetworkFailure()
-
-    // Act
-    await user.click(screen.getByRole('button', { name: 'Delete Work' }))
-    await user.click(screen.getByRole('button', { name: 'Delete' }))
-
-    // Assert — Work is still there, and still holds the text only it can reach.
-    await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith(
-        "Couldn't save that change — try again.",
-      )
-    })
-    expect(readCategories().map((category) => category.name)).toEqual([
-      'General',
-      'Work',
-    ])
-    expect(getLocalNote(12)).toBe('half a thought')
-    // The default carries a duplicate until the delete is retried. A copy the
-    // user can see and remove beats text nothing can reach again.
-    expect(getLocalNote(1)).toBe('already here\nhalf a thought')
-  })
-
-  test('carries the rescued draft over once when a rejected delete is retried', async () => {
-    // Arrange — the first attempt already appended to the default and left the
-    // doomed copy alone, so a second read of that untouched key must not append
-    // the same text again.
-    const user = userEvent.setup()
-    setLocalNote(1, 'already here')
-    setLocalNote(12, 'half a thought')
-    await renderDialog([defaultCategory, buildCategory()])
-    armNetworkFailure()
-    await user.click(screen.getByRole('button', { name: 'Delete Work' }))
-    await user.click(screen.getByRole('button', { name: 'Delete' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Your original draft is retained',
-    )
-
-    // Act — retry the retained confirmation against a server that answers.
-    await user.click(screen.getByRole('button', { name: 'Delete' }))
-
-    // Assert — one copy of the draft in the default, not two.
-    await waitFor(() => {
-      expect(readCategories().map((category) => category.name)).toEqual([
-        'General',
-      ])
-    })
-    expect(getLocalNote(1)).toBe('already here\nhalf a thought')
-    // Never wiped, on either attempt — the copy the retry relies on.
-    expect(getLocalNote(12)).toBe('half a thought')
-  })
-
-  test('appends the rescued draft once when the manager is reopened between two delete attempts', async () => {
-    // Arrange — the first attempt fails, so the doomed copy is deliberately
-    // left where it is. Closing the manager empties the in-memory "already
-    // rescued" set, and that lost state is the whole point of this spec.
-    const user = userEvent.setup()
-    setLocalNote(1, 'already here')
-    setLocalNote(12, 'half a thought')
-    await renderDialog([defaultCategory, buildCategory()])
-    armNetworkFailure()
-    await user.click(screen.getByRole('button', { name: 'Delete Work' }))
-    await user.click(screen.getByRole('button', { name: 'Delete' }))
-    // Waits on the append itself, not on the row returning: the retry must not
-    // repeat work that has already landed.
-    await waitFor(() => {
-      expect(getLocalNote(1)).toBe('already here\nhalf a thought')
-    })
-
-    // Act — unmount the manager, mount a fresh one, retry against a server
-    // that answers. Nothing in React remembers the first attempt.
-    cleanup()
-    await renderDialog([defaultCategory, buildCategory()])
-    await user.click(screen.getByRole('button', { name: 'Delete Work' }))
-    await user.click(screen.getByRole('button', { name: 'Delete' }))
-
-    // Assert — the draft the first attempt already moved is not moved twice.
-    await waitFor(() => {
-      expect(readCategories().map((category) => category.name)).toEqual([
-        'General',
-      ])
-    })
-    expect(getLocalNote(1)).toBe('already here\nhalf a thought')
-  })
-
-  test('deletes an empty category without touching the default draft', async () => {
-    // Arrange
-    const user = userEvent.setup()
-    setLocalNote(1, 'already here')
-    await renderDialog([defaultCategory, buildCategory()])
-
-    // Act
-    await user.click(screen.getByRole('button', { name: 'Delete Work' }))
-    await user.click(screen.getByRole('button', { name: 'Delete' }))
-
-    // Assert
-    await waitFor(() => {
-      expect(readCategories()).toHaveLength(1)
-    })
-    expect(getLocalNote(1)).toBe('already here')
-  })
-})
-
 describe('two-level category organization', () => {
   test('creates a subcategory beneath the chosen parent with its inherited color', async () => {
     // Arrange
@@ -734,12 +378,9 @@ describe('two-level category organization', () => {
     )
   })
 
-  test('previews and promotes children while rescuing only the deleted parent draft', async () => {
+  test('previews and promotes children when the parent is deleted', async () => {
     // Arrange
     const user = userEvent.setup()
-    setLocalNote(1, 'existing')
-    setLocalNote(12, 'parent writing')
-    setLocalNote(13, 'child writing')
     await renderDialog([
       defaultCategory,
       buildCategory({ recordCount: 1 }),
@@ -764,15 +405,11 @@ describe('two-level category organization', () => {
         [13, null],
       ]),
     )
-    expect(getLocalNote(1)).toBe('existing\nparent writing')
-    expect(getLocalNote(13)).toBe('child writing')
   })
 
-  test('deleting a child defaults its entries and writing to the parent', async () => {
+  test('deleting a child defaults its entries to the parent', async () => {
     // Arrange
     const user = userEvent.setup()
-    setLocalNote(12, 'work writing')
-    setLocalNote(13, 'child writing')
     await renderDialog([
       defaultCategory,
       buildCategory(),
@@ -790,8 +427,6 @@ describe('two-level category organization', () => {
     await waitFor(() =>
       expect(readCategories().map((category) => category.id)).toEqual([1, 12]),
     )
-    expect(getLocalNote(12)).toBe('work writing\nchild writing')
-    expect(getLocalNote(1)).toBe('')
   })
 
   test('blocks parent deletion when promotion would create a duplicate main category', async () => {
@@ -813,10 +448,9 @@ describe('two-level category organization', () => {
     expect(readCategories()).toHaveLength(4)
   })
 
-  test('moves a child to a main category without changing its draft ID', async () => {
+  test('moves a child to a main category', async () => {
     // Arrange
     const user = userEvent.setup()
-    setLocalNote(13, 'child writing')
     await renderDialog([
       defaultCategory,
       buildCategory(),
@@ -845,22 +479,7 @@ describe('two-level category organization', () => {
         readCategories().find((category) => category.id === 13),
       ).toMatchObject({ parentId: null, name: 'CoreLive' }),
     )
-    expect(getLocalNote(13)).toBe('child writing')
   })
-})
-
-test('preserves independently written identical drafts instead of mistaking the first rescue for a retry', async () => {
-  // Arrange
-  const user = userEvent.setup()
-  setLocalNote(1, 'same thought')
-  setLocalNote(12, 'same thought')
-  await renderDialog([defaultCategory, buildCategory()])
-  // Act
-  await user.click(screen.getByRole('button', { name: 'Delete Work' }))
-  await user.click(screen.getByRole('button', { name: 'Delete' }))
-  // Assert
-  await waitFor(() => expect(readCategories()).toHaveLength(1))
-  expect(getLocalNote(1)).toBe('same thought\nsame thought')
 })
 
 test('keyboard Enter chooses an edit color without submitting the category prematurely', async () => {
@@ -913,97 +532,142 @@ test('returns focus and allows Escape after the category being edited disappears
   expect(onOpenChange).toHaveBeenCalledWith(false)
 })
 
-test('restores the source once when a saved rescue copy was removed before retrying a failed delete', async () => {
-  // Arrange
-  const user = userEvent.setup()
-  setLocalNote(1, 'existing')
-  setLocalNote(12, 'half a thought')
-  await renderDialog([defaultCategory, buildCategory()])
-  armNetworkFailure()
-  await user.click(screen.getByRole('button', { name: 'Delete Work' }))
-  await user.click(screen.getByRole('button', { name: 'Delete' }))
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Your original draft is retained',
-  )
-  expect(getLocalNote(1)).toBe('existing\nhalf a thought')
-  const firstNotification = vi
-    .mocked(CategorySyncModule.broadcastCategorySync)
-    .mock.calls.find((call) => call[0] === 1)?.[1]
-  // Act — destination writing is edited in another window while the server category remains.
-  setLocalNote(1, 'existing')
-  await user.click(screen.getByRole('button', { name: 'Delete' }))
-  // Assert
-  await waitFor(() =>
-    expect(readCategories().map((category) => category.id)).toEqual([1]),
-  )
-  expect(getLocalNote(1)).toBe('existing\nhalf a thought')
-  const lastNotification = vi
-    .mocked(CategorySyncModule.broadcastCategorySync)
-    .mock.calls.filter((call) => call[0] === 1)
-    .at(-1)?.[1]
-  expect(firstNotification?.receipt).toBeTruthy()
-  expect(lastNotification?.receipt).not.toBe(firstNotification?.receipt)
-})
+describe('CategoryManageDialog deletion', () => {
+  /**
+   * Opens the delete confirmation for Work over a table that also holds Reading.
+   * @returns The user-event driver.
+   * @example
+   * const user = await openDeleteConfirmationForWork()
+   */
+  async function openDeleteConfirmationForWork() {
+    const user = userEvent.setup()
+    await renderDialog([
+      defaultCategory,
+      buildCategory({ recordCount: 2 }),
+      buildCategory({ id: 13, name: 'Reading' }),
+    ])
+    await user.click(screen.getByRole('button', { name: 'Delete Work' }))
+    return user
+  }
 
-test('retains confirmed source rescue until the account stream acknowledges it while preserving another pending source', async () => {
-  // Arrange
-  const user = userEvent.setup()
-  const uuid = vi
-    .spyOn(crypto, 'randomUUID')
-    .mockReturnValueOnce('00000000-0000-4000-8000-000000000001')
-  setLocalNote(1, 'existing')
-  setLocalNote(12, 'half a thought')
-  prepareCategoryDraftRescueReceipt(13, 1, 'existing', 'other pending writing')
-  await renderDialog([
-    defaultCategory,
-    buildCategory(),
-    buildCategory({ id: 13, name: 'Reading' }),
-  ])
-  // Act
-  await user.click(screen.getByRole('button', { name: 'Delete Work' }))
-  await user.click(screen.getByRole('button', { name: 'Delete' }))
-  // Assert
-  await waitFor(() =>
-    expect(readCategories().map((category) => category.id)).toEqual([1, 13]),
-  )
-  await waitFor(() =>
+  test('tells the visitor that desktop writing stays on each Mac and they choose where to keep it after sync', async () => {
+    // Arrange
+    await openDeleteConfirmationForWork()
+
+    // Act
+    const confirmation = screen.getByRole('alertdialog')
+
+    // Assert
     expect(
-      getCategoryDraftRescueReceipt(12, 1, 'half a thought'),
-    ).toMatchObject({ state: 'saved', text: 'half a thought' }),
-  )
-  expect(getCategoryDraftRescueReceipt(13, 1, 'other pending writing')).toEqual(
-    {
-      receipt: '00000000-0000-4000-8000-000000000001',
-      identity: '[13,1,"other pending writing"]',
-      baseText: 'existing',
-      text: 'other pending writing',
-      state: 'prepared',
-    },
-  )
-  expect(
-    JSON.parse(localStorage.getItem(CATEGORY_DRAFT_RESCUE_STORAGE_KEY) ?? '[]'),
-  ).toHaveLength(2)
-  expect(getLocalNote(12)).toBe('half a thought')
-  uuid.mockRestore()
-})
+      within(confirmation).getByText(
+        /2 direct entries will move to General\. Your entries will be kept\. Writing in the desktop app stays on each Mac\. After it syncs, you choose where to keep it\./,
+      ),
+    ).toBeVisible()
+  })
 
-test('retains receipt evidence after a failed server delete for a later retry', async () => {
-  // Arrange
-  const user = userEvent.setup()
-  setLocalNote(1, 'existing')
-  setLocalNote(12, 'half a thought')
-  await renderDialog([defaultCategory, buildCategory()])
-  armNetworkFailure()
-  // Act
-  await user.click(screen.getByRole('button', { name: 'Delete Work' }))
-  await user.click(screen.getByRole('button', { name: 'Delete' }))
-  // Assert
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Your original draft is retained',
-  )
-  expect(readCategories().map((category) => category.id)).toEqual([1, 12])
-  expect(getCategoryDraftRescueReceipt(12, 1, 'half a thought')).toMatchObject({
-    state: 'saved',
-    text: 'half a thought',
+  test('deletes through category.delete exactly once without touching browser storage', async () => {
+    // Arrange
+    const user = await openDeleteConfirmationForWork()
+    const getItem = vi.spyOn(Storage.prototype, 'getItem')
+    const setItem = vi.spyOn(Storage.prototype, 'setItem')
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+
+    // Assert
+    await waitFor(() => {
+      expect(readCategories().map((category) => category.name)).toEqual([
+        'General',
+        'Reading',
+      ])
+    })
+    expect(getItem).not.toHaveBeenCalled()
+    expect(setItem).not.toHaveBeenCalled()
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    getItem.mockRestore()
+    setItem.mockRestore()
+  })
+
+  test('shows Deleting and disables the button while the delete is pending', async () => {
+    // Arrange
+    const user = await openDeleteConfirmationForWork()
+    const release = holdRequests()
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+
+    // Assert
+    const pending = await screen.findByRole('button', { name: 'Deleting…' })
+    expect(pending).toBeDisabled()
+    release()
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+  })
+
+  test('keeps the chosen destination and lets the visitor retry after a failed delete', async () => {
+    // Arrange
+    const user = await openDeleteConfirmationForWork()
+    await user.click(screen.getByRole('combobox', { name: 'Move entries to' }))
+    await user.click(screen.getByRole('option', { name: 'Reading' }))
+    armNetworkFailure()
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+
+    // Assert
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not confirm the change',
+    )
+    expect(
+      screen.getByRole('combobox', { name: 'Move entries to' }),
+    ).toHaveTextContent('Reading')
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await waitFor(() => {
+      expect(readCategories().map((category) => category.name)).toEqual([
+        'General',
+        'Reading',
+      ])
+    })
+  })
+
+  test('closes quietly when a retried delete finds the category already gone', async () => {
+    // Arrange: the first attempt succeeded but its response was lost, so the
+    // dialog still lists Work while the server no longer does.
+    const user = await openDeleteConfirmationForWork()
+    resetOrpcServer([
+      defaultCategory,
+      buildCategory({ id: 13, name: 'Reading' }),
+    ])
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+
+    // Assert
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  test('stays open with an inline error and falls back to the default destination when the chosen destination vanished', async () => {
+    // Arrange
+    const user = await openDeleteConfirmationForWork()
+    await user.click(screen.getByRole('combobox', { name: 'Move entries to' }))
+    await user.click(screen.getByRole('option', { name: 'Reading' }))
+    resetOrpcServer([defaultCategory, buildCategory({ recordCount: 2 })])
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+
+    // Assert
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Category not found',
+    )
+    expect(toast.error).toHaveBeenCalledTimes(1)
+    await waitFor(() => {
+      expect(
+        screen.getByRole('combobox', { name: 'Move entries to' }),
+      ).toHaveTextContent('General')
+    })
+    expect(screen.getByRole('alertdialog')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled()
   })
 })

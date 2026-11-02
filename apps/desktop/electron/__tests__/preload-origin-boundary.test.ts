@@ -22,7 +22,7 @@ test.each([
 test('the app document receives its native namespace after the Clerk handshake returns', () => {
   // Arrange
   vi.stubGlobal('window', {
-    location: { href: 'https://www.corelive.app/live-editor' },
+    location: { href: 'https://www.corelive.app/home' },
   })
   const api = { nativeFixture: true }
   // Act

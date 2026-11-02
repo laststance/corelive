@@ -1,8 +1,4 @@
-import type {
-  ElectronAPI,
-  LiveEditorAPI,
-  LiveEditorSettingsAPI,
-} from './electron-api'
+import type { ElectronAPI, LiveEditorSettingsAPI } from './electron-api'
 
 /**
  * @fileoverview Electron Environment Detection
@@ -38,16 +34,6 @@ export const isElectronEnvironment = (): boolean => {
 }
 
 /**
- * Returns the LiveEditor preload bridge across canonical and pre-rename installed desktop versions.
- * @returns The available LiveEditor API, or undefined in a regular browser.
- * @example const note = await getLiveEditorAPI()?.note.get(1)
- */
-export const getLiveEditorAPI = (): LiveEditorAPI | undefined => {
-  if (typeof window === 'undefined') return undefined
-  return window.liveEditorAPI ?? window.brainDumpAPI
-}
-
-/**
  * Returns the main Settings LiveEditor bridge while web and desktop releases cross versions independently.
  * @returns The available Settings bridge, or undefined outside a compatible Electron main renderer.
  * @example await getLiveEditorSettingsAPI()?.setOpacity(0.85)
@@ -57,22 +43,4 @@ export const getLiveEditorSettingsAPI = ():
   if (typeof window === 'undefined') return undefined
   const electronAPI: ElectronAPI | undefined = window.electronAPI
   return electronAPI?.liveEditor ?? electronAPI?.brainDump
-}
-
-/**
- * Check if running in the LiveEditor frameless window.
- *
- * Detects the LiveEditor host by checking for `window.liveEditorAPI`, which is
- * exposed only by `preload-live-editor.ts`. Use this from the LiveEditor renderer
- * (`src/components/live-editor/*`) to skip API calls when the same React route is
- * rendered in a regular browser tab during dev.
- *
- * @returns true if running in LiveEditor window, false otherwise
- * @example
- * if (isLiveEditorEnvironment()) {
- *   await window.liveEditorAPI.window.setOpacity(0.85)
- * }
- */
-export const isLiveEditorEnvironment = (): boolean => {
-  return getLiveEditorAPI() !== undefined
 }

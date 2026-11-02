@@ -1,51 +1,24 @@
 import { ORPCError } from '@orpc/server'
-import { and, asc, eq, gte, isNull, sql } from 'drizzle-orm'
-import { z } from 'zod'
+import { sql } from 'drizzle-orm'
 
 import { db } from '@/db'
-import { PG_UNIQUE_VIOLATION } from '@/db/constants'
-import { isPgError } from '@/db/isPgError'
 import { parseUtcTimestamp } from '@/db/parseUtcTimestamp'
-import { requireRow } from '@/db/requireRow'
-import {
-  categoryTable,
-  completedTable,
-  completionSyncStateTable,
-  importBatchTable,
-} from '@/db/schema'
-import { IMPORT_TRANSACTION_TIMEOUT_MS, runTransaction } from '@/db/transaction'
 import { shiftIsoDate } from '@/lib/shiftIsoDate'
 import { toLocalDayKey } from '@/lib/toLocalDayKey'
 
 import { log } from '../../lib/logger'
 import { authMiddleware } from '../middleware/auth'
-import { DEFAULT_CATEGORY_SEED } from '../schemas/category'
 import type { DayDetailTask } from '../schemas/completed'
 import {
   CompletedJournalInputSchema,
   CompletedJournalResponseSchema,
-  CompletedSchema,
-  CreateCompletedSchema,
   DayDetailInputSchema,
   DayDetailResponseSchema,
-  DeleteCompletedSchema,
   HeatmapInputSchema,
   HeatmapResponseSchema,
-  ImportLocalResponseSchema,
-  ImportLocalSchema,
 } from '../schemas/completed'
 import { calculateStreaks } from '../utils/calculateStreaks'
 import { fetchCompletedEntries } from '../utils/completedAggregation'
-
-import { findOwnedCategory, lockCategoryOwner } from './category'
-
-/**
- * Window during which a Completed row may be hard-deleted via {@link deleteCompleted}.
- * Covers LiveEditor's undo toast plus slack for slow networks; older rows must go
- * through archival so the destructive endpoint cannot be aimed at real history.
- * Keyed off `createdAt` (the real insert time), never the semantic `completedAt`.
- */
-const COMPLETED_UNDO_WINDOW_MS = 60 * 1000
 
 /**
  * Fetches heatmap data for completed tasks, aggregated by the user's *local*
@@ -410,265 +383,6 @@ export const getJournal = authMiddleware
       log.error('Error in getJournal:', error)
       throw new ORPCError('INTERNAL_SERVER_ERROR', {
         message: 'Failed to fetch completion journal',
-        cause: error,
-      })
-    }
-  })
-
-/**
- * Inserts a row directly into the Completed table for the authenticated user.
- * Used by LiveEditor's checkbox-tick flow which bypasses the Todo lifecycle —
- * the user has already decided the item is done at the moment of capture.
- *
- * @param input.categoryId - Target category (must belong to the caller)
- * @param input.title - Free-text title (1-255 chars; longer text is rejected
- *   by Zod, callers should truncate before calling)
- * @returns The newly created Completed row
- * @example
- * createCompleted({ categoryId: 1, title: "buy milk" })
- * // => { id: 42, categoryId: 1, title: "buy milk", archived: false, ... }
- */
-export const createCompleted = authMiddleware
-  .input(CreateCompletedSchema)
-  .output(CompletedSchema)
-  .handler(async ({ input, context }) => {
-    try {
-      const { user } = context
-      const { categoryId, title } = input
-
-      return await runTransaction(async (tx) => {
-        await lockCategoryOwner(tx, user.id)
-        // The same account lock makes Keep/delete ordering deterministic.
-        if (!(await findOwnedCategory(user.id, categoryId, tx))) {
-          throw new ORPCError('NOT_FOUND', { message: 'Category not found' })
-        }
-        return requireRow(
-          await tx
-            .insert(completedTable)
-            .values({ title, categoryId, userId: user.id })
-            .returning(),
-          'completed.insert',
-        )
-      })
-    } catch (error) {
-      if (error instanceof ORPCError) throw error
-      log.error('Error in createCompleted:', error)
-      throw new ORPCError('INTERNAL_SERVER_ERROR', {
-        message: 'Failed to create completed row',
-        cause: error,
-      })
-    }
-  })
-
-/**
- * Hard-deletes a Completed row owned by the authenticated user, but only
- * within {@link COMPLETED_UNDO_WINDOW_MS} of creation. Used by LiveEditor's
- * 5-second toast-undo flow when the user retracts a checkbox tick — the
- * row is ephemeral and reversed before any archival semantics matter.
- *
- * The time window scopes the destructive surface area: even if a Bearer
- * token leaks, an attacker cannot use this endpoint to wipe historical
- * Completed history.
- *
- * @param input.id - Completed row id
- * @returns The deleted row id (echoed back so optimistic clients can confirm)
- * @example
- * deleteCompleted({ id: 42 }) // => { id: 42 }
- */
-export const deleteCompleted = authMiddleware
-  .input(DeleteCompletedSchema)
-  .output(z.object({ id: z.number().int() }))
-  .handler(async ({ input, context }) => {
-    const { user } = context
-    const { id } = input
-
-    // Atomic conditional delete: ownership + freshness checks happen inside a
-    // single statement so two concurrent undo calls (or an undo racing the
-    // window expiry) cannot both observe the row as deletable. The number of
-    // returned rows is the authoritative result; we only do an extra
-    // existence read on failure to distinguish NOT_FOUND vs FORBIDDEN.
-    const deletedRows = await runTransaction(async (tx) => {
-      await lockCategoryOwner(tx, user.id)
-      const rows = await tx
-        .delete(completedTable)
-        .where(
-          and(
-            eq(completedTable.id, id),
-            eq(completedTable.userId, user.id),
-            gte(
-              completedTable.createdAt,
-              new Date(Date.now() - COMPLETED_UNDO_WINDOW_MS),
-            ),
-          ),
-        )
-        .returning({
-          id: completedTable.id,
-          localCompletionId: completedTable.localCompletionId,
-        })
-      const deleted = rows[0]
-      if (deleted?.localCompletionId) {
-        // Legacy Undo keeps its 60-second condition and invalidates sync replay in the same transaction.
-        await tx
-          .update(completionSyncStateTable)
-          .set({
-            cancelled: true,
-            completedId: null,
-            revision: sql`${completionSyncStateTable.revision} + 1`,
-          })
-          .where(
-            and(
-              eq(completionSyncStateTable.userId, user.id),
-              eq(
-                completionSyncStateTable.completionId,
-                deleted.localCompletionId,
-              ),
-            ),
-          )
-      }
-      return rows
-    })
-
-    if (deletedRows.length === 1) {
-      return { id }
-    }
-
-    const [stillExists] = await db
-      .select({ id: completedTable.id })
-      .from(completedTable)
-      .where(and(eq(completedTable.id, id), eq(completedTable.userId, user.id)))
-      .limit(1)
-    if (stillExists) {
-      throw new ORPCError('FORBIDDEN', {
-        message: 'Undo window has expired for this completion',
-      })
-    }
-    throw new ORPCError('NOT_FOUND', {
-      message: 'Completed row not found',
-    })
-  })
-
-/**
- * Resolves the category every imported keep lands in: the account's default,
- * falling back to any category, seeding "General" when the account has none.
- * Exists because a `/write` visitor can sign up and merge before the Clerk
- * webhook's seed lands, and an import that 404s there would strand the device's
- * whole history. Called only by {@link importLocalCompleted}, inside its
- * account-locked transaction, so a fallback category cannot disappear before insertion.
- * @param userId - Owner whose default category is wanted.
- * @returns The category id to file every imported row under.
- * @example
- * await resolveImportCategoryId(user.id) // => 3
- */
-async function resolveImportCategoryId(
-  userId: number,
-  database: Parameters<Parameters<typeof runTransaction>[0]>[0],
-): Promise<number> {
-  const [existing] = await database
-    .select({ id: categoryTable.id })
-    .from(categoryTable)
-    .where(
-      and(
-        eq(categoryTable.userId, userId),
-        eq(categoryTable.isDefault, true),
-        isNull(categoryTable.parentId),
-      ),
-    )
-    .limit(1)
-  if (existing) return existing.id
-
-  // DO NOTHING returns no row when the webhook (or a non-default "General") already owns the
-  // root name (partial unique index); fall through only to an existing root.
-  const [created] = await database
-    .insert(categoryTable)
-    .values({ ...DEFAULT_CATEGORY_SEED, userId })
-    .onConflictDoNothing()
-    .returning({ id: categoryTable.id })
-  if (created) return created.id
-
-  const [fallback] = await database
-    .select({ id: categoryTable.id })
-    .from(categoryTable)
-    .where(
-      and(eq(categoryTable.userId, userId), isNull(categoryTable.parentId)),
-    )
-    .orderBy(asc(categoryTable.id))
-    .limit(1)
-  if (!fallback) {
-    throw new ORPCError('INTERNAL_SERVER_ERROR', {
-      message: 'No category available to import into',
-    })
-  }
-  return fallback.id
-}
-
-/**
- * Merges a device's signed-out keeps into the account exactly once. Runs from
- * the root-level merge provider right after sign-in, so a visitor who wrote at
- * `/write` before making an account keeps everything they earned.
- *
- * Idempotency is the `ImportBatch` primary key, namespaced `"<userId>:<batchId>"`
- * so two accounts can never collide on one client-generated id. The insert and
- * the rows share a single transaction: a duplicate batch raises a unique
- * violation and rolls the whole thing back before a row lands, which is why the catch sits outside
- * the callback — catching inside would run against an already-aborting
- * transaction. Repeated titles are never deduplicated; repeating a task is the
- * habit signal this app exists to count.
- *
- * @param input.batchId - Client idempotency key, persisted locally before the call so a retry reuses it.
- * @param input.items - The device's unmerged keeps, each with the timestamp it actually happened at.
- * @returns How many rows landed, and whether this batch had already been imported.
- * @example
- * importLocalCompleted({ batchId: '7d0c…', items: [{ title: 'buy milk', completedAt: new Date() }] })
- * // => { batchId: '7d0c…', imported: 1, alreadyImported: false }
- */
-export const importLocalCompleted = authMiddleware
-  .input(ImportLocalSchema)
-  .output(ImportLocalResponseSchema)
-  .handler(async ({ input, context }) => {
-    const { user } = context
-    const { batchId, items } = input
-    const namespacedBatchId = `${user.id}:${batchId}`
-
-    try {
-      // Up to {@link IMPORT_LOCAL_MAX_ITEMS} rows in one transaction, so it gets the longer limit the previous ORM gave it.
-      const imported = await runTransaction(async (tx) => {
-        await lockCategoryOwner(tx, user.id)
-        const categoryId = await resolveImportCategoryId(user.id, tx)
-        await tx
-          .insert(importBatchTable)
-          .values({ id: namespacedBatchId, userId: user.id })
-        const insertedRows = await tx
-          .insert(completedTable)
-          .values(
-            items.map((item) => ({
-              title: item.title,
-              completedAt: item.completedAt,
-              categoryId,
-              userId: user.id,
-              importBatchId: namespacedBatchId,
-              localCompletionId: item.localId,
-            })),
-          )
-          // A keep this account already holds (a second tab claimed the same
-          // batch, or a lost tag re-sent it under a fresh batch id) is skipped
-          // rather than duplicated — `(userId, localCompletionId)` is unique.
-          // `.returning()` lists only the rows that actually landed.
-          .onConflictDoNothing()
-          .returning({ id: completedTable.id })
-        return insertedRows.length
-      }, IMPORT_TRANSACTION_TIMEOUT_MS)
-
-      return { batchId, imported, alreadyImported: false }
-    } catch (error) {
-      // The batch id is already taken: an earlier attempt committed and only its
-      // response was lost. Nothing to do, and the client tags its items either way.
-      if (isPgError(error, PG_UNIQUE_VIOLATION)) {
-        return { batchId, imported: 0, alreadyImported: true }
-      }
-      if (error instanceof ORPCError) throw error
-      log.error('Error in importLocalCompleted:', error)
-      throw new ORPCError('INTERNAL_SERVER_ERROR', {
-        message: 'Failed to import local completions',
         cause: error,
       })
     }

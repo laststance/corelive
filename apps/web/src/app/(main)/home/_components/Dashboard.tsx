@@ -1,5 +1,5 @@
 'use client'
-import { useIsRestoring, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useIsRestoring, useQuery } from '@tanstack/react-query'
 import { Suspense } from 'react'
 
 import { Grid } from '@/components/grid'
@@ -9,24 +9,23 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useMounted } from '@/hooks/use-mounted'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { useHeatmapData } from '@/hooks/useHeatmapData'
 import { orpc } from '@/lib/orpc/client-query'
-import { subscribeToTodoSync } from '@/lib/todo-sync-channel'
 
 import { CompletedTodos } from './CompletedTodos'
 import { ContributionGraph } from './ContributionGraph'
 import { SundayDigestCard } from './SundayDigestCard'
+import { useDashboardFreshness } from './useDashboardFreshness'
 import { WeeklySummaryCard } from './WeeklySummaryCard'
 import { YearInReviewModal } from './YearInReviewModal'
 
 /**
  * Read-only completion dashboard for Home — heatmap, weekly/Sunday digests and
  * the permanent win journal. Mounted by {@link HomeContent}; every card reads
- * the `completed.*` procedures, so LiveEditor check-offs are the only thing
- * that fills it.
+ * the `completed.*` procedures, so check-offs synced from the desktop app are
+ * the only thing that fills it.
  *
  * @returns The Home dashboard grid, or a loading state until Clerk + the query
  *   persister have settled.
@@ -34,7 +33,6 @@ import { YearInReviewModal } from './YearInReviewModal'
  * <Dashboard />
  */
 export const Dashboard = function Dashboard() {
-  const queryClient = useQueryClient()
   const isRestoring = useIsRestoring()
   const isClerkQueryReady = useClerkQueryReady()
   const isMounted = useMounted()
@@ -52,18 +50,8 @@ export const Dashboard = function Dashboard() {
   const { dataByDate: heatmapByDate, isLoading: heatmapLoading } =
     useHeatmapData()
 
-  // Cross-window sync: a LiveEditor completion writes to the Completed table in
-  // its own window and broadcasts, so this window's heatmap / day-detail /
-  // journal caches must be invalidated or they stay stale until reload.
-  useCycleEffect(() => {
-    return subscribeToTodoSync(() => {
-      queryClient.invalidateQueries({ queryKey: orpc.completed.heatmap.key() })
-      queryClient.invalidateQueries({
-        queryKey: orpc.completed.dayDetail.key(),
-      })
-      queryClient.invalidateQueries({ queryKey: orpc.completed.journal.key() })
-    })
-  }, [queryClient])
+  // Completions arrive from the desktop app through sync, so keep Home fresh.
+  useDashboardFreshness()
 
   // Hold the loading state until mount (so server HTML and the hydration pass
   // match), Clerk resolves, and the persister finishes restoring.

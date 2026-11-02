@@ -16,7 +16,6 @@ import { db } from '../index'
 import {
   categoryTable,
   completedTable,
-  importBatchTable,
   nodeAssignmentTable,
   nodeEdgeTable,
   skillNodeTable,
@@ -100,7 +99,7 @@ const COMPLETED_TODO_COUNT = 360
 /** Target count of still-active (incomplete) `Todo` rows so the list isn't empty. */
 const ACTIVE_TODO_COUNT = 40
 
-/** Target count of `Completed`-table rows (the separate import/live-editor store). */
+/** Target count of `Completed`-table rows (the permanent win journal store). */
 const COMPLETED_TABLE_COUNT = 200
 
 /**
@@ -129,17 +128,6 @@ const BUSY_DAY_PROBABILITY = 0.22
 
 /** Max completions clustered onto a single busy day (2..this, inclusive). */
 const MAX_COMPLETIONS_PER_DAY = 6
-
-/**
- * Number of paste-import batches to simulate in the `Completed` table. Each
- * batch groups 10..40 rows under a shared `importBatchId` (the rest are
- * live-editor-style singles with a null batch id).
- */
-const IMPORT_BATCH_COUNT = 6
-
-/** Min / max rows grouped under a single simulated paste-import batch. */
-const MIN_BATCH_SIZE = 10
-const MAX_BATCH_SIZE = 40
 
 /**
  * XP (= NodeAssignment row count) assigned to representative nodes so the skill
@@ -476,13 +464,11 @@ async function seedDev(): Promise<void> {
   // FK-safe order. The only Restrict FK is Category→Todo/Completed, and we
   // upsert (never delete) categories above, so it never fires. Deleting the
   // user's SkillTree cascades to SkillNode/NodeEdge/NodeAssignment (ON DELETE
-  // CASCADE), so one delete clears the whole tree. ImportBatch only cascades from
-  // User, so we delete it explicitly. Scoped to this user and already gated to
-  // localhost by `assertLocalDatabase` above.
+  // CASCADE), so one delete clears the whole tree. Scoped to this user and already
+  // gated to localhost by `assertLocalDatabase` above.
   await db.delete(skillTreeTable).where(eq(skillTreeTable.userId, user.id))
   await db.delete(todoTable).where(eq(todoTable.userId, user.id))
   await db.delete(completedTable).where(eq(completedTable.userId, user.id))
-  await db.delete(importBatchTable).where(eq(importBatchTable.userId, user.id))
 
   // ── 4. ~360 completed Todos spread across the year ──
   // A clustered calendar gives believable rest days, weekend dips, and streaks.
@@ -525,55 +511,17 @@ async function seedDev(): Promise<void> {
   )
   await db.insert(todoTable).values(activeTodoRows)
 
-  // ── 6. ~200 Completed-table rows (the import/live-editor store) ──
-  // First create the ImportBatch parent rows, then tag a slice of Completed rows
-  // with those batch ids (paste-import groups); the remainder are liveEditor
-  // singles with a null importBatchId.
-  const batchIds: string[] = Array.from(
-    { length: IMPORT_BATCH_COUNT },
-    (_, i) => `dev-seed-batch-${i + 1}`,
-  )
-  await db
-    .insert(importBatchTable)
-    .values(batchIds.map((id) => ({ id, userId: user.id })))
-
-  // Decide how many rows each batch owns (10..40), capped by the total target.
+  // ── 6. ~200 Completed-table rows (the permanent win journal store) ──
   const completedTableRows: {
     title: string
     archived: boolean
     completedAt: Date
     createdAt: Date
-    importBatchId: string | null
     userId: number
     categoryId: number
   }[] = []
 
-  // Build the grouped (paste-import) rows first.
-  let remaining = COMPLETED_TABLE_COUNT
-  for (const batchId of batchIds) {
-    if (remaining <= 0) break
-    const size = Math.min(remaining, randomInt(MIN_BATCH_SIZE, MAX_BATCH_SIZE))
-    // Each paste-import batch shares a single createdAt "moment" (one paste),
-    // while completedAt can be a past date the user back-filled.
-    const importedAt = pickCompletedAt()
-    for (let i = 0; i < size; i++) {
-      const category = pickOne(categories)
-      const titlePool = titlePoolFor(category.name)
-      completedTableRows.push({
-        title: pickOne(titlePool),
-        archived: false,
-        completedAt: pickCompletedAt(),
-        createdAt: importedAt,
-        importBatchId: batchId,
-        userId: user.id,
-        categoryId: category.id,
-      })
-    }
-    remaining -= size
-  }
-
-  // Fill the rest as live-editor-style singles (null batch id).
-  for (let i = 0; i < remaining; i++) {
+  for (let i = 0; i < COMPLETED_TABLE_COUNT; i++) {
     const category = pickOne(categories)
     const titlePool = titlePoolFor(category.name)
     const completedAt = pickCompletedAt()
@@ -581,9 +529,8 @@ async function seedDev(): Promise<void> {
       title: pickOne(titlePool),
       archived: false,
       completedAt,
-      // LiveEditor singles: createdAt tracks the (near-) completion moment.
+      // createdAt tracks the (near-) completion moment.
       createdAt: completedAt,
-      importBatchId: null,
       userId: user.id,
       categoryId: category.id,
     })
@@ -647,9 +594,7 @@ async function seedDev(): Promise<void> {
     `   • ${completedTodoRows.length} completed Todos (year history)`,
   )
   console.warn(`   • ${activeTodoRows.length} active Todos`)
-  console.warn(
-    `   • ${completedTableRows.length} Completed rows (${batchIds.length} import batches + LiveEditor singles)`,
-  )
+  console.warn(`   • ${completedTableRows.length} Completed rows`)
   console.warn(
     `   • 1 skill tree · ${createdNodes.length} nodes · ${edgeRows.length} edges · ${totalXp} XP assignments across all level bands`,
   )

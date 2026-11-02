@@ -18,6 +18,8 @@ const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '..',
 )
+// Public landing page of the local production build; `open <url>` overrides it.
+const DEFAULT_OPEN_URL = 'http://localhost:4991/'
 const argumentsToForward = process.argv.slice(2)
 const command = argumentsToForward[0] ?? 'open'
 const informationalCommands = new Set(['--help', '-h', '--version'])
@@ -150,10 +152,11 @@ if (
 }
 
 const cliArguments = argumentsToForward.length ? argumentsToForward : ['open']
-// Keep the default entry point public and free of login automation.
+// Keep the default entry point public and free of login automation: the
+// landing page needs no sign-in now that the web editor (/write) is gone.
 if (command === 'open') {
   if (!cliArguments[1] || cliArguments[1].startsWith('--')) {
-    cliArguments.splice(1, 0, 'http://localhost:4991/write')
+    cliArguments.splice(1, 0, DEFAULT_OPEN_URL)
   }
   cliArguments.push(
     `--config=${path.join(repositoryRoot, '.playwright/cli.config.json')}`,

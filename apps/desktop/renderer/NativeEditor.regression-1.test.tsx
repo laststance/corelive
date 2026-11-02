@@ -136,7 +136,6 @@ function mountEditor(
       getVisibleOnAllWorkspaces: async () => false,
       setVisibleOnAllWorkspaces: async (enabled) => enabled,
     },
-    note: { get: async () => '', set: async () => undefined },
   }
   const store = new DurableEditorStore(host)
   stores.push(store)
@@ -403,15 +402,10 @@ test('the LiveEditor header leaves its empty control-row space available for win
       categoryCount={1}
       categoryPicker={null}
       settings={UserSettingsStateSchema.parse({})}
-      storageAvailability="ok"
       nativeHeader={<button type="button">Details</button>}
       isCategoryListPending={false}
       isCategoryListError={false}
-      isElectronPanel
       isMounted
-      isSignedIn
-      isAuthLoaded
-      isSignedOutWeb={false}
       isLiveEditorConfigReady
       activeCategoryId={1}
       isNoteFieldDisabled={false}

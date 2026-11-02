@@ -21,12 +21,10 @@ import {
   beforeAll,
   beforeEach,
   expect,
-  vi,
   test,
 } from 'vitest'
 
 import { broadcastCategorySync } from '@/lib/category-sync-channel'
-import { registerLiveDraftAppender } from '@/lib/live-editor/appendCategoryDraft'
 import { orpc } from '@/lib/orpc/client-query'
 import type { CategoryWithCount } from '@/server/schemas/category'
 import { orpcServer, resetOrpcServer } from '@/test/orpcServer'
@@ -66,7 +64,7 @@ const defaultCategory = buildCategory({
 
 /**
  * Renders a category list that also mounts {@link useCategorySync}, standing in
- * for `/write`, `/live-editor` and the `/home` sidebar.
+ * for the `/home` sidebar.
  * `staleTime: Infinity` removes every refetch TanStack would do on its own, so
  * anything that appears got there through the broadcast.
  * @returns Nothing; assert against the rendered names.
@@ -136,7 +134,7 @@ test('holds the fetched list until a window announces a change', async () => {
   expect(screen.queryByText('Work')).not.toBeInTheDocument()
 })
 
-test('invalidates parent retrospectives and refreshes a persisted rescued draft on peer notification', async () => {
+test('invalidates parent retrospectives when a peer window announces a category change', async () => {
   // Arrange
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
@@ -147,38 +145,23 @@ test('invalidates parent retrospectives and refreshes a persisted rescued draft 
   client.setQueryData(heatmapKey, { fixture: 'old root' })
   client.setQueryData(journalKey, { fixture: 'old path' })
   client.setQueryData(bootstrapKey, { fixture: 'old metadata' })
-  const refresh = vi.fn(async () => true)
-  const unregister = registerLiveDraftAppender(
-    async () => false,
-    undefined,
-    refresh,
-  )
   renderHook(() => useCategorySync(), {
     wrapper: ({ children }) => (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     ),
   })
+
   // Act
   act(() => {
     const peer = new BroadcastChannel('corelive-category-sync')
-    peer.postMessage({
-      type: 'category-sync',
-      senderId: 'other-window',
-      draftCategoryId: 12,
-      draftRescue: { receipt: '12:1', baseText: 'base', text: 'rescued' },
-    })
+    peer.postMessage({ type: 'category-sync', senderId: 'other-window' })
     peer.close()
   })
+
   // Assert
   await waitFor(() =>
-    expect(refresh).toHaveBeenCalledWith(12, {
-      receipt: '12:1',
-      baseText: 'base',
-      text: 'rescued',
-    }),
+    expect(client.getQueryState(heatmapKey)?.isInvalidated).toBe(true),
   )
-  expect(client.getQueryState(heatmapKey)?.isInvalidated).toBe(true)
   expect(client.getQueryState(journalKey)?.isInvalidated).toBe(true)
   expect(client.getQueryState(bootstrapKey)?.isInvalidated).toBe(true)
-  unregister()
 })

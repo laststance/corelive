@@ -156,12 +156,10 @@ export const todoTable = pgTable(
     updatedAt: updatedAtColumn(),
     order: integer('order'),
     categoryId: integer('categoryId').notNull(),
-    importBatchId: text('importBatchId'),
     completedAt: timestampColumn('completedAt'),
   },
   (table) => [
     index('Todo_categoryId_idx').on(table.categoryId),
-    index('Todo_importBatchId_idx').on(table.importBatchId),
     foreignKey({
       columns: [table.userId],
       foreignColumns: [userTable.id],
@@ -190,12 +188,10 @@ export const completedTable = pgTable(
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
     completedAt: timestampColumn('completedAt'),
-    importBatchId: text('importBatchId'),
     localCompletionId: text('localCompletionId'),
   },
   (table) => [
     index('Completed_categoryId_idx').on(table.categoryId),
-    index('Completed_importBatchId_idx').on(table.importBatchId),
     uniqueIndex('Completed_userId_localCompletionId_key').on(
       table.userId,
       table.localCompletionId,
@@ -260,25 +256,6 @@ export const completionSyncReceiptTable = pgTable(
     createdAt: createdAtColumn(),
   },
   (table) => [primaryKey({ columns: [table.userId, table.operationId] })],
-)
-
-export const importBatchTable = pgTable(
-  'ImportBatch',
-  {
-    id: text('id').primaryKey(),
-    userId: integer('userId').notNull(),
-    createdAt: createdAtColumn(),
-  },
-  (table) => [
-    index('ImportBatch_userId_idx').on(table.userId),
-    foreignKey({
-      columns: [table.userId],
-      foreignColumns: [userTable.id],
-      name: 'ImportBatch_userId_fkey',
-    })
-      .onUpdate('cascade')
-      .onDelete('cascade'),
-  ],
 )
 
 export const electronSettingsTable = pgTable(

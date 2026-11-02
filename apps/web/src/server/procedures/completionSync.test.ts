@@ -16,7 +16,6 @@ import {
 } from '@/db/schema'
 
 import { createCategory, deleteCategory } from './category'
-import { deleteCompleted, importLocalCompleted } from './completed'
 import {
   syncApply,
   syncBootstrap,
@@ -392,66 +391,17 @@ describeIfDb('offline completion synchronization', () => {
     })
   })
 
-  test('legacy Undo invalidates sync state and replay cannot restore its deleted row', async () => {
-    // Arrange
-    const account = await createAccount()
-    const operation = createOperation(account.categoryId)
-    await call(syncApply, { operations: [operation] }, account.context)
-    const [record] = await db
-      .select()
-      .from(completedTable)
-      .where(eq(completedTable.userId, account.userId))
-
-    // Act
-    await call(deleteCompleted, { id: record!.id }, account.context)
-    await call(
-      syncApply,
-      {
-        operations: [
-          {
-            ...operation,
-            operationId: randomUUID(),
-            revision: 3,
-            expectedRemoteRevision: 2,
-            kind: 'correctTime',
-          },
-        ],
-      },
-      account.context,
-    )
-
-    // Assert
-    expect(
-      await db
-        .select()
-        .from(completedTable)
-        .where(eq(completedTable.userId, account.userId)),
-    ).toEqual([])
-    const [state] = await db
-      .select()
-      .from(completionSyncStateTable)
-      .where(eq(completionSyncStateTable.userId, account.userId))
-    expect(state?.cancelled).toBe(true)
-  })
-
   test('a sync identity cannot adopt or cancel a legacy imported completion', async () => {
     // Arrange
     const account = await createAccount()
     const operation = createOperation(account.categoryId)
-    await call(
-      importLocalCompleted,
-      {
-        batchId: randomUUID(),
-        items: [
-          {
-            localId: operation.completionId,
-            title: 'Legacy keep',
-            completedAt: new Date(recordedAt),
-          },
-        ],
-      },
-      account.context,
-    )
+    await db.insert(completedTable).values({
+      userId: account.userId,
+      categoryId: account.categoryId,
+      title: 'Legacy keep',
+      completedAt: new Date(recordedAt),
+      localCompletionId: operation.completionId,
+    })
 
     // Act
     const result = await call(

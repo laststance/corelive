@@ -58,15 +58,6 @@ if (process.isMainFrame && isLocalEditorDocument(window.location.href)) {
         await typedInvoke('live-editor-window-set-bounds', bounds)
       },
     },
-    // Keep the shared host shape; new native editing must use the durable account command API.
-    note: {
-      get: async () => {
-        throw new Error('Use the prepared workspace')
-      },
-      set: async () => {
-        throw new Error('Use the prepared workspace')
-      },
-    },
     spaces: {
       getVisibleOnAllWorkspaces: async () =>
         typedInvoke('live-editor-get-visible-on-all-workspaces'),

@@ -1,4 +1,7 @@
-export const usePathname = () => '/settings'
+export const usePathname = () =>
+  new URLSearchParams(location.search).get('view') === 'home'
+    ? '/home'
+    : '/settings'
 export const useRouter = () => ({
   push: () => undefined,
   replace: () => undefined,

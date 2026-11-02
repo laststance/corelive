@@ -1,18 +1,10 @@
 import {
   listCategories,
-  listCategoryChanges,
   createCategory,
   updateCategory,
   deleteCategory,
 } from './procedures/category'
-import {
-  createCompleted,
-  importLocalCompleted,
-  deleteCompleted,
-  getDayDetail,
-  getHeatmap,
-  getJournal,
-} from './procedures/completed'
+import { getDayDetail, getHeatmap, getJournal } from './procedures/completed'
 import {
   syncApply,
   syncBootstrap,
@@ -37,7 +29,6 @@ export const router = {
   },
   category: {
     list: listCategories,
-    changes: listCategoryChanges,
     create: createCategory,
     update: updateCategory,
     delete: deleteCategory,
@@ -50,9 +41,6 @@ export const router = {
     heatmap: getHeatmap,
     dayDetail: getDayDetail,
     journal: getJournal,
-    create: createCompleted,
-    importLocal: importLocalCompleted,
-    delete: deleteCompleted,
   },
   electronSettings: {
     get: getElectronSettings,

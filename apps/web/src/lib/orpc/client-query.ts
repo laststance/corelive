@@ -15,7 +15,7 @@ const client = createClient()
  * @example
  * ```tsx
  * const { data } = useQuery(orpc.completed.heatmap.queryOptions({ input: { days: 365 } }))
- * const mutation = useMutation(orpc.completed.create.mutationOptions())
+ * const mutation = useMutation(orpc.category.create.mutationOptions())
  * ```
  */
 export const orpc = createTanstackQueryUtils(client)

@@ -93,7 +93,7 @@ const Page = function Page() {
   }
 
   // Rendered only after `isLoaded`, so `window` exists. `forceRedirectUrl` (not
-  // fallback) makes `?redirect_url=/write` beat the env-level
+  // fallback) makes `?redirect_url=/skill-tree` beat the env-level
   // NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL (/home) deterministically —
   // the force prop wins over the env force URL; with no param it still resolves
   // to /home, so existing bounces are unchanged.

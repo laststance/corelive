@@ -251,20 +251,6 @@ export interface IPCChannels extends OfflineIPCChannels {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // LiveEditor Notes (per-category text persistence)
-  // ──────────────────────────────────────────────────────────────────────────
-  /** Read the persisted note text for a categoryId (empty string if none). */
-  'live-editor-note-get': {
-    request: number
-    response: string
-  }
-  /** Persist the note text for a categoryId. */
-  'live-editor-note-set': {
-    request: [categoryId: number, text: string]
-    response: boolean
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
   // LiveEditor Configuration (shortcuts)
   // ──────────────────────────────────────────────────────────────────────────
   'live-editor-config-get-shortcut': {

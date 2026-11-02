@@ -494,7 +494,7 @@ const electronAPI = {
   /**
    * LiveEditor Note window controls — exposed to the Settings window's UI.
    *
-   * The LiveEditor renderer has its own preload (`preload-live-editor.ts`) for
+   * The LiveEditor renderer has its own preload (`preload-offline-editor.ts`) for
    * window-local operations. These methods let the Settings page configure
    * LiveEditor without opening it.
    */

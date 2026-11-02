@@ -203,34 +203,59 @@ describe('DeepLinkManager', () => {
       deepLinkManager.initialize()
     })
 
-    test('opens LiveEditor in the browser, never a Home page that cannot create tasks', async () => {
-      // Arrange: a `corelive://create?title=...&description=...` deep link.
+    test('corelive://create surfaces the desktop panel once and never opens the browser', async () => {
+      // Arrange: a bare `corelive://create` deep link.
 
-      // Act
-      await deepLinkManager.handleCreateAction({
-        title: 'New Task',
-        description: 'Task description',
-      })
+      // Act: the real open-url path.
+      const handled = await deepLinkManager.handleDeepLink('corelive://create')
 
-      // Assert: LiveEditor opens — Home is a read-only dashboard, so routing
-      // there would dead-end the user. Prefill fields are dropped because
-      // LiveEditor is free text; the deep link never touches a database
-      // (DeepLinkManager has no database bridge to call).
-      expect(mockShell.openExternal).toHaveBeenCalledWith(
-        'https://corelive.app/live-editor',
-      )
+      // Assert: handleDeepLink's single ensureWindowVisible() reveal is the
+      // only surfacing, and no browser tab opens.
+      expect(handled).toBe(true)
+      expect(mockWindowManager.restoreFromTray).toHaveBeenCalledTimes(1)
+      expect(mockShell.openExternal).not.toHaveBeenCalled()
     })
 
-    test('opens LiveEditor in the browser when the deep link carries no fields', async () => {
-      // Arrange: a bare `corelive://create` deep link (no params).
+    test('corelive://create with prefill params still opens no browser tab', async () => {
+      // Arrange: legacy prefill params are dropped because LiveEditor is free text.
 
       // Act
-      await deepLinkManager.handleCreateAction({})
-
-      // Assert: same destination as the pre-filled case.
-      expect(mockShell.openExternal).toHaveBeenCalledWith(
-        'https://corelive.app/live-editor',
+      await deepLinkManager.handleDeepLink(
+        'corelive://create?title=Buy%20milk&description=2%20liters',
       )
+
+      // Assert
+      expect(mockWindowManager.restoreFromTray).toHaveBeenCalledTimes(1)
+      expect(mockShell.openExternal).not.toHaveBeenCalled()
+    })
+
+    test('a corelive://create stored before the app was ready is surfaced exactly once', async () => {
+      // Arrange: the link arrived before ready and was parked as the pending URL.
+      deepLinkManager.pendingUrl = 'corelive://create'
+
+      // Act
+      deepLinkManager.processPendingUrl()
+      await vi.waitFor(() => {
+        expect(mockWindowManager.restoreFromTray).toHaveBeenCalledTimes(1)
+      })
+      deepLinkManager.processPendingUrl()
+
+      // Assert: the pending URL was consumed, so the second call is a no-op.
+      expect(mockWindowManager.restoreFromTray).toHaveBeenCalledTimes(1)
+      expect(mockShell.openExternal).not.toHaveBeenCalled()
+    })
+
+    test('corelive://create without a WindowManager does not throw', async () => {
+      // Arrange: the link arrives before the WindowManager exists.
+      deepLinkManager.windowManager = null
+
+      // Act
+      const handled = await deepLinkManager.handleDeepLink('corelive://create')
+
+      // Assert: handled without a crash, an error notification, or a browser tab.
+      expect(handled).toBe(true)
+      expect(mockNotificationManager.showNotification).not.toHaveBeenCalled()
+      expect(mockShell.openExternal).not.toHaveBeenCalled()
     })
   })
 

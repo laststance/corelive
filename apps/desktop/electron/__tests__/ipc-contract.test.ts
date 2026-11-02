@@ -145,8 +145,8 @@ describe('IPC contract', () => {
     })
 
     /**
-     * LiveEditor Note channels — locks down the contract used by
-     * `preload-live-editor.ts` and the main-window Settings bridge.
+     * LiveEditor window channels — locks down the contract used by
+     * `preload-offline-editor.ts` and the main-window Settings bridge.
      */
     test('clamps and validates live-editor-window-set-opacity', () => {
       const setOpacity = IPC_ARG_SCHEMAS['live-editor-window-set-opacity']
@@ -157,14 +157,6 @@ describe('IPC contract', () => {
       expect(() => setOpacity.parse([1.5])).toThrow(ZodError)
       expect(() => setOpacity.parse([-0.1])).toThrow(ZodError)
       expect(() => setOpacity.parse(['0.5'])).toThrow(ZodError)
-    })
-
-    test('requires (categoryId, text) tuple for live-editor-note-set', () => {
-      const setNote = IPC_ARG_SCHEMAS['live-editor-note-set']
-      expect(() => setNote.parse([42, 'hello'])).not.toThrow()
-      expect(() => setNote.parse([42])).toThrow(ZodError)
-      expect(() => setNote.parse(['42', 'hello'])).toThrow(ZodError)
-      expect(() => setNote.parse([1.5, 'hello'])).toThrow(ZodError) // not int
     })
 
     test('accepts empty string (disable shortcut) for live-editor-config-set-shortcut', () => {

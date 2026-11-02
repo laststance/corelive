@@ -4,7 +4,7 @@
  * @example await orpcClient.category.create({ name: 'CoreLive', parentId: 1 })
  */
 import { ORPCError } from '@orpc/server'
-import { and, asc, eq, gt, isNull, sql } from 'drizzle-orm'
+import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { db } from '@/db'
@@ -27,6 +27,7 @@ import {
   type Category,
   type CategoryWithCount,
   CategorySchema,
+  CATEGORY_DELETE_NOT_FOUND_REASON,
   CategoryListResponseSchema,
   CreateCategorySchema,
   DEFAULT_CATEGORY_SEED,
@@ -38,7 +39,7 @@ type CategoryTransaction = Parameters<Parameters<typeof runTransaction>[0]>[0]
 type CategoryDatabase = typeof db | CategoryTransaction
 
 /**
- * Serializes hierarchy writes and Keeps before validation; category mutations and {@link createCompleted} call this inside their transaction.
+ * Serializes hierarchy writes and Keeps before validation; category mutations and completion sync call this inside their transaction.
  * @param tx - Transaction that owns every following validation and write.
  * @param userId - Owner whose category graph is being changed.
  * @returns Once this transaction owns the account lock.
@@ -353,7 +354,10 @@ export const deleteCategory = authMiddleware
         await lockCategoryOwner(tx, userId)
         const existing = await findOwnedCategory(userId, id, tx)
         if (!existing)
-          throw new ORPCError('NOT_FOUND', { message: 'Category not found' })
+          throw new ORPCError('NOT_FOUND', {
+            message: 'Category not found',
+            data: { reason: CATEGORY_DELETE_NOT_FOUND_REASON.source },
+          })
         if (existing.isDefault)
           throw new ORPCError('FORBIDDEN', {
             message: 'Cannot delete the default category',
@@ -395,6 +399,7 @@ export const deleteCategory = authMiddleware
         if (!targetId || !(await findOwnedCategory(userId, targetId, tx)))
           throw new ORPCError('NOT_FOUND', {
             message: 'Destination category not found',
+            data: { reason: CATEGORY_DELETE_NOT_FOUND_REASON.destination },
           })
         const roots = await tx
           .select({ id: categoryTable.id, name: categoryTable.name })
@@ -501,57 +506,6 @@ export const deleteCategory = authMiddleware
       log.error({ error }, 'Error in deleteCategory')
       throw new ORPCError('INTERNAL_SERVER_ERROR', {
         message: 'Failed to delete category',
-        cause: error,
-      })
-    }
-  })
-
-/** Replays account-owned category deletions for browser/desktop draft rescue, without exposing local note text.
- * {@link CategoryChangeSync} polls/focus-refreshes this cursor and acknowledges only a completed local rescue.
- * @example await orpcClient.category.changes({ afterId: 0 })
- */
-export const listCategoryChanges = authMiddleware
-  .input(z.object({ afterId: z.number().int().nonnegative().default(0) }))
-  .output(
-    z.object({
-      deletions: z.array(
-        z.object({
-          id: z.number(),
-          sourceId: z.number(),
-          destinationId: z.number(),
-        }),
-      ),
-      cursor: z.number(),
-      hasMore: z.boolean(),
-    }),
-  )
-  .handler(async ({ context, input }) => {
-    try {
-      const rows = await db
-        .select({
-          id: categoryDeletionTable.id,
-          sourceId: categoryDeletionTable.sourceId,
-          destinationId: categoryDeletionTable.destinationId,
-        })
-        .from(categoryDeletionTable)
-        .where(
-          and(
-            eq(categoryDeletionTable.userId, context.user.id),
-            gt(categoryDeletionTable.id, input.afterId),
-          ),
-        )
-        .orderBy(asc(categoryDeletionTable.id))
-        .limit(101)
-      const deletions = rows.slice(0, 100)
-      return {
-        deletions,
-        cursor: deletions.at(-1)?.id ?? input.afterId,
-        hasMore: rows.length > 100,
-      }
-    } catch (error) {
-      log.error({ error }, 'Error in listCategoryChanges')
-      throw new ORPCError('INTERNAL_SERVER_ERROR', {
-        message: 'Failed to refresh category changes',
         cause: error,
       })
     }

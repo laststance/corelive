@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
@@ -102,6 +102,61 @@ describe('PanelToggle', () => {
     // Assert: the optimistic off-state reverts and an error surfaces.
     await waitFor(() => expect(pinSwitch).toBeChecked())
     expect(screen.getByText('Failed to update setting')).toBeInTheDocument()
+  })
+
+  test('shows the pin saved elsewhere when the Settings window regains focus', async () => {
+    // Arrange: the pin loads on, then another surface turns it off.
+    const getPin = vi.fn().mockResolvedValueOnce(true).mockResolvedValue(false)
+    installElectronAPI({
+      floatingPanels: {
+        getLiveEditorAlwaysOnTop: getPin,
+        setLiveEditorAlwaysOnTop: vi.fn().mockResolvedValue(false),
+      },
+    })
+    render(
+      <PanelToggle setting={LIVE_EDITOR_PIN_SETTING} label="Keep on top" />,
+    )
+    const pinSwitch = await screen.findByRole('switch', { name: 'Keep on top' })
+    await waitFor(() => expect(pinSwitch).toBeChecked())
+
+    // Act
+    fireEvent.focus(window)
+
+    // Assert
+    await waitFor(() => expect(pinSwitch).not.toBeChecked())
+  })
+
+  test('keeps the optimistic pin while its own save is still in flight when the window regains focus', async () => {
+    // Arrange: the save hangs, and the saved (old) value is still on disk.
+    let finishSave: (applied: boolean) => void = () => {}
+    const getPin = vi.fn().mockResolvedValue(true)
+    installElectronAPI({
+      floatingPanels: {
+        getLiveEditorAlwaysOnTop: getPin,
+        setLiveEditorAlwaysOnTop: vi.fn(
+          async () =>
+            new Promise<boolean>((resolve) => {
+              finishSave = resolve
+            }),
+        ),
+      },
+    })
+    const user = userEvent.setup()
+    render(
+      <PanelToggle setting={LIVE_EDITOR_PIN_SETTING} label="Keep on top" />,
+    )
+    const pinSwitch = await screen.findByRole('switch', { name: 'Keep on top' })
+    await waitFor(() => expect(pinSwitch).toBeChecked())
+    await user.click(pinSwitch)
+
+    // Act
+    fireEvent.focus(window)
+    await waitFor(() => expect(getPin).toHaveBeenCalledTimes(2))
+
+    // Assert
+    expect(pinSwitch).not.toBeChecked()
+    finishSave(false)
+    await waitFor(() => expect(pinSwitch).toBeEnabled())
   })
 
   test('renders nothing when the preload lacks this setting’s methods', () => {
