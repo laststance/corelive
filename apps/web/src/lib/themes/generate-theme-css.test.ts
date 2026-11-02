@@ -521,6 +521,21 @@ describe('checkThemeArtifacts / writeThemeArtifacts — theme:check and theme:ge
     expect(check).not.toThrow('ENOENT')
   })
 
+  // Value: protects=theme:check surfaces real fs failures; fails_when=non-ENOENT read errors are reported as MISSING and mislead the fix
+  // Value: why_new=only the ENOENT branch is tested; seam=none; no_claim=permission-specific errors
+  test('fails theme:check with the raw fs error when a generated path cannot be read for a reason other than being missing', () => {
+    // Arrange
+    const { directory, cssArtifact } = makeArtifactFixture()
+    const unreadable = { ...cssArtifact, absolutePath: directory }
+
+    // Act
+    const check = (): void => checkThemeArtifacts([unreadable])
+
+    // Assert
+    expect(check).toThrow('EISDIR')
+    expect(check).not.toThrow('THEME_ARTIFACT_MISSING')
+  })
+
   test('reports every stale and missing generated file in one theme:check failure', () => {
     // Arrange
     const { cssArtifact, tokensArtifact } = makeArtifactFixture()
@@ -635,6 +650,27 @@ describe('THEME_TOKENS — the generated token module for runtimes without the C
     expect(generate).toThrow(
       'THEME_TOKEN_SET_MISMATCH light missing=--ring extra=--glow',
     )
+  })
+
+  // Value: protects=generator output equals the committed token module, in plain pnpm test; fails_when=generator format/values drift from the committed file
+  // Value: why_new=other tests read the committed module and only feed generateThemeTokensModule a broken input; seam=none; no_claim=prettier stability
+  test('generates the committed token module byte for byte, with bare light/dark keys and quoted hyphenated ids', () => {
+    // Arrange
+    const committedModule = readFileSync(
+      join(
+        process.cwd(),
+        '../../packages/live-editor/src/themes/themeTokens.generated.ts',
+      ),
+      'utf-8',
+    )
+
+    // Act
+    const generated = generateThemeTokensModule(registryThemes)
+
+    // Assert
+    expect(generated).toBe(committedModule)
+    expect(generated).toContain("\n  light: {\n    '--background': ")
+    expect(generated).toContain("\n  'cathedral-light': {\n")
   })
 })
 
