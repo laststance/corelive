@@ -116,10 +116,39 @@ describe('finished-line strikes on the desktop writing field', () => {
     const layer = container.querySelector('[data-finished-line-strikes]')
     expect(layer).toHaveAttribute('aria-hidden', 'true')
     expect(layer).toHaveClass('pointer-events-none')
-    // The mirror holds the full text so wrapping matches the field line for line.
+    // The mirror holds the text through the last finished title so wrapping matches the field line for line.
     expect(layer?.textContent).toBe(
       '- [x] 10月の請求書の提出  \n- [ ] セルフコードレビュー\nLaravelの学習\n  - [x] DB構造の学習',
     )
+  })
+
+  test('a long note with no finished line adds no text to the strike layer', () => {
+    // Arrange / Act — a newline-heavy paste must not become one DOM node per row.
+    const { container } = renderSurface({
+      text: `${'\n'.repeat(5000)}Plain idea`,
+      strike: true,
+    })
+
+    // Assert
+    const content = container.querySelector(
+      '[data-finished-line-strikes] > div',
+    )
+    expect(content?.childNodes).toHaveLength(0)
+  })
+
+  test('unfinished rows collapse into one run and text after the last finished title is not mirrored', () => {
+    // Arrange / Act
+    const { container } = renderSurface({
+      text: 'Idea one\nIdea two\n- [x] Done  \nLater one\nLater two',
+      strike: true,
+    })
+
+    // Assert — one plain run plus the struck title, nothing after it.
+    const content = container.querySelector(
+      '[data-finished-line-strikes] > div',
+    )
+    expect(content?.childNodes).toHaveLength(2)
+    expect(content?.textContent).toBe('Idea one\nIdea two\n- [x] Done')
   })
 
   test('the strike is a hairline in the muted theme token, never a fixed color', () => {

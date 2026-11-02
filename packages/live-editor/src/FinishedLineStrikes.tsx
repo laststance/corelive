@@ -101,16 +101,21 @@ export function FinishedLineStrikes({
     }
   }, [])
 
-  // An edit can scroll the field or add a scrollbar before any scroll event fires.
+  // An edit or a font/padding change can scroll the field or add a scrollbar before any scroll event fires.
   useLayoutEffect(() => {
     syncStrikeGeometry(
       findSiblingField(viewportRef.current),
       viewportRef.current,
       contentRef.current,
     )
-  }, [text])
+  }, [
+    text,
+    paddingClassName,
+    fontClassName,
+    fontStyle.fontSize,
+    fontStyle.lineHeight,
+  ])
 
-  const rows = text.split('\n')
   return (
     <div
       ref={viewportRef}
@@ -123,23 +128,57 @@ export function FinishedLineStrikes({
         className={cn('text-transparent', paddingClassName, fontClassName)}
         style={{ ...MIRRORED_TEXT_STYLE, ...fontStyle }}
       >
-        {rows.map((row, index) => {
-          const finished = splitFinishedLine(row)
-          const newline = index < rows.length - 1 ? '\n' : ''
-          // Unfinished rows still render so wrapping and line positions stay identical.
-          if (!finished)
-            return <React.Fragment key={index}>{row + newline}</React.Fragment>
-          return (
-            <React.Fragment key={index}>
-              {finished.prefix}
-              <span data-finished-title style={FINISHED_TITLE_STRIKE_STYLE}>
-                {finished.title}
-              </span>
-              {finished.trailing + newline}
-            </React.Fragment>
-          )
-        })}
+        {toMirrorRuns(text).map((run, index) =>
+          // Plain runs only hold struck titles in place; they stay transparent and undecorated.
+          run.isStruck ? (
+            <span
+              key={index}
+              data-finished-title
+              style={FINISHED_TITLE_STRIKE_STYLE}
+            >
+              {run.text}
+            </span>
+          ) : (
+            <React.Fragment key={index}>{run.text}</React.Fragment>
+          ),
+        )}
       </div>
     </div>
   )
+}
+
+/** One stretch of mirrored text: either a struck finished title or the plain text before it. */
+type MirrorRun = Readonly<{ text: string; isStruck: boolean }>
+
+/**
+ * Turns the note into the fewest mirrored runs for {@link FinishedLineStrikes}.
+ * Unstruck rows merge into one plain run, and text after the last finished title is dropped
+ * because later text never moves earlier glyphs; DOM size follows finished rows, not note length.
+ * @param text - The field's current value.
+ * @returns
+ * - Finished rows present: plain and struck runs alternating, ending at the last struck title
+ * - No finished row: an empty list, so nothing is mirrored
+ * @example
+ * toMirrorRuns('Idea\n- [x] Ship it  \nLater')
+ * // → [{ text: 'Idea\n- [x] ', isStruck: false }, { text: 'Ship it', isStruck: true }]
+ */
+function toMirrorRuns(text: string): MirrorRun[] {
+  const runs: MirrorRun[] = []
+  let plainText = ''
+  const rows = text.split('\n')
+  for (const [index, row] of rows.entries()) {
+    const finished = splitFinishedLine(row)
+    const newline = index < rows.length - 1 ? '\n' : ''
+    // Unfinished rows only extend the plain run so the next title lands on its own line.
+    if (!finished) {
+      plainText += row + newline
+      continue
+    }
+    runs.push(
+      { text: plainText + finished.prefix, isStruck: false },
+      { text: finished.title, isStruck: true },
+    )
+    plainText = finished.trailing + newline
+  }
+  return runs
 }

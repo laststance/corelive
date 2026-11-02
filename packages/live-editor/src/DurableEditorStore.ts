@@ -42,6 +42,8 @@ type PendingCommand = {
   submittedRows: DraftRow[]
   noticeTitle?: string
   rebaseAttempts?: number
+  /** Set when saveThrough resends this retained command after its reply was lost. */
+  isRetryAfterLostReply?: boolean
 }
 export type CompletionNotice = { id: string; title: string; undoUntil: number }
 export interface DurableEditorSnapshot {
@@ -519,6 +521,7 @@ export class DurableEditorStore {
         uncertain.generation = generation
         uncertain.buffer.generation = generation
       }
+      uncertain.isRetryAfterLostReply = true
       if (!(await this.send(uncertain))) return false
     }
     if (
@@ -625,10 +628,9 @@ export class DurableEditorStore {
     // Main refused completing an already finished row in keep mode: an intentional no-op, not a save failure.
     if (reason === 'finished-line' && command.type === 'complete') {
       this.uncertain.delete(buffer.ownerId)
-      // A fresh Cmd+Enter is sent only after a clean save, so a set failure flag marks the retry of a lost reply.
-      // That retry is now settled: report success so saveThrough continues to the save whose ACK clears the flag.
-      const isRetryAfterLostReply = buffer.saveFailed
-      return isRetryAfterLostReply
+      // A fresh Cmd+Enter stays a no-op (false). A retried lost reply is now settled (true), so saveThrough
+      // continues to the save whose ACK clears the failure that lost reply recorded.
+      return pending.isRetryAfterLostReply === true
     }
     // A definite revision conflict can rebase a save; an unknown result must keep its command identity.
     if (
