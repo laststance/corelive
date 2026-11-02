@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.27.0] - 2026-11-02
+
+### Added
+
+- See what you finished at a glance. With Clear finished lines off, LiveEditor keeps each finished line in place with a thin strike through its words. The strike follows your theme and stays on the text when lines wrap, the note scrolls, or you zoom or change the font size. Delete a finished line whenever you like, and its completion stays recorded.
+
+### Changed
+
+- With Clear finished lines off, Cmd+Enter on a finished line does nothing, so a task is never recorded twice. The Settings description now says that Off keeps finished lines in place until you delete them.
+
 ## [0.26.1] - 2026-10-26
 
 ### Fixed
