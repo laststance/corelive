@@ -57,10 +57,15 @@ function syncStrikeGeometry(
     MAX_BOX_ROUNDING_ERROR_PX
   viewport.style.top = `${fieldBox.top - (wrapperBox?.top ?? 0) + borderTop}px`
   viewport.style.left = `${fieldBox.left - (wrapperBox?.left ?? 0) + borderLeft}px`
-  // A classic scrollbar's fractional width is not exposed, so that rare case keeps the rounded client size.
-  viewport.style.width = hasVerticalScrollbar
-    ? `${textarea.clientWidth}px`
-    : `${fieldBox.width - borderX}px`
+  viewport.style.width = `${fieldBox.width - borderX}px`
+  // A classic scrollbar's width is not exposed at sub-pixel precision, so the mirror reserves the same gutter
+  // and lets layout subtract it; overlay scrollbars reserve none, so this is a no-op for them.
+  viewport.style.setProperty(
+    'scrollbar-gutter',
+    hasVerticalScrollbar ? 'stable' : 'auto',
+  )
+  viewport.style.setProperty('scrollbar-width', fieldStyle.scrollbarWidth)
+  // Height only clips the mirror and never moves a wrap, so a rare horizontal scrollbar keeps the rounded size.
   viewport.style.height = hasHorizontalScrollbar
     ? `${textarea.clientHeight}px`
     : `${fieldBox.height - borderY}px`

@@ -321,10 +321,11 @@ describe('finished-line strikes on the desktop writing field', () => {
     )
   })
 
-  // Value: protects=a classic (always-shown) scrollbar is excluded from the mirror so text wraps where the field wraps;
-  // fails_when=the scrollbar gutter is treated as text width; why_new=other geometry tests have no scrollbar; seam=none;
-  // no_claim=the scrollbar's exact fractional width (falls back to the rounded clientWidth)
-  test('a field showing a classic scrollbar keeps the strikes clear of the scrollbar gutter', () => {
+  // Value: protects=a classic (always-shown) scrollbar is excluded from the mirror at sub-pixel precision, so a zoomed field with a
+  // scrollbar wraps where the mirror wraps; fails_when=the scrollbar gutter is treated as text width, or the width is rounded to the
+  // integer clientWidth; why_new=other geometry tests have no scrollbar; seam=none;
+  // no_claim=the platform scrollbar width itself (layout reserves it through scrollbar-gutter; headless QA forces a classic scrollbar)
+  test('a zoomed field showing a classic scrollbar keeps its fractional width and reserves the same scrollbar gutter for the strikes', () => {
     // Arrange
     vi.stubGlobal(
       'ResizeObserver',
@@ -336,8 +337,9 @@ describe('finished-line strikes on the desktop writing field', () => {
     )
     const { container } = renderSurface({ text: '- [x] Done', strike: true })
     const field = container.querySelector('textarea') as HTMLTextAreaElement
+    // A 702.4px border box with 1px borders and a 15px classic scrollbar: clientWidth rounds 685.4 down to 685.
     stubFieldBox(field, {
-      fieldRect: { left: 0, top: 0, width: 702, height: 402 },
+      fieldRect: { left: 0, top: 0, width: 702.4, height: 402 },
       offsetWidth: 702,
       clientWidth: 685,
       offsetHeight: 402,
@@ -348,12 +350,60 @@ describe('finished-line strikes on the desktop writing field', () => {
     // Act
     fireEvent.scroll(field)
 
+    // Assert — the viewport spans the exact padding box including the gutter, and layout reserves the scrollbar inside it.
+    const viewport = container.querySelector<HTMLElement>(
+      '[data-finished-line-strikes]',
+    )
+    expect(viewport?.style.width).toBe('700.4px')
+    expect(viewport?.style.getPropertyValue('scrollbar-gutter')).toBe('stable')
+    expect(viewport?.style.height).toBe('400px')
+  })
+
+  // Value: protects=strike layer resizes with the field when the field box changes without a scroll; fails_when=the ResizeObserver is not
+  // registered on the field or its callback is not the geometry sync; why_new=every geometry test uses a no-op observer and drives
+  // geometry through scroll; seam=none; no_claim=real layout (happy-dom stubs box metrics)
+  test('resizing the writing field without scrolling resizes the strikes to the new field box', () => {
+    // Arrange
+    // The surface hosts other observers (e.g. the opacity slider), so pair each callback with its target.
+    const registrations: { target: Element; callback: () => void }[] = []
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        callback: () => void
+        constructor(callback: () => void) {
+          this.callback = callback
+        }
+        observe(target: Element): void {
+          registrations.push({ target, callback: this.callback })
+        }
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    )
+    const { container } = renderSurface({ text: '- [x] Done', strike: true })
+    const field = container.querySelector('textarea') as HTMLTextAreaElement
+    stubFieldBox(field, {
+      fieldRect: { left: 6, top: 4, width: 402, height: 202 },
+      offsetWidth: 402,
+      clientWidth: 400,
+      offsetHeight: 202,
+      clientHeight: 200,
+      scrollTop: 0,
+    })
+
+    // Act
+    const fieldRegistration = registrations.find(
+      ({ target }) => target === field,
+    )
+    fieldRegistration?.callback()
+
     // Assert
     const viewport = container.querySelector<HTMLElement>(
       '[data-finished-line-strikes]',
     )
-    expect(viewport?.style.width).toBe('685px')
-    expect(viewport?.style.height).toBe('400px')
+    expect(fieldRegistration).toBeDefined()
+    expect(viewport?.style.width).toBe('400px')
+    expect(viewport?.style.height).toBe('200px')
   })
 })
 

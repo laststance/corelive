@@ -70,7 +70,7 @@ Mockup: `projects/laststance-corelive/designs/mockup-20261102/variant-C.png` (th
   - Its text is `color: transparent`, and it has no background, so the textarea's caret and selection stay visible.
 - **Geometry (eng review D3).** The overlay is a fixed clip viewport that covers exactly the textarea's padding box:
   - It is offset by the textarea's border width.
-  - Its size is the textarea's fractional border-box size minus the border, read from `getBoundingClientRect`. Rounded `clientWidth` / `clientHeight` would wrap a near-limit line one glyph later under page zoom. Only a classic scrollbar falls back to the rounded client size; a gap of up to 1px between the integer offset/client sizes and a fractional border is rounding, not a scrollbar. A `ResizeObserver` on the textarea keeps the size current, and font or padding changes re-sync it.
+  - Its size is the textarea's fractional border-box size minus the border, read from `getBoundingClientRect`. Rounded `clientWidth` / `clientHeight` would wrap a near-limit line one glyph later under page zoom. When the textarea shows a classic scrollbar, the overlay sets `scrollbar-gutter: stable` so layout reserves the same scrollbar width inside it; a gap of up to 1px between the integer offset/client sizes and a fractional border is rounding, not a scrollbar. A `ResizeObserver` on the textarea keeps the size current, and font or padding changes re-sync it.
   - It uses `overflow: hidden`.
   - Inside it, one content block carries the textarea's padding and is translated by `(-scrollLeft, -scrollTop)` on the textarea's `scroll` event and after every value change.
   - The content block's width is the viewport width, so the border and scrollbar are subtracted exactly once.
