@@ -32,7 +32,10 @@ function findBareRootViolations(css: string): string[] {
   )
   const violations: string[] = []
   for (const match of text.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-    if ((match[1] ?? '').trim() !== ':root') continue
+    // The prelude may start with `;`-terminated at-rules (`@import …;`); only the
+    // last statement before `{` is the selector of this block.
+    const selector = (match[1] ?? '').split(';').pop()?.trim()
+    if (selector !== ':root') continue
     const bodyStart = (match.index ?? 0) + match[0].indexOf('{') + 1
     let offset = 0
     for (const rawDeclaration of (match[2] ?? '').split(';')) {
@@ -83,5 +86,20 @@ describe('base.css bare :root', () => {
       'BARE_ROOT_DECLARATION base.css:3 selector=:root declaration="--primary: oklch(0.56 0.16 50)" permitted bare declarations: color-scheme, --radius, --control-border.\n' +
         "A Warm Cathedral value belongs in :root[data-theme='cathedral-*']; a Default value belongs in the registry seed (packages/live-editor/src/themes/registry.ts) + pnpm theme:generate. See DESIGN.md#theme-system",
     ])
+  })
+
+  test('still reports a planted colour on a bare :root that follows a semicolon-terminated at-rule', () => {
+    // Arrange — an @import directly before the block shares its prelude text
+    const css =
+      "@import 'tailwindcss';\n:root {\n  --primary: oklch(0.56 0.16 50);\n}"
+
+    // Act
+    const violations = findBareRootViolations(css)
+
+    // Assert
+    expect(violations).toHaveLength(1)
+    expect(violations[0]).toContain(
+      'BARE_ROOT_DECLARATION base.css:3 selector=:root declaration="--primary: oklch(0.56 0.16 50)"',
+    )
   })
 })
