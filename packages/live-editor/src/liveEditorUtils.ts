@@ -129,11 +129,9 @@ export function splitFinishedLine(line: string): FinishedLineParts | null {
   const parsed = parseCheckboxLine(line, 0)
   // Only a finished row is struck; unchecked and plain rows stay undecorated.
   if (!parsed?.checked) return null
-  const titleStart = line.indexOf(
-    parsed.title,
-    parsed.leadingWhitespace.length + '- [x] '.length,
-  )
-  const titleEnd = titleStart + parsed.title.length
+  // The title is the trimmed final capture, so it ends where the row's trailing whitespace begins.
+  const titleEnd = line.trimEnd().length
+  const titleStart = titleEnd - parsed.title.length
   return {
     prefix: line.slice(0, titleStart),
     title: parsed.title,

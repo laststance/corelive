@@ -592,9 +592,26 @@ export class DurableEditorStore {
       )
     } finally {
       if (this.pending === pending) this.pending = null
+      this.releaseDeferredSnapshot()
       this.reconcileCurrent()
       this.publish()
     }
+  }
+
+  /**
+   * Hands a main snapshot held back during a command to {@link DurableEditorStore.receive} once the command settles.
+   * Only a successful reply consumed it before, so a definite refusal (e.g. `finished-line` right after a
+   * keep-mode switch) left the renderer on the older settings until the next notification.
+   * Called from {@link DurableEditorStore.send}'s settlement; `receive` defers it again while the owner is still
+   * uncertain or composing.
+   * @returns Nothing; may replace `this.main` and reconcile the current buffer.
+   * @example this.releaseDeferredSnapshot()
+   */
+  private releaseDeferredSnapshot(): void {
+    if (!this.deferred || this.pending) return
+    const deferred = this.deferred
+    this.deferred = null
+    this.receive(deferred)
   }
 
   /** Rebases a definite save rejection but retains the exact command after an uncertain storage outcome.
@@ -608,7 +625,10 @@ export class DurableEditorStore {
     // Main refused completing an already finished row in keep mode: an intentional no-op, not a save failure.
     if (reason === 'finished-line' && command.type === 'complete') {
       this.uncertain.delete(buffer.ownerId)
-      return false
+      // A fresh Cmd+Enter is sent only after a clean save, so a set failure flag marks the retry of a lost reply.
+      // That retry is now settled: report success so saveThrough continues to the save whose ACK clears the flag.
+      const isRetryAfterLostReply = buffer.saveFailed
+      return isRetryAfterLostReply
     }
     // A definite revision conflict can rebase a save; an unknown result must keep its command identity.
     if (
