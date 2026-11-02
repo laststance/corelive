@@ -70,7 +70,7 @@ Mockup: `projects/laststance-corelive/designs/mockup-20261102/variant-C.png` (th
   - Its text is `color: transparent`, and it has no background, so the textarea's caret and selection stay visible.
 - **Geometry (eng review D3).** The overlay is a fixed clip viewport that covers exactly the textarea's padding box:
   - It is offset by the textarea's border width.
-  - Its size is the textarea's `clientWidth` × `clientHeight`, which excludes border and scrollbar. A `ResizeObserver` on the textarea keeps the size current.
+  - Its size is the textarea's fractional border-box size minus the border, read from `getBoundingClientRect`. Rounded `clientWidth` / `clientHeight` would wrap a near-limit line one glyph later under page zoom. Only a classic scrollbar falls back to the rounded client size; a gap of up to 1px between the integer offset/client sizes and a fractional border is rounding, not a scrollbar. A `ResizeObserver` on the textarea keeps the size current, and font or padding changes re-sync it.
   - It uses `overflow: hidden`.
   - Inside it, one content block carries the textarea's padding and is translated by `(-scrollLeft, -scrollTop)` on the textarea's `scroll` event and after every value change.
   - The content block's width is the viewport width, so the border and scrollbar are subtracted exactly once.
@@ -80,7 +80,7 @@ Mockup: `projects/laststance-corelive/designs/mockup-20261102/variant-C.png` (th
   2. The title with trailing whitespace removed, as a span with `text-decoration-line: line-through`, a 1px thickness, and `text-decoration-color: var(--muted-foreground)`.
   3. Any trailing whitespace, as undecorated transparent text.
 
-  Unfinished rows render as undecorated transparent text so that wrapping stays identical.
+  Consecutive unfinished rows collapse into one undecorated transparent run, and text after the last finished title is not mirrored, because later text never moves earlier glyphs. A note with no finished line mirrors nothing, so the layer's size follows finished rows, not note length.
 
 - **Wrapped titles.** Because the strike is an inline text decoration, each wrapped fragment ends its line at that fragment's last glyph. No positioned or full-width rules are drawn.
 - **Scroll sync.** The layer's content is translated by `-scrollTop` and `-scrollLeft`. The translation is updated on the textarea's `scroll` event, on value changes, and on resize.
@@ -118,24 +118,24 @@ The description under "Clear finished lines" (`LiveEditorAppearance.tsx:257-263`
 
 ### Edge cases to cover
 
-| Case                                                         | Expected                                                                                   |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| Long title that wraps                                        | Every wrapped fragment is struck and ends at its own last glyph                            |
-| Trailing spaces after the title                              | Not struck; the line ends at the last visible character                                    |
-| Indented or nested `  - [x] …`                               | Struck exactly when `parseCheckboxLine` reads it as checked                                |
-| Font size change, window resize, scrollbar appearing         | Strike stays aligned (same CSS, client width)                                              |
-| Scrolling a long note                                        | Strike scrolls with its text                                                               |
-| IME composition on or next to a struck row                   | Composition text renders normally; no flicker; strike realigns after commit                |
-| Category switch                                              | Strike follows the newly loaded note                                                       |
-| Clear mode on                                                | No strike drawn; behavior as today                                                         |
-| Cmd+Enter on a struck row                                    | No command, no toast, "kept today" count unchanged                                         |
-| Delete or Backspace on a struck row                          | Row removed; the Completed record remains on the dashboard                                 |
-| `[x]` changed to `[ ]`                                       | Strike removed; Cmd+Enter records it again                                                 |
-| Details opened and closed                                    | Wrapper and overlay hidden with Details; textarea stays mounted; strike realigns on return |
-| Setting switched while a save is in flight                   | Main answers `finished-line`; renderer stays silent (no "Could not save" message)          |
-| Clear-mode completion, then switch to keep within its window | Row is still removed at its `clearAfter` (≤ 5 s)                                           |
-| Switch keep → clear with struck rows                         | Rows stay, unstruck; nothing is removed after the fact                                     |
-| Title ending exactly at the wrap width                       | Strike and text wrap at the same character (border subtracted once)                        |
+| Case                                                            | Expected                                                                                   |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Long title that wraps                                           | Every wrapped fragment is struck and ends at its own last glyph                            |
+| Trailing spaces after the title                                 | Not struck; the line ends at the last visible character                                    |
+| Indented or nested `  - [x] …`                                  | Struck exactly when `parseCheckboxLine` reads it as checked                                |
+| Font size change, window resize, page zoom, scrollbar appearing | Strike stays aligned (same CSS, sub-pixel padding-box width)                               |
+| Scrolling a long note                                           | Strike scrolls with its text                                                               |
+| IME composition on or next to a struck row                      | Composition text renders normally; no flicker; strike realigns after commit                |
+| Category switch                                                 | Strike follows the newly loaded note                                                       |
+| Clear mode on                                                   | No strike drawn; behavior as today                                                         |
+| Cmd+Enter on a struck row                                       | No command, no toast, "kept today" count unchanged                                         |
+| Delete or Backspace on a struck row                             | Row removed; the Completed record remains on the dashboard                                 |
+| `[x]` changed to `[ ]`                                          | Strike removed; Cmd+Enter records it again                                                 |
+| Details opened and closed                                       | Wrapper and overlay hidden with Details; textarea stays mounted; strike realigns on return |
+| Setting switched while a save is in flight                      | Main answers `finished-line`; renderer stays silent (no "Could not save" message)          |
+| Clear-mode completion, then switch to keep within its window    | Row is still removed at its `clearAfter` (≤ 5 s)                                           |
+| Switch keep → clear with struck rows                            | Rows stay, unstruck; nothing is removed after the fact                                     |
+| Title ending exactly at the wrap width                          | Strike and text wrap at the same character (border subtracted once)                        |
 
 ## Open Questions
 
