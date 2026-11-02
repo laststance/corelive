@@ -63,7 +63,12 @@
   ],
   "duplicates": {
     // Test cases repeat setup and expected values so each scenario remains readable.
-    "ignore": ["**/*.{test,spec}.{ts,tsx,mjs}", "**/__tests__/**"],
+    // theme:generate owns the token module's 14 same-shaped theme maps (dead-code still scans it).
+    "ignore": [
+      "**/*.{test,spec}.{ts,tsx,mjs}",
+      "**/__tests__/**",
+      "packages/live-editor/src/themes/themeTokens.generated.ts",
+    ],
   },
   "health": {
     // Match the structural complexity budget used by Skills Desktop.

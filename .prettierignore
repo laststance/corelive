@@ -29,5 +29,6 @@ coverage
 html
 
 # Generated (machine-written; formatting is owned by scripts/generate-theme-css.ts
-# so prettier must not reformat it and break the generated-not-stale CI check)
+# so prettier must not reformat them and break the generated-not-stale CI check)
 packages/live-editor/src/styles/generated.css
+packages/live-editor/src/themes/themeTokens.generated.ts

@@ -1,12 +1,21 @@
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+import { THEME_TOKENS } from '@corelive/live-editor/theme-tokens'
 import { converter } from 'culori'
 import { describe, test, expect } from 'vitest'
 
 import {
+  CATHEDRAL,
+  checkThemeArtifacts,
   deriveThemeTokens,
   deriveThemeCss,
-  describeThemeCssDrift,
+  describeThemeArtifactDrift,
   generateThemesCss,
+  generateThemeTokensModule,
   staticThemeCss,
+  writeThemeArtifacts,
   type DerivationSeed,
 } from '../../../scripts/generate-theme-css'
 
@@ -14,6 +23,7 @@ import { contrastRatio, meetsAA } from './contrast'
 import {
   isDerivedTheme,
   isStaticTheme,
+  THEME_IDS,
   THEME_REGISTRY,
   type DerivedTheme,
   type ThemeSeed,
@@ -400,17 +410,23 @@ describe('generateThemesCss — validation (nothing is produced from a bad regis
   })
 })
 
-describe('describeThemeCssDrift — theme:check diagnostics', () => {
-  test('names the generated file, the first differing line number and both lines', () => {
+describe('describeThemeArtifactDrift — theme:check diagnostics', () => {
+  test('names the stale file with its code, the first differing line number and both lines', () => {
     // Arrange
     const expected = 'line one\nline two\nexpected three\nline four'
     const actual = 'line one\nline two\nactual three\nline four'
 
     // Act
-    const message = describeThemeCssDrift(expected, actual)
+    const message = describeThemeArtifactDrift(
+      'packages/live-editor/src/styles/generated.css',
+      expected,
+      actual,
+    )
 
     // Assert
-    expect(message).toContain('packages/live-editor/src/styles/generated.css')
+    expect(message).toContain(
+      'THEME_ARTIFACT_STALE packages/live-editor/src/styles/generated.css',
+    )
     expect(message).toContain('line 3')
     expect(message).toContain('expected: expected three')
     expect(message).toContain('actual:   actual three')
@@ -423,11 +439,202 @@ describe('describeThemeCssDrift — theme:check diagnostics', () => {
     const actual = `${'b'.repeat(500)}\nsecond`
 
     // Act
-    const message = describeThemeCssDrift(expected, actual)
+    const message = describeThemeArtifactDrift(
+      'packages/live-editor/src/themes/themeTokens.generated.ts',
+      expected,
+      actual,
+    )
 
     // Assert
     expect(message).toContain(`expected: ${'a'.repeat(200)}\n`)
     expect(message).not.toContain('a'.repeat(201))
+  })
+})
+
+/**
+ * Creates a fresh temp directory and two artifact descriptors inside it.
+ * @returns the directory and the artifacts (contents are what a fresh generation produced).
+ */
+function makeArtifactFixture() {
+  const directory = mkdtempSync(join(tmpdir(), 'corelive-theme-artifacts-'))
+  return {
+    directory,
+    cssArtifact: {
+      absolutePath: join(directory, 'generated.css'),
+      repoPath: 'packages/live-editor/src/styles/generated.css',
+      content: ':root {\n  --primary: oklch(0.205 0 0);\n}\n',
+    },
+    tokensArtifact: {
+      absolutePath: join(directory, 'themeTokens.generated.ts'),
+      repoPath: 'packages/live-editor/src/themes/themeTokens.generated.ts',
+      content: 'export const THEME_TOKENS = { light: {} }\n',
+    },
+  }
+}
+
+describe('checkThemeArtifacts / writeThemeArtifacts — theme:check and theme:generate on disk', () => {
+  test('passes theme:check when every generated file matches a fresh generation', () => {
+    // Arrange
+    const { cssArtifact, tokensArtifact } = makeArtifactFixture()
+    writeThemeArtifacts([cssArtifact, tokensArtifact])
+
+    // Act
+    const check = (): void => checkThemeArtifacts([cssArtifact, tokensArtifact])
+
+    // Assert
+    expect(check).not.toThrow()
+  })
+
+  test('fails theme:check on a stale token module, naming it, the first differing line and the fix command', () => {
+    // Arrange
+    const { cssArtifact, tokensArtifact } = makeArtifactFixture()
+    writeThemeArtifacts([cssArtifact, tokensArtifact])
+    writeFileSync(
+      tokensArtifact.absolutePath,
+      'export const THEME_TOKENS = { dark: {} }\n',
+    )
+
+    // Act
+    const check = (): void => checkThemeArtifacts([cssArtifact, tokensArtifact])
+
+    // Assert
+    expect(check).toThrow(
+      'THEME_ARTIFACT_STALE packages/live-editor/src/themes/themeTokens.generated.ts',
+    )
+    expect(check).toThrow('First difference at line 1:')
+    expect(check).toThrow('pnpm theme:generate')
+  })
+
+  test('fails theme:check on a missing token module with its own code instead of a raw ENOENT', () => {
+    // Arrange
+    const { cssArtifact, tokensArtifact } = makeArtifactFixture()
+    writeThemeArtifacts([cssArtifact])
+
+    // Act
+    const check = (): void => checkThemeArtifacts([cssArtifact, tokensArtifact])
+
+    // Assert
+    expect(check).toThrow(
+      'THEME_ARTIFACT_MISSING packages/live-editor/src/themes/themeTokens.generated.ts',
+    )
+    expect(check).toThrow('pnpm theme:generate')
+    expect(check).not.toThrow('ENOENT')
+  })
+
+  test('reports every stale and missing generated file in one theme:check failure', () => {
+    // Arrange
+    const { cssArtifact, tokensArtifact } = makeArtifactFixture()
+    writeFileSync(cssArtifact.absolutePath, ':root {}\n')
+
+    // Act
+    const check = (): void => checkThemeArtifacts([cssArtifact, tokensArtifact])
+
+    // Assert
+    expect(check).toThrow(
+      'THEME_ARTIFACT_STALE packages/live-editor/src/styles/generated.css',
+    )
+    expect(check).toThrow(
+      'THEME_ARTIFACT_MISSING packages/live-editor/src/themes/themeTokens.generated.ts',
+    )
+  })
+
+  test('theme:generate writes every generated file in order and reports their paths', () => {
+    // Arrange
+    const { cssArtifact, tokensArtifact } = makeArtifactFixture()
+
+    // Act
+    const writtenPaths = writeThemeArtifacts([cssArtifact, tokensArtifact])
+
+    // Assert
+    expect(writtenPaths).toEqual([
+      'packages/live-editor/src/styles/generated.css',
+      'packages/live-editor/src/themes/themeTokens.generated.ts',
+    ])
+    expect(readFileSync(tokensArtifact.absolutePath, 'utf-8')).toBe(
+      'export const THEME_TOKENS = { light: {} }\n',
+    )
+  })
+
+  test('a part-way theme:generate failure names the failed file and the file already written', () => {
+    // Arrange
+    const { directory, cssArtifact, tokensArtifact } = makeArtifactFixture()
+    const unwritableTokens = {
+      ...tokensArtifact,
+      absolutePath: join(
+        directory,
+        'missing-directory',
+        'themeTokens.generated.ts',
+      ),
+    }
+
+    // Act
+    const generate = () => writeThemeArtifacts([cssArtifact, unwritableTokens])
+
+    // Assert
+    expect(generate).toThrow(
+      'THEME_ARTIFACT_WRITE_FAILED packages/live-editor/src/themes/themeTokens.generated.ts (ENOENT). Already written: packages/live-editor/src/styles/generated.css.',
+    )
+    expect(existsSync(cssArtifact.absolutePath)).toBe(true)
+  })
+})
+
+describe('THEME_TOKENS — the generated token module for runtimes without the CSS cascade', () => {
+  const ALL_TOKEN_NAMES = Object.keys(THEME_REGISTRY.light.tokens)
+  // Widen the satisfies-typed registry to ThemeSeed so the type predicate applies.
+  const registryThemes: ThemeSeed[] = Object.values(THEME_REGISTRY)
+
+  test('carries every registered theme with every theme token', () => {
+    // Arrange / Act
+    const moduleThemeIds = Object.keys(THEME_TOKENS)
+
+    // Assert
+    expect([...moduleThemeIds].sort()).toEqual([...THEME_IDS].sort())
+    for (const themeId of THEME_IDS) {
+      expect(Object.keys(THEME_TOKENS[themeId])).toEqual(ALL_TOKEN_NAMES)
+    }
+  })
+
+  test('copies the static Default themes from their registry tokens', () => {
+    // Assert
+    expect(THEME_TOKENS.light).toEqual(THEME_REGISTRY.light.tokens)
+    expect(THEME_TOKENS.dark).toEqual(THEME_REGISTRY.dark.tokens)
+  })
+
+  test('mirrors Warm Cathedral from the CATHEDRAL ladder pinned to base.css', () => {
+    // Assert
+    expect(THEME_TOKENS['cathedral-light']).toEqual(CATHEDRAL.light)
+    expect(THEME_TOKENS['cathedral-dark']).toEqual(CATHEDRAL.dark)
+  })
+
+  test.each(registryThemes.filter(isDerivedTheme))(
+    'carries the derived $id colors exactly as deriveThemeTokens computes them',
+    (theme) => {
+      // Assert
+      expect(THEME_TOKENS[theme.id]).toEqual(deriveThemeTokens(theme, theme.id))
+    },
+  )
+
+  test('refuses to generate a module when a theme loses or gains a token', () => {
+    // Arrange — Default light without --ring and with an unknown --glow
+    const tokensWithoutRing = Object.fromEntries(
+      Object.entries(THEME_REGISTRY.light.tokens).filter(
+        ([token]) => token !== '--ring',
+      ),
+    )
+    const brokenDefault = {
+      ...THEME_REGISTRY.light,
+      tokens: { ...tokensWithoutRing, '--glow': 'oklch(0.9 0 0)' },
+    }
+
+    // Act
+    const generate = () =>
+      // @ts-expect-error -- the broken token set is the input under test
+      generateThemeTokensModule([brokenDefault])
+
+    // Assert
+    expect(generate).toThrow(
+      'THEME_TOKEN_SET_MISMATCH light missing=--ring extra=--glow',
+    )
   })
 })
 

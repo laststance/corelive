@@ -6,22 +6,95 @@
  * routes. A native `data:` window paints immediately and keeps the user aware
  * of progress without depending on Next.js, Clerk, or the network.
  *
+ * The window paints the user's theme (#214) from the generated
+ * {@link THEME_TOKENS} map, because a `data:` document never sees the
+ * renderer's `data-theme` attribute or its CSS cascade.
+ *
  * @module electron/update-progress-window-html
  */
 
 import type { UpdaterDownloadProgress } from '@corelive/desktop-contract/ipc'
+import { THEME_TOKENS } from '@corelive/live-editor/theme-tokens'
+import {
+  normalizeThemePreference,
+  THEME_REGISTRY,
+  type ThemeId,
+} from '@corelive/live-editor/themes'
+
+/** The five theme tokens the HUD paints with (shadcn Popover + Progress semantics). */
+const HUD_THEME_TOKENS = [
+  '--popover',
+  '--popover-foreground',
+  '--muted-foreground',
+  '--border',
+  '--primary',
+] as const
+
+/**
+ * Renders one theme's HUD token block: its `color-scheme` plus the five
+ * {@link HUD_THEME_TOKENS}. Scoped to `.panel` (not `:root`) so the transparent
+ * window's root canvas never gets a color-scheme-adjusted background.
+ * @param themeId - A concrete registered theme.
+ * @param indent - Leading spaces of the selector line inside the `<style>`.
+ * @returns the `.panel { ... }` CSS block.
+ * @example
+ * renderHudTokenBlock('cathedral-light', 6)
+ * // => "      .panel {\n        color-scheme: light;\n        --popover: oklch(0.972 0.018 78);\n…      }"
+ */
+function renderHudTokenBlock(themeId: ThemeId, indent: number): string {
+  const tokens = THEME_TOKENS[themeId]
+  const outer = ' '.repeat(indent)
+  const inner = ' '.repeat(indent + 2)
+  const declarations = [
+    `color-scheme: ${THEME_REGISTRY[themeId].colorScheme};`,
+    ...HUD_THEME_TOKENS.map((token) => `${token}: ${tokens[token]};`),
+  ]
+  return `${outer}.panel {\n${declarations.map((line) => `${inner}${line}`).join('\n')}\n${outer}}`
+}
+
+/**
+ * Emits the HUD's theme CSS for a normalized preference. `system` paints the
+ * Default pair: light by default and dark under `prefers-color-scheme: dark`,
+ * so it keeps following the OS while shown; a concrete theme paints only its own
+ * tokens and ignores the OS, as the app does. Module-private: the builder is its
+ * only caller, and tests read its output through {@link buildUpdateProgressWindowHtml}.
+ * @param preference - Output of `normalizeThemePreference` (never a raw stored value).
+ * @returns the token CSS placed at the top of the window `<style>`.
+ * @example
+ * buildUpdateProgressThemeCss('system') // => ".panel {…light…}\n@media (prefers-color-scheme: dark) { .panel {…dark…} }"
+ */
+function buildUpdateProgressThemeCss(preference: ThemeId | 'system'): string {
+  // An explicit pick is not OS-managed: one block, no media query.
+  if (preference !== 'system') return renderHudTokenBlock(preference, 6)
+  return `${renderHudTokenBlock('light', 6)}
+      @media (prefers-color-scheme: dark) {
+${renderHudTokenBlock('dark', 8)}
+      }`
+}
 
 /**
  * Build the native update-progress window HTML shown while an app update downloads.
+ * Called by `AutoUpdater` once per HUD, with the theme preference read at creation.
+ * Only the normalized preference selects a {@link THEME_TOKENS} entry; the raw
+ * stored string is never written into the document.
  * @param progress - Normalized 0-100 download progress payload.
+ * @param themePreference - Raw stored desktop theme (`'system'`, a theme id, a legacy
+ *   alias, or anything else); missing or unknown values paint the Default pair following the OS.
  * @returns Complete offline-safe HTML for a transparent data-url BrowserWindow.
  * @example
  * buildUpdateProgressWindowHtml({ percent: 42, bytesPerSecond: 1, transferred: 2, total: 4 })
+ * // => Default light/dark HUD following the OS
+ * buildUpdateProgressWindowHtml({ percent: 42, bytesPerSecond: 1, transferred: 2, total: 4 }, 'harbor-dark')
+ * // => Harbor dark HUD
  */
 export function buildUpdateProgressWindowHtml(
   progress: UpdaterDownloadProgress,
+  themePreference?: string,
 ): string {
   const percent = Math.round(progress.percent)
+  const themeCss = buildUpdateProgressThemeCss(
+    normalizeThemePreference(themePreference),
+  )
 
   return `<!doctype html>
 <html lang="en">
@@ -29,26 +102,7 @@ export function buildUpdateProgressWindowHtml(
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
-      :root {
-        --surface: oklch(0.98 0.008 70 / 96%);
-        --foreground: oklch(0.18 0.015 30);
-        --muted: oklch(0.5 0.026 56);
-        --border: oklch(0.92 0.01 70);
-        --track: oklch(0.88 0.018 74);
-        --fill: oklch(0.56 0.16 50);
-        --shadow: oklch(0.18 0.015 30 / 20%);
-      }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --surface: oklch(0.22 0.015 40 / 96%);
-          --foreground: oklch(0.96 0.005 75);
-          --muted: oklch(0.74 0.026 66);
-          --border: oklch(1 0 0 / 8%);
-          --track: oklch(1 0 0 / 12%);
-          --fill: oklch(0.7 0.16 55);
-          --shadow: oklch(0 0 0 / 45%);
-        }
-      }
+${themeCss}
       * {
         box-sizing: border-box;
       }
@@ -83,9 +137,9 @@ export function buildUpdateProgressWindowHtml(
         padding: 16px 18px;
         border: 1px solid var(--border);
         border-radius: 12px;
-        background: var(--surface);
-        box-shadow: 0 10px 28px var(--shadow);
-        backdrop-filter: blur(18px);
+        background: var(--popover);
+        box-shadow: 0 10px 28px
+          light-dark(oklch(0 0 0 / 18%), oklch(0 0 0 / 45%));
       }
       .row {
         display: flex;
@@ -94,13 +148,13 @@ export function buildUpdateProgressWindowHtml(
         gap: 12px;
       }
       .label {
-        color: var(--foreground);
+        color: var(--popover-foreground);
         font-size: 14px;
         font-weight: 600;
         line-height: 1.2;
       }
       .percent {
-        color: var(--muted);
+        color: var(--muted-foreground);
         font-family:
           ui-monospace,
           SFMono-Regular,
@@ -115,17 +169,17 @@ export function buildUpdateProgressWindowHtml(
         width: 100%;
         overflow: hidden;
         border-radius: 9999px;
-        background: var(--track);
+        background: color-mix(in oklch, var(--primary) 20%, transparent);
       }
       .fill {
         height: 100%;
         width: var(--progress-percent);
         border-radius: inherit;
-        background: var(--fill);
+        background: var(--primary);
         transition: width 160ms ease-out;
       }
       .hint {
-        color: var(--muted);
+        color: var(--muted-foreground);
         font-size: 12px;
         line-height: 1.2;
       }

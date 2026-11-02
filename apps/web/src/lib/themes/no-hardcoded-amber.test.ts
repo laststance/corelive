@@ -42,6 +42,7 @@ const SKIPPED_DIRECTORIES = new Set(['node_modules', '.next', 'dist', 'out'])
 const THEME_DEFINITION_PATHS = [
   'packages/live-editor/src/styles/generated.css',
   'packages/live-editor/src/themes/registry.ts',
+  'packages/live-editor/src/themes/themeTokens.generated.ts',
   'apps/web/scripts/generate-theme-css.ts',
   'apps/web/src/lib/themes/preview.ts',
   'apps/web/src/lib/themes/contrast.ts',
@@ -53,11 +54,6 @@ const ALLOWLIST: ReadonlyArray<{
   reason: string
   issue?: number
 }> = [
-  {
-    path: 'apps/desktop/electron/update-progress-window-html.ts',
-    reason: '#214 themes this window',
-    issue: 214,
-  },
   {
     path: 'apps/web/src/lib/category-colors.ts',
     reason: 'user-picked category palette, not theme chrome',
@@ -276,7 +272,14 @@ describe('no hard-coded amber (partial coverage: oklch hue 30-80 chroma >= 0.1 a
 
     // Assert
     expect(reasons.every((reason) => reason.length > 0)).toBe(true)
-    expect(ALLOWLIST.find((entry) => entry.issue === 214)?.path).toBe(
+  })
+
+  test('scans the update-download window builder now that it paints the user theme (#214)', () => {
+    // Arrange / Act
+    const allowlistedPaths = ALLOWLIST.map((entry) => entry.path)
+
+    // Assert
+    expect(allowlistedPaths).not.toContain(
       'apps/desktop/electron/update-progress-window-html.ts',
     )
   })

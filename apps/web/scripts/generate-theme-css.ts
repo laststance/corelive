@@ -1,7 +1,10 @@
 /**
- * Theme CSS generator — reads the theme registry and writes
- * `packages/live-editor/src/styles/generated.css` with one block per generator-emitted theme:
- * the DERIVED (colored) families and the STATIC shadcn Default pair.
+ * Theme generator — reads the theme registry and writes two committed files:
+ * - `packages/live-editor/src/styles/generated.css` with one block per generator-emitted theme:
+ *   the DERIVED (colored) families and the STATIC shadcn Default pair;
+ * - `packages/live-editor/src/themes/themeTokens.generated.ts` (`THEME_TOKENS`) with
+ *   every token of every theme, Warm Cathedral included, for runtimes without the
+ *   CSS cascade (the Electron main process update-download window, #214).
  *
  * Preserved themes (Warm Cathedral `cathedral-light`/`cathedral-dark`) are
  * SKIPPED: their CSS stays hand-authored in base.css and is pinned by a snapshot
@@ -13,13 +16,13 @@
  * `[data-theme='light']` plus one block per legacy alias for light; `dark`, the
  * legacy dark alias and a `prefers-color-scheme: dark` first-paint block for dark.
  *
- * Run via `pnpm theme:generate`. CI re-runs it and fails on any diff, so
- * generated.css can never be stale. BUILD-TIME ONLY (imports culori via
- * contrast.ts); nothing here ships to the client bundle.
+ * Run via `pnpm theme:generate`. CI runs `pnpm theme:check` and fails on any
+ * difference, so neither file can be stale. BUILD-TIME ONLY (imports culori via
+ * contrast.ts); nothing here ships to the client bundle — only its outputs do.
  *
  * @example
  * // add a family seed to registry.ts, then:
- * // $ pnpm theme:generate   → rewrites packages/live-editor/src/styles/generated.css
+ * // $ pnpm theme:generate   → rewrites generated.css and themeTokens.generated.ts
  */
 import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -46,8 +49,12 @@ const REGISTRY_SOURCE_PATH = 'packages/live-editor/src/themes/registry.ts'
 /** Longest expected/actual line excerpt printed in a drift diagnostic. */
 const MAX_EXCERPT_LENGTH = 200
 
-/** Repo-relative generated file, quoted in drift diagnostics. */
+/** Repo-relative generated CSS file, quoted in drift diagnostics. */
 const GENERATED_CSS_PATH = 'packages/live-editor/src/styles/generated.css'
+
+/** Repo-relative generated token module, quoted in drift diagnostics. */
+const GENERATED_TOKENS_PATH =
+  'packages/live-editor/src/themes/themeTokens.generated.ts'
 
 /**
  * Cathedral token values, copied verbatim from base.css
@@ -532,17 +539,164 @@ export function generateThemesCss(
 }
 
 /**
- * Explains why generated.css differs from a fresh generation: the first differing
- * line (1-based) with the expected and actual text, plus the recovery steps.
- * Used by `--check` so a CI failure is actionable without diffing by hand.
+ * The canonical {@link ThemeToken} key set. The Default light `tokens` literal is
+ * typed `Record<ThemeToken, string>` inside a `satisfies` registry, so typecheck
+ * already holds it to exactly the token union; every other resolved map is
+ * compared against it before anything is written.
+ */
+const THEME_TOKEN_KEYS: readonly string[] = Object.keys(
+  THEME_REGISTRY.light.tokens,
+)
+
+/**
+ * Resolves one registry theme to its full token map, the same values the CSS
+ * cascade paints: static themes copy their registry `tokens`, derived families
+ * run {@link deriveThemeTokens}, and preserved Warm Cathedral mirrors
+ * {@link CATHEDRAL} (pinned to base.css by the cathedral snapshot test).
+ * @param theme - One registry entry.
+ * @returns the token → value map for that theme.
+ * @example
+ * resolveThemeTokens(THEME_REGISTRY['cathedral-light'])['--primary'] // => 'oklch(0.56 0.16 50)'
+ */
+function resolveThemeTokens(
+  theme: ThemeSeed,
+): Readonly<Record<string, string>> {
+  if (isStaticTheme(theme)) return theme.tokens
+  if (isDerivedTheme(theme)) return deriveThemeTokens(theme, theme.id)
+  return CATHEDRAL[theme.mode]
+}
+
+/**
+ * Throws when a resolved token map does not carry exactly the
+ * {@link ThemeToken} set, so a ladder or derivation change fails the generator
+ * before it writes a module that typecheck would reject anyway.
+ * @param themeId - Theme id quoted in the error.
+ * @param tokens - The resolved token map.
+ * @throws `THEME_TOKEN_SET_MISMATCH <themeId> missing=<keys> extra=<keys>`
+ */
+function assertThemeTokenSet(
+  themeId: string,
+  tokens: Readonly<Record<string, string>>,
+): void {
+  const resolvedKeys = Object.keys(tokens)
+  const missingKeys = THEME_TOKEN_KEYS.filter(
+    (token) => !resolvedKeys.includes(token),
+  )
+  const extraKeys = resolvedKeys.filter(
+    (token) => !THEME_TOKEN_KEYS.includes(token),
+  )
+  // Either direction is a contract break: the module type is Record<ThemeToken, string>.
+  if (missingKeys.length > 0 || extraKeys.length > 0) {
+    throw new Error(
+      `THEME_TOKEN_SET_MISMATCH ${themeId} missing=${missingKeys.join(',') || '-'} extra=${extraKeys.join(',') || '-'} source=${REGISTRY_SOURCE_PATH}`,
+    )
+  }
+}
+
+/**
+ * Quotes a token name or value as a single-quoted TS string literal.
+ * @param text - Raw text (token names and validated colors never contain quotes,
+ *   but escaping keeps the emitted module valid for any input).
+ * @returns the literal, e.g. `'--primary'`.
+ * @example
+ * quoteTsString('oklch(1 0 0 / 8%)') // => "'oklch(1 0 0 / 8%)'"
+ */
+function quoteTsString(text: string): string {
+  return `'${text.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
+}
+
+/** Header of the generated token module: what it is, how to refresh it, and why it is complete. */
+const GENERATED_TOKENS_HEADER = `/**
+ * AUTO-GENERATED by apps/web/scripts/generate-theme-css.ts — DO NOT EDIT.
+ * Run \`pnpm theme:generate\` to regenerate; \`pnpm theme:check\` fails when stale.
+ *
+ * Every color token of every registered theme, resolved at build time: static
+ * themes copy their registry \`tokens\`, derived families run \`deriveThemeTokens\`
+ * (culori, build-time only) and Warm Cathedral mirrors \`CATHEDRAL\` (= base.css).
+ * Runtimes that cannot read the CSS cascade or run culori (the Electron main
+ * process, e.g. the update-download window) read their colors from here. It
+ * carries every token, not only the ones used today, so later native surfaces
+ * reuse it instead of adding another generated output.
+ *
+ * Keys are concrete theme ids only: run \`normalizeThemePreference\` on a stored
+ * value first (\`'system'\` and legacy ids are not keys).
+ */`
+
+/**
+ * Builds the source of `packages/live-editor/src/themes/themeTokens.generated.ts`:
+ * one typed `THEME_TOKENS` map with every {@link ThemeToken} value for every
+ * registry theme, so the Electron main process can paint any theme without the
+ * CSS cascade or culori. Emitted already prettier-formatted (single quotes, no
+ * semicolons, trailing commas) so commit-time formatting never rewrites it.
+ * Called by the direct-run block next to {@link generateThemesCss}.
+ * @param themes - The registry entries, in registry order.
+ * @returns the complete module source.
+ * @throws `THEME_INVALID_COLOR` / `THEME_TOKEN_SET_MISMATCH` for an invalid registry.
+ * @example
+ * generateThemeTokensModule(Object.values(THEME_REGISTRY))
+ * // => "/** AUTO-GENERATED … *\/\nimport type { ThemeId, ThemeToken } from './registry'\n…"
+ */
+export function generateThemeTokensModule(
+  themes: readonly ThemeSeed[],
+): string {
+  assertThemeColorsParse(themes)
+  const entries: string[] = []
+  for (const theme of themes) {
+    const tokens = resolveThemeTokens(theme)
+    assertThemeTokenSet(theme.id, tokens)
+    const tokenLines = Object.entries(tokens).map(
+      ([token, value]) =>
+        `    ${quoteTsString(token)}: ${quoteTsString(value)},`,
+    )
+    // Bare identifiers (light/dark) stay unquoted, hyphenated ids need quotes (prettier as-needed).
+    const key = /^[a-z]+$/.test(theme.id) ? theme.id : quoteTsString(theme.id)
+    entries.push(`  ${key}: {\n${tokenLines.join('\n')}\n  },`)
+  }
+  return [
+    GENERATED_TOKENS_HEADER,
+    "import type { ThemeId, ThemeToken } from './registry'",
+    '',
+    'type ThemeTokenMap = Readonly<Record<ThemeToken, string>>',
+    '',
+    'export const THEME_TOKENS: Readonly<Record<ThemeId, ThemeTokenMap>> = {',
+    ...entries,
+    '}',
+    '',
+  ].join('\n')
+}
+
+/** Recovery steps shared by every theme-artifact diagnostic. */
+const THEME_ARTIFACT_FIX_LINE =
+  "Fix: from the repository root run `pnpm theme:generate`, review both generated files' diffs, rerun `pnpm theme:check` and `pnpm test`, then commit."
+
+/**
+ * One generated theme file: where it lives, how diagnostics name it, and the
+ * content a fresh generation produced.
+ */
+export interface ThemeArtifact {
+  /** Absolute path read and written on disk. */
+  absolutePath: string
+  /** Repo-relative path quoted in diagnostics (never the absolute path). */
+  repoPath: string
+  /** Fresh generator output. */
+  content: string
+}
+
+/**
+ * Explains why a generated theme file differs from a fresh generation: the code
+ * and file, the first differing line (1-based) with bounded expected/actual
+ * excerpts, and the recovery steps. Used by `--check` so a CI failure is
+ * actionable without diffing by hand.
+ * @param repoPath - Repo-relative path of the stale file.
  * @param expected - Freshly generated content.
  * @param actual - Content currently on disk.
  * @returns a multi-line diagnostic, bounded to one line each for expected and actual.
  * @example
- * describeThemeCssDrift('a\nb\nc', 'a\nb\nX')
- * // => message naming generated.css, "line 3", `expected: c`, `actual:   X`
+ * describeThemeArtifactDrift('packages/live-editor/src/styles/generated.css', 'a\nb\nc', 'a\nb\nX')
+ * // => "THEME_ARTIFACT_STALE packages/live-editor/src/styles/generated.css …\nFirst difference at line 3: …"
  */
-export function describeThemeCssDrift(
+export function describeThemeArtifactDrift(
+  repoPath: string,
   expected: string,
   actual: string,
 ): string {
@@ -559,42 +713,137 @@ export function describeThemeCssDrift(
   const excerpt = (line: string | undefined): string =>
     line === undefined ? '<end of file>' : line.slice(0, MAX_EXCERPT_LENGTH)
   return [
-    `Theme CSS is stale: ${GENERATED_CSS_PATH} differs from the registry output.`,
+    `THEME_ARTIFACT_STALE ${repoPath}: the file differs from the registry output.`,
     `First difference at line ${firstDifferentIndex + 1}:`,
     `  expected: ${excerpt(expectedLines[firstDifferentIndex])}`,
     `  actual:   ${excerpt(actualLines[firstDifferentIndex])}`,
-    "Fix: from the repository root run `pnpm theme:generate`, review that file's diff, rerun `pnpm theme:check` and `pnpm test`, then commit.",
+    THEME_ARTIFACT_FIX_LINE,
   ].join('\n')
 }
 
-// Write the file when run directly (tsx scripts/generate-theme-css.ts).
+/**
+ * Tells whether a thrown fs error means "the file does not exist".
+ * @param error - Whatever `readFileSync` threw.
+ * @returns true only for an `ENOENT` error.
+ * @example
+ * isMissingFileError(Object.assign(new Error('x'), { code: 'ENOENT' })) // => true
+ */
+function isMissingFileError(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && error.code === 'ENOENT'
+}
+
+/**
+ * Compares every generated theme file on disk with its fresh content without
+ * modifying anything (`pnpm theme:check`). Reports every stale or missing file
+ * in one error so one regeneration fixes all of them.
+ * @param artifacts - The generated files with their fresh content.
+ * @throws one Error listing `THEME_ARTIFACT_STALE <path>` / `THEME_ARTIFACT_MISSING <path>` diagnostics.
+ * @example
+ * checkThemeArtifacts([{ absolutePath, repoPath: GENERATED_CSS_PATH, content: css }])
+ */
+export function checkThemeArtifacts(artifacts: readonly ThemeArtifact[]): void {
+  const problems: string[] = []
+  for (const artifact of artifacts) {
+    let onDisk: string
+    try {
+      onDisk = readFileSync(artifact.absolutePath, 'utf-8')
+    } catch (error) {
+      // A deleted or never-generated file gets its own code instead of a raw ENOENT.
+      if (!isMissingFileError(error)) throw error
+      problems.push(
+        `THEME_ARTIFACT_MISSING ${artifact.repoPath}: the generated file does not exist.\n${THEME_ARTIFACT_FIX_LINE}`,
+      )
+      continue
+    }
+    if (onDisk !== artifact.content) {
+      problems.push(
+        describeThemeArtifactDrift(artifact.repoPath, artifact.content, onDisk),
+      )
+    }
+  }
+  if (problems.length > 0) throw new Error(problems.join('\n\n'))
+}
+
+/**
+ * Writes every generated theme file in order (`pnpm theme:generate`). A failed
+ * write names the file that failed and the files already written, so the message
+ * never claims nothing changed after a partial write.
+ * @param artifacts - The generated files with their fresh content.
+ * @returns the repo-relative paths written, in order.
+ * @throws `THEME_ARTIFACT_WRITE_FAILED <path> (<fs code>)` with the already-written list.
+ * @example
+ * writeThemeArtifacts([{ absolutePath, repoPath: GENERATED_CSS_PATH, content: css }])
+ * // => ['packages/live-editor/src/styles/generated.css']
+ */
+export function writeThemeArtifacts(
+  artifacts: readonly ThemeArtifact[],
+): string[] {
+  const writtenPaths: string[] = []
+  for (const artifact of artifacts) {
+    try {
+      writeFileSync(artifact.absolutePath, artifact.content, 'utf-8')
+    } catch (error) {
+      const fsCode =
+        error instanceof Error && 'code' in error
+          ? String(error.code)
+          : 'unknown'
+      const writtenSummary =
+        writtenPaths.length > 0
+          ? `Already written: ${writtenPaths.join(', ')}.`
+          : 'No other file was written.'
+      throw new Error(
+        `THEME_ARTIFACT_WRITE_FAILED ${artifact.repoPath} (${fsCode}). ${writtenSummary}\n${THEME_ARTIFACT_FIX_LINE}`,
+        { cause: error },
+      )
+    }
+    writtenPaths.push(artifact.repoPath)
+  }
+  return writtenPaths
+}
+
+/**
+ * Resolves a repo-relative path from this script's location.
+ * @param repoPath - Path relative to the repository root.
+ * @returns the absolute path.
+ * @example
+ * repoFile(GENERATED_CSS_PATH) // => '/…/corelive/packages/live-editor/src/styles/generated.css'
+ */
+function repoFile(repoPath: string): string {
+  return fileURLToPath(new URL(`../../../${repoPath}`, import.meta.url))
+}
+
+// Write (or with --check, compare) both generated files when run directly (tsx scripts/generate-theme-css.ts).
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const outPath = fileURLToPath(
-    new URL(
-      '../../../packages/live-editor/src/styles/generated.css',
-      import.meta.url,
-    ),
-  )
-  // Validation runs inside generateThemesCss, before any write in both modes.
-  let generated: string
+  const themes = Object.values(THEME_REGISTRY)
+  // Generation validates the registry for BOTH outputs before any file is touched.
+  let artifacts: ThemeArtifact[]
   try {
-    generated = generateThemesCss(Object.values(THEME_REGISTRY))
+    artifacts = [
+      {
+        absolutePath: repoFile(GENERATED_CSS_PATH),
+        repoPath: GENERATED_CSS_PATH,
+        content: generateThemesCss(themes),
+      },
+      {
+        absolutePath: repoFile(GENERATED_TOKENS_PATH),
+        repoPath: GENERATED_TOKENS_PATH,
+        content: generateThemeTokensModule(themes),
+      },
+    ]
   } catch (error) {
     // keep the original error as `cause` so an unexpected failure stays debuggable
     throw new Error(
-      `Theme CSS generation failed; nothing was written. ${error instanceof Error ? error.message : String(error)}`,
+      `Theme generation failed; nothing was written. ${error instanceof Error ? error.message : String(error)}`,
       { cause: error },
     )
   }
-  // Validation compares content without modifying the golden file or relying on Git staging.
+  // --check compares content without modifying the golden files or relying on Git staging.
   if (process.argv.includes('--check')) {
-    const onDisk = readFileSync(outPath, 'utf-8')
-    if (onDisk !== generated) {
-      throw new Error(describeThemeCssDrift(generated, onDisk))
-    }
+    checkThemeArtifacts(artifacts)
   } else {
-    writeFileSync(outPath, generated, 'utf-8')
-    // eslint-disable-next-line no-console -- build script progress output
-    console.log(`Wrote ${outPath}`)
+    for (const writtenPath of writeThemeArtifacts(artifacts)) {
+      // eslint-disable-next-line no-console -- build script progress output
+      console.log(`Wrote ${writtenPath}`)
+    }
   }
 }

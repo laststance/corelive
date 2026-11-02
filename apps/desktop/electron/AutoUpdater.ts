@@ -17,6 +17,8 @@ import type {
   UpdaterDownloadProgress,
   UpdaterStatus,
 } from '@corelive/desktop-contract/ipc'
+import type { OfflinePreferences } from '@corelive/desktop-contract/offline-workspace'
+import { normalizeThemePreference } from '@corelive/live-editor/themes'
 import { BrowserWindow, dialog, screen } from 'electron'
 import type { MessageBoxOptions, MessageBoxReturnValue } from 'electron'
 import { autoUpdater } from 'electron-updater'
@@ -127,8 +129,25 @@ export class AutoUpdater {
   /** Periodic check interval reference for cleanup */
   private periodicCheckInterval: ReturnType<typeof setInterval> | null = null
 
+  /**
+   * Creates the updater and schedules its checks. Constructed once by `main.ts`
+   * in packaged builds only.
+   * @param beforeInstall - Runs before quit-and-install; resolve `false` to cancel the install.
+   * @param readThemePreference - Returns the raw stored desktop theme for the
+   *   download HUD (#214). Contract: synchronous; called exactly once when a HUD
+   *   is created (on Download Now), and again for the next HUD after one closes;
+   *   later progress ticks never call it. Returning `undefined`, or throwing,
+   *   paints the Default theme following the OS (a throw also logs
+   *   `UPDATE_HUD_THEME_READ_FAILED`). Defaults to "no theme known".
+   * @example
+   * new AutoUpdater(prepareForQuit, () =>
+   *   readUpdateHudThemePreference(offlineEditor?.controller.getSnapshot()),
+   * )
+   */
   constructor(
     private readonly beforeInstall: () => Promise<boolean> = async () => true,
+    private readonly readThemePreference: () =>
+      OfflinePreferences['theme'] | undefined = () => undefined,
   ) {
     this.updateAvailable = false
     this.updateDownloaded = false
@@ -370,6 +389,37 @@ export class AutoUpdater {
   }
 
   /**
+   * Reads the raw desktop theme for a HUD that is about to be created, so a
+   * broken reader can never block the update window: a throw falls back to the
+   * Default theme following the OS and logs one diagnosable warning.
+   * @returns the stored theme, or `undefined` when none is known or the read failed.
+   * @example
+   * this.readHudThemePreference() // => 'harbor-dark' | undefined
+   */
+  private readHudThemePreference(): OfflinePreferences['theme'] | undefined {
+    let themePreference: OfflinePreferences['theme'] | undefined
+    try {
+      themePreference = this.readThemePreference()
+    } catch (error) {
+      log.warn(
+        `UPDATE_HUD_THEME_READ_FAILED phase=create-window fallback=system: ${
+          error instanceof Error ? error.message : String(error)
+        }; the next HUD reads again`,
+      )
+      return undefined
+    }
+    // A stored value the registry no longer knows still paints, as System; say so for debugging.
+    if (
+      themePreference !== undefined &&
+      themePreference !== 'system' &&
+      normalizeThemePreference(themePreference) === 'system'
+    ) {
+      log.debug('Unknown theme preference for the update HUD, using System')
+    }
+    return themePreference
+  }
+
+  /**
    * Opens or updates the passive native progress window.
    * @param progress - Normalized progress payload to paint.
    * @returns Nothing; window creation is skipped only when Electron cannot build it.
@@ -428,10 +478,12 @@ export class AutoUpdater {
           this.updateProgressWindow.showInactive()
         }
       })
+      // The theme is fixed per HUD: read once here, never on later ticks.
+      const themePreference = this.readHudThemePreference()
       void this.updateProgressWindow
         .loadURL(
           `data:text/html;charset=utf-8,${encodeURIComponent(
-            buildUpdateProgressWindowHtml(progress),
+            buildUpdateProgressWindowHtml(progress, themePreference),
           )}`,
         )
         .catch((error: unknown) => {

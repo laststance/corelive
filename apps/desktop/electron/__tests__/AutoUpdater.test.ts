@@ -13,6 +13,7 @@ import {
 } from 'vitest'
 
 import { AutoUpdater, normalizeDownloadProgress } from '../AutoUpdater'
+import { log } from '../logger'
 import { MenuManager } from '../MenuManager'
 
 type MockListener = (...args: unknown[]) => void
@@ -642,6 +643,165 @@ describe('AutoUpdater update dialogs', () => {
       expect.objectContaining({ title: 'Update Ready' }),
     )
 
+    updater.cleanup()
+  })
+})
+
+/**
+ * Decodes the HUD document a mocked progress window was loaded with.
+ * @param progressWindow - A captured progress window mock.
+ * @returns the HTML passed through the `data:` URL.
+ */
+function loadedHudHtml(progressWindow: MockWindow): string {
+  const [url] = progressWindow.loadURL.mock.calls[0] ?? []
+  if (typeof url !== 'string')
+    throw new Error('Expected the HUD to load a data URL')
+  return decodeURIComponent(url.slice('data:text/html;charset=utf-8,'.length))
+}
+
+describe('AutoUpdater download HUD theme (#214)', () => {
+  beforeEach(() => {
+    electronMocks.createdWindows.length = 0
+    electronMocks.mockShowMessageBox.mockClear()
+    electronMocks.mockShowMessageBox.mockResolvedValue({ response: 0 })
+    electronMocks.mockAutoUpdater.removeAllListeners()
+    electronMocks.mockAutoUpdater.downloadUpdate.mockClear()
+    electronMocks.mockAutoUpdater.downloadUpdate.mockResolvedValue(undefined)
+    vi.mocked(log.warn).mockClear()
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.clearAllTimers()
+    vi.useRealTimers()
+  })
+
+  test('opens the HUD on Download Now in the theme saved for the desktop', async () => {
+    // Arrange
+    const readThemePreference = vi.fn(() => 'harbor-dark')
+    const updater = new AutoUpdater(async () => true, readThemePreference)
+
+    // Act
+    electronMocks.mockAutoUpdater.emit('update-available', { version: '9.9.9' })
+
+    // Assert
+    await vi.waitFor(() => {
+      expect(electronMocks.createdWindows).toHaveLength(1)
+    })
+    const hudHtml = loadedHudHtml(getProgressWindow())
+    expect(hudHtml).toContain('--popover: oklch(0.235 0.014 250);')
+    expect(hudHtml).toContain('--primary: oklch(0.7 0.135 250);')
+    expect(readThemePreference).toHaveBeenCalledTimes(1)
+    updater.cleanup()
+  })
+
+  test('keeps the HUD palette for the whole download even if the saved theme changes', async () => {
+    // Arrange
+    const readThemePreference = vi.fn(() => 'harbor-dark')
+    const updater = new AutoUpdater(async () => true, readThemePreference)
+    electronMocks.mockAutoUpdater.emit('update-available', { version: '9.9.9' })
+    await vi.waitFor(() => {
+      expect(electronMocks.createdWindows).toHaveLength(1)
+    })
+    readThemePreference.mockReturnValue('cathedral-light')
+
+    // Act
+    for (const percent of [42, 75]) {
+      electronMocks.mockAutoUpdater.emit('download-progress', {
+        percent,
+        bytesPerSecond: 1024,
+        transferred: percent,
+        total: 100,
+        delta: 0,
+      })
+    }
+
+    // Assert
+    const progressWindow = getProgressWindow()
+    expect(readThemePreference).toHaveBeenCalledTimes(1)
+    expect(progressWindow.loadURL).toHaveBeenCalledTimes(1)
+    expect(
+      progressWindow.webContents.executeJavaScript,
+    ).toHaveBeenLastCalledWith('window.__coreliveSetUpdateProgress?.(75)')
+    expect(electronMocks.createdWindows).toHaveLength(1)
+    updater.cleanup()
+  })
+
+  test('reads the current theme again for the next HUD after an error closes the first', async () => {
+    // Arrange
+    const readThemePreference = vi.fn(() => 'harbor-dark')
+    const updater = new AutoUpdater(async () => true, readThemePreference)
+    electronMocks.mockAutoUpdater.emit('update-available', { version: '9.9.9' })
+    await vi.waitFor(() => {
+      expect(electronMocks.createdWindows).toHaveLength(1)
+    })
+    electronMocks.mockAutoUpdater.emit('error', new Error('connection reset'))
+    readThemePreference.mockReturnValue('grove-light')
+
+    // Act
+    electronMocks.mockAutoUpdater.emit('update-available', { version: '9.9.9' })
+
+    // Assert
+    await vi.waitFor(() => {
+      expect(electronMocks.createdWindows).toHaveLength(2)
+    })
+    const [firstWindow, secondWindow] = electronMocks.createdWindows
+    expect(firstWindow?.destroy).toHaveBeenCalledTimes(1)
+    if (!secondWindow) throw new Error('Expected a second HUD')
+    expect(loadedHudHtml(secondWindow)).toContain(
+      '--popover: oklch(0.972 0.012 145);',
+    )
+    expect(readThemePreference).toHaveBeenCalledTimes(2)
+    updater.cleanup()
+  })
+
+  test('paints the Default HUD and logs one diagnosable warning when the theme read throws', () => {
+    // Arrange
+    const updater = new AutoUpdater(
+      async () => true,
+      () => {
+        throw new Error('snapshot unavailable')
+      },
+    )
+
+    // Act
+    electronMocks.mockAutoUpdater.emit('download-progress', {
+      percent: 10,
+      bytesPerSecond: 1024,
+      transferred: 10,
+      total: 100,
+      delta: 0,
+    })
+
+    // Assert
+    const hudHtml = loadedHudHtml(getProgressWindow())
+    expect(hudHtml).toContain('--primary: oklch(0.205 0 0);')
+    expect(hudHtml).toContain('@media (prefers-color-scheme: dark)')
+    expect(log.warn).toHaveBeenCalledTimes(1)
+    expect(log.warn).toHaveBeenCalledWith(
+      'UPDATE_HUD_THEME_READ_FAILED phase=create-window fallback=system: snapshot unavailable; the next HUD reads again',
+    )
+    updater.cleanup()
+  })
+
+  test('paints the Default HUD following the OS when constructed without a theme reader', () => {
+    // Arrange
+    const updater = new AutoUpdater(async () => true)
+
+    // Act
+    electronMocks.mockAutoUpdater.emit('download-progress', {
+      percent: 10,
+      bytesPerSecond: 1024,
+      transferred: 10,
+      total: 100,
+      delta: 0,
+    })
+
+    // Assert
+    const hudHtml = loadedHudHtml(getProgressWindow())
+    expect(hudHtml).toContain('--primary: oklch(0.205 0 0);')
+    expect(hudHtml).toContain('@media (prefers-color-scheme: dark)')
+    expect(log.warn).not.toHaveBeenCalled()
     updater.cleanup()
   })
 })

@@ -74,6 +74,7 @@ import {
 } from './utils/isTrustedAppNavigation'
 import { loadUiohook } from './utils/loadUiohook'
 import { openConfigFile } from './utils/openConfigFile'
+import { readUpdateHudThemePreference } from './utils/readUpdateHudThemePreference'
 import {
   HIDE_APP_ICON_CONFIG_PATH,
   resolveHideAppIcon,
@@ -710,7 +711,12 @@ async function createWindow(): Promise<void> {
         try {
           const AutoUpdaterCls =
             await lazyLoadManager.loadComponent('AutoUpdater')
-          autoUpdater = new AutoUpdaterCls(prepareForQuit)
+          // The download HUD paints the prepared workspace's theme (#214); read at HUD creation.
+          autoUpdater = new AutoUpdaterCls(prepareForQuit, () =>
+            readUpdateHudThemePreference(
+              offlineEditor?.controller.getSnapshot(),
+            ),
+          )
           // No main window to bind dialogs to after T18; the updater surfaces
           // through its own notifications.
         } catch (autoUpdaterError) {
