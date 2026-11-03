@@ -519,6 +519,33 @@ test('a fresh install shows "Nothing here yet" in History instead of an empty im
   ).toBeNull()
 })
 
+// Added by /ship Step 7 coverage pass on 2026-11-03
+// Value: protects=a Mac whose Sync details carry no migration summary shows
+// "Nothing here yet." and no import block; fails_when=hasImportedWriting stops
+// guarding a null summary or the empty condition stops treating a missing
+// summary as empty; why_new=every existing SyncDetailsPage test passes a
+// summary object, so the null branch is never rendered; seam=none;
+// no_claim=real workspace state on disk (renderer test with a stubbed settings API)
+test('Sync details without a migration summary shows "Nothing here yet" in History', async () => {
+  // Arrange
+  const syncDetails = withRows([], { migrationSummary: null })
+
+  // Act
+  await renderWithSettings(<SyncDetailsPage onBack={vi.fn()} />, {
+    syncDetails,
+  })
+
+  // Assert
+  const history = (
+    await screen.findByRole('heading', { name: 'History' })
+  ).closest('section')!
+  expect(within(history).getByText('Nothing here yet.')).toBeVisible()
+  expect(history).not.toHaveTextContent('Brought your earlier writing')
+  expect(
+    within(history).queryByRole('button', { name: 'Open recovery copies' }),
+  ).toBeNull()
+})
+
 // Regression: native VM QA of v0.30.0 on 2026-11-03 — Open recovery copies showed even when the import made no recovery copy
 test('an import without recovery copies keeps its summary but offers no Open recovery copies', async () => {
   // Arrange
@@ -545,6 +572,44 @@ test('an import without recovery copies keeps its summary but offers no Open rec
   expect(history).toHaveTextContent(
     "Brought your earlier writing into this Mac's workspace: 2 drafts, 5 keeps, 0 recovery copies. 1 earlier files kept as backups.",
   )
+  expect(
+    within(history).queryByRole('button', { name: 'Open recovery copies' }),
+  ).toBeNull()
+})
+
+// Added by /ship Step 7 coverage pass on 2026-11-03
+// Value: protects=History lists preserved backups and hides "Nothing here yet."
+// when the fresh-install summary is all-zero; fails_when=the empty condition
+// ignores backups or the zero-summary gate also hides backups;
+// why_new=SyncDetailsPage.test.tsx:452 mixes summary, backups and history so it
+// never isolates the backups-only state; seam=none; no_claim=real migration
+// output on disk (renderer test with a stubbed settings API)
+test('a fresh install with preserved backups lists them in History without "Nothing here yet"', async () => {
+  // Arrange
+  const syncDetails = withRows([], {
+    migrationSummary: {
+      sourceAccountId: null,
+      importedDrafts: 0,
+      importedCompletions: 0,
+      recoveryCopies: 0,
+      v1FilesKept: 0,
+      preservedBackups: 0,
+    },
+    preservedBackups: [{ fileName: 'old-workspace.json', accountId: null }],
+  })
+
+  // Act
+  await renderWithSettings(<SyncDetailsPage onBack={vi.fn()} />, {
+    syncDetails,
+  })
+
+  // Assert
+  const history = (
+    await screen.findByRole('heading', { name: 'History' })
+  ).closest('section')!
+  expect(history).toHaveTextContent('Kept as a backup: old-workspace.json')
+  expect(within(history).queryByText('Nothing here yet.')).toBeNull()
+  expect(history).not.toHaveTextContent('Brought your earlier writing')
   expect(
     within(history).queryByRole('button', { name: 'Open recovery copies' }),
   ).toBeNull()
