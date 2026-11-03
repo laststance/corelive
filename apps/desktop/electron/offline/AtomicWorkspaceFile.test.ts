@@ -347,3 +347,45 @@ describe('durable account workspace', () => {
     await expect(file.read()).rejects.toMatchObject({ reason: 'invalid' })
   })
 })
+
+describe('v2 fixed file names', () => {
+  test('a v2 file lands at the fixed name while the v1 owner-hash path stays unchanged', async () => {
+    // Arrange
+    const { directory, options } = await createFixture()
+    const initial = { revision: 0, text: 'a', completions: [], receipts: [] }
+    const v2File = new AtomicWorkspaceFile({
+      ...options,
+      ownerId: 'device',
+      fileName: 'device',
+    })
+    const v1File = new AtomicWorkspaceFile(options)
+
+    // Act
+    await v2File.initialize(initial)
+    await v1File.initialize(initial)
+    const names = (await readdir(directory)).sort()
+
+    // Assert
+    expect(v2File.path).toBe(join(directory, 'device.json'))
+    expect(v2File.recoveryPath).toBe(join(directory, 'device.recovery.json'))
+    expect(names).toContain('device.json')
+    expect(v1File.path).toMatch(/\/[a-f0-9]{64}\.json$/)
+    expect(names).toHaveLength(2)
+  })
+
+  test('a file name that could escape the directory is refused', () => {
+    // Arrange
+    const options = {
+      directory: '/tmp/x',
+      ownerId: 'device',
+      parse: schema.parse,
+      fileName: '../evil',
+    }
+
+    // Act
+    const create = () => new AtomicWorkspaceFile(options)
+
+    // Assert
+    expect(create).toThrow('invalid')
+  })
+})

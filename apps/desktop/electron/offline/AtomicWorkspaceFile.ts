@@ -27,6 +27,11 @@ type WorkspaceFileOptions<T> = {
   directory: string
   ownerId: string
   parse: (value: unknown) => T
+  /**
+   * v2 file stem (`device` -> `device.json` + `device.recovery.json`). Omitted for the
+   * v1 layout, which hashes the owner id into the path.
+   */
+  fileName?: string
   /** Fault injection and timing observations; never receives writing or credentials. */
   onStage?: (stage: WorkspaceWriteStage) => void | Promise<void>
 }
@@ -67,8 +72,15 @@ export class AtomicWorkspaceFile<T> {
     this.ownerId = options.ownerId
     this.parse = options.parse
     this.onStage = options.onStage
-    // Account IDs are data, never filesystem paths.
-    const partition = createHash('sha256').update(options.ownerId).digest('hex')
+    if (
+      options.fileName !== undefined &&
+      !/^[a-z0-9-]+$/.test(options.fileName)
+    )
+      throw new WorkspaceFileError('invalid')
+    // Account IDs are data, never filesystem paths; v2 passes a fixed, non-secret stem (E1).
+    const partition =
+      options.fileName ??
+      createHash('sha256').update(options.ownerId).digest('hex')
     this.path = join(options.directory, `${partition}.json`)
     this.recoveryPath = join(options.directory, `${partition}.recovery.json`)
   }

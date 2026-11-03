@@ -5,7 +5,10 @@ import { z } from 'zod'
 
 import { AtomicWorkspaceFile, WorkspaceFileError } from './AtomicWorkspaceFile'
 
-const registrySchema = z.object({
+/** Owner id of the v1 registry envelope; it also decides the v1 file name. */
+export const REGISTRY_OWNER_ID = 'corelive-account-registry-v1'
+
+export const registrySchema = z.object({
   version: z.literal(1),
   deviceId: z.uuid(),
   activeAccountId: z.string().nullable(),
@@ -26,7 +29,7 @@ export class OfflineAccountRegistry {
   constructor(directory: string) {
     this.file = new AtomicWorkspaceFile({
       directory: join(directory, 'registry'),
-      ownerId: 'corelive-account-registry-v1',
+      ownerId: REGISTRY_OWNER_ID,
       parse: registrySchema.parse,
     })
   }
