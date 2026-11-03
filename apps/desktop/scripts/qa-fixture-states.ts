@@ -14,7 +14,8 @@ import type {
 
 /** One editor fixture (DX1): the scene the headless editor starts in. */
 export interface EditorFixtureSpec {
-  name: 'local-only' | 'signed-out' | 'attached' | 'recovery'
+  name:
+    'local-only' | 'signed-out' | 'session-expired' | 'attached' | 'recovery'
   /** One-line description printed by `--help`. */
   description: string
   /** Text that must be visible before a screenshot counts as ready (DX3). */
