@@ -99,6 +99,8 @@
     "prettier": "prettier --ignore-unknown --write .",
     "qa:web": "pnpm --filter @corelive/web exec tsx scripts/qa-web.ts",
     "qa:offline-editor": "pnpm --filter @corelive/desktop exec tsx scripts/qa-offline-editor.ts",
+    "qa:settings": "pnpm --filter @corelive/desktop exec tsx scripts/qa-settings.ts",
+    "benchmark:offline": "pnpm --filter @corelive/desktop exec tsx scripts/benchmark-offline-workspace.ts",
     "qa:browser": "node scripts/qa-browser.mjs",
     "prepare": "husky",
     "setup:env": "node scripts/setup-env.mjs",

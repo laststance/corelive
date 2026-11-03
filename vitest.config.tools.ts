@@ -9,7 +9,11 @@ export default defineConfig({
       new URL('./node_modules/.vitest-tools', import.meta.url),
     ),
     environment: 'node',
-    include: ['scripts/**/*.test.{ts,mjs}', 'apps/web/scripts/**/*.test.mjs'],
+    include: [
+      'scripts/**/*.test.{ts,mjs}',
+      'apps/web/scripts/**/*.test.mjs',
+      'apps/desktop/scripts/**/*.test.ts',
+    ],
     testTimeout: 10000,
   },
 })

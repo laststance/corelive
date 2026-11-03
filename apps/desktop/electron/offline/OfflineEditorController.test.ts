@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -19,6 +19,7 @@ import type { WindowManager } from '../WindowManager'
 
 import { AtomicWorkspaceFile } from './AtomicWorkspaceFile'
 import {
+  buildDeviceWorkspace,
   categoryUuid,
   initializeDeviceWorkspace,
 } from './deviceWorkspaceFixture'
@@ -575,6 +576,83 @@ test('a Mac with writing opens it from disk without waiting for authentication',
     },
   })
   expect(fixture.broker.acquire).not.toHaveBeenCalled()
+})
+
+test('a copied workspace and registry open on another Mac with every draft and completion', async () => {
+  // Arrange: a source Mac with three drafts and one unsent completion
+  const source = await createFixture({ existing: false })
+  const seeded = buildDeviceWorkspace({
+    categoryCount: 3,
+    notes: { 1: 'First draft', 2: 'Second draft', 3: 'Third draft' },
+  })
+  const completionId = randomUUID()
+  const operationId = randomUUID()
+  seeded.completions[completionId] = {
+    id: completionId,
+    categoryId: categoryUuid(1),
+    originalCategoryId: categoryUuid(1),
+    title: 'Carried across Macs',
+    rawText: 'Carried across Macs',
+    lineId: randomUUID(),
+    lineIndex: 0,
+    completedAt: 1_800_000_000_000,
+    originalCompletedAt: 1_800_000_000_000,
+    timezone: 'Asia/Tokyo',
+    revision: 1,
+    undoUntil: 0,
+    cancelled: false,
+    restored: false,
+    remote: null,
+    clearAfter: null,
+    cleared: false,
+  }
+  seeded.outbox[operationId] = {
+    state: 'queued',
+    operation: {
+      operationId,
+      completionId,
+      deviceId: seeded.deviceId,
+      revision: 1,
+      expectedRemoteRevision: 0,
+      kind: 'create',
+      categoryId: categoryUuid(1),
+      title: 'Carried across Macs',
+      completedAt: 1_800_000_000_000,
+      originalCompletedAt: 1_800_000_000_000,
+      timezone: 'Asia/Tokyo',
+    },
+  }
+  await new AtomicWorkspaceFile({
+    directory: source.workspaces,
+    ownerId: DEVICE_OWNER_ID,
+    fileName: DEVICE_WORKSPACE_FILE_NAME,
+    parse: OfflineWorkspaceSchema.parse,
+  }).initialize(seeded)
+  await source.registry.read()
+  const target = await createFixture({ existing: false })
+
+  // Act: copy userData/offline the way Time Machine or Migration Assistant would
+  await cp(source.directory, target.directory, { recursive: true })
+  await target.controller.initialize()
+
+  // Assert
+  const snapshot = target.controller.getSnapshot()
+  if (snapshot.phase !== 'ready') throw new Error('Expected a ready editor')
+  const drafts = await Promise.all(
+    [1, 2, 3].map(async (index) =>
+      target.controller.draft(snapshot.generation, categoryUuid(index)),
+    ),
+  )
+  expect(drafts.map((record) => record.draft.rows[0]?.text)).toEqual([
+    'First draft',
+    'Second draft',
+    'Third draft',
+  ])
+  expect(
+    (await target.controller.details(snapshot.generation, 0, 10)).records.map(
+      (record) => record.completion.title,
+    ),
+  ).toEqual(['Carried across Macs'])
 })
 
 test('a corrupt device workspace and recovery copy open recovery and are never replaced by a fresh workspace', async () => {
