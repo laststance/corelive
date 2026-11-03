@@ -164,6 +164,14 @@ async function mutateSyncIdentity(
   if (operation.kind === 'cancel')
     return applied(await cancelSyncIdentity(tx, userId, operation, current))
   const rejection = rejectedRevision(operation, current)
+  // A stale edit asking for exactly the state the dashboard already holds (a category delete moved
+  // the record there too) has one possible outcome, so it converges instead of asking for a decision.
+  if (
+    rejection === 'conflict' &&
+    current &&
+    requestsCurrentState(operation, current)
+  )
+    return applied(current)
   if (rejection) return rejected(operation, rejection, current)
   if (
     operation.completedAt > Date.now() + FUTURE_TOLERANCE_MS ||
@@ -245,6 +253,32 @@ function rejectedRevision(
   if (!current && operation.kind !== 'create') return 'dependency'
   if (current && operation.kind === 'create') return 'conflict'
   return null
+}
+
+/**
+ * Whether a relocate or time correction asks for the record's current dashboard state.
+ *
+ * Called by {@link mutateSyncIdentity} for a revision conflict only. A Mac that deleted a category
+ * moves its records locally while the server's delete moves them too; the Mac's later relocate
+ * then carries a stale revision but the same target, and accepting it loses nothing.
+ *
+ * @param operation - The incoming edit; creates and cancels never qualify.
+ * @param current - The live sync state the conflict was judged against.
+ * @returns
+ * - true when category, title and time all equal the dashboard's
+ * - false otherwise, so a different target still asks for a decision
+ * @example requestsCurrentState({ ...move, categoryId: 4 }, { ...state, categoryId: 4 }) // => true
+ */
+function requestsCurrentState(
+  operation: CompletionSyncOperation,
+  current: SyncState,
+): boolean {
+  return (
+    (operation.kind === 'relocate' || operation.kind === 'correctTime') &&
+    current.categoryId === operation.categoryId &&
+    current.title === operation.title &&
+    current.completedAt.getTime() === operation.completedAt
+  )
 }
 
 /** Creates or updates the visible owned record without adopting another import's identity.

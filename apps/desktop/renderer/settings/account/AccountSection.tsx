@@ -363,30 +363,33 @@ export function AccountSection({
   }
 
   const lookCount = account.needsALookCount
+  // A sign-in that re-attached this Mac since the sign-out makes its notes stale; main pushes the state.
+  const showsSignOutNotes = account.state !== 'attached'
   return (
     <SettingsSection label="Account" headingRef={headingRef}>
       <div className="space-y-3">
-        {ui.kind === 'signed-out' && (
+        {showsSignOutNotes && ui.kind === 'signed-out' && (
           <p role="status" className="type-small text-muted-foreground">
             Signed out. Your writing is still here.
           </p>
         )}
-        {(ui.kind === 'residual' || ui.kind === 'clearing') && (
-          <div role="status" className="space-y-2">
-            <p className="type-small text-muted-foreground">
-              Signed out. Some sign-in data couldn&apos;t be cleared from this
-              Mac.
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={ui.kind === 'clearing'}
-              onClick={() => void clearAgain()}
-            >
-              {ui.kind === 'clearing' ? 'Clearing…' : 'Clear again'}
-            </Button>
-          </div>
-        )}
+        {showsSignOutNotes &&
+          (ui.kind === 'residual' || ui.kind === 'clearing') && (
+            <div role="status" className="space-y-2">
+              <p className="type-small text-muted-foreground">
+                Signed out. Some sign-in data couldn&apos;t be cleared from this
+                Mac.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={ui.kind === 'clearing'}
+                onClick={() => void clearAgain()}
+              >
+                {ui.kind === 'clearing' ? 'Clearing…' : 'Clear again'}
+              </Button>
+            </div>
+          )}
         {ui.kind === 'flush-failed' && (
           <p role="alert" className="type-small text-destructive">
             Not saved — retry or copy your writing

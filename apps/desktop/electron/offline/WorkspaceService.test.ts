@@ -1718,6 +1718,54 @@ describe('outgoing delivery uses frozen server-id payloads', () => {
     })
     expect(JSON.stringify(await file.read())).toContain('Distinct export title')
   })
+
+  // Regression: /ship Step 11 rerun (Codex adversarial) 2026-11-03 — a checkpoint retired a keep
+  // whose Undo had not reached the dashboard and recorded the dashboard's uncancelled state.
+  test('a count checkpoint keeps an Undo the dashboard has not received yet', async () => {
+    // Arrange
+    const { file, service, setNow } = await createWorkspace()
+    let state = await service.execute(completionCommand(await file.read()))
+    const operation = (await freeze(service))[0]!.operation
+    const projection = {
+      completionId: completionA,
+      revision: 1,
+      cancelled: false,
+      categoryId: 1,
+      title: 'Original',
+      completedAt: instant,
+    }
+    state = await service.acceptReceipts(accountId, [
+      {
+        operationId: operation.operationId,
+        completionId: completionA,
+        revision: 1,
+        status: 'applied',
+        projection,
+      },
+    ])
+    state = await service.execute({
+      type: 'undo',
+      commandId: randomUUID(),
+      completionId: completionA,
+    })
+
+    // Act
+    setNow(instant + 60 * 60_000)
+    state = await service.checkpoint(accountId, state.revision, {
+      day: '2026-10-21',
+      timezone: 'Asia/Tokyo',
+      total: 1,
+      fetchedAt: instant + 60 * 60_000,
+      identities: { [completionA]: projection },
+    })
+
+    // Assert
+    expect(state.retiredCompletions[completionA]).toBeUndefined()
+    expect(state.completions[completionA]).toMatchObject({
+      cancelled: true,
+      revision: 2,
+    })
+  })
 })
 
 describe('attaching the account categories to the device workspace', () => {

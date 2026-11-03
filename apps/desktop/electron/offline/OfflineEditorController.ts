@@ -460,14 +460,25 @@ export class OfflineEditorController {
 
   /**
    * The "Clear again" action after a residual result: reruns only D3 step 4 and its read-back.
-   * @example await controller.clearAgain()
+   * Called by the Settings IPC; runs under the same in-flight guard as {@link signOut}.
+   * @returns
+   * - The sweep's result while a sign-out is journaled
+   * - The running sign-out's result when one is already in flight
+   * - `signed-out` without sweeping when a later sign-in already cleared the journal
+   * @example await controller.clearAgain() // => { status: 'signed-out' }
    */
-  async clearAgain(): Promise<SessionEnd> {
+  async clearAgain(): Promise<SignOutResult> {
+    // A sign-out or Clear again already sweeping owns the session end; share its result.
+    if (this.signOutRun) return this.signOutRun
     // A sign-in that completed since the residual result already cleared the journal; leave it alone.
     if (!this.registryState?.signOutPending) return { status: 'signed-out' }
-    // Like a sign-out, clearing ends the session: a login racing it must not attach.
+    // Like a sign-out, clearing ends the session: the epoch drops logins queued before it, and the
+    // in-flight run makes a login arriving during the sweep stand down (handleSession, connect).
     this.signOutEpoch += 1
-    return this.finishPendingSignOut()
+    this.signOutRun = this.finishPendingSignOut().finally(() => {
+      this.signOutRun = null
+    })
+    return this.signOutRun
   }
 
   /**

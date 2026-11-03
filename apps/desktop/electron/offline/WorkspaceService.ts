@@ -816,6 +816,9 @@ export class WorkspaceService {
             !completion.cleared &&
             completion.clearAfter !== null) ||
           !completion.remote ||
+          // A local change the dashboard has not received yet (an Undo, a move) must outlive the
+          // checkpoint; retiring now would replace it with the dashboard's older state.
+          completion.revision > completion.remote.revision ||
           !remote ||
           remote.revision < completion.remote.revision
         )

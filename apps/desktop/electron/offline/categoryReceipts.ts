@@ -608,25 +608,11 @@ function applyApplied(
       return
     }
     case 'delete': {
-      // The server promoted the children to roots with the delete.
+      // The server promoted the children to roots with the delete. Its move of the records is not
+      // predicted here: the next completion pass relocates them and the dashboard accepts a move it
+      // already made (completionSync mutateSyncIdentity), so another device's choice is never masked.
       for (const base of Object.values(binding.base))
         if (base.parentLocalId === operation.localId) base.parentLocalId = null
-      // It also moved every live dashboard record of the source to the destination at revision + 1;
-      // mirror that so the next completion pass does not relocate them again against a stale revision.
-      for (const completion of Object.values(state.completions)) {
-        const remote = completion.remote
-        if (
-          !remote ||
-          remote.cancelled ||
-          remote.categoryId !== operation.localId
-        )
-          continue
-        completion.remote = {
-          ...remote,
-          categoryId: operation.destinationLocalId,
-          revision: remote.revision + 1,
-        }
-      }
       dropBinding(binding, operation.localId)
       return
     }

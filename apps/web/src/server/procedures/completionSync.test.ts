@@ -349,7 +349,9 @@ describeIfDb('offline completion synchronization', () => {
     ).toHaveLength(1)
   })
 
-  test('deleting a category advances the remote revision so stale offline moves require a decision', async () => {
+  // Regression: /ship Step 11 rerun (Codex adversarial) 2026-11-03 — a Mac that deleted a category
+  // relocated its records to the same destination the server's delete chose, and every one conflicted.
+  test('a stale move to where a category delete already put the record is accepted instead of conflicting', async () => {
     // Arrange
     const account = await createAccount()
     const category = await call(
@@ -377,6 +379,52 @@ describeIfDb('offline completion synchronization', () => {
             revision: 2,
             expectedRemoteRevision: 1,
             categoryId: account.categoryId,
+          },
+        ],
+      },
+      account.context,
+    )
+
+    // Assert
+    expect(result.receipts[0]).toMatchObject({
+      status: 'applied',
+      projection: { revision: 2, categoryId: account.categoryId },
+    })
+  })
+
+  test('deleting a category advances the remote revision so a stale move elsewhere still requires a decision', async () => {
+    // Arrange
+    const account = await createAccount()
+    const category = await call(
+      createCategory,
+      { name: 'Temporary' },
+      account.context,
+    )
+    const elsewhere = await call(
+      createCategory,
+      { name: 'Elsewhere' },
+      account.context,
+    )
+    const operation = createOperation(category.id)
+    await call(syncApply, { operations: [operation] }, account.context)
+    await call(
+      deleteCategory,
+      { id: category.id, targetCategoryId: account.categoryId },
+      account.context,
+    )
+
+    // Act
+    const result = await call(
+      syncApply,
+      {
+        operations: [
+          {
+            ...operation,
+            operationId: randomUUID(),
+            kind: 'relocate',
+            revision: 2,
+            expectedRemoteRevision: 1,
+            categoryId: elsewhere.id,
           },
         ],
       },

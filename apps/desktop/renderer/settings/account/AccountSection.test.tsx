@@ -402,6 +402,84 @@ test('a sign-in request that fails in main re-enables Sign in instead of staying
   )
 })
 
+// Regression: /ship fix-check 2026-11-03 — a sign-in that re-attached the Mac after a residual
+// sign-out left the cleanup note and Clear again above the attached account.
+test('a sign-in that re-attaches the Mac after a residual sign-out removes the cleanup note and Clear again', async () => {
+  // Arrange
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+  const { fake } = await renderWithSettings(<Harness />, { account: ATTACHED })
+  fake.api.account.signOut.mockImplementation(async () => {
+    fake.setAccount({ state: 'signed-out' })
+    return {
+      status: 'signed-out-residual',
+      code: 'SIGNOUT_RESIDUAL_COOKIE',
+      cookieNames: ['__client'],
+      domains: ['clerk.corelive.app'],
+    }
+  })
+  await user.click(screen.getByRole('button', { name: 'Sign out' }))
+  await user.click(
+    within(screen.getByRole('group', { name: 'Confirm sign out' })).getByRole(
+      'button',
+      { name: 'Sign out' },
+    ),
+  )
+  await screen.findByRole('button', { name: 'Clear again' })
+
+  // Act
+  fake.setAccount(ATTACHED)
+
+  // Assert
+  await waitFor(() =>
+    expect(screen.getByText('raphtalia@example.com')).toBeVisible(),
+  )
+  expect(
+    screen.queryByText(
+      "Signed out. Some sign-in data couldn't be cleared from this Mac.",
+    ),
+  ).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Clear again' })).toBeNull()
+})
+
+// Regression: /ship fix-check 2026-11-03 — Clear again that found the Mac re-attached reported
+// "Signed out" above the attached account.
+test('Clear again that finds the Mac signed in again never says it signed out', async () => {
+  // Arrange
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+  const { fake } = await renderWithSettings(<Harness />, { account: ATTACHED })
+  fake.api.account.signOut.mockImplementation(async () => {
+    fake.setAccount({ state: 'signed-out' })
+    return {
+      status: 'signed-out-residual',
+      code: 'SIGNOUT_RESIDUAL_COOKIE',
+      cookieNames: ['__client'],
+      domains: ['clerk.corelive.app'],
+    }
+  })
+  fake.api.account.clearAgain.mockImplementation(async () => {
+    fake.setAccount(ATTACHED)
+    return { status: 'signed-out' }
+  })
+  await user.click(screen.getByRole('button', { name: 'Sign out' }))
+  await user.click(
+    within(screen.getByRole('group', { name: 'Confirm sign out' })).getByRole(
+      'button',
+      { name: 'Sign out' },
+    ),
+  )
+
+  // Act
+  await user.click(await screen.findByRole('button', { name: 'Clear again' }))
+
+  // Assert
+  await waitFor(() =>
+    expect(screen.getByText('raphtalia@example.com')).toBeVisible(),
+  )
+  expect(
+    screen.queryByText('Signed out. Your writing is still here.'),
+  ).toBeNull()
+})
+
 // Regression: /ship pre-landing review 2026-11-03 (pass 2) — a failed Clear again dropped its own retry.
 test('a Clear again request that fails in main keeps the cleanup note and the Clear again retry', async () => {
   // Arrange
