@@ -11,13 +11,10 @@ import type {
 import { afterEach, expect, test, vi } from 'vitest'
 
 import {
-  CompletionSyncLoop,
-  type SyncAccountContext,
-} from './CompletionSyncLoop'
-import {
   categoryUuid,
   initializeDeviceWorkspace,
 } from './deviceWorkspaceFixture'
+import { SyncLoop, type SyncAccountContext } from './SyncLoop'
 import { WorkspaceWorkerClient } from './WorkspaceWorkerClient'
 
 type OfflineSyncStatus = 'idle' | 'syncing' | 'offline' | 'sign-in-required'
@@ -100,6 +97,14 @@ async function createFixture(options: { settleTimeoutMs?: number } = {}) {
         ),
       }),
     ),
+    categoryApply: vi.fn<CompletionSyncTransport['categoryApply']>(
+      async () => ({
+        receipts: [],
+      }),
+    ),
+    categoryReceipts: vi.fn<CompletionSyncTransport['categoryReceipts']>(
+      async () => ({ receipts: [] }),
+    ),
     checkpoint: vi.fn<CompletionSyncTransport['checkpoint']>(
       async ({ day, timezone, completionIds }) => ({
         day,
@@ -128,7 +133,7 @@ async function createFixture(options: { settleTimeoutMs?: number } = {}) {
   const nextStatus = async (status: OfflineSyncStatus): Promise<void> =>
     new Promise((resolve) => statusWaiters.set(status, resolve))
   const onView = vi.fn()
-  const loop = new CompletionSyncLoop({
+  const loop = new SyncLoop({
     context: () => context,
     broker: {
       acquire: async (expectedAccountId, generation) => ({

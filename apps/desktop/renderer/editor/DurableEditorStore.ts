@@ -10,6 +10,7 @@ import type {
   WorkspaceCommand,
 } from '@corelive/desktop-contract/offline-workspace-v2'
 
+import type { CategoryCommandOutcome } from './categoryCopy'
 import {
   applyDraftEdits,
   diffDraftRows,
@@ -60,6 +61,15 @@ export interface DurableEditorSnapshot {
   selectionRevision: number
   notice: CompletionNotice | null
 }
+/** Command types whose definite refusals are form state, not storage failures (C5). */
+const CATEGORY_COMMAND_TYPES: ReadonlySet<WorkspaceCommand['type']> = new Set([
+  'categoryCreate',
+  'categoryRename',
+  'categoryRecolor',
+  'categoryReparent',
+  'categoryDelete',
+  'syncDetailAction',
+])
 const EMPTY_SELECTION: EditorSelection = { start: 0, end: 0, direction: 'none' }
 const rowsText = (rows: DraftRow[]): string =>
   rows.map((row) => row.text).join('\n')
@@ -89,6 +99,7 @@ export class DurableEditorStore {
   private readonly buffers = new Set<Buffer>()
   private current: Buffer | null = null
   private pending: PendingCommand | null = null
+  private categoryRefusal: { reason: string; detail?: string } | null = null
   private deferred: Extract<OfflineEditorSnapshot, { phase: 'ready' }> | null =
     null
   private readonly uncertain = new Map<string, PendingCommand>()
@@ -429,6 +440,23 @@ export class DurableEditorStore {
     })
   }
 
+  /**
+   * Runs a category command and reports its definite outcome (C5).
+   * A refusal (`name-taken-local`, `default-locked`, ...) is returned for inline copy and never
+   * raises the storage error banner.
+   * @example const outcome = await store.categoryCommand({ type: 'categoryRename', commandId, categoryId, name })
+   */
+  async categoryCommand(
+    command: WorkspaceCommand,
+  ): Promise<CategoryCommandOutcome> {
+    this.categoryRefusal = null
+    const accepted = await this.command(command)
+    if (accepted) return { ok: true }
+    const refusal = this.categoryRefusal
+    this.categoryRefusal = null
+    return { ok: false, ...(refusal ?? { reason: 'storage-failed' }) }
+  }
+
   /** Retries an uncertain command with the original identity, then saves the newest text.
    * @example await store.retry()
    */
@@ -565,7 +593,8 @@ export class DurableEditorStore {
       const result = await this.withDeadline(
         this.host.command(generation, command),
       )
-      if (!result.ok) return await this.rejectCommand(pending, result.reason)
+      if (!result.ok)
+        return await this.rejectCommand(pending, result.reason, result.detail)
       this.uncertain.delete(buffer.ownerId)
       if (command.type === 'save')
         buffer.acknowledged = Math.max(buffer.acknowledged, pending.version)
@@ -625,8 +654,23 @@ export class DurableEditorStore {
   private async rejectCommand(
     pending: PendingCommand,
     reason: string,
+    detail?: string,
   ): Promise<boolean> {
     const { buffer, generation, command } = pending
+    // C5: a definite category refusal is the form's state, never the storage error.
+    if (
+      CATEGORY_COMMAND_TYPES.has(command.type) &&
+      ![
+        'storage-failed',
+        'worker-unavailable',
+        'invalid-reply',
+        'account-changed',
+      ].includes(reason)
+    ) {
+      this.uncertain.delete(buffer.ownerId)
+      this.categoryRefusal = { reason, ...(detail ? { detail } : {}) }
+      return false
+    }
     // Main refused completing an already finished row in keep mode: an intentional no-op, not a save failure.
     if (reason === 'finished-line' && command.type === 'complete') {
       this.uncertain.delete(buffer.ownerId)

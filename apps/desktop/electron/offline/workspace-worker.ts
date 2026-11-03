@@ -71,6 +71,36 @@ async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
       )
     case 'reconcile':
       return workspaceView(await service.reconcileCategories(request.input))
+    case 'categoryPending':
+      return service.categoryPending(request.input.limit)
+    case 'markCategorySent':
+      return service.markCategorySent(
+        request.input.accountId,
+        request.input.operationIds,
+      )
+    case 'categoryReceipts':
+      return workspaceView(
+        await service.acceptCategoryReceipts(
+          request.input.accountId,
+          request.input.receipts,
+        ),
+      )
+    case 'noteCategoryQuery':
+      return workspaceView(
+        await service.noteCategoryQuery(
+          request.input.accountId,
+          request.input.operationIds,
+        ),
+      )
+    case 'parkCategory':
+      return workspaceView(
+        await service.parkCategory(
+          request.input.accountId,
+          request.input.operationIds,
+        ),
+      )
+    case 'syncDetails':
+      return service.syncDetails()
     case 'markSynced':
       return workspaceView(
         await service.markSynced(request.input.accountId, request.input.at),
@@ -270,6 +300,9 @@ parentPort?.on('message', (request: WorkspaceWorkerRequest) => {
         requestId: request.requestId,
         ok: false,
         reason,
+        ...(error instanceof WorkspaceCommandError && error.detail
+          ? { detail: error.detail }
+          : {}),
       })
     },
   )

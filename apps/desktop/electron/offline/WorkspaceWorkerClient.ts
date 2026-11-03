@@ -7,11 +7,20 @@ import type { WorkspaceWorkerCalls } from './workspace-worker-protocol'
 
 const replySchema = z.discriminatedUnion('ok', [
   z.object({ requestId: z.string(), ok: z.literal(true), result: z.unknown() }),
-  z.object({ requestId: z.string(), ok: z.literal(false), reason: z.string() }),
+  z.object({
+    requestId: z.string(),
+    ok: z.literal(false),
+    reason: z.string(),
+    detail: z.string().optional(),
+  }),
 ])
 
 export class WorkspaceWorkerError extends Error {
-  constructor(readonly reason: string) {
+  constructor(
+    readonly reason: string,
+    /** Extra copy input from a definite refusal (EA8 child name). */
+    readonly detail?: string,
+  ) {
     super(`Workspace: ${reason}`)
     this.name = 'WorkspaceWorkerError'
   }
@@ -63,7 +72,7 @@ export class WorkspaceWorkerClient {
       if (!pending) return
       this.pending.delete(reply.requestId)
       if (reply.ok) pending.resolve(reply.result)
-      else pending.reject(new WorkspaceWorkerError(reply.reason))
+      else pending.reject(new WorkspaceWorkerError(reply.reason, reply.detail))
     })
     worker.on('error', () => this.failAll('worker-unavailable'))
     worker.on('exit', () => {

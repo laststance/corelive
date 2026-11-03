@@ -1,3 +1,7 @@
+import type {
+  CategoryWireOperation,
+  SyncOutcome,
+} from '@corelive/desktop-contract/category-sync'
 import type { CompletionSyncTransport } from '@corelive/desktop-contract/offline-sync'
 import type { CompletionSyncReceipt } from '@corelive/desktop-contract/offline-workspace'
 import { toLocalDayKey } from '@corelive/live-editor/day'
@@ -21,18 +25,22 @@ type LoopOptions = {
   onStatus: (status: CompletionSyncStatus, generation: number) => void
   /** The verified email stored in the binding at attach time (EA2). */
   displayEmail?: () => string | null
+  /** Redacted log sink: codes, ids and counts only (DX7). */
+  log?: (line: string) => void
   random?: () => number
-  /** Bound on how long {@link CompletionSyncLoop.stop} waits for an in-flight request (C9). */
+  /** Bound on how long {@link SyncLoop.stop} waits for an in-flight request (C9). */
   settleTimeoutMs?: number
 }
 
 /**
- * Sends durable completion operations in bounded, account-bound background passes.
+ * Sends durable category and completion operations in bounded, account-bound background passes.
+ * One ordered outbox for both kinds, one backoff and one in-flight marker: category batches
+ * (`category.syncApply`) always go before completion batches (D4).
  * UI commands/reconnection/session changes call {@link wake}; local editing never
  * waits for this loop. Every awaited boundary rechecks the account generation.
- * @example const loop = new CompletionSyncLoop(options); loop.wake()
+ * @example const loop = new SyncLoop(options); loop.wake()
  */
-export class CompletionSyncLoop {
+export class SyncLoop {
   private timer: ReturnType<typeof setTimeout> | null = null
   private running = false
   private again = false
@@ -40,6 +48,8 @@ export class CompletionSyncLoop {
   private failures = 0
   private abort: AbortController | null = null
   private runPromise: Promise<void> | null = null
+  /** Whether this pass sent category operations, so a quick follow-up pass re-derives. */
+  private sentCategories = false
 
   constructor(private readonly options: LoopOptions) {}
 
@@ -113,7 +123,23 @@ export class CompletionSyncLoop {
     try {
       const transport = await this.authorizedTransport(context)
       if (!transport) return
-      if (!(await this.refreshCategories(context, transport, signal))) return
+      // EA4: uncertain category operations are recovered from receipts before any category refresh (C19).
+      const uncertain = await this.recoverCategoryReceipts(
+        context,
+        transport,
+        signal,
+      )
+      if (!this.current(context)) return
+      if (
+        !uncertain &&
+        !(await this.refreshCategories(context, transport, signal))
+      )
+        return
+      // Category batches first; dependents become sendable as receipts add server ids.
+      this.sentCategories = false
+      for (let batch = 0; batch < 8 && this.current(context); batch++) {
+        if (!(await this.sendCategoryBatch(context, transport, signal))) break
+      }
       // Bound each pass so an offline backlog cannot monopolize the account actor.
       for (let batch = 0; batch < 4 && this.current(context); batch++) {
         if (!(await this.sendBatch(context, transport, signal))) break
@@ -121,9 +147,16 @@ export class CompletionSyncLoop {
       if (!this.current(context)) return
       if (await this.refreshCheckpoint(context, transport, signal)) delay = 20
       const remaining = await context.worker.call('pending', { limit: 1 })
+      const categoryWork = await context.worker.call('categoryPending', {
+        limit: 1,
+      })
       if (!this.current(context)) return
+      const sendable =
+        remaining.length +
+        categoryWork.sendable.length +
+        categoryWork.uncertain.length
       // C22: a pass with nothing sendable left counts as synced; dependency-waiting work does not block it.
-      if (!remaining.length) {
+      if (!sendable) {
         const view = await context.worker.call('markSynced', {
           accountId: context.ownerId,
           at: Date.now(),
@@ -133,7 +166,8 @@ export class CompletionSyncLoop {
       }
       this.options.onStatus('idle', context.generation)
       this.failures = 0
-      if (remaining.length) delay = 20
+      // A receipt can change the merge base (adopt, revert); re-derive on a quick follow-up pass.
+      if (sendable || this.sentCategories) delay = 20
     } catch (error) {
       this.failedPass(context, error)
     } finally {
@@ -187,6 +221,156 @@ export class CompletionSyncLoop {
     if (!this.current(context)) return false
     this.options.onView(refreshed, context.generation)
     return true
+  }
+
+  /**
+   * Looks up uncertain category receipts before any refresh or replay (EA4).
+   * A lookup that finds nothing is counted; three of them surface "Waiting for the dashboard".
+   * @returns True while some category operation is still uncertain after the lookup.
+   * @example const uncertain = await this.recoverCategoryReceipts(context, transport, signal)
+   */
+  private async recoverCategoryReceipts(
+    context: SyncAccountContext,
+    transport: CompletionSyncTransport,
+    signal: AbortSignal,
+  ): Promise<boolean> {
+    const { uncertain } = await context.worker.call('categoryPending', {
+      limit: 16,
+    })
+    if (!uncertain.length) return false
+    const ids = uncertain.map((entry) => entry.operation.operationId)
+    const found = await transport.categoryReceipts(
+      { operationIds: ids },
+      signal,
+    )
+    if (!this.current(context)) return true
+    this.assertCategoryReceipts(found.receipts, ids)
+    if (found.receipts.length)
+      await this.commitCategoryReceipts(context, found.receipts)
+    const answered = new Set(
+      found.receipts.map((receipt) => receipt.operationId),
+    )
+    const missing = ids.filter((id) => !answered.has(id))
+    if (missing.length && this.current(context)) {
+      const view = await context.worker.call('noteCategoryQuery', {
+        accountId: context.ownerId,
+        operationIds: missing,
+      })
+      if (this.current(context)) this.options.onView(view, context.generation)
+    }
+    return missing.length > 0
+  }
+
+  /** Commits category receipts durably before publishing progress (EA16: by `operationId` only).
+   * @example await this.commitCategoryReceipts(context, receipts)
+   */
+  private async commitCategoryReceipts(
+    context: SyncAccountContext,
+    receipts: SyncOutcome[],
+  ): Promise<void> {
+    const view = await context.worker.call('categoryReceipts', {
+      accountId: context.ownerId,
+      receipts,
+    })
+    if (this.current(context)) this.options.onView(view, context.generation)
+  }
+
+  /**
+   * Sends one category batch: frozen payloads of still-uncertain operations are replayed
+   * byte-identically (EA3) together with newly frozen sendable ones; a dependent never shares a
+   * batch with what it waits on. A non-401 4xx resends a multi-op batch once as single ops and
+   * parks only those rejected alone (E3).
+   * @returns Whether another category batch may make progress.
+   * @example const more = await this.sendCategoryBatch(context, transport, signal)
+   */
+  private async sendCategoryBatch(
+    context: SyncAccountContext,
+    transport: CompletionSyncTransport,
+    signal: AbortSignal,
+  ): Promise<boolean> {
+    const work = await context.worker.call('categoryPending', { limit: 16 })
+    if (!this.current(context)) return false
+    const replay = work.uncertain.flatMap((entry) =>
+      entry.wire ? [entry.wire] : [],
+    )
+    const room = Math.max(0, 16 - replay.length)
+    const frozen = room
+      ? await context.worker.call('markCategorySent', {
+          accountId: context.ownerId,
+          operationIds: work.sendable
+            .slice(0, room)
+            .map((entry) => entry.operation.operationId),
+        })
+      : []
+    if (!this.current(context)) return false
+    const operations: CategoryWireOperation[] = [
+      ...replay,
+      ...frozen.flatMap((entry) => (entry.wire ? [entry.wire] : [])),
+    ]
+    if (!operations.length) return false
+    this.sentCategories = true
+    const ids = operations.map((operation) => operation.operationId)
+    let receipts: SyncOutcome[]
+    try {
+      receipts = (await transport.categoryApply({ operations }, signal))
+        .receipts
+    } catch (error) {
+      if (!isClientRejection(error)) throw error
+      receipts = await this.isolateRejected(
+        context,
+        transport,
+        operations,
+        signal,
+      )
+    }
+    this.assertCategoryReceipts(receipts, ids)
+    // C9/EA16: a receipt that arrives after detach still retires its own operations.
+    await this.commitCategoryReceipts(context, receipts)
+    // A short answer means uncertainty; the next pass recovers it instead of hammering.
+    return this.current(context) && receipts.length === operations.length
+  }
+
+  /**
+   * E3: resends a rejected multi-operation batch as single operations, once. Only operations the
+   * server rejects alone are parked (`CATEGORY_SYNC_REJECTED`); the others keep sending.
+   * @returns Receipts of the operations that were answered.
+   * @example const receipts = await this.isolateRejected(context, transport, operations, signal)
+   */
+  private async isolateRejected(
+    context: SyncAccountContext,
+    transport: CompletionSyncTransport,
+    operations: CategoryWireOperation[],
+    signal: AbortSignal,
+  ): Promise<SyncOutcome[]> {
+    const receipts: SyncOutcome[] = []
+    const parked: string[] = []
+    for (const operation of operations) {
+      if (operations.length === 1) {
+        parked.push(operation.operationId)
+        continue
+      }
+      try {
+        const single = await transport.categoryApply(
+          { operations: [operation] },
+          signal,
+        )
+        receipts.push(...single.receipts)
+      } catch (error) {
+        if (!isClientRejection(error)) throw error
+        parked.push(operation.operationId)
+      }
+    }
+    if (parked.length) {
+      this.options.log?.(
+        `CATEGORY_SYNC_REJECTED procedure=category.syncApply count=${parked.length} operations=${parked.join(',')}`,
+      )
+      const view = await context.worker.call('parkCategory', {
+        accountId: context.ownerId,
+        operationIds: parked,
+      })
+      if (this.current(context)) this.options.onView(view, context.generation)
+    }
+    return receipts
   }
 
   /** Looks up uncertain receipts before a replay; absence permits replay of the same immutable payload.
@@ -356,6 +540,25 @@ export class CompletionSyncLoop {
     this.timer.unref?.()
   }
 
+  /** Refuses foreign or duplicate category acknowledgements; a missing one means "uncertain" (EA3).
+   * @example this.assertCategoryReceipts(receipts, requestedIds)
+   */
+  private assertCategoryReceipts(
+    receipts: SyncOutcome[],
+    requested: string[],
+  ): void {
+    const ids = new Set(receipts.map((receipt) => receipt.operationId))
+    if (
+      ids.size !== receipts.length ||
+      receipts.some(
+        (receipt) =>
+          receipt.kind !== 'category' ||
+          !requested.includes(receipt.operationId),
+      )
+    )
+      throw new Error('Invalid category synchronization acknowledgement')
+  }
+
   /** Refuses missing/foreign/duplicate apply acknowledgements without silently retiring work.
    * @example this.assertReceipts(response.receipts, operationIds, true)
    */
@@ -372,4 +575,18 @@ export class CompletionSyncLoop {
     )
       throw new Error('Invalid synchronization acknowledgement')
   }
+}
+
+/**
+ * Recognizes a non-401 client rejection (4xx) that retrying cannot fix (E3, DX7).
+ *
+ * @param error - Anything a transport call threw.
+ * @returns True for HTTP 400-499 except 401.
+ * @example isClientRejection({ status: 400 }) // true
+ */
+function isClientRejection(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false
+  const status =
+    'status' in error && typeof error.status === 'number' ? error.status : null
+  return status !== null && status >= 400 && status < 500 && status !== 401
 }

@@ -1,3 +1,4 @@
+import type { SyncOutcome } from '@corelive/desktop-contract/category-sync'
 import type { OfflineRecoveryPreview } from '@corelive/desktop-contract/offline-editor-api'
 import type {
   CountCheckpoint,
@@ -5,6 +6,7 @@ import type {
 } from '@corelive/desktop-contract/offline-workspace'
 import type {
   AccountBinding,
+  CategoryOutboxEntry,
   OfflineCompletion,
   OfflineDraftRecord,
   OfflineWorkspace,
@@ -13,6 +15,7 @@ import type {
   WorkspaceCommand,
 } from '@corelive/desktop-contract/offline-workspace-v2'
 
+import { needsALookCount, type SyncDetailsView } from './syncDetails'
 import { workspaceToday } from './workspaceCounts'
 
 export type { OfflineWorkspaceView as WorkspaceView } from '@corelive/desktop-contract/offline-workspace-v2'
@@ -40,6 +43,34 @@ export interface WorkspaceWorkerCalls {
     input: { accountId: string; receipts: unknown[] }
     output: WorkspaceView
   }
+  /** Uncertain category entries plus queued ones whose ids all have server ids (D4). */
+  categoryPending: {
+    input: { limit: number }
+    output: {
+      uncertain: CategoryOutboxEntry[]
+      sendable: CategoryOutboxEntry[]
+    }
+  }
+  /** Freezes the wire payload and marks category operations in flight (EA3). */
+  markCategorySent: {
+    input: { accountId: string; operationIds: string[] }
+    output: CategoryOutboxEntry[]
+  }
+  categoryReceipts: {
+    input: { accountId: string; receipts: SyncOutcome[] }
+    output: WorkspaceView
+  }
+  /** Counts an unanswered receipt lookup (EA4). */
+  noteCategoryQuery: {
+    input: { accountId: string; operationIds: string[] }
+    output: WorkspaceView
+  }
+  /** Parks operations a 4xx rejected on their own (E3). */
+  parkCategory: {
+    input: { accountId: string; operationIds: string[] }
+    output: WorkspaceView
+  }
+  syncDetails: { input: null; output: SyncDetailsView }
   reconcile: {
     input: {
       accountId: string
@@ -142,6 +173,7 @@ export function workspaceView(state: OfflineWorkspace): WorkspaceView {
           lastSyncedAt: state.binding.lastSyncedAt,
         }
       : null,
+    needsALookCount: needsALookCount(state),
     recoveryCopyCount: state.recoveryCopies.filter(
       (copy) => copy.restoredTo === undefined,
     ).length,

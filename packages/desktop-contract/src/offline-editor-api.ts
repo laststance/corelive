@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import type { SyncDetailRow } from './category-sync'
 import {
   OfflinePreferencesSchema,
   type OfflinePreferences,
@@ -13,6 +14,7 @@ import {
   type OfflineWorkspace,
   type OfflineWorkspaceView,
   type OutboxEntry,
+  type SyncHistoryItem,
   type WorkspaceCommand,
 } from './offline-workspace-v2'
 import type { UserSettingsState } from './settings'
@@ -40,6 +42,14 @@ export const OfflineCategoryActionSchema = z.object({
 export type OfflineCategoryAction = z.infer<typeof OfflineCategoryActionSchema>
 export type OfflineCategoryRequest = OfflineCategoryAction & {
   generation: number
+}
+/** Everything the Sync details page renders (DA7, C34). */
+export interface OfflineSyncDetails {
+  rows: SyncDetailRow[]
+  history: SyncHistoryItem[]
+  migrationSummary: OfflineWorkspace['migration']['summary']
+  preservedBackups: { fileName: string; accountId: string | null }[]
+  dashboardOnlyCount: number
 }
 export interface OfflineSettingsContext {
   generation: number
@@ -79,7 +89,8 @@ export interface OfflineEditorAPI {
     limit: number,
   ) => Promise<OfflineRecoveryPage>
   signIn: () => Promise<void>
-  manageCategories: (request?: OfflineCategoryAction) => Promise<void>
+  /** Sync details page data (rows, History, C34 summary); read-only. */
+  syncDetails: (generation: number) => Promise<OfflineSyncDetails>
   copyWriting: (generation: number, text: string) => Promise<boolean>
   export: (generation: number) => Promise<boolean>
   previewRecovery: (generation: number) => Promise<OfflineRecoveryPreview>
@@ -87,9 +98,6 @@ export interface OfflineEditorAPI {
   subscribe: (listener: (snapshot: OfflineEditorSnapshot) => void) => () => void
   onFlush: (listener: (request: OfflineFlushRequest) => void) => () => void
   onShown: (listener: () => void) => () => void
-  onCategoryCreated: (
-    listener: (selection: { generation: number; categoryId: string }) => void,
-  ) => () => void
   replyFlush: (request: OfflineFlushRequest, saved: boolean) => Promise<boolean>
 }
 
@@ -143,9 +151,9 @@ export interface OfflineIPCChannels {
     response: OfflineRecoveryPage
   }
   'offline-editor-sign-in': { request: void; response: void }
-  'offline-editor-manage-categories': {
-    request: OfflineCategoryAction
-    response: void
+  'offline-editor-sync-details': {
+    request: number
+    response: OfflineSyncDetails
   }
   'offline-editor-copy': { request: [number, string]; response: boolean }
   'offline-editor-export': { request: number; response: boolean }
@@ -202,7 +210,7 @@ export const OFFLINE_IPC_ARGUMENT_SCHEMAS = {
   'offline-editor-undo-history': pagination,
   'offline-editor-recovery-copies': pagination,
   'offline-editor-sign-in': z.tuple([]),
-  'offline-editor-manage-categories': z.tuple([OfflineCategoryActionSchema]),
+  'offline-editor-sync-details': z.tuple([generation]),
   'offline-editor-copy': z.tuple([generation, z.string()]),
   'offline-editor-export': z.tuple([generation]),
   'offline-editor-preview-recovery': z.tuple([generation]),

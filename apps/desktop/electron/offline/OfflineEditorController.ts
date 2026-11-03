@@ -18,12 +18,9 @@ import {
   type WorkspaceCommand,
 } from '@corelive/desktop-contract/offline-workspace-v2'
 
-import {
-  CompletionSyncLoop,
-  type SyncAccountContext,
-} from './CompletionSyncLoop'
 import { migrateWorkspaceV1 } from './migrateWorkspaceV1'
 import { OfflineAccountRegistry } from './OfflineAccountRegistry'
+import { SyncLoop, type SyncAccountContext } from './SyncLoop'
 import type { TokenBroker } from './TokenBroker'
 import type { WorkspaceView } from './workspace-worker-protocol'
 import {
@@ -82,7 +79,7 @@ export class OfflineEditorController {
     string,
     Extract<WorkspaceCommand, { type: 'save' }>
   >()
-  private readonly loop: CompletionSyncLoop
+  private readonly loop: SyncLoop
   private registryState: DeviceRegistry | null = null
   private context: AccountContext | null = null
   private recovery: AccountContext | null = null
@@ -106,12 +103,13 @@ export class OfflineEditorController {
   constructor(private readonly options: ControllerOptions) {
     this.registry =
       options.registry ?? new OfflineAccountRegistry(options.directory)
-    this.loop = new CompletionSyncLoop({
+    this.loop = new SyncLoop({
       context: () => this.syncContext(),
       broker: options.broker,
       transport: options.transport,
       displayEmail: () => this.signedIn?.email ?? this.pendingEmail,
       settleTimeoutMs: options.settleTimeoutMs,
+      log: options.log,
       onView: (view, generation) => this.publishView(view, generation),
       onStatus: (status, generation) => {
         if (generation !== this.generation) return
@@ -337,6 +335,7 @@ export class OfflineEditorController {
       signedInEmail:
         state === 'other-account' ? (this.signedIn?.email ?? null) : null,
       waitingCount: view?.pendingCount ?? 0,
+      needsALookCount: view?.needsALookCount ?? 0,
       lastSyncedAt: binding?.lastSyncedAt ?? null,
       pendingConnect: pending ? { displayEmail: pending.displayEmail } : null,
       firstUpload: this.firstUpload,
@@ -482,13 +481,15 @@ export class OfflineEditorController {
     } catch (error) {
       const reason =
         error instanceof WorkspaceWorkerError ? error.reason : 'storage-failed'
+      const detail =
+        error instanceof WorkspaceWorkerError ? error.detail : undefined
       if (command.type === 'save' && reason !== 'revision-conflict') {
         this.failedDrafts.set(context.ownerId, command)
         // A replacement renderer must receive rescued writing before any later refresh.
         if (this.snapshot.phase === 'ready')
           this.publishView(this.snapshot.workspace, generation)
       }
-      return { ok: false, reason }
+      return { ok: false, reason, ...(detail ? { detail } : {}) }
     } finally {
       this.finishCommand()
     }
@@ -559,6 +560,15 @@ export class OfflineEditorController {
       offset,
       limit,
     })
+  }
+
+  /**
+   * Sync details data for the page reached from Settings ▸ Account (DA7, C31): the only place
+   * conflict and refusal items appear. Actions run as `syncDetailAction` commands.
+   * @example const details = await controller.syncDetails(generation)
+   */
+  async syncDetails(generation: number) {
+    return this.requireContext(generation).worker.call('syncDetails', null)
   }
 
   /** Reads a specific owned draft for revision-conflict repair without changing the visible category.

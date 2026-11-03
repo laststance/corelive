@@ -96,6 +96,7 @@ function createFixture() {
       categoryMoves: {},
       binding: null,
       recoveryCopyCount: 0,
+      needsALookCount: 0,
       today: {
         day: '2026-10-21',
         timezone: 'UTC',
@@ -113,6 +114,7 @@ function createFixture() {
     readSnapshot: vi.fn(async () => snapshot),
     canLeaveWithoutRenderer: vi.fn(() => true),
     retrySync: vi.fn(),
+    syncDetails: vi.fn(),
     details: vi.fn(async () => ({ total: 0, records: [] })),
     settingsContext: vi.fn((accountId: string) =>
       accountId === 'account-a' ? { generation: 1, preferences } : null,
@@ -359,60 +361,43 @@ test('category creation triggers a sync refresh only for the attached account an
   )
 })
 
-test.each(['local-only', 'waiting', 'sign-in-to-sync'] as const)(
-  'category management is a no-op while sync state is %s',
-  async (state) => {
-    // Arrange
-    const fixture = createFixture()
-    const snapshot = fixture.controller.getSnapshot()
-    if (snapshot.phase !== 'ready') throw new Error('Missing fixture workspace')
-    fixture.updateSnapshot({ ...snapshot, sync: { ...snapshot.sync, state } })
-
-    // Act
-    await fixture.handler('offline-editor-manage-categories')(fixture.event, {
-      action: 'manage',
-    })
-
-    // Assert
-    expect(fixture.windows.openSettings).not.toHaveBeenCalled()
-    await expect(
-      fixture.handler('offline-settings-category-request')(
-        fixture.settingsEvent,
-      ),
-    ).resolves.toBeNull()
-  },
-)
-
-test('category management retains the requested create form through Settings hydration and discards an old account request', async () => {
+test('category management in the editor picker no longer needs a live account, so the retired settings request stays empty', async () => {
   // Arrange
   const fixture = createFixture()
   const snapshot = fixture.controller.getSnapshot()
   if (snapshot.phase !== 'ready') throw new Error('Missing fixture workspace')
   fixture.updateSnapshot({
     ...snapshot,
-    sync: { ...snapshot.sync, state: 'synced' },
+    sync: { ...snapshot.sync, state: 'local-only' },
   })
 
   // Act / Assert
-  await fixture.handler('offline-editor-manage-categories')(fixture.event, {
-    action: 'create',
-    initialName: 'Writing ideas',
-  })
-  await expect(
-    fixture.handler('offline-settings-category-request')(fixture.settingsEvent),
-  ).resolves.toEqual({
-    action: 'create',
-    initialName: 'Writing ideas',
-    generation: 1,
-  })
   await expect(
     fixture.handler('offline-settings-category-request')(fixture.settingsEvent),
   ).resolves.toBeNull()
-  await fixture.handler('offline-editor-manage-categories')(fixture.event, {
-    action: 'manage',
+  expect(() => fixture.handler('offline-editor-manage-categories')).toThrow()
+})
+
+test('the Sync details read is served to the editor window of the current generation only', async () => {
+  // Arrange
+  const { handler, controller, event, settingsEvent } = createFixture()
+  controller.syncDetails.mockResolvedValue({
+    rows: [],
+    history: [],
+    migrationSummary: null,
+    preservedBackups: [],
+    dashboardOnlyCount: 0,
   })
-  fixture.changeAccount()
+
+  // Act
+  const details = await handler('offline-editor-sync-details')(event, 1)
+
+  // Assert
+  expect(details).toMatchObject({ rows: [] })
   await expect(
-    fixture.handler('offline-settings-category-request')(fixture.settingsEvent),
-  ).resolves.toBeNull()
+    handler('offline-editor-sync-details')(settingsEvent, 1),
+  ).rejects.toThrow()
+  await expect(
+    handler('offline-editor-sync-details')(event, 0),
+  ).rejects.toThrow()
 })

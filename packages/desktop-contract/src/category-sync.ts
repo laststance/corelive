@@ -241,3 +241,38 @@ export const SyncStatusSchema = z.object({
   boundEmail: z.string().nullable(),
 })
 export type SyncStatus = z.infer<typeof SyncStatusSchema>
+
+export type CategorySyncApplyInput = z.infer<
+  typeof CategorySyncApplyInputSchema
+>
+export type CategorySyncApplyOutput = z.infer<
+  typeof CategorySyncApplyOutputSchema
+>
+
+/** Row types of the "Needs a look" group (DA7). */
+export const SYNC_DETAIL_ROW_TYPES = [
+  'conflict',
+  'name-taken',
+  'invalid-parent',
+  'forbidden',
+  'digest-mismatch',
+  'delete-blocked',
+  'parked',
+  'waiting-confirm',
+] as const
+export type SyncDetailRowType = (typeof SYNC_DETAIL_ROW_TYPES)[number]
+
+/** One "Needs a look" row, ready to render (DA7). Colors are names, parents are full paths. */
+export interface SyncDetailRow {
+  /** `<localId>:<field>`; the key of every action. */
+  id: string
+  type: SyncDetailRowType
+  categoryPath: string
+  field: string
+  macValue: string | null
+  dashboardValue: string | null
+  /** The child that blocked a delete (EA8). */
+  childName?: string
+  /** Actions this row offers, in display order. Empty for informational rows. */
+  actions: SyncDetailAction[]
+}

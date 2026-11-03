@@ -1,12 +1,16 @@
 import { createHash, randomUUID } from 'node:crypto'
 
+import type { SyncOutcome } from '@corelive/desktop-contract/category-sync'
+import {
+  validateCategoryAction,
+  type CategoryAction,
+} from '@corelive/desktop-contract/category-validator'
 import {
   CompletionSyncReceiptSchema,
   CountCheckpointSchema,
   type CompletionProjection,
   type CompletionSyncReceipt,
   type DraftRow,
-  type EditorCategory,
   type OfflineDraft,
 } from '@corelive/desktop-contract/offline-workspace'
 import {
@@ -28,23 +32,20 @@ import {
 } from '../../renderer/editor/liveEditorUtils'
 
 import type { AtomicWorkspaceFile } from './AtomicWorkspaceFile'
+import { mergeCategories, type CategoryMergeInput } from './categoryMerge'
+import {
+  applyCategoryReceipts,
+  categoryWork,
+  freezeCategoryBatch,
+  hasSendableWork,
+  noteReceiptQuery,
+  parkOperations,
+} from './categoryReceipts'
+import { clearMarker, type CategoryContext } from './categoryState'
+import { applySyncDetailAction, buildSyncDetails } from './syncDetails'
+import { WorkspaceCommandError } from './WorkspaceCommandError'
 
-export class WorkspaceCommandError extends Error {
-  constructor(
-    readonly reason:
-      | 'revision-conflict'
-      | 'command-conflict'
-      | 'category-unavailable'
-      | 'undo-expired'
-      | 'invalid-row'
-      | 'finished-line'
-      | 'record-unavailable'
-      | 'conflict-unavailable',
-  ) {
-    super(`Workspace command: ${reason}`)
-    this.name = 'WorkspaceCommandError'
-  }
-}
+export { WorkspaceCommandError }
 
 /**
  * Commits editor commands, captured Undo and outgoing completion identities together.
@@ -159,6 +160,8 @@ export class WorkspaceService {
         return current
       const state = structuredClone(current)
       for (const receipt of receipts) this.applyReceipt(state, receipt)
+      // C22: written with the receipt that leaves nothing sendable.
+      if (!hasSendableWork(state)) state.binding!.lastSyncedAt = this.now()
       state.revision++
       return state
     })
@@ -218,131 +221,124 @@ export class WorkspaceService {
   }
 
   /**
-   * Mirrors the attached account's categories into the device workspace (minimal D2 attach merge).
-   * The first call binds the account; later calls apply one-sided server changes, add
-   * server-only categories and keep a removed category's writing (it is never dropped).
-   * Local-only edits are left for the full D4 merge.
+   * Runs the D4 three-way category merge against the attached account's server list.
+   * The first call binds the account (name-path match, local default pairs with the server
+   * default); every call re-derives the not-yet-sent operations (C19). It defers, changing
+   * nothing, while a category operation is still uncertain.
    * @param input - The verified account id/email and the server category list with deletions.
    * @throws {@link WorkspaceCommandError} `command-conflict` when another account is bound (C10).
    * @example await service.reconcileCategories({ accountId, displayEmail, categories, deletions })
    */
-  async reconcileCategories(input: {
-    accountId: string
-    displayEmail: string | null
-    categories: EditorCategory[]
-    deletions: { sourceId: number; destinationId: number }[]
-  }): Promise<OfflineWorkspace> {
+  async reconcileCategories(
+    input: CategoryMergeInput,
+  ): Promise<OfflineWorkspace> {
     return this.file.update((current) => {
       if (current.binding && current.binding.accountId !== input.accountId)
         throw new WorkspaceCommandError('command-conflict')
       const state = structuredClone(current)
-      state.binding ??= {
-        accountId: input.accountId,
-        displayEmail: input.displayEmail,
-        serverCategoryIds: {},
-        base: {},
-        declined: {},
-        deletionReceipts: {},
-        lastSyncedAt: null,
-      }
-      const binding = state.binding
-      if (input.displayEmail) binding.displayEmail = input.displayEmail
-      const serverToLocal = new Map(
-        Object.entries(binding.serverCategoryIds).map(
-          ([localId, serverId]) => [serverId, localId] as const,
-        ),
-      )
-      const live = input.categories.filter((category) => !category.removed)
-      // Roots first so a child can resolve its parent's local id.
-      const ordered = [
-        ...live.filter((category) => category.parentId === null),
-        ...live.filter((category) => category.parentId !== null),
-      ]
-      for (const server of ordered) {
-        const parentLocalId =
-          server.parentId === null
-            ? null
-            : (serverToLocal.get(server.parentId) ?? null)
-        let localId = serverToLocal.get(server.id)
-        if (!localId) {
-          const match = state.categories.find(
-            (category) =>
-              !category.removed &&
-              !category.historical &&
-              binding.serverCategoryIds[category.id] === undefined &&
-              (server.isDefault
-                ? category.isDefault
-                : !category.isDefault &&
-                  category.name === server.name &&
-                  category.parentId === parentLocalId),
-          )
-          localId = match?.id ?? this.nextId()
-          if (!match) {
-            state.categories.push({
-              id: localId,
-              name: server.name,
-              color: server.color,
-              isDefault: server.isDefault,
-              parentId: parentLocalId,
-              removed: false,
-              historical: false,
-              fieldRevisions: { name: 0, color: 0, parentLocalId: 0 },
-            })
-            state.drafts[localId] ??= { revision: 0, rows: this.rows('') }
-          }
-          binding.serverCategoryIds[localId] = server.id
-          serverToLocal.set(server.id, localId)
-          binding.base[localId] = {
-            name: server.name,
-            color: server.color,
-            parentLocalId,
-          }
-          continue
-        }
-        // A field changed only on the server takes the server value; both-changed waits for D4.
-        const local = state.categories.find(
-          (category) => category.id === localId,
-        )
-        const base = binding.base[localId]
-        if (local && base) {
-          if (local.name === base.name && server.name !== base.name)
-            local.name = server.name
-          if (local.color === base.color && server.color !== base.color)
-            local.color = server.color
-          if (
-            local.parentId === base.parentLocalId &&
-            parentLocalId !== base.parentLocalId
-          )
-            local.parentId = parentLocalId
-          if (local.name === server.name) base.name = server.name
-          if (local.color === server.color) base.color = server.color
-          if (local.parentId === parentLocalId)
-            base.parentLocalId = parentLocalId
-        }
-      }
-      // A bound category the server no longer lists keeps its writing and awaits a confirmed move.
-      const liveServerIds = new Set(live.map((category) => category.id))
-      for (const [localId, serverId] of Object.entries(
-        binding.serverCategoryIds,
-      )) {
-        if (liveServerIds.has(serverId)) continue
-        const local = state.categories.find(
-          (category) => category.id === localId,
-        )
-        if (local) local.removed = true
-        const destination = resolveServerDeletion(
-          serverId,
-          input.deletions,
-          serverToLocal,
-        )
-        if (destination) binding.deletionReceipts[localId] = destination
-        delete binding.serverCategoryIds[localId]
-        delete binding.base[localId]
-        serverToLocal.delete(serverId)
-      }
+      if (!mergeCategories(state, input, this.categoryContext())) return current
       state.revision++
       return state
     })
+  }
+
+  /** Clock and id source handed to the pure category modules. */
+  private categoryContext(): CategoryContext {
+    return { now: this.now(), nextId: this.nextId }
+  }
+
+  /**
+   * Lists category work for the sync loop: uncertain entries to recover and sendable queued ones.
+   * @example const { uncertain, sendable } = await service.categoryPending(16)
+   */
+  async categoryPending(limit: number) {
+    return categoryWork(await this.file.read(), limit)
+  }
+
+  /**
+   * Freezes and marks category operations in flight in one transaction (EA3, D1).
+   * @param accountId - Must be the binding's account.
+   * @param operationIds - Candidates from {@link categoryPending}.
+   * @returns The entries now in flight, each with its frozen wire payload.
+   * @example const sent = await service.markCategorySent(accountId, ids)
+   */
+  async markCategorySent(accountId: string, operationIds: string[]) {
+    const state = await this.file.update((current) => {
+      if (current.binding?.accountId !== accountId) return current
+      const next = structuredClone(current)
+      if (!freezeCategoryBatch(next, operationIds).length) return current
+      next.revision++
+      return next
+    })
+    return operationIds.flatMap((id) =>
+      state.categoryOutbox[id]?.state === 'sent'
+        ? [state.categoryOutbox[id]]
+        : [],
+    )
+  }
+
+  /**
+   * Stores category receipts durably, applying each only to its own `operationId` (EA16).
+   * @example await service.acceptCategoryReceipts(accountId, response.receipts)
+   */
+  async acceptCategoryReceipts(
+    accountId: string,
+    receipts: SyncOutcome[],
+  ): Promise<OfflineWorkspace> {
+    return this.file.update((current) => {
+      if (current.binding?.accountId !== accountId)
+        throw new WorkspaceCommandError('command-conflict')
+      const categoryReceipts = receipts.flatMap((receipt) =>
+        receipt.kind === 'category' &&
+        current.categoryOutbox[receipt.operationId]
+          ? [receipt]
+          : [],
+      )
+      if (!categoryReceipts.length) return current
+      const state = structuredClone(current)
+      applyCategoryReceipts(state, categoryReceipts, this.categoryContext())
+      state.revision++
+      return state
+    })
+  }
+
+  /** Counts an unanswered receipt lookup for uncertain operations (EA4).
+   * @example await service.noteCategoryQuery(accountId, ids)
+   */
+  async noteCategoryQuery(
+    accountId: string,
+    operationIds: string[],
+  ): Promise<OfflineWorkspace> {
+    return this.file.update((current) => {
+      if (current.binding?.accountId !== accountId) return current
+      const state = structuredClone(current)
+      noteReceiptQuery(state, operationIds)
+      state.revision++
+      return state
+    })
+  }
+
+  /** Parks operations a 4xx rejected on their own (E3).
+   * @example await service.parkCategory(accountId, ids)
+   */
+  async parkCategory(
+    accountId: string,
+    operationIds: string[],
+  ): Promise<OfflineWorkspace> {
+    return this.file.update((current) => {
+      if (current.binding?.accountId !== accountId) return current
+      const state = structuredClone(current)
+      parkOperations(state, operationIds)
+      state.revision++
+      return state
+    })
+  }
+
+  /** Reads the Sync details page data (rows, History, C34 summary, v1 backups).
+   * @example const details = await service.syncDetails()
+   */
+  async syncDetails() {
+    return buildSyncDetails(await this.file.read())
   }
 
   /**
@@ -471,6 +467,23 @@ export class WorkspaceService {
         return this.resolveConflict(state, command)
       case 'retrySync':
         return this.retrySync(state, command)
+      case 'categoryCreate':
+        return this.categoryCreate(state, command)
+      case 'categoryRename':
+        return this.categoryEdit(state, command.categoryId, 'name', command)
+      case 'categoryRecolor':
+        return this.categoryEdit(state, command.categoryId, 'color', command)
+      case 'categoryReparent':
+        return this.categoryEdit(
+          state,
+          command.categoryId,
+          'parentLocalId',
+          command,
+        )
+      case 'categoryDelete':
+        return this.categoryDelete(state, command)
+      case 'syncDetailAction':
+        return applySyncDetailAction(state, command, this.categoryContext())
       case 'preferences':
         return this.patchPreferences(state, command)
       case 'restoreRecovery':
@@ -814,6 +827,19 @@ export class WorkspaceService {
 
     if (!targetCategory) throw new WorkspaceCommandError('category-unavailable')
 
+    this.retireCategory(state, source, destination)
+  }
+
+  /**
+   * Moves a category's writing and records into its destination and removes it from the list.
+   * Shared by the confirmed move of a removed category and the local delete (D4).
+   * @example this.retireCategory(state, sourceId, destinationId)
+   */
+  private retireCategory(
+    state: OfflineWorkspace,
+    source: string,
+    destination: string,
+  ): void {
     const from = this.draft(state, source)
 
     const to = this.draft(state, destination)
@@ -850,6 +876,111 @@ export class WorkspaceService {
     }
 
     return
+  }
+
+  /** Judges a local category edit with the shared validator; refusals are definite, never storage errors (C5).
+   * @returns The normalized name for create/rename.
+   * @example const name = this.judgeCategory(state, { type: 'create', name, parentId })
+   */
+  private judgeCategory(
+    state: OfflineWorkspace,
+    action: CategoryAction<string>,
+  ): string | undefined {
+    const verdict = validateCategoryAction(state.categories, action)
+    if (!verdict.ok)
+      throw new WorkspaceCommandError(verdict.reason, verdict.childName)
+    return verdict.name
+  }
+
+  /** Creates a local category offline and selects it (D4, DA8; restores the step 3 auto-select).
+   * @example this.categoryCreate(state, command)
+   */
+  private categoryCreate(
+    state: OfflineWorkspace,
+    command: Extract<WorkspaceCommand, { type: 'categoryCreate' }>,
+  ): void {
+    if (state.categories.some((category) => category.id === command.categoryId))
+      throw new WorkspaceCommandError('command-conflict')
+    const name = this.judgeCategory(state, {
+      type: 'create',
+      name: command.name,
+      parentId: command.parentId,
+    })
+    state.categories.push({
+      id: command.categoryId,
+      name: name ?? command.name,
+      color: command.color,
+      isDefault: false,
+      parentId: command.parentId,
+      removed: false,
+      historical: false,
+      fieldRevisions: { name: 1, color: 1, parentLocalId: 1 },
+    })
+    state.drafts[command.categoryId] = { revision: 0, rows: this.rows('') }
+    state.selectedCategoryId = command.categoryId
+  }
+
+  /** Renames, recolors or reparents a local category; a new edit clears that field's declined marker (C18).
+   * @example this.categoryEdit(state, id, 'name', command)
+   */
+  private categoryEdit(
+    state: OfflineWorkspace,
+    categoryId: string,
+    field: 'name' | 'color' | 'parentLocalId',
+    command: Extract<
+      WorkspaceCommand,
+      { type: 'categoryRename' | 'categoryRecolor' | 'categoryReparent' }
+    >,
+  ): void {
+    const category = state.categories.find(
+      (entry) => entry.id === categoryId && !entry.removed,
+    )
+    if (!category) throw new WorkspaceCommandError('not-found')
+    if (command.type === 'categoryRename') {
+      const name = this.judgeCategory(state, {
+        type: 'rename',
+        id: categoryId,
+        name: command.name,
+      })
+      if (name === category.name) return
+      category.name = name ?? command.name
+    } else if (command.type === 'categoryRecolor') {
+      this.judgeCategory(state, { type: 'recolor', id: categoryId })
+      if (command.color === category.color) return
+      category.color = command.color
+    } else {
+      this.judgeCategory(state, {
+        type: 'reparent',
+        id: categoryId,
+        parentId: command.parentId,
+      })
+      if (command.parentId === category.parentId) return
+      category.parentId = command.parentId
+    }
+    category.fieldRevisions[field]++
+    if (state.binding) {
+      clearMarker(state.binding, categoryId, field)
+      clearMarker(state.binding, categoryId, 'create')
+    }
+  }
+
+  /** Deletes a local category offline: children become roots, writing and records move to the destination (D4, EA8).
+   * @example this.categoryDelete(state, command)
+   */
+  private categoryDelete(
+    state: OfflineWorkspace,
+    command: Extract<WorkspaceCommand, { type: 'categoryDelete' }>,
+  ): void {
+    const destination = effectiveCategory(state, command.destinationId)
+    this.judgeCategory(state, {
+      type: 'delete',
+      id: command.categoryId,
+      destinationId: destination,
+    })
+    for (const child of state.categories)
+      if (child.parentId === command.categoryId) child.parentId = null
+    if (state.binding) delete state.binding.declined[command.categoryId]
+    this.retireCategory(state, command.categoryId, destination)
   }
 
   /** Applies the correctTime command inside the account's durable transaction.
@@ -1136,32 +1267,6 @@ function localProjectionMapper(
     ...projection,
     categoryId: reverse.get(projection.categoryId) ?? fallback,
   })
-}
-
-/**
- * Follows chained server deletions to a still-bound local destination (EA11c guard).
- * @returns The local destination id, or undefined when the chain ends at an unknown category.
- * @example resolveServerDeletion(7, deletions, serverToLocal)
- */
-function resolveServerDeletion(
-  sourceServerId: number,
-  deletions: { sourceId: number; destinationId: number }[],
-  serverToLocal: Map<number, string>,
-): string | undefined {
-  const next = new Map(
-    deletions.map((entry) => [entry.sourceId, entry.destinationId] as const),
-  )
-  const visited = new Set<number>()
-  let current = next.get(sourceServerId)
-  // Visited-set and hop cap guard against cyclic or runaway chains.
-  for (let hop = 0; current !== undefined && hop < 1000; hop++) {
-    const local = serverToLocal.get(current)
-    if (local) return local
-    if (visited.has(current)) return undefined
-    visited.add(current)
-    current = next.get(current)
-  }
-  return undefined
 }
 
 /** Reuses the editor's established checkbox grammar for durable completion/Undo.

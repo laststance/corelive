@@ -106,6 +106,7 @@ function mountEditor(
       categoryMoves: {},
       binding: null,
       recoveryCopyCount: 0,
+      needsALookCount: 0,
     },
   }
   const host: OfflineEditorAPI = {
@@ -122,7 +123,13 @@ function mountEditor(
     undoHistory: async () => ({ total: 0, completions: [] }),
     recoveryCopies: async () => ({ total: 0, copies: [] }),
     signIn: async () => undefined,
-    manageCategories: async () => undefined,
+    syncDetails: async () => ({
+      rows: [],
+      history: [],
+      migrationSummary: null,
+      preservedBackups: [],
+      dashboardOnlyCount: 0,
+    }),
     copyWriting: async () => true,
     export: async () => true,
     previewRecovery: async () => ({
@@ -137,7 +144,6 @@ function mountEditor(
       shown.add(listener)
       return () => shown.delete(listener)
     },
-    onCategoryCreated: () => () => undefined,
   }
   const api: LiveEditorAPI = {
     workspace: host,

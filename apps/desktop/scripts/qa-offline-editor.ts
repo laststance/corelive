@@ -101,7 +101,8 @@ async function rpc(method: string, args: unknown[]): Promise<unknown> {
     await publish()
     return
   }
-  if (method === 'signIn' || method === 'manageCategories') {
+  if (method === 'syncDetails') return worker.call('syncDetails', null)
+  if (method === 'signIn') {
     events.push({ method, args })
     return
   }
@@ -294,7 +295,7 @@ const listeners={changed:new Set(),flush:new Set(),shown:new Set(),category:new 
 const stream=new EventSource('/events'); for(const [event,set] of Object.entries(listeners))stream.addEventListener(event,e=>{const data=JSON.parse(e.data);for(const listener of set)listener(data)});
 const call=async(method,...args)=>{const response=await fetch('/rpc',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({method,args})});const value=await response.json();if(!response.ok)throw new Error(value.error);return value.result};
 const listen=(event,listener)=>{listeners[event].add(listener);return()=>listeners[event].delete(listener)};
-window.liveEditorAPI={workspace:{version:1,snapshot:()=>call('snapshot'),draft:(...a)=>call('draft',...a),command:(...a)=>call('command',...a),retry:()=>call('retry'),details:(...a)=>call('details',...a),undoHistory:(...a)=>call('undoHistory',...a),recoveryCopies:(...a)=>call('recoveryCopies',...a),signIn:()=>call('signIn'),manageCategories:(...a)=>call('manageCategories',...a),copyWriting:(...a)=>call('copyWriting',...a),export:(...a)=>call('export',...a),previewRecovery:(...a)=>call('previewRecovery',...a),recover:(...a)=>call('recover',...a),replyFlush:(...a)=>call('replyFlush',...a),subscribe:l=>listen('changed',l),onFlush:l=>listen('flush',l),onShown:l=>listen('shown',l),onCategoryCreated:l=>listen('category',l)},window:{close:()=>call('hide'),getOpacity:()=>call('getOpacity'),setOpacity:v=>call('setOpacity',v),getBounds:async()=>null,setBounds:async()=>{}},spaces:{getVisibleOnAllWorkspaces:()=>call('getSpaces'),setVisibleOnAllWorkspaces:v=>call('setSpaces',v)},note:{get:async()=>{throw new Error('Legacy note path must not run')},set:async()=>{throw new Error('Legacy note path must not run')}}};
+window.liveEditorAPI={workspace:{version:1,snapshot:()=>call('snapshot'),draft:(...a)=>call('draft',...a),command:(...a)=>call('command',...a),retry:()=>call('retry'),details:(...a)=>call('details',...a),undoHistory:(...a)=>call('undoHistory',...a),recoveryCopies:(...a)=>call('recoveryCopies',...a),signIn:()=>call('signIn'),syncDetails:(...a)=>call('syncDetails',...a),copyWriting:(...a)=>call('copyWriting',...a),export:(...a)=>call('export',...a),previewRecovery:(...a)=>call('previewRecovery',...a),recover:(...a)=>call('recover',...a),replyFlush:(...a)=>call('replyFlush',...a),subscribe:l=>listen('changed',l),onFlush:l=>listen('flush',l),onShown:l=>listen('shown',l)},window:{close:()=>call('hide'),getOpacity:()=>call('getOpacity'),setOpacity:v=>call('setOpacity',v),getBounds:async()=>null,setBounds:async()=>{}},spaces:{getVisibleOnAllWorkspaces:()=>call('getSpaces'),setVisibleOnAllWorkspaces:v=>call('setSpaces',v)},note:{get:async()=>{throw new Error('Legacy note path must not run')},set:async()=>{throw new Error('Legacy note path must not run')}}};
 window.liveEditorEnv={isElectron:true,isLiveEditor:true,platform:'darwin'};
 window.__offlineFixture={control:async(input)=>{const response=await fetch('/control',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(input)});if(!response.ok)throw new Error('Control failed');return response.json()}};
 `

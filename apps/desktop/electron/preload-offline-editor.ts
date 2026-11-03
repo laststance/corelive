@@ -28,8 +28,8 @@ if (process.isMainFrame && isLocalEditorDocument(window.location.href)) {
           limit,
         ),
       signIn: async () => typedInvoke('offline-editor-sign-in'),
-      manageCategories: async (request = { action: 'manage' }) =>
-        typedInvoke('offline-editor-manage-categories', request),
+      syncDetails: async (generation) =>
+        typedInvoke('offline-editor-sync-details', generation),
       copyWriting: async (generation, text) =>
         typedInvoke('offline-editor-copy', generation, text),
       export: async (generation) =>
@@ -42,8 +42,6 @@ if (process.isMainFrame && isLocalEditorDocument(window.location.href)) {
         subscribeToMain('offline-editor-changed', listener),
       onFlush: (listener) => subscribeToMain('offline-editor-flush', listener),
       onShown: (listener) => subscribeToMain('offline-editor-shown', listener),
-      onCategoryCreated: (listener) =>
-        subscribeToMain('offline-editor-category-created', listener),
       replyFlush: async (request, saved) =>
         typedInvoke('offline-editor-flush-result', request, saved),
     },

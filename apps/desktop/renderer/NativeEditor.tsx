@@ -214,15 +214,6 @@ function PreparedEditor({
     [store],
   )
 
-  useEffect(
-    () =>
-      // eslint-disable-next-line react-you-might-not-need-an-effect/no-pass-data-to-parent -- subscribe to main's verified category event
-      store.host.onCategoryCreated((selection) => {
-        if (selection.generation === main.generation)
-          void select(selection.categoryId)
-      }),
-    [store, main.generation, select],
-  )
   const undo = async (completion: OfflineCompletion): Promise<void> => {
     if (
       await store.command({
@@ -314,13 +305,7 @@ function PreparedEditor({
           categories={workspace.categories}
           activeCategoryId={workspace.selectedCategoryId}
           onCategoryValueChange={(value) => void select(value)}
-          actionsDisabled={!online}
-          onManage={() => void run(async () => store.host.manageCategories())}
-          onCreate={(initialName) =>
-            void run(async () =>
-              store.host.manageCategories({ action: 'create', initialName }),
-            )
-          }
+          onCategoryCommand={async (command) => store.categoryCommand(command)}
         />
       }
       ember={

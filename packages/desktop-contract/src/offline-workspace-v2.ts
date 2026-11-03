@@ -16,6 +16,7 @@ import {
   type SyncStatus,
   CategoryOperationSchema,
   CategoryWireOperationSchema,
+  SyncDetailActionSchema,
 } from './category-sync'
 import {
   CompletionSyncOperationSchema,
@@ -151,6 +152,8 @@ export const CategoryOutboxEntrySchema = z.object({
   operation: CategoryOperationSchema,
   wire: CategoryWireOperationSchema.optional(),
   state: z.enum(['queued', 'sent', 'blocked', 'parked']),
+  /** Unanswered `category.syncReceipts` lookups; 3 shows "Waiting for the dashboard to confirm" (EA4). */
+  receiptQueries: z.number().int().nonnegative().default(0),
   /** Local revision of each touched field at freeze time (EA5). */
   frozenRevisions: z
     .array(
@@ -174,6 +177,29 @@ export const DECLINED_KINDS = [
   'delete-blocked',
   'parked',
 ] as const
+
+/** One resolved or informational Sync details entry (DA7 History, latest 50). */
+export const SyncHistoryItemSchema = z.object({
+  id: identity,
+  at: timestamp,
+  /** Stable kind: a refusal that already reverted, a resolved row, or a mirror note. */
+  kind: z.enum([
+    'resolved',
+    'reverted',
+    'server-delete-unknown-destination',
+    'server-delete-cycle',
+    'applied-elsewhere',
+  ]),
+  categoryPath: z.string(),
+  field: z.string(),
+  macValue: z.string().nullable(),
+  dashboardValue: z.string().nullable(),
+  reason: z.string().optional(),
+})
+export type SyncHistoryItem = z.infer<typeof SyncHistoryItemSchema>
+
+/** Longest History the workspace keeps (DA7). */
+export const SYNC_HISTORY_LIMIT = 50
 
 export const DeclinedFieldSchema = z.object({
   kind: z.enum(DECLINED_KINDS),
@@ -280,6 +306,7 @@ export const OfflineWorkspaceSchema = z.object({
   retiredCompletions: z.record(identity, RetiredCompletionSchema).default({}),
   outbox: z.record(identity, OutboxEntrySchema),
   categoryOutbox: z.record(identity, CategoryOutboxEntrySchema).default({}),
+  syncHistory: z.array(SyncHistoryItemSchema).default([]),
   commandReceipts: z.record(
     identity,
     z.object({
@@ -372,6 +399,42 @@ export const WorkspaceCommandSchema = z.discriminatedUnion('type', [
     destinationId: identity,
   }),
   commandIdentity.extend({
+    type: z.literal('categoryCreate'),
+    /** Chosen by the caller so the editor can select the new category without a lookup. */
+    categoryId: identity,
+    name: z.string().max(255),
+    color: CategoryColorSchema,
+    parentId: identity.nullable(),
+  }),
+  commandIdentity.extend({
+    type: z.literal('categoryRename'),
+    categoryId: identity,
+    name: z.string().max(255),
+  }),
+  commandIdentity.extend({
+    type: z.literal('categoryRecolor'),
+    categoryId: identity,
+    color: CategoryColorSchema,
+  }),
+  commandIdentity.extend({
+    type: z.literal('categoryReparent'),
+    categoryId: identity,
+    parentId: identity.nullable(),
+  }),
+  commandIdentity.extend({
+    type: z.literal('categoryDelete'),
+    categoryId: identity,
+    destinationId: identity,
+  }),
+  commandIdentity.extend({
+    type: z.literal('syncDetailAction'),
+    /** Row id from {@link SyncDetailRow}: `<localId>:<field>`. */
+    rowId: z.string().min(1).max(100),
+    action: SyncDetailActionSchema,
+    /** Required by `choose-another-name`. */
+    name: z.string().max(255).optional(),
+  }),
+  commandIdentity.extend({
     type: z.literal('preferences'),
     expectedRevision: revision,
     patch: UserSettingsPatchSchema,
@@ -399,6 +462,8 @@ export interface OfflineWorkspaceView {
   /** Local source id -> local destination id of every removed category (D4). */
   categoryMoves: Record<string, string>
   recoveryCopyCount: number
+  /** "Needs a look" rows on the Sync details page (DA3 link). */
+  needsALookCount: number
   /** The bound account's display facts; null on a Mac that never attached (DA2, X1). */
   binding: {
     accountId: string
@@ -440,4 +505,9 @@ export type OfflineCommandResult =
       workspace: OfflineWorkspaceView | null
       writtenDraft?: OfflineDraftRecord
     }
-  | { ok: false; reason: string }
+  | {
+      ok: false
+      reason: string
+      /** Extra DA8 copy input, e.g. the child name of an EA8 promotion clash. */
+      detail?: string
+    }

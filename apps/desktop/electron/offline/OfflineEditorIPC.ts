@@ -4,7 +4,6 @@ import { writeFile } from 'node:fs/promises'
 import type {
   OfflineFlushRequest,
   OfflineSettingsResult,
-  OfflineCategoryRequest,
 } from '@corelive/desktop-contract/offline-editor-api'
 import type { OfflineEditorSnapshot } from '@corelive/desktop-contract/offline-workspace-v2'
 import {
@@ -76,7 +75,6 @@ export function isTrustedAuthSender(
 export class OfflineEditorIPC {
   private pending: PendingFlush | null = null
   private snapshotReaders = 0
-  private categoryRequest: OfflineCategoryRequest | null = null
 
   constructor(
     private readonly windows: WindowManager,
@@ -149,28 +147,11 @@ export class OfflineEditorIPC {
       this.assertEditor(event)
       this.windows.showLoginWindow()
     })
-    typedHandle('offline-editor-manage-categories', (event, request) => {
-      this.assertEditor(event)
-      const snapshot = this.controller.getSnapshot()
-      // Category management still runs in the remote Settings page until D4/D5 land; it needs a live account.
-      if (
-        snapshot.phase !== 'ready' ||
-        snapshot.sync.state === 'local-only' ||
-        snapshot.sync.state === 'waiting' ||
-        snapshot.sync.state === 'sign-in-to-sync'
-      )
-        return
-      this.categoryRequest = { ...request, generation: snapshot.generation }
-      this.windows.openSettings()
-      const settings = this.windows.getSettingsWindow()
-      if (!settings) return
-      const open = (): void => {
-        if (!settings.isDestroyed())
-          typedSend(settings.webContents, 'offline-settings-manage-categories')
-      }
-      if (settings.webContents.isLoadingMainFrame())
-        settings.webContents.once('did-finish-load', open)
-      else open()
+    typedHandle('offline-editor-sync-details', async (event, generation) => {
+      this.assertEditor(event, generation)
+      const details = await this.controller.syncDetails(generation)
+      this.assertEditor(event, generation)
+      return details
     })
     typedHandle('offline-editor-copy', (event, generation, text) => {
       this.assertEditor(event, generation)
@@ -337,11 +318,8 @@ export class OfflineEditorIPC {
   private registerSettings(): void {
     typedHandle('offline-settings-category-request', (event) => {
       this.assertSettings(event)
-      const requested = this.categoryRequest
-      this.categoryRequest = null
-      return requested?.generation === this.controller.getSnapshot().generation
-        ? requested
-        : null
+      // Category management lives in the editor picker now; the remote dialog is retired in step 5.
+      return null
     })
     typedHandle(
       'offline-settings-category-created',

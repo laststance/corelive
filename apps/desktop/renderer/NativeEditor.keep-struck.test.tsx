@@ -23,7 +23,11 @@ afterEach(() => {
 /** Supplies only synthetic preload values; these checks cover the keep-mode wiring, not IPC or disk persistence.
  * @example const fixture = mountEditor()
  */
-function mountEditor(clearOnComplete: boolean, savedText: string) {
+function mountEditor(
+  clearOnComplete: boolean,
+  savedText: string,
+  needsALookCount = 0,
+) {
   const syncStatus: OfflineSyncStatus = {
     state: 'local-only',
     waitingCount: 0,
@@ -83,6 +87,7 @@ function mountEditor(clearOnComplete: boolean, savedText: string) {
       categoryMoves: {},
       binding: null,
       recoveryCopyCount: 0,
+      needsALookCount,
     },
   }
   const host: OfflineEditorAPI = {
@@ -98,7 +103,13 @@ function mountEditor(clearOnComplete: boolean, savedText: string) {
     undoHistory: async () => ({ total: 0, completions: [] }),
     recoveryCopies: async () => ({ total: 0, copies: [] }),
     signIn: async () => undefined,
-    manageCategories: async () => undefined,
+    syncDetails: async () => ({
+      rows: [],
+      history: [],
+      migrationSummary: null,
+      preservedBackups: [],
+      dashboardOnlyCount: 0,
+    }),
     copyWriting: async () => true,
     export: async () => true,
     previewRecovery: async () => ({
@@ -113,7 +124,6 @@ function mountEditor(clearOnComplete: boolean, savedText: string) {
       shown.add(listener)
       return () => shown.delete(listener)
     },
-    onCategoryCreated: () => () => undefined,
   }
   const api: LiveEditorAPI = {
     workspace: host,
@@ -166,4 +176,19 @@ test('the desktop editor draws no strikes when Clear finished lines is on', asyn
     ).toHaveValue('- [x] 10月の請求書の提出'),
   )
   expect(document.querySelector('[data-finished-line-strikes]')).toBeNull()
+})
+
+test('the editor window renders no conflict or refusal copy even when the dashboard declined this Mac values', async () => {
+  // Arrange / Act
+  mountEditor(false, 'A calm line', 3)
+
+  // Assert
+  await waitFor(() =>
+    expect(
+      screen.getByRole('textbox', { name: 'Write one thing' }),
+    ).toHaveValue('A calm line'),
+  )
+  expect(
+    screen.queryByText(/conflict|needs a look|not applied|name already used/i),
+  ).toBeNull()
 })

@@ -1796,7 +1796,7 @@ describe('attaching the account categories to the device workspace', () => {
     ).toBe('Projects')
   })
 
-  test('a locally renamed category is not overwritten by a later server change', async () => {
+  test('when both sides renamed a category the dashboard name shows and this Mac name stays as a conflict row', async () => {
     // Arrange
     const { file, service } = await createUnboundWorkspace()
     await service.reconcileCategories({
@@ -1830,7 +1830,12 @@ describe('attaching the account categories to the device workspace', () => {
     // Assert
     expect(
       state.categories.find((category) => category.id === category2)?.name,
-    ).toBe('My own name')
+    ).toBe('Server name')
+    expect(state.binding?.declined[category2]?.name).toEqual({
+      kind: 'conflict',
+      localValue: 'My own name',
+      serverValue: 'Server name',
+    })
   })
 
   test('a bound category the server no longer lists keeps its writing until the user confirms a move', async () => {

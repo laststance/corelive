@@ -35,6 +35,8 @@ export interface AccountStatus {
   /** The verified email of a different signed-in account (state D). */
   signedInEmail: string | null
   waitingCount: number
+  /** "Needs a look" rows on the Sync details page; the DA3 link shows only when above 0. */
+  needsALookCount: number
   lastSyncedAt: number | null
   /** Set until Connect / Not now after a first sign-in on an unbound Mac (EA2b). */
   pendingConnect: { displayEmail: string } | null

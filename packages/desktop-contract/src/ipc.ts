@@ -394,7 +394,6 @@ export interface IPCEventChannels {
   'offline-editor-changed': OfflineEditorSnapshot
   'offline-editor-flush': OfflineFlushRequest
   'offline-editor-shown': void
-  'offline-editor-category-created': { generation: number; categoryId: string }
   'offline-settings-changed': void
   'offline-settings-manage-categories': void
   'offline-auth-request': OfflineAuthRequest

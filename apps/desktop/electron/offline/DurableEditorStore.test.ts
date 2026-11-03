@@ -95,6 +95,9 @@ async function createFixture(text = 'First\nSecond', clear = false) {
           error instanceof WorkspaceWorkerError
             ? error.reason
             : 'storage-failed',
+        ...(error instanceof WorkspaceWorkerError && error.detail
+          ? { detail: error.detail }
+          : {}),
       }
     }
   }
@@ -122,7 +125,13 @@ async function createFixture(text = 'First\nSecond', clear = false) {
     recoveryCopies: async (_generation, offset, limit) =>
       worker.call('recoveryCopies', { offset, limit }),
     signIn: async () => undefined,
-    manageCategories: async () => undefined,
+    syncDetails: async () => ({
+      rows: [],
+      history: [],
+      migrationSummary: null,
+      preservedBackups: [],
+      dashboardOnlyCount: 0,
+    }),
     copyWriting,
     export: async () => true,
     previewRecovery: async () => worker.call('previewRecovery', null),
@@ -139,7 +148,6 @@ async function createFixture(text = 'First\nSecond', clear = false) {
       shownListeners.add(listener)
       return () => shownListeners.delete(listener)
     },
-    onCategoryCreated: () => () => undefined,
     replyFlush,
   }
   const store = new DurableEditorStore(host)
@@ -863,4 +871,44 @@ test('clear mode still records a typed finished line from Cmd+Enter', async () =
   expect(completed).toBe(true)
   expect(fixture.store.getSnapshot().text).toBe('Second')
   expect(fixture.store.getSnapshot().notice).toMatchObject({ title: 'Typed' })
+})
+
+test('a refused category command is reported as its own state and never as a storage failure', async () => {
+  // Arrange
+  const fixture = await createFixture()
+
+  // Act
+  const outcome = await fixture.store.categoryCommand({
+    type: 'categoryRename',
+    commandId: randomUUID(),
+    categoryId: CATEGORY_ONE,
+    name: 'Home',
+  })
+
+  // Assert
+  expect(outcome).toEqual({ ok: false, reason: 'default-locked' })
+  expect(fixture.store.getSnapshot().save).toBe('saved')
+  expect(fixture.store.getSnapshot().error).toBeNull()
+})
+
+test('creating a category offline selects it and keeps the previous writing saved', async () => {
+  // Arrange
+  const fixture = await createFixture('First\nSecond')
+  const created = randomUUID()
+
+  // Act
+  const outcome = await fixture.store.categoryCommand({
+    type: 'categoryCreate',
+    commandId: randomUUID(),
+    categoryId: created,
+    name: 'Ideas',
+    color: 'rose',
+    parentId: null,
+  })
+
+  // Assert
+  expect(outcome).toEqual({ ok: true })
+  const view = await fixture.worker.call('open', null)
+  expect(view.selectedCategoryId).toBe(created)
+  expect(view.categories.map((category) => category.name)).toContain('Ideas')
 })

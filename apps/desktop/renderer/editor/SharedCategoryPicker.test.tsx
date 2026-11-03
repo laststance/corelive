@@ -58,24 +58,22 @@ afterEach(cleanup)
 /**
  * Mounts the shared picker the way the desktop panel does, with spies for every callback.
  * @param rows - Category rows to offer.
- * @returns The selection, create and manage spies.
+ * @returns The selection and category command spies.
  * @example
  * const { select } = renderPicker()
  */
 function renderPicker(rows: PickerCategory[] = categories) {
   const select = vi.fn()
-  const create = vi.fn()
-  const manage = vi.fn()
+  const command = vi.fn(async () => ({ ok: true as const }))
   render(
     <SharedCategoryPicker
       categories={rows}
       activeCategoryId="00000000-0000-4000-8000-0000000000a3"
       onCategoryValueChange={select}
-      onCreate={create}
-      onManage={manage}
+      onCategoryCommand={command}
     />,
   )
-  return { select, create, manage }
+  return { select, command }
 }
 
 /**
@@ -115,9 +113,9 @@ describe('SharedCategoryPicker', () => {
     await waitFor(() => expect(trigger).toHaveFocus())
   })
 
-  test('keeps the Create action reachable when search has no results', async () => {
+  test('keeps the Create action reachable when search has no results and opens its form with the typed name', async () => {
     // Arrange
-    const { select, create } = renderPicker()
+    const { select } = renderPicker()
     openPicker(ACTIVE_TRIGGER_NAME)
 
     // Act: no search result leaves the Create action as the first item.
@@ -128,8 +126,71 @@ describe('SharedCategoryPicker', () => {
     fireEvent.keyDown(input, { key: 'Enter' })
 
     // Assert
-    expect(create).toHaveBeenCalledWith('unmatched')
+    expect(
+      await screen.findByRole('form', { name: 'Create category' }),
+    ).toBeVisible()
+    expect(screen.getByLabelText('Name')).toHaveValue('unmatched')
     expect(select).not.toHaveBeenCalled()
+  })
+
+  test('shows the duplicate-name refusal inline and keeps the form open with the typed value', async () => {
+    // Arrange
+    const command = vi.fn(async () => ({
+      ok: false as const,
+      reason: 'name-taken-local',
+    }))
+    render(
+      <SharedCategoryPicker
+        categories={categories}
+        activeCategoryId="00000000-0000-4000-8000-0000000000a1"
+        onCategoryValueChange={vi.fn()}
+        onCategoryCommand={command}
+      />,
+    )
+    openPicker('Writing category: General')
+    fireEvent.click(await screen.findByText('Create category…'))
+    fireEvent.change(await screen.findByLabelText('Name'), {
+      target: { value: 'Work' },
+    })
+
+    // Act
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+
+    // Assert
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'There\'s already a category called "Work" here.',
+    )
+    expect(screen.getByLabelText('Name')).toHaveValue('Work')
+    expect(screen.getByRole('form', { name: 'Create category' })).toBeVisible()
+  })
+
+  test('hides rename, move and delete for the default category and explains why', async () => {
+    // Arrange
+    render(
+      <SharedCategoryPicker
+        categories={[
+          { ...categories[0]!, isDefault: true },
+          ...categories.slice(1),
+        ]}
+        activeCategoryId="00000000-0000-4000-8000-0000000000a1"
+        onCategoryValueChange={vi.fn()}
+        onCategoryCommand={vi.fn(async () => ({ ok: true as const }))}
+      />,
+    )
+    openPicker('Writing category: General')
+
+    // Act
+    fireEvent.click(await screen.findByText('Manage categories…'))
+    fireEvent.click(await screen.findByRole('button', { name: 'General' }))
+
+    // Assert
+    expect(
+      await screen.findByText(
+        'General is your default category. You can change its color.',
+      ),
+    ).toBeVisible()
+    expect(screen.queryByLabelText('Name')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Delete category' })).toBeNull()
   })
 
   test('IME composition Enter and Escape keep the picker open without selecting', () => {

@@ -1,11 +1,14 @@
 import {
   AccountWhoamiOutputSchema,
+  SyncCategoryOutputSchema,
   SyncBootstrapOutputSchema,
   SyncCheckpointOutputSchema,
   SyncReceiptsOutputSchema,
   type AccountWhoami,
   type CompletionSyncTransport,
   type SyncBootstrap,
+  type SyncCategoryApplyInput,
+  type SyncCategoryApplyOutput,
   type SyncCheckpointInput,
   type SyncReceiptsOutput,
 } from '@corelive/desktop-contract/offline-sync'
@@ -17,6 +20,20 @@ import { createORPCClient, type Client } from '@orpc/client'
 import { RPCLink } from '@orpc/client/fetch'
 
 type SyncClient = {
+  category: {
+    syncApply: Client<
+      object,
+      SyncCategoryApplyInput,
+      SyncCategoryApplyOutput,
+      Error
+    >
+    syncReceipts: Client<
+      object,
+      { operationIds: string[] },
+      SyncCategoryApplyOutput,
+      Error
+    >
+  }
   account: {
     whoami: Client<object, undefined, AccountWhoami, Error>
   }
@@ -110,6 +127,14 @@ export function createSyncTransport(
     receipts: async (input, signal) =>
       SyncReceiptsOutputSchema.parse(
         await client.completed.syncReceipts(input, { signal }),
+      ),
+    categoryApply: async (input, signal) =>
+      SyncCategoryOutputSchema.parse(
+        await client.category.syncApply(input, { signal }),
+      ),
+    categoryReceipts: async (input, signal) =>
+      SyncCategoryOutputSchema.parse(
+        await client.category.syncReceipts(input, { signal }),
       ),
     checkpoint: async (input, signal) =>
       SyncCheckpointOutputSchema.parse(

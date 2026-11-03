@@ -73,6 +73,14 @@ function createTransport(identity: { clerkId: string; email: string | null }) {
     receipts: vi.fn<CompletionSyncTransport['receipts']>(async () => ({
       receipts: [],
     })),
+    categoryApply: vi.fn<CompletionSyncTransport['categoryApply']>(
+      async () => ({
+        receipts: [],
+      }),
+    ),
+    categoryReceipts: vi.fn<CompletionSyncTransport['categoryReceipts']>(
+      async () => ({ receipts: [] }),
+    ),
     checkpoint: vi.fn<CompletionSyncTransport['checkpoint']>(
       async ({ day, timezone, completionIds }) => ({
         day,
@@ -310,7 +318,13 @@ test.each(['after', 'before', 'queued'] as const)(
       recoveryCopies: async (generation, offset, limit) =>
         controller.recoveryCopies(generation, offset, limit),
       signIn: async () => undefined,
-      manageCategories: async () => undefined,
+      syncDetails: async () => ({
+        rows: [],
+        history: [],
+        migrationSummary: null,
+        preservedBackups: [],
+        dashboardOnlyCount: 0,
+      }),
       copyWriting: async () => true,
       export: async () => true,
       previewRecovery: async (generation) =>
@@ -322,7 +336,6 @@ test.each(['after', 'before', 'queued'] as const)(
       },
       onFlush: () => () => undefined,
       onShown: () => () => undefined,
-      onCategoryCreated: () => () => undefined,
       replyFlush: async () => true,
     }
     const store = new DurableEditorStore(host)
