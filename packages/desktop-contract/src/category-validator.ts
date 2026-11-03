@@ -48,6 +48,52 @@ export type CategoryVerdict =
   | { ok: false; reason: CategoryRefusal; childName?: string }
 
 /**
+ * Maps a refused `reparent` verdict to the sync receipt result both the dashboard procedure and
+ * the desktop fake report.
+ *
+ * @param reason - Refusal reason from {@link validateCategoryAction}.
+ * @returns `name-taken` when a sibling already uses the name, otherwise `invalid-parent`.
+ * @example
+ * ```ts
+ * reparentRefusalResult('name-taken-local') // 'name-taken'
+ * ```
+ */
+export function reparentRefusalResult(
+  reason: CategoryRefusal,
+): 'name-taken' | 'invalid-parent' {
+  return reason === 'name-taken-local' ? 'name-taken' : 'invalid-parent'
+}
+
+/**
+ * Maps a refused `delete` verdict to the sync receipt body both the dashboard procedure and the
+ * desktop fake report (EA8).
+ *
+ * @param verdict - A refusal from {@link validateCategoryAction}.
+ * @returns `delete-blocked` when rescuing would collide with a child's name, else `invalid-parent`.
+ * @example
+ * ```ts
+ * deleteRefusalBody({ ok: false, reason: 'invalid-destination' }) // { result: 'invalid-parent' }
+ * ```
+ */
+export function deleteRefusalBody(
+  verdict: Extract<CategoryVerdict, { ok: false }>,
+):
+  | {
+      result: 'delete-blocked'
+      reason: 'child-name-taken'
+      childName: string
+    }
+  | { result: 'invalid-parent' } {
+  if (verdict.reason === 'name-taken-local' && verdict.childName)
+    return {
+      result: 'delete-blocked',
+      reason: 'child-name-taken',
+      childName: verdict.childName,
+    }
+  return { result: 'invalid-parent' }
+}
+
+/**
  * Normalizes a category name the way both sides compare it: NFC first, then trim (EA11a).
  *
  * @param name - Raw user input.

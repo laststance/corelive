@@ -23,9 +23,13 @@ import {
   type RecoveryCopy,
 } from '@corelive/desktop-contract/offline-workspace-v2'
 import { UserSettingsStateSchema } from '@corelive/desktop-contract/settings'
-import { z } from 'zod'
+import type { z } from 'zod'
 
-import { AtomicWorkspaceFile, WorkspaceFileError } from './AtomicWorkspaceFile'
+import {
+  AtomicWorkspaceFile,
+  envelopeSchema,
+  WorkspaceFileError,
+} from './AtomicWorkspaceFile'
 import { REGISTRY_OWNER_ID, registrySchema } from './OfflineAccountRegistry'
 
 /** Points where a test can kill the migration to prove it converges (EA9). */
@@ -76,12 +80,6 @@ type V1File =
 type V1Registry = z.infer<typeof registrySchema>
 
 const V1_FILE_PATTERN = /^[a-f0-9]{64}\.json$/
-const envelopeSchema = z.object({
-  format: z.literal(1),
-  ownerId: z.string().min(1),
-  checksum: z.string().regex(/^[a-f0-9]{64}$/),
-  payload: z.string(),
-})
 
 /**
  * Converts the v1 per-account workspaces into the one v2 device workspace (D7).
@@ -459,11 +457,37 @@ interface BuildInput {
   now: number
 }
 
-/** Builds the complete v2 workspace in memory; pure apart from `randomUUID` for a fresh device id. */
-function buildWorkspace(input: BuildInput): OfflineWorkspace {
-  const { source, now } = input
+/**
+ * The v1-to-v2 id mapping shared by every conversion step of one {@link buildWorkspace} run.
+ *
+ * Exists so each step (categories, drafts, records, binding) maps server category ids to the
+ * same deterministic local UUIDs without re-deriving them. Inferred from {@link createConversion}
+ * so the projection and receipt mappers keep their exact v1 to v2 types.
+ */
+type Conversion = ReturnType<typeof createConversion>['conversion']
+
+/** Fields of a recovery copy built during migration, before its deterministic id is assigned. */
+type RecoveryCopyDraft = Pick<
+  RecoveryCopy,
+  'categoryId' | 'text' | 'reason'
+> & {
+  origin: NonNullable<RecoveryCopy['origin']>
+}
+
+/**
+ * Builds the id mapping for one conversion run.
+ *
+ * @param source - The converted v1 file, or null when starting fresh.
+ * @param registryState - The v1 registry, used for the device id of a fresh start.
+ * @returns The {@link Conversion} plus the device id the workspace keeps.
+ * @example const { conversion, deviceId } = createConversion(source, registryState)
+ */
+function createConversion(
+  source: Extract<V1File, { valid: true }> | null,
+  registryState: V1Registry | null,
+) {
   const v1 = source?.workspace ?? null
-  const deviceId = v1?.deviceId ?? input.registryState?.deviceId ?? randomUUID()
+  const deviceId = v1?.deviceId ?? registryState?.deviceId ?? randomUUID()
   const seed = source?.checksum ?? `fresh:${deviceId}`
   const localIds = new Map<number, string>()
   for (const serverId of [...(v1 ? collectServerCategoryIds(v1) : [])].sort(
@@ -483,25 +507,75 @@ function buildWorkspace(input: BuildInput): OfflineWorkspace {
     ...value,
     projection: value.projection ? mapProjection(value.projection) : null,
   })
+  const conversion = {
+    v1,
+    seed,
+    localIds,
+    local,
+    mapProjection,
+    mapReceipt,
+  }
+  return {
+    conversion,
+    deviceId,
+  }
+}
 
-  const liveIds = new Set(v1?.categories.map((category) => category.id))
-  const categories: OfflineWorkspace['categories'] = []
-  if (v1) {
-    for (const category of v1.categories)
-      categories.push({
-        id: local(category.id),
-        name: category.name,
-        color: category.color,
-        isDefault: category.isDefault,
-        parentId: category.parentId === null ? null : local(category.parentId),
-        removed: category.removed,
+/** A category row with no edits yet, as the v2 workspace stores it. */
+function untouchedCategory(
+  fields: Pick<
+    OfflineWorkspace['categories'][number],
+    | 'id'
+    | 'name'
+    | 'color'
+    | 'isDefault'
+    | 'parentId'
+    | 'removed'
+    | 'historical'
+  >,
+): OfflineWorkspace['categories'][number] {
+  return { ...fields, fieldRevisions: { name: 0, color: 0, parentLocalId: 0 } }
+}
+
+/**
+ * Converts the v1 categories (or seeds the default category on a fresh start).
+ *
+ * Ids with no live category stay referenced through a historical placeholder (EA9).
+ *
+ * @example const categories = convertCategories(conversion)
+ */
+function convertCategories(
+  conversion: Conversion,
+): OfflineWorkspace['categories'] {
+  const { v1, seed, localIds, local } = conversion
+  if (!v1)
+    return [
+      untouchedCategory({
+        id: uuidFrom(`${seed}:default`),
+        name: DEFAULT_CATEGORY_SEED.name,
+        color: DEFAULT_CATEGORY_SEED.color,
+        isDefault: true,
+        parentId: null,
+        removed: false,
         historical: false,
-        fieldRevisions: { name: 0, color: 0, parentLocalId: 0 },
-      })
-    // Ids with no live category stay referenced through a historical placeholder (EA9).
-    for (const [serverId, id] of localIds)
-      if (!liveIds.has(serverId))
-        categories.push({
+      }),
+    ]
+  const liveIds = new Set(v1.categories.map((category) => category.id))
+  const categories = v1.categories.map((category) =>
+    untouchedCategory({
+      id: local(category.id),
+      name: category.name,
+      color: category.color,
+      isDefault: category.isDefault,
+      parentId: category.parentId === null ? null : local(category.parentId),
+      removed: category.removed,
+      historical: false,
+    }),
+  )
+  for (const [serverId, id] of localIds)
+    if (!liveIds.has(serverId))
+      categories.push(
+        untouchedCategory({
           id,
           name: 'Earlier category',
           color: 'blue',
@@ -509,24 +583,21 @@ function buildWorkspace(input: BuildInput): OfflineWorkspace {
           parentId: null,
           removed: false,
           historical: true,
-          fieldRevisions: { name: 0, color: 0, parentLocalId: 0 },
-        })
-  } else {
-    categories.push({
-      id: uuidFrom(`${seed}:default`),
-      name: DEFAULT_CATEGORY_SEED.name,
-      color: DEFAULT_CATEGORY_SEED.color,
-      isDefault: true,
-      parentId: null,
-      removed: false,
-      historical: false,
-      fieldRevisions: { name: 0, color: 0, parentLocalId: 0 },
-    })
-  }
-  const defaultCategoryId =
-    categories.find((category) => category.isDefault && !category.removed)
-      ?.id ?? categories[0]!.id
+        }),
+      )
+  return categories
+}
 
+/**
+ * Converts the v1 drafts and gives every live category an empty one.
+ *
+ * @example const drafts = convertDrafts(conversion, categories)
+ */
+function convertDrafts(
+  conversion: Conversion,
+  categories: OfflineWorkspace['categories'],
+): OfflineWorkspace['drafts'] {
+  const { v1, seed, local } = conversion
   const drafts: OfflineWorkspace['drafts'] = {}
   for (const [key, draft] of Object.entries(v1?.drafts ?? {}))
     drafts[local(Number(key))] = draft
@@ -536,35 +607,33 @@ function buildWorkspace(input: BuildInput): OfflineWorkspace {
         revision: 0,
         rows: [{ id: uuidFrom(`${seed}:row:${category.id}`), text: '' }],
       }
+  return drafts
+}
 
-  const recoveryCopies: RecoveryCopy[] = (v1?.recoveryCopies ?? []).map(
-    (copy) => ({
-      ...copy,
-      categoryId: local(copy.categoryId),
-      restoredTo:
-        copy.restoredTo === undefined ? undefined : local(copy.restoredTo),
-    }),
-  )
-  const created: RecoveryCopy[] = []
-  const addCopy = (
-    categoryId: string,
-    text: string,
-    reason: string,
-    origin: NonNullable<RecoveryCopy['origin']>,
-  ) =>
-    created.push({
-      id: uuidFrom(`${seed}:recovery:${created.length}`),
-      categoryId,
-      text,
-      reason,
-      createdAt: now,
-      origin,
-    })
-
+/**
+ * Records one migration receipt per v1 file and collects the recovery copies they imply.
+ *
+ * C7: another account's writing is kept as recovery copies; nothing is sent to that account.
+ *
+ * @param addCopy - Appends a recovery copy; the caller owns the deterministic id counter.
+ * @returns The receipts, the v1 file checksums and how many unreadable files were preserved.
+ * @example const { receipts, v1Files } = recordV1Files(source, others, now, id, addCopy)
+ */
+function recordV1Files(
+  source: Extract<V1File, { valid: true }> | null,
+  others: V1File[],
+  now: number,
+  defaultCategoryId: string,
+  addCopy: (copy: RecoveryCopyDraft) => void,
+): {
+  receipts: MigrationReceipt['receipts']
+  v1Files: MigrationReceipt['v1Files']
+  preservedBackups: number
+} {
   const receipts: MigrationReceipt['receipts'] = {}
   const v1Files: MigrationReceipt['v1Files'] = {}
   let preservedBackups = 0
-  for (const file of [...(source ? [source] : []), ...input.others]) {
+  for (const file of [...(source ? [source] : []), ...others]) {
     v1Files[file.fileName] = file.checksum
     if (file === source) {
       receipts[file.checksum] = {
@@ -574,18 +643,7 @@ function buildWorkspace(input: BuildInput): OfflineWorkspace {
         at: now,
       }
     } else if (file.valid) {
-      // C7: another account's writing is kept as recovery copies; nothing is sent to that account.
-      const writing = describeWriting(file.workspace)
-      const origin = {
-        kind: 'other-account' as const,
-        accountId: file.workspace.ownerId,
-      }
-      const reason = `Other account: ${file.workspace.ownerId}`
-      for (const draft of writing.drafts)
-        addCopy(defaultCategoryId, draft.text, reason, origin)
-      for (const completion of writing.completions)
-        if (completion.unresolved && !completion.cancelled)
-          addCopy(defaultCategoryId, completion.title, reason, origin)
+      importOtherAccountWriting(file.workspace, defaultCategoryId, addCopy)
       receipts[file.checksum] = {
         fileName: file.fileName,
         accountId: file.workspace.ownerId,
@@ -602,9 +660,50 @@ function buildWorkspace(input: BuildInput): OfflineWorkspace {
       }
     }
   }
+  return { receipts, v1Files, preservedBackups }
+}
 
-  // Pre-offline notes: changed since the v1 import, or never mapped, are kept as copies.
-  for (const [key, text] of Object.entries(input.legacyNotes)) {
+/**
+ * Keeps another account's unsent writing as recovery copies in the default category (C7).
+ *
+ * @example importOtherAccountWriting(otherWorkspace, defaultCategoryId, addCopy)
+ */
+function importOtherAccountWriting(
+  workspace: OfflineWorkspaceV1,
+  defaultCategoryId: string,
+  addCopy: (copy: RecoveryCopyDraft) => void,
+): void {
+  const writing = describeWriting(workspace)
+  const origin = {
+    kind: 'other-account' as const,
+    accountId: workspace.ownerId,
+  }
+  const reason = `Other account: ${workspace.ownerId}`
+  for (const draft of writing.drafts)
+    addCopy({ categoryId: defaultCategoryId, text: draft.text, reason, origin })
+  for (const completion of writing.completions)
+    if (completion.unresolved && !completion.cancelled)
+      addCopy({
+        categoryId: defaultCategoryId,
+        text: completion.title,
+        reason,
+        origin,
+      })
+}
+
+/**
+ * Keeps pre-offline notes that changed since the v1 import, or were never mapped, as copies.
+ *
+ * @example importLegacyNotes(conversion, { '7': 'note' }, defaultCategoryId, addCopy)
+ */
+function importLegacyNotes(
+  conversion: Conversion,
+  legacyNotes: Record<string, string>,
+  defaultCategoryId: string,
+  addCopy: (copy: RecoveryCopyDraft) => void,
+): void {
+  const { v1, localIds } = conversion
+  for (const [key, text] of Object.entries(legacyNotes)) {
     if (!text.trim()) continue
     const sourceHash = v1?.migration.sourceHashes[key]
     const textHash = hash(text)
@@ -614,73 +713,73 @@ function buildWorkspace(input: BuildInput): OfflineWorkspace {
     )
       continue
     const serverId = Number(key)
-    addCopy(
-      localIds.get(serverId) ?? defaultCategoryId,
+    addCopy({
+      categoryId: localIds.get(serverId) ?? defaultCategoryId,
       text,
-      localIds.has(serverId) ? 'legacy-changed' : 'legacy-unmapped',
-      { kind: 'legacy-note', accountId: null },
-    )
+      reason: localIds.has(serverId) ? 'legacy-changed' : 'legacy-unmapped',
+      origin: { kind: 'legacy-note', accountId: null },
+    })
   }
+}
 
-  const binding: OfflineWorkspace['binding'] = v1
-    ? {
-        accountId: v1.ownerId,
-        displayEmail: null,
-        serverCategoryIds: Object.fromEntries(
-          v1.categories
-            .filter((category) => !category.removed)
-            .map((category) => [local(category.id), category.id]),
-        ),
-        base: Object.fromEntries(
-          v1.categories
-            .filter((category) => !category.removed)
-            .map((category) => [
-              local(category.id),
-              {
-                name: category.name,
-                color: category.color,
-                parentLocalId:
-                  category.parentId === null ? null : local(category.parentId),
-              },
-            ]),
-        ),
-        declined: {},
-        deletionReceipts: Object.fromEntries(
-          Object.entries(v1.categoryDeletions).map(([from, to]) => [
-            local(Number(from)),
-            local(to),
-          ]),
-        ),
-        lastSyncedAt: v1.checkpoint?.fetchedAt ?? null,
-      }
-    : null
-
-  const writing = v1 ? describeWriting(v1) : { drafts: [], completions: [] }
-  const summary: MigrationSummary = {
-    sourceAccountId: v1?.ownerId ?? null,
-    importedDrafts: writing.drafts.length,
-    importedCompletions:
-      Object.keys(v1?.completions ?? {}).length +
-      Object.keys(v1?.retiredCompletions ?? {}).length,
-    recoveryCopies: created.length,
-    v1FilesKept: input.keptFileCount,
-    preservedBackups,
+/**
+ * Converts the v1 account binding: server ids, merge base, deletions and last sync time.
+ *
+ * @returns The binding, or null on a fresh start.
+ * @example const binding = convertBinding(conversion)
+ */
+function convertBinding(conversion: Conversion): OfflineWorkspace['binding'] {
+  const { v1, local } = conversion
+  if (!v1) return null
+  const liveCategories = v1.categories.filter((category) => !category.removed)
+  return {
+    accountId: v1.ownerId,
+    displayEmail: null,
+    serverCategoryIds: Object.fromEntries(
+      liveCategories.map((category) => [local(category.id), category.id]),
+    ),
+    base: Object.fromEntries(
+      liveCategories.map((category) => [
+        local(category.id),
+        {
+          name: category.name,
+          color: category.color,
+          parentLocalId:
+            category.parentId === null ? null : local(category.parentId),
+        },
+      ]),
+    ),
+    declined: {},
+    deletionReceipts: Object.fromEntries(
+      Object.entries(v1.categoryDeletions).map(([from, to]) => [
+        local(Number(from)),
+        local(to),
+      ]),
+    ),
+    lastSyncedAt: v1.checkpoint?.fetchedAt ?? null,
   }
+}
 
-  return OfflineWorkspaceSchema.parse({
-    version: 2,
-    ownerId: DEVICE_OWNER_ID,
-    deviceId,
-    revision: v1?.revision ?? 0,
-    createdAt: v1?.preparedAt ?? now,
-    selectedCategoryId: v1 ? local(v1.selectedCategoryId) : defaultCategoryId,
-    categories,
-    preferences: v1?.preferences ?? {
-      revision: 0,
-      settings: UserSettingsStateSchema.parse({}),
-      theme: 'system',
-    },
-    drafts,
+/**
+ * Converts completions, retired completions, the outbox, category moves and the checkpoint.
+ *
+ * A queued v1 entry was never offered to the server: it is re-derived from its completion.
+ * Anything already offered keeps its exact bytes (EA3, P3).
+ *
+ * @example const records = convertRecords(conversion)
+ */
+function convertRecords(
+  conversion: Conversion,
+): Pick<
+  OfflineWorkspace,
+  | 'completions'
+  | 'retiredCompletions'
+  | 'outbox'
+  | 'categoryMoves'
+  | 'checkpoint'
+> {
+  const { v1, local, mapProjection, mapReceipt } = conversion
+  return {
     completions: Object.fromEntries(
       Object.entries(v1?.completions ?? {}).map(([id, completion]) => [
         id,
@@ -698,7 +797,6 @@ function buildWorkspace(input: BuildInput): OfflineWorkspace {
         { ...retired, originalCategoryId: local(retired.originalCategoryId) },
       ]),
     ),
-    // A queued v1 entry was never offered to the server: it is re-derived from its completion.
     outbox: Object.fromEntries(
       Object.entries(v1?.outbox ?? {})
         .filter(([, entry]) => entry.state !== 'queued')
@@ -709,7 +807,6 @@ function buildWorkspace(input: BuildInput): OfflineWorkspace {
               ...entry.operation,
               categoryId: local(entry.operation.categoryId),
             },
-            // Anything already offered to the server keeps its exact bytes (EA3, P3).
             wire: entry.operation,
             state: entry.state,
             failure: entry.failure,
@@ -717,23 +814,12 @@ function buildWorkspace(input: BuildInput): OfflineWorkspace {
           },
         ]),
     ),
-    categoryOutbox: {},
-    commandReceipts: v1?.commandReceipts ?? {},
     categoryMoves: Object.fromEntries(
       Object.entries(v1?.categoryMoves ?? {}).map(([from, to]) => [
         local(Number(from)),
         local(to),
       ]),
     ),
-    binding,
-    migration: {
-      version: 2,
-      sourceChecksum: source?.checksum ?? null,
-      receipts,
-      v1Files,
-      dashboardOnly: {},
-      summary,
-    },
     checkpoint: v1?.checkpoint
       ? {
           ...v1.checkpoint,
@@ -745,8 +831,150 @@ function buildWorkspace(input: BuildInput): OfflineWorkspace {
           ),
         }
       : null,
-    recoveryCopies: [...recoveryCopies, ...created],
+  }
+}
+
+/**
+ * Counts what the migration carried over, for the redacted C34 summary (DX7).
+ *
+ * @example const summary = buildSummary(conversion, 2, 3, 0)
+ */
+function buildSummary(
+  conversion: Conversion,
+  recoveryCopyCount: number,
+  keptFileCount: number,
+  preservedBackups: number,
+): MigrationSummary {
+  const { v1 } = conversion
+  const writing = v1 ? describeWriting(v1) : { drafts: [], completions: [] }
+  return {
+    sourceAccountId: v1?.ownerId ?? null,
+    importedDrafts: writing.drafts.length,
+    importedCompletions:
+      Object.keys(v1?.completions ?? {}).length +
+      Object.keys(v1?.retiredCompletions ?? {}).length,
+    recoveryCopies: recoveryCopyCount,
+    v1FilesKept: keptFileCount,
+    preservedBackups,
+  }
+}
+
+/**
+ * Carries the scalar workspace fields: revision, creation time, selection, preferences and
+ * command receipts. A fresh start selects the default category and uses default preferences.
+ *
+ * @example const header = convertHeader(conversion, defaultCategoryId, Date.now())
+ */
+function convertHeader(
+  conversion: Conversion,
+  defaultCategoryId: string,
+  now: number,
+): Pick<
+  OfflineWorkspace,
+  | 'revision'
+  | 'createdAt'
+  | 'selectedCategoryId'
+  | 'preferences'
+  | 'commandReceipts'
+> {
+  const { v1, local } = conversion
+  return {
+    revision: v1?.revision ?? 0,
+    createdAt: v1?.preparedAt ?? now,
+    selectedCategoryId: v1 ? local(v1.selectedCategoryId) : defaultCategoryId,
+    preferences: v1?.preferences ?? {
+      revision: 0,
+      settings: UserSettingsStateSchema.parse({}),
+      theme: 'system',
+    },
+    commandReceipts: v1?.commandReceipts ?? {},
+  }
+}
+
+/**
+ * Carries the v1 recovery copies over with their categories mapped to local ids.
+ *
+ * @example const copies = convertRecoveryCopies(conversion)
+ */
+function convertRecoveryCopies(conversion: Conversion): RecoveryCopy[] {
+  const { v1, local } = conversion
+  return (v1?.recoveryCopies ?? []).map((copy) => ({
+    ...copy,
+    categoryId: local(copy.categoryId),
+    restoredTo:
+      copy.restoredTo === undefined ? undefined : local(copy.restoredTo),
+  }))
+}
+
+/** Builds the complete v2 workspace in memory; pure apart from `randomUUID` for a fresh device id. */
+function buildWorkspace(input: BuildInput): OfflineWorkspace {
+  const { source, now } = input
+  const { conversion, deviceId } = createConversion(source, input.registryState)
+  const { seed } = conversion
+
+  const categories = convertCategories(conversion)
+  const defaultCategoryId =
+    categories.find((category) => category.isDefault && !category.removed)
+      ?.id ?? categories[0]!.id
+  const drafts = convertDrafts(conversion, categories)
+
+  // Copy ids count up in creation order, so the file loop must run before the legacy notes.
+  const created: RecoveryCopy[] = []
+  const addCopy = (copy: RecoveryCopyDraft): void => {
+    created.push({
+      id: uuidFrom(`${seed}:recovery:${created.length}`),
+      ...copy,
+      createdAt: now,
+    })
+  }
+  const { receipts, v1Files, preservedBackups } = recordV1Files(
+    source,
+    input.others,
+    now,
+    defaultCategoryId,
+    addCopy,
+  )
+  importLegacyNotes(conversion, input.legacyNotes, defaultCategoryId, addCopy)
+
+  const summary = buildSummary(
+    conversion,
+    created.length,
+    input.keptFileCount,
+    preservedBackups,
+  )
+
+  return OfflineWorkspaceSchema.parse({
+    version: 2,
+    ownerId: DEVICE_OWNER_ID,
+    deviceId,
+    ...convertHeader(conversion, defaultCategoryId, now),
+    categories,
+    drafts,
+    ...convertRecords(conversion),
+    categoryOutbox: {},
+    binding: convertBinding(conversion),
+    migration: {
+      version: 2,
+      sourceChecksum: source?.checksum ?? null,
+      receipts,
+      v1Files,
+      dashboardOnly: {},
+      summary,
+    },
+    recoveryCopies: [...convertRecoveryCopies(conversion), ...created],
   })
+}
+
+/**
+ * What {@link importOlderFile} needs beyond the workspace being updated.
+ */
+interface OlderImportContext {
+  /** Every line v2 already holds, so unchanged writing is not copied again. */
+  knownLines: Set<string>
+  defaultCategoryId: string
+  /** Settled completion ids that live in the archive file. */
+  archivedIds: Set<string>
+  now: () => number
 }
 
 /**
@@ -769,105 +997,121 @@ async function importOlderVersionChanges(
   const archivedIds = await readArchivedIds(workspacesDirectory)
   return file.update((state) => {
     const next = structuredClone(state)
-    const defaultCategoryId =
-      next.categories.find(
-        (category) => category.isDefault && !category.removed,
-      )?.id ?? next.categories[0]!.id
-    const knownLines = new Set<string>()
-    for (const draft of Object.values(next.drafts))
-      for (const row of draft.rows) knownLines.add(row.text)
-    for (const copy of next.recoveryCopies)
-      for (const line of copy.text.split('\n')) knownLines.add(line)
-    for (const completion of Object.values(next.completions)) {
-      knownLines.add(completion.title)
-      knownLines.add(completion.rawText)
+    const context: OlderImportContext = {
+      knownLines: collectKnownLines(next),
+      defaultCategoryId:
+        next.categories.find(
+          (category) => category.isDefault && !category.removed,
+        )?.id ?? next.categories[0]!.id,
+      archivedIds,
+      now,
     }
-    for (const v1File of changed) {
-      next.migration.v1Files[v1File.fileName] = v1File.checksum
-      // Each checksum imports once, even if the user already deleted what it produced.
-      if (next.migration.receipts[v1File.checksum]) continue
-      if (!v1File.valid) {
-        next.migration.receipts[v1File.checksum] = {
-          fileName: v1File.fileName,
-          accountId: null,
-          outcome: 'backup-preserved',
-          at: now(),
-        }
-        continue
-      }
-      const workspace = v1File.workspace
-      const reverse = new Map<number, string>()
-      if (next.binding?.accountId === workspace.ownerId)
-        for (const [localId, serverId] of Object.entries(
-          next.binding.serverCategoryIds,
-        ))
-          reverse.set(serverId, localId)
-      const origin = {
-        kind: 'older-version' as const,
-        accountId: workspace.ownerId,
-      }
-      const reason = 'From an older CoreLive version'
-      const writing = describeWriting(workspace)
-      const push = (categoryId: string, text: string) =>
-        next.recoveryCopies.push({
-          id: uuidFrom(
-            `${v1File.checksum}:older:${next.recoveryCopies.length}`,
-          ),
-          categoryId,
-          text,
-          reason,
-          createdAt: now(),
-          origin,
-        })
-      for (const draft of writing.drafts) {
-        const fresh = draft.rows.filter(
-          (line) => line.trim() && !knownLines.has(line),
-        )
-        if (fresh.length)
-          push(
-            reverse.get(draft.serverCategoryId) ?? defaultCategoryId,
-            fresh.join('\n'),
-          )
-      }
-      for (const completion of Object.values(workspace.completions)) {
-        // Identity, not send state, decides what v2 lacks (EA13a).
-        if (
-          next.completions[completion.id] ||
-          next.retiredCompletions[completion.id] ||
-          archivedIds.has(completion.id)
-        )
-          continue
-        push(
-          reverse.get(completion.categoryId) ?? defaultCategoryId,
-          completion.rawText.trim() || completion.title,
-        )
-      }
-      for (const [id, retired] of Object.entries(
-        workspace.retiredCompletions,
-      )) {
-        if (
-          next.completions[id] ||
-          next.retiredCompletions[id] ||
-          archivedIds.has(id)
-        )
-          continue
-        next.migration.dashboardOnly[id] = {
-          completedAt: retired.completedAt,
-          originalCategoryId:
-            reverse.get(retired.originalCategoryId) ?? defaultCategoryId,
-          cancelled: retired.cancelled,
-        }
-      }
-      next.migration.receipts[v1File.checksum] = {
-        fileName: v1File.fileName,
-        accountId: workspace.ownerId,
-        outcome: 'older-version-imported',
-        at: now(),
-      }
-    }
+    for (const v1File of changed) importOlderFile(next, v1File, context)
     next.revision++
     return next
   })
+}
+
+/** Every draft row, recovery-copy line and completion text already stored in v2. */
+function collectKnownLines(workspace: OfflineWorkspace): Set<string> {
+  const knownLines = new Set<string>()
+  for (const draft of Object.values(workspace.drafts))
+    for (const row of draft.rows) knownLines.add(row.text)
+  for (const copy of workspace.recoveryCopies)
+    for (const line of copy.text.split('\n')) knownLines.add(line)
+  for (const completion of Object.values(workspace.completions)) {
+    knownLines.add(completion.title)
+    knownLines.add(completion.rawText)
+  }
+  return knownLines
+}
+
+/** True when v2 or the archive already holds the completion identity (EA13a). */
+function holdsCompletionIdentity(
+  workspace: OfflineWorkspace,
+  archivedIds: Set<string>,
+  id: string,
+): boolean {
+  return Boolean(
+    workspace.completions[id] ||
+    workspace.retiredCompletions[id] ||
+    archivedIds.has(id),
+  )
+}
+
+/**
+ * Imports one changed v1 file into the v2 workspace and stamps its receipt.
+ *
+ * @param next - The cloned workspace being updated; mutated in place.
+ * @example importOlderFile(next, v1File, context)
+ */
+function importOlderFile(
+  next: OfflineWorkspace,
+  v1File: V1File,
+  context: OlderImportContext,
+): void {
+  next.migration.v1Files[v1File.fileName] = v1File.checksum
+  // Each checksum imports once, even if the user already deleted what it produced.
+  if (next.migration.receipts[v1File.checksum]) return
+  if (!v1File.valid) {
+    next.migration.receipts[v1File.checksum] = {
+      fileName: v1File.fileName,
+      accountId: null,
+      outcome: 'backup-preserved',
+      at: context.now(),
+    }
+    return
+  }
+  const workspace = v1File.workspace
+  const reverse = new Map<number, string>()
+  if (next.binding?.accountId === workspace.ownerId)
+    for (const [localId, serverId] of Object.entries(
+      next.binding.serverCategoryIds,
+    ))
+      reverse.set(serverId, localId)
+  const { defaultCategoryId, archivedIds } = context
+  const push = (categoryId: string, text: string) =>
+    next.recoveryCopies.push({
+      id: uuidFrom(`${v1File.checksum}:older:${next.recoveryCopies.length}`),
+      categoryId,
+      text,
+      reason: 'From an older CoreLive version',
+      createdAt: context.now(),
+      origin: { kind: 'older-version' as const, accountId: workspace.ownerId },
+    })
+  for (const draft of describeWriting(workspace).drafts) {
+    const fresh = draft.rows.filter(
+      (line) => line.trim() && !context.knownLines.has(line),
+    )
+    if (fresh.length)
+      push(
+        reverse.get(draft.serverCategoryId) ?? defaultCategoryId,
+        fresh.join('\n'),
+      )
+  }
+  for (const completion of Object.values(workspace.completions)) {
+    // Identity, not send state, decides what v2 lacks (EA13a).
+    if (holdsCompletionIdentity(next, archivedIds, completion.id)) continue
+    push(
+      reverse.get(completion.categoryId) ?? defaultCategoryId,
+      completion.rawText.trim() || completion.title,
+    )
+  }
+  for (const [id, retired] of Object.entries(workspace.retiredCompletions)) {
+    if (holdsCompletionIdentity(next, archivedIds, id)) continue
+    next.migration.dashboardOnly[id] = {
+      completedAt: retired.completedAt,
+      originalCategoryId:
+        reverse.get(retired.originalCategoryId) ?? defaultCategoryId,
+      cancelled: retired.cancelled,
+    }
+  }
+  next.migration.receipts[v1File.checksum] = {
+    fileName: v1File.fileName,
+    accountId: workspace.ownerId,
+    outcome: 'older-version-imported',
+    at: context.now(),
+  }
 }
 
 /** SHA-256 hex of a string. */

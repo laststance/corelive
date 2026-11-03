@@ -306,6 +306,20 @@ export class OfflineEditorController {
   }
 
   /**
+   * Classifies the account relationship: attached, signed out with a binding, or another account.
+   * @param binding - The workspace binding, or null before the first attach.
+   * @returns The {@link AccountState} shown by Settings ▸ Account.
+   * @example const state = this.accountState(view?.binding ?? null)
+   */
+  private accountState(binding: { accountId: string } | null): AccountState {
+    if (this.registryState?.attachedAccountId) return 'attached'
+    if (!binding) return 'never-attached'
+    const isOtherAccount =
+      this.signedIn !== null && this.signedIn.clerkId !== binding.accountId
+    return isOtherAccount ? 'other-account' : 'signed-out'
+  }
+
+  /**
    * What Settings ▸ Account renders (DA3, X1): derived from the registry, the binding and the
    * session verified in this run.
    * @example const status = controller.accountStatus()
@@ -315,13 +329,7 @@ export class OfflineEditorController {
       this.snapshot.phase === 'ready' ? this.snapshot.workspace : null
     const binding = view?.binding ?? null
     const pending = this.registryState?.pendingConnect ?? null
-    let state: AccountState = 'never-attached'
-    if (this.registryState?.attachedAccountId) state = 'attached'
-    else if (binding)
-      state =
-        this.signedIn && this.signedIn.clerkId !== binding.accountId
-          ? 'other-account'
-          : 'signed-out'
+    const state = this.accountState(binding)
     return {
       state,
       boundEmail: binding?.displayEmail ?? null,

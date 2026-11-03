@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto'
-
 import { SyncOutcomeSchema } from '@corelive/desktop-contract/category-sync'
 import {
   SyncApplyInputSchema,
@@ -17,7 +15,7 @@ import {
   type CompletionSyncReceipt,
 } from '@corelive/desktop-contract/offline-workspace'
 import { call, ORPCError } from '@orpc/server'
-import { and, eq, inArray, sql } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 
 import { db } from '@/db'
 import { requireRow } from '@/db/requireRow'
@@ -35,6 +33,11 @@ import {
   listCategories,
   lockCategoryOwner,
 } from './category'
+import {
+  digestOperation,
+  findStoredReceipt,
+  readStoredReceipts,
+} from './syncReceiptStore'
 
 type Transaction = Parameters<Parameters<typeof runTransaction>[0]>[0]
 type SyncState = typeof completionSyncStateTable.$inferSelect
@@ -110,19 +113,8 @@ async function applySyncOperation(
 ): Promise<CompletionSyncReceipt> {
   return runTransaction(async (tx) => {
     await lockCategoryOwner(tx, userId)
-    const digest = createHash('sha256')
-      .update(JSON.stringify(operation))
-      .digest('hex')
-    const [receipt] = await tx
-      .select()
-      .from(syncReceiptTable)
-      .where(
-        and(
-          eq(syncReceiptTable.userId, userId),
-          eq(syncReceiptTable.operationId, operation.operationId),
-        ),
-      )
-      .limit(1)
+    const digest = digestOperation(operation)
+    const receipt = await findStoredReceipt(tx, userId, operation.operationId)
     const [current] = await tx
       .select()
       .from(completionSyncStateTable)
@@ -379,20 +371,12 @@ export const syncReceipts = authMiddleware
   .input(SyncReceiptsInputSchema)
   .output(SyncReceiptsOutputSchema)
   .handler(async ({ input, context }) => {
-    const rows = await db
-      .select({ outcome: syncReceiptTable.outcome })
-      .from(syncReceiptTable)
-      .where(
-        and(
-          eq(syncReceiptTable.userId, context.user.id),
-          inArray(syncReceiptTable.operationId, input.operationIds),
-        ),
-      )
     return {
-      receipts: rows.flatMap((row) => {
-        const receipt = readCompletionOutcome(row.outcome)
-        return receipt ? [receipt] : []
-      }),
+      receipts: await readStoredReceipts(
+        context.user.id,
+        input.operationIds,
+        readCompletionOutcome,
+      ),
     }
   })
 

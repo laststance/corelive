@@ -425,83 +425,15 @@ function applyReceipt(
     case 'applied':
       applyApplied(state, binding, operation, receipt.serverId)
       return
-    case 'adopted': {
-      if (operation.type !== 'create') return
-      const reverse = serverToLocalMap(binding)
-      const holder = reverse.get(receipt.serverId)
-      if (holder && holder !== operation.localId) {
-        // The dashboard category is already bound to another local one: this create was a duplicate.
-        dropCategoryOperations(state, operation.localId)
-        retireIntoCategory(state, operation.localId, holder, context.nextId)
-        return
-      }
-      binding.serverCategoryIds[operation.localId] = receipt.serverId
-      binding.base[operation.localId] = {
-        name: receipt.current.name,
-        color: receipt.current.color,
-        parentLocalId:
-          receipt.current.parentId === null
-            ? null
-            : (reverse.get(receipt.current.parentId) ?? null),
-      }
+    case 'adopted':
+      applyAdopted(state, binding, operation, receipt, context)
       return
-    }
-    case 'conflict': {
-      if (operation.type === 'renameSet') {
-        // Which item lost is unknown; the next merge re-reads each from the refreshed list.
-        return
-      }
-      if (!fieldKey) return
-      const current = receipt.current
-      const reverse = serverToLocalMap(binding)
-      const serverValue =
-        'name' in current
-          ? current.name
-          : 'color' in current
-            ? current.color
-            : current.parentId === null
-              ? null
-              : (reverse.get(current.parentId) ?? null)
-      const category = state.categories.find((item) => item.id === localId)
-      const base = binding.base[localId]
-      if (base) setBaseFieldValue(base, fieldKey, serverValue)
-      if (category && mayRevert(state, entry, localId, fieldKey)) {
-        setMarker(binding, localId, fieldKey, {
-          kind: 'conflict',
-          localValue: markerLocalValue(state, operation),
-          serverValue,
-        })
-        setFieldValue(category, fieldKey, serverValue)
-      }
+    case 'conflict':
+      applyConflict(state, binding, entry, receipt, localId, fieldKey)
       return
-    }
-    case 'name-taken': {
-      // The local value is kept; the server keeps the old one (C8, EA5).
-      const items =
-        operation.type === 'renameSet'
-          ? operation.items.map((item) => item.localId)
-          : [localId]
-      for (const id of items) {
-        const keyField: string =
-          operation.type === 'reparent' ? 'parentLocalId' : 'name'
-        const category = state.categories.find((item) => item.id === id)
-        if (!category) continue
-        setMarker(binding, id, keyField, {
-          kind: 'name-taken',
-          localValue: fieldValue(
-            category,
-            keyField === 'name' ? 'name' : 'parentLocalId',
-          ),
-          serverValue: binding.base[id]
-            ? baseFieldValue(
-                binding.base[id],
-                keyField === 'name' ? 'name' : 'parentLocalId',
-              )
-            : null,
-        })
-      }
+    case 'name-taken':
+      applyNameTaken(state, binding, operation, localId)
       return
-    }
     case 'invalid-parent':
     case 'forbidden': {
       revertRefused(
@@ -531,6 +463,108 @@ function applyReceipt(
       })
       return
     }
+  }
+}
+
+/**
+ * `adopted`: the server already has an equivalent category, so bind the local create to it (or
+ * retire it into the existing holder when that server category is already bound locally).
+ *
+ * @example applyAdopted(state, binding, operation, receipt, context)
+ */
+function applyAdopted(
+  state: OfflineWorkspace,
+  binding: AccountBinding,
+  operation: CategoryOperation,
+  receipt: Extract<CategoryReceipt, { result: 'adopted' }>,
+  context: CategoryContext,
+): void {
+  if (operation.type !== 'create') return
+  const reverse = serverToLocalMap(binding)
+  const holder = reverse.get(receipt.serverId)
+  if (holder && holder !== operation.localId) {
+    // The dashboard category is already bound to another local one: this create was a duplicate.
+    dropCategoryOperations(state, operation.localId)
+    retireIntoCategory(state, operation.localId, holder, context.nextId)
+    return
+  }
+  binding.serverCategoryIds[operation.localId] = receipt.serverId
+  binding.base[operation.localId] = {
+    name: receipt.current.name,
+    color: receipt.current.color,
+    parentLocalId:
+      receipt.current.parentId === null
+        ? null
+        : (reverse.get(receipt.current.parentId) ?? null),
+  }
+}
+
+/**
+ * `conflict`: advance the merge base to the server value and, when the field is unchanged since
+ * freeze, adopt the server value locally with a `conflict` marker (EA5).
+ *
+ * @example applyConflict(state, binding, entry, receipt, 'local-a', 'name')
+ */
+function applyConflict(
+  state: OfflineWorkspace,
+  binding: AccountBinding,
+  entry: CategoryOutboxEntry,
+  receipt: Extract<CategoryReceipt, { result: 'conflict' }>,
+  localId: string,
+  fieldKey: CategoryField | null,
+): void {
+  // Which item lost is unknown for a renameSet; the next merge re-reads each from the refreshed list.
+  if (entry.operation.type === 'renameSet' || !fieldKey) return
+  const current = receipt.current
+  const reverse = serverToLocalMap(binding)
+  const serverValue =
+    'name' in current
+      ? current.name
+      : 'color' in current
+        ? current.color
+        : current.parentId === null
+          ? null
+          : (reverse.get(current.parentId) ?? null)
+  const category = state.categories.find((item) => item.id === localId)
+  const base = binding.base[localId]
+  if (base) setBaseFieldValue(base, fieldKey, serverValue)
+  if (category && mayRevert(state, entry, localId, fieldKey)) {
+    setMarker(binding, localId, fieldKey, {
+      kind: 'conflict',
+      localValue: markerLocalValue(state, entry.operation),
+      serverValue,
+    })
+    setFieldValue(category, fieldKey, serverValue)
+  }
+}
+
+/**
+ * `name-taken`: the local value is kept and the server keeps the old one (C8, EA5); every
+ * affected category gets a `name-taken` marker.
+ *
+ * @example applyNameTaken(state, binding, operation, 'local-a')
+ */
+function applyNameTaken(
+  state: OfflineWorkspace,
+  binding: AccountBinding,
+  operation: CategoryOperation,
+  localId: string,
+): void {
+  const items =
+    operation.type === 'renameSet'
+      ? operation.items.map((item) => item.localId)
+      : [localId]
+  const keyField: 'name' | 'parentLocalId' =
+    operation.type === 'reparent' ? 'parentLocalId' : 'name'
+  for (const id of items) {
+    const category = state.categories.find((item) => item.id === id)
+    if (!category) continue
+    const base = binding.base[id]
+    setMarker(binding, id, keyField, {
+      kind: 'name-taken',
+      localValue: fieldValue(category, keyField),
+      serverValue: base ? baseFieldValue(base, keyField) : null,
+    })
   }
 }
 

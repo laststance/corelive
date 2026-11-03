@@ -12,7 +12,8 @@ import { join } from 'node:path'
 
 import { z } from 'zod'
 
-const envelopeSchema = z.object({
+/** The on-disk envelope (also read by the v1 migration, which never writes it). */
+export const envelopeSchema = z.object({
   format: z.literal(1),
   ownerId: z.string().min(1),
   checksum: z.string().regex(/^[a-f0-9]{64}$/),

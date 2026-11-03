@@ -1606,6 +1606,43 @@ app.on('before-quit', (event) => {
 })
 
 /**
+ * Decides whether a window's web contents may navigate or redirect to a URL.
+ *
+ * Exists so the `will-navigate` / `will-redirect` guard in the
+ * `web-contents-created` handler stays flat: external documents must never
+ * inherit the native preload capabilities of the bundled or login windows.
+ *
+ * @param contents - The web contents attempting to navigate.
+ * @param navigationUrl - The destination URL.
+ * @param isMainFrame - `false` for iframe requests reported by redirect events.
+ * @returns `true` when the navigation may proceed, `false` when it must be blocked.
+ * @example
+ * isNavigationAllowed(editorContents, 'https://evil.example/') // => false
+ */
+function isNavigationAllowed(
+  contents: WebContents,
+  navigationUrl: string,
+  isMainFrame: boolean | undefined,
+): boolean {
+  // Each bundled window may only stay on its own document (D5, EA16): identity, then exact path.
+  if (contents === windowManager?.getLiveEditorWindow()?.webContents) {
+    return isLocalEditorDocument(navigationUrl)
+  }
+  if (contents === windowManager?.getSettingsWindow()?.webContents) {
+    return isLocalSettingsDocument(navigationUrl)
+  }
+  // Redirect events include iframe requests; Clerk's isolated frames do not receive preload APIs.
+  if (isMainFrame === false) return true
+  const appOrigin =
+    windowManager?.getWebAppOrigin() ??
+    (isDev ? 'http://localhost:4991' : 'https://corelive.app')
+  return (
+    isTrustedAppNavigation(navigationUrl, appOrigin) ||
+    isTrustedClerkHandshake(navigationUrl, appOrigin)
+  )
+}
+
+/**
  * Web content security handler.
  *
  * This is a critical security boundary. Every web page (renderer process)
@@ -1674,25 +1711,9 @@ app.on('web-contents-created', (_event, contents: WebContents) => {
     _isInPlace?: boolean,
     isMainFrame?: boolean,
   ): void => {
-    // Each bundled window may only stay on its own document (D5, EA16): identity, then exact path.
-    if (contents === windowManager?.getLiveEditorWindow()?.webContents) {
-      if (!isLocalEditorDocument(navigationUrl)) event.preventDefault()
-      return
-    }
-    if (contents === windowManager?.getSettingsWindow()?.webContents) {
-      if (!isLocalSettingsDocument(navigationUrl)) event.preventDefault()
-      return
-    }
-    // Redirect events include iframe requests; Clerk's isolated frames do not receive preload APIs.
-    if (isMainFrame === false) return
-    const appOrigin =
-      windowManager?.getWebAppOrigin() ??
-      (isDev ? 'http://localhost:4991' : 'https://corelive.app')
-    if (
-      !isTrustedAppNavigation(navigationUrl, appOrigin) &&
-      !isTrustedClerkHandshake(navigationUrl, appOrigin)
-    )
+    if (!isNavigationAllowed(contents, navigationUrl, isMainFrame)) {
       event.preventDefault()
+    }
   }
   contents.on('will-navigate', guardNavigation)
   contents.on('will-redirect', guardNavigation)

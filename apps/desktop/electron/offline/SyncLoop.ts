@@ -38,6 +38,11 @@ type LoopOptions = {
   settleTimeoutMs?: number
 }
 
+/** Mutable result of one pass: the delay before the next pass is scheduled. */
+interface PassOutcome {
+  delay: number
+}
+
 /**
  * Sends durable category and completion operations in bounded, account-bound background passes.
  * One ordered outbox for both kinds, one backoff and one in-flight marker: category batches
@@ -125,72 +130,135 @@ export class SyncLoop {
     })
     this.abort = new AbortController()
     const signal = this.abort.signal
-    let delay = 50000
+    // Mutated by the pass so a delay chosen before a late failure still applies.
+    const outcome: PassOutcome = { delay: 50000 }
     try {
-      const transport = await this.authorizedTransport(context)
-      if (!transport) return
-      // EA4: uncertain category operations are recovered from receipts before any category refresh (C19).
-      const uncertain = await this.recoverCategoryReceipts(
-        context,
-        transport,
-        signal,
-      )
-      if (!this.current(context)) return
-      if (
-        !uncertain &&
-        !(await this.refreshCategories(context, transport, signal))
-      )
-        return
-      // Category batches first; dependents become sendable as receipts add server ids.
-      this.sentCategories = false
-      for (let batch = 0; batch < 8 && this.current(context); batch++) {
-        if (!(await this.sendCategoryBatch(context, transport, signal))) break
-      }
-      // Bound each pass so an offline backlog cannot monopolize the account actor.
-      for (
-        let batch = 0;
-        batch < COMPLETION_BATCHES_PER_PASS && this.current(context);
-        batch++
-      ) {
-        if (!(await this.sendBatch(context, transport, signal))) break
-      }
-      if (!this.current(context)) return
-      const remaining = await context.worker.call('pending', { limit: 1 })
-      const categoryWork = await context.worker.call('categoryPending', {
-        limit: 1,
-      })
-      if (!this.current(context)) return
-      const sendable =
-        remaining.uncertain.length +
-        remaining.sendable +
-        categoryWork.sendable.length +
-        categoryWork.uncertain.length
-      // A large first upload drains in short, bounded passes; the count checkpoint waits for the end.
-      if (
-        !sendable &&
-        (await this.refreshCheckpoint(context, transport, signal))
-      )
-        delay = 20
-      // C22: a pass with nothing sendable left counts as synced; dependency-waiting work does not block it.
-      if (!sendable) {
-        const view = await context.worker.call('markSynced', {
-          accountId: context.ownerId,
-          at: Date.now(),
-        })
-        if (!this.current(context)) return
-        this.options.onView(view, context.generation)
-      }
-      this.options.onStatus('idle', context.generation)
-      this.failures = 0
-      // A receipt can change the merge base (adopt, revert); re-derive on a quick follow-up pass.
-      if (sendable || this.sentCategories) delay = 20
+      await this.syncPass(context, signal, outcome)
     } catch (error) {
       this.failedPass(context, error)
     } finally {
       this.runPromise = null
       finished()
-      this.finishPass(delay)
+      this.finishPass(outcome.delay)
     }
+  }
+
+  /**
+   * One authorized pass: category recovery/refresh, bounded batches, then the settle checkpoint.
+   * Returns early (leaving the idle delay) whenever the account context is replaced.
+   * @param outcome - Receives the delay before the next pass.
+   * @example await this.syncPass(context, signal, outcome)
+   */
+  private async syncPass(
+    context: SyncAccountContext,
+    signal: AbortSignal,
+    outcome: PassOutcome,
+  ): Promise<void> {
+    const transport = await this.authorizedTransport(context)
+    if (!transport) return
+    if (!(await this.recoverOrRefreshCategories(context, transport, signal)))
+      return
+    await this.drainBatches(context, transport, signal)
+    if (!this.current(context)) return
+    const sendable = await this.countSendable(context)
+    if (sendable === null) return
+    await this.settlePass(context, transport, signal, sendable, outcome)
+  }
+
+  /**
+   * EA4: uncertain category operations are recovered from receipts before any category refresh (C19).
+   * @returns False when the pass must stop (context replaced or refresh abandoned).
+   * @example if (!(await this.recoverOrRefreshCategories(context, transport, signal))) return
+   */
+  private async recoverOrRefreshCategories(
+    context: SyncAccountContext,
+    transport: CompletionSyncTransport,
+    signal: AbortSignal,
+  ): Promise<boolean> {
+    const uncertain = await this.recoverCategoryReceipts(
+      context,
+      transport,
+      signal,
+    )
+    if (!this.current(context)) return false
+    return (
+      uncertain || (await this.refreshCategories(context, transport, signal))
+    )
+  }
+
+  /**
+   * Sends category batches first (dependents become sendable as receipts add server ids), then
+   * a bounded number of completion batches so an offline backlog cannot monopolize the actor.
+   * @example await this.drainBatches(context, transport, signal)
+   */
+  private async drainBatches(
+    context: SyncAccountContext,
+    transport: CompletionSyncTransport,
+    signal: AbortSignal,
+  ): Promise<void> {
+    this.sentCategories = false
+    for (let batch = 0; batch < 8 && this.current(context); batch++) {
+      if (!(await this.sendCategoryBatch(context, transport, signal))) break
+    }
+    for (
+      let batch = 0;
+      batch < COMPLETION_BATCHES_PER_PASS && this.current(context);
+      batch++
+    ) {
+      if (!(await this.sendBatch(context, transport, signal))) break
+    }
+  }
+
+  /**
+   * Counts the work still sendable or uncertain across completions and categories.
+   * @returns The count, or null when the account context changed while counting.
+   * @example const sendable = await this.countSendable(context)
+   */
+  private async countSendable(
+    context: SyncAccountContext,
+  ): Promise<number | null> {
+    const remaining = await context.worker.call('pending', { limit: 1 })
+    const categoryWork = await context.worker.call('categoryPending', {
+      limit: 1,
+    })
+    if (!this.current(context)) return null
+    return (
+      remaining.uncertain.length +
+      remaining.sendable +
+      categoryWork.sendable.length +
+      categoryWork.uncertain.length
+    )
+  }
+
+  /**
+   * Finishes a pass: count checkpoint, "synced" mark when nothing is sendable, status and delay.
+   * @param sendable - Result of {@link SyncLoop.countSendable}.
+   * @param outcome - Receives a short follow-up delay when more work may remain.
+   * @example await this.settlePass(context, transport, signal, 0, outcome)
+   */
+  private async settlePass(
+    context: SyncAccountContext,
+    transport: CompletionSyncTransport,
+    signal: AbortSignal,
+    sendable: number,
+    outcome: PassOutcome,
+  ): Promise<void> {
+    // A large first upload drains in short, bounded passes; the count checkpoint waits for the end.
+    if (!sendable && (await this.refreshCheckpoint(context, transport, signal)))
+      outcome.delay = 20
+    // C22: a pass with nothing sendable left counts as synced; dependency-waiting work does not block it.
+    if (!sendable) {
+      const view = await context.worker.call('markSynced', {
+        accountId: context.ownerId,
+        at: Date.now(),
+      })
+      if (!this.current(context)) return
+      this.options.onView(view, context.generation)
+    }
+    this.options.onStatus('idle', context.generation)
+    this.failures = 0
+    // A receipt can change the merge base (adopt, revert); re-derive on a quick follow-up pass.
+    if (sendable || this.sentCategories) outcome.delay = 20
   }
 
   /** Acquires a short-lived capability without making local editor availability depend on it.
@@ -546,7 +614,7 @@ export class SyncLoop {
   }
 
   /** Schedules a coalesced next pass with bounded backoff, respecting shutdown.
-   * @example this.finishPass(delay)
+   * @example this.finishPass(outcome.delay)
    */
   private finishPass(delay: number): void {
     this.running = false

@@ -713,6 +713,24 @@ export class WorkspaceService {
     })
   }
 
+  /**
+   * Durably applies a category-outbox edit only while the workspace is still bound to the account.
+   * A stale account (signed out or switched meanwhile) leaves the file untouched.
+   * @example await this.updateBoundAccount(accountId, (state) => parkOperations(state, ids))
+   */
+  private async updateBoundAccount(
+    accountId: string,
+    edit: (state: OfflineWorkspace) => void,
+  ): Promise<OfflineWorkspace> {
+    return this.file.update((current) => {
+      if (current.binding?.accountId !== accountId) return current
+      const state = structuredClone(current)
+      edit(state)
+      state.revision++
+      return state
+    })
+  }
+
   /** Counts an unanswered receipt lookup for uncertain operations (EA4).
    * @example await service.noteCategoryQuery(accountId, ids)
    */
@@ -720,13 +738,9 @@ export class WorkspaceService {
     accountId: string,
     operationIds: string[],
   ): Promise<OfflineWorkspace> {
-    return this.file.update((current) => {
-      if (current.binding?.accountId !== accountId) return current
-      const state = structuredClone(current)
-      noteReceiptQuery(state, operationIds)
-      state.revision++
-      return state
-    })
+    return this.updateBoundAccount(accountId, (state) =>
+      noteReceiptQuery(state, operationIds),
+    )
   }
 
   /** Parks operations a 4xx rejected on their own (E3).
@@ -736,13 +750,9 @@ export class WorkspaceService {
     accountId: string,
     operationIds: string[],
   ): Promise<OfflineWorkspace> {
-    return this.file.update((current) => {
-      if (current.binding?.accountId !== accountId) return current
-      const state = structuredClone(current)
-      parkOperations(state, operationIds)
-      state.revision++
-      return state
-    })
+    return this.updateBoundAccount(accountId, (state) =>
+      parkOperations(state, operationIds),
+    )
   }
 
   /** Reads the Sync details page data (rows, History, C34 summary, v1 backups).

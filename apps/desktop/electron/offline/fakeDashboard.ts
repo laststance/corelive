@@ -12,7 +12,9 @@ import type {
   SyncOutcome,
 } from '@corelive/desktop-contract/category-sync'
 import {
+  deleteRefusalBody,
   normalizeCategoryName,
+  reparentRefusalResult,
   validateCategoryAction,
   validateCategorySet,
 } from '@corelive/desktop-contract/category-validator'
@@ -157,10 +159,7 @@ export function createFakeDashboard(initial: EditorCategory[]) {
           })
           if (!verdict.ok)
             return outcome(id, {
-              result:
-                verdict.reason === 'name-taken-local'
-                  ? 'name-taken'
-                  : 'invalid-parent',
+              result: reparentRefusalResult(verdict.reason),
             })
           target.parentId = operation.parentId
         }
@@ -179,15 +178,7 @@ export function createFakeDashboard(initial: EditorCategory[]) {
           id: target.id,
           destinationId: operation.destinationId,
         })
-        if (!verdict.ok) {
-          if (verdict.reason === 'name-taken-local' && verdict.childName)
-            return outcome(id, {
-              result: 'delete-blocked',
-              reason: 'child-name-taken',
-              childName: verdict.childName,
-            })
-          return outcome(id, { result: 'invalid-parent' })
-        }
+        if (!verdict.ok) return outcome(id, deleteRefusalBody(verdict))
         webDelete(target.id, operation.destinationId)
         return outcome(id, { result: 'applied', serverId: target.id })
       }

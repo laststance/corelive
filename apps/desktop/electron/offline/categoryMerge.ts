@@ -471,9 +471,42 @@ function deriveOperations(
   context: CategoryContext,
 ): void {
   const live = liveCategories(state)
-  const bound = (id: string): boolean =>
-    binding.serverCategoryIds[id] !== undefined
-  const pendingDeleted = new Set(
+  const pendingDeleted = derivePendingDeleted(state, binding, serverById)
+  const operationId = (): string => context.nextId()
+
+  // Order of id allocation is part of the contract: creates, field edits, deletes, then renames.
+  const creates = deriveCreates(live, binding, operationId)
+  const { renames, recolors, reparents } = deriveFieldEdits(
+    live,
+    binding,
+    serverById,
+    pendingDeleted,
+    operationId,
+  )
+  const deletes = deriveDeletes(state, binding, pendingDeleted, operationId)
+
+  const derived = [
+    ...creates,
+    ...orderRenames(renames, operationId),
+    ...recolors,
+    ...reparents,
+    ...deletes,
+  ]
+  replaceQueuedOperations(state, derived, operationId)
+}
+
+/**
+ * Finds bound categories that were deleted locally while the server still has them.
+ *
+ * @returns Local ids whose server category still exists but whose local row is gone.
+ * @example derivePendingDeleted(state, binding, serverById) // => Set { 'local-b' }
+ */
+function derivePendingDeleted(
+  state: OfflineWorkspace,
+  binding: AccountBinding,
+  serverById: Map<number, EditorCategory>,
+): Set<string> {
+  return new Set(
     Object.entries(binding.serverCategoryIds)
       .filter(
         ([localId, serverId]) =>
@@ -482,17 +515,25 @@ function deriveOperations(
       )
       .map(([localId]) => localId),
   )
+}
 
+/**
+ * Derives `create` operations for locally-created categories, roots before children so a parent
+ * create precedes its dependents.
+ *
+ * @returns Create operations; a category whose unchanged create is suppressed by a marker is skipped.
+ * @example deriveCreates(live, binding, nextId)
+ */
+function deriveCreates(
+  live: LocalCategory[],
+  binding: AccountBinding,
+  operationId: () => string,
+): CategoryOperation[] {
   const creates: CategoryOperation[] = []
-  const renames: RenameCandidate[] = []
-  const recolors: CategoryOperation[] = []
-  const reparents: CategoryOperation[] = []
-  const deletes: CategoryOperation[] = []
-  const operationId = (): string => context.nextId()
-
-  // Locally-created categories: roots before children so a parent create precedes its dependents.
   const unbound = live.filter(
-    (category) => !bound(category.id) && !category.isDefault,
+    (category) =>
+      binding.serverCategoryIds[category.id] === undefined &&
+      !category.isDefault,
   )
   for (const category of [
     ...unbound.filter((entry) => entry.parentId === null),
@@ -513,33 +554,77 @@ function deriveOperations(
       isDefault: false,
     })
   }
+  return creates
+}
 
+/**
+ * Whether a differing field must not produce an operation: a marker already declined this exact
+ * change, or the server promotes a locally deleted parent's children itself.
+ *
+ * @example isFieldEditSuppressed(binding, category, 'name', 'B', 'A', pendingDeleted)
+ */
+function isFieldEditSuppressed(
+  binding: AccountBinding,
+  category: LocalCategory,
+  field: (typeof CATEGORY_FIELDS)[number],
+  localValue: string | null,
+  baseValue: string | null,
+  pendingDeleted: Set<string>,
+): boolean {
+  const marker = getMarker(binding, category.id, field)
+  if (
+    marker &&
+    SUPPRESSING_KINDS.has(marker.kind) &&
+    marker.localValue === localValue &&
+    marker.serverValue === baseValue
+  )
+    return true
+  // The server promotes a locally deleted parent's children itself; no reparent is needed.
+  return (
+    field === 'parentLocalId' &&
+    localValue === null &&
+    baseValue !== null &&
+    pendingDeleted.has(baseValue)
+  )
+}
+
+/**
+ * Derives rename candidates, recolors and reparents from bound categories that differ from `base`.
+ *
+ * @returns Renames (ordered later by {@link orderRenames}), recolor and reparent operations.
+ * @example deriveFieldEdits(live, binding, serverById, pendingDeleted, nextId)
+ */
+function deriveFieldEdits(
+  live: LocalCategory[],
+  binding: AccountBinding,
+  serverById: Map<number, EditorCategory>,
+  pendingDeleted: Set<string>,
+  operationId: () => string,
+): {
+  renames: RenameCandidate[]
+  recolors: CategoryOperation[]
+  reparents: CategoryOperation[]
+} {
+  const renames: RenameCandidate[] = []
+  const recolors: CategoryOperation[] = []
+  const reparents: CategoryOperation[] = []
   for (const category of live) {
     const base = binding.base[category.id]
-    if (
-      !bound(category.id) ||
-      !base ||
-      !serverById.has(binding.serverCategoryIds[category.id]!)
-    )
-      continue
+    const serverId = binding.serverCategoryIds[category.id]
+    if (serverId === undefined || !base || !serverById.has(serverId)) continue
     for (const field of CATEGORY_FIELDS) {
       const localValue = fieldValue(category, field)
       const baseValue = baseFieldValue(base, field)
       if (localValue === baseValue) continue
-      const marker = getMarker(binding, category.id, field)
       if (
-        marker &&
-        SUPPRESSING_KINDS.has(marker.kind) &&
-        marker.localValue === localValue &&
-        marker.serverValue === baseValue
-      )
-        continue
-      // The server promotes a locally deleted parent's children itself; no reparent is needed.
-      if (
-        field === 'parentLocalId' &&
-        localValue === null &&
-        baseValue !== null &&
-        pendingDeleted.has(baseValue)
+        isFieldEditSuppressed(
+          binding,
+          category,
+          field,
+          localValue,
+          baseValue,
+          pendingDeleted,
+        )
       )
         continue
       if (field === 'name' && localValue !== null && baseValue !== null)
@@ -567,7 +652,22 @@ function deriveOperations(
         })
     }
   }
+  return { renames, recolors, reparents }
+}
 
+/**
+ * Derives `delete` operations for locally deleted categories that resolve to a live destination.
+ *
+ * @returns Delete operations; an unchanged delete suppressed by a marker is skipped.
+ * @example deriveDeletes(state, binding, pendingDeleted, nextId)
+ */
+function deriveDeletes(
+  state: OfflineWorkspace,
+  binding: AccountBinding,
+  pendingDeleted: Set<string>,
+  operationId: () => string,
+): CategoryOperation[] {
+  const deletes: CategoryOperation[] = []
   for (const localId of pendingDeleted) {
     const destination = resolveMove(state.categoryMoves, localId)
     if (!destination.ok || destination.id === localId) continue
@@ -583,15 +683,7 @@ function deriveOperations(
       destinationLocalId: destination.id,
     })
   }
-
-  const derived = [
-    ...creates,
-    ...orderRenames(renames, operationId),
-    ...recolors,
-    ...reparents,
-    ...deletes,
-  ]
-  replaceQueuedOperations(state, derived, operationId)
+  return deletes
 }
 
 /**

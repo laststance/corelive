@@ -22,7 +22,9 @@ import {
   CompletionSyncOperationSchema,
   DraftRowSchema,
   DraftSchema,
+  OfflineCompletionV1Schema,
   OfflinePreferencesSchema,
+  requireReceiptEvidence,
   SyncFailureSchema,
   type OfflineDraft,
   type OfflinePreferences,
@@ -84,18 +86,7 @@ export const LocalCompletionReceiptSchema = z
     projection: LocalCompletionProjectionSchema.nullable(),
     reason: SyncFailureSchema.optional(),
   })
-  .superRefine((receipt, context) => {
-    if (receipt.status === 'applied' && !receipt.projection)
-      context.addIssue({
-        code: 'custom',
-        message: 'Applied receipt requires its projection',
-      })
-    if (receipt.status === 'rejected' && !receipt.reason)
-      context.addIssue({
-        code: 'custom',
-        message: 'Rejected receipt requires a reason',
-      })
-  })
+  .superRefine(requireReceiptEvidence)
 
 /** Completion operation as the editor queues it: local category id. */
 export const LocalCompletionOperationSchema =
@@ -103,25 +94,10 @@ export const LocalCompletionOperationSchema =
     categoryId: true,
   }).extend({ categoryId: identity })
 
-export const OfflineCompletionSchema = z.object({
-  id: identity,
+/** The v1 completion row with local category ids; every other field is unchanged. */
+export const OfflineCompletionSchema = OfflineCompletionV1Schema.extend({
   categoryId: identity,
   originalCategoryId: identity,
-  title: z.string().min(1).max(255),
-  rawText: z.string(),
-  lineId: identity,
-  lineIndex: z.number().int().nonnegative(),
-  previousRowId: identity.optional(),
-  nextRowId: identity.optional(),
-  completedAt: timestamp,
-  originalCompletedAt: timestamp,
-  timezone: z.string(),
-  revision,
-  undoUntil: timestamp,
-  cancelled: z.boolean(),
-  restored: z.boolean(),
-  clearAfter: timestamp.nullable(),
-  cleared: z.boolean(),
   remote: LocalCompletionProjectionSchema.nullable(),
 })
 export type OfflineCompletion = z.infer<typeof OfflineCompletionSchema>

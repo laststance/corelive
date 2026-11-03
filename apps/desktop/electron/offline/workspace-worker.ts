@@ -98,8 +98,35 @@ const pageSchema = z.object({
   limit: z.number().int().min(1).max(100),
 })
 
+/** Narrows {@link WorkspaceWorkerRequest} to the requests of the given types. */
+type RequestOf<Type extends WorkspaceWorkerRequest['type']> = Extract<
+  WorkspaceWorkerRequest,
+  { type: Type }
+>
+
+type CategorySyncType =
+  | 'reconcile'
+  | 'categoryPending'
+  | 'markCategorySent'
+  | 'categoryReceipts'
+  | 'noteCategoryQuery'
+  | 'parkCategory'
+type ReadType =
+  | 'draft'
+  | 'pendingTotal'
+  | 'syncDetails'
+  | 'binding'
+  | 'localCategory'
+  | 'pending'
+  | 'details'
+  | 'tracked'
+type HistoryType =
+  'recoveryCopies' | 'undoHistory' | 'export' | 'previewRecovery' | 'recover'
+
 /** Executes trusted main-process requests in the same process's dedicated storage thread.
  * Domain commands and persisted inputs still cross runtime validation boundaries.
+ * Lifecycle, command and sync-receipt requests are handled here; the rest are delegated by
+ * family to keep each switch small.
  * @example const result = await dispatch(request)
  */
 async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
@@ -120,8 +147,6 @@ async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
       scheduleArchive()
       return result
     }
-    case 'draft':
-      return readDraft(request.input.categoryId)
     case 'markSentBatch': {
       const sent = await service.markSentBatch(
         request.input.accountId,
@@ -131,8 +156,6 @@ async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
       if (service.needsArchiveRoll()) scheduleArchive(true)
       return sent
     }
-    case 'pendingTotal':
-      return service.pendingTotal()
     case 'receipts':
       return view(
         await service.acceptReceipts(
@@ -140,6 +163,30 @@ async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
           request.input.receipts,
         ),
       )
+    case 'markSynced':
+      return view(
+        await service.markSynced(request.input.accountId, request.input.at),
+      )
+    case 'checkpoint': {
+      const state = await service.checkpoint(
+        request.input.accountId,
+        request.input.expectedRevision,
+        request.input.checkpoint,
+      )
+      return view(state)
+    }
+    default:
+      return dispatchCategorySync(request)
+  }
+}
+
+/** Category reconcile and outbox requests used by the sync loop (EA4, C19).
+ * @example const result = await dispatchCategorySync(request)
+ */
+async function dispatchCategorySync(
+  request: RequestOf<CategorySyncType | ReadType | HistoryType>,
+): Promise<unknown> {
+  switch (request.type) {
     case 'reconcile':
       return view(await service.reconcileCategories(request.input))
     case 'categoryPending':
@@ -170,12 +217,24 @@ async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
           request.input.operationIds,
         ),
       )
+    default:
+      return dispatchRead(request)
+  }
+}
+
+/** Side-effect-free reads of drafts, bindings, pending work and details.
+ * @example const result = await dispatchRead(request)
+ */
+async function dispatchRead(
+  request: RequestOf<ReadType | HistoryType>,
+): Promise<unknown> {
+  switch (request.type) {
+    case 'draft':
+      return readDraft(request.input.categoryId)
+    case 'pendingTotal':
+      return service.pendingTotal()
     case 'syncDetails':
       return service.syncDetails()
-    case 'markSynced':
-      return view(
-        await service.markSynced(request.input.accountId, request.input.at),
-      )
     case 'binding': {
       const { binding } = await file.read()
       return binding
@@ -193,6 +252,28 @@ async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
       )
       return entry?.[0] ?? null
     }
+    case 'pending':
+      return service.pendingWork(
+        z.number().int().min(1).max(100).parse(request.input.limit),
+      )
+    case 'details':
+      return readDetails(request.input)
+    case 'tracked': {
+      const state = await file.read()
+      return checkpointIdentities(state, Date.now())
+    }
+    default:
+      return dispatchHistory(request)
+  }
+}
+
+/** Paged history, export and recovery requests.
+ * @example const result = await dispatchHistory(request)
+ */
+async function dispatchHistory(
+  request: RequestOf<HistoryType>,
+): Promise<unknown> {
+  switch (request.type) {
     case 'recoveryCopies': {
       const { offset, limit } = pageSchema.parse(request.input)
       const state = await file.read()
@@ -204,10 +285,6 @@ async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
         copies: copies.slice(offset, offset + limit),
       }
     }
-    case 'pending':
-      return service.pendingWork(
-        z.number().int().min(1).max(100).parse(request.input.limit),
-      )
     case 'undoHistory': {
       const { offset, limit } = pageSchema.parse(request.input)
       const completions = eligibleUndo(await file.read())
@@ -215,20 +292,6 @@ async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
         total: completions.length,
         completions: completions.slice(offset, offset + limit),
       }
-    }
-    case 'details':
-      return readDetails(request.input)
-    case 'tracked': {
-      const state = await file.read()
-      return checkpointIdentities(state, Date.now())
-    }
-    case 'checkpoint': {
-      const state = await service.checkpoint(
-        request.input.accountId,
-        request.input.expectedRevision,
-        request.input.checkpoint,
-      )
-      return view(state)
     }
     case 'export':
       return exportWriting()

@@ -67,6 +67,39 @@ export const SyncFailureSchema = z.enum([
   'conflict',
   'dependency',
 ])
+/**
+ * Rejects a completion receipt that lacks the evidence its status promises.
+ *
+ * Shared by the dashboard-id receipt here and the local-id receipt in `offline-workspace-v2`,
+ * so both reject the same malformed shapes.
+ *
+ * @param receipt - The parsed receipt candidate.
+ * @param context - The Zod refinement context that collects the issues.
+ * @example
+ * ```ts
+ * schema.superRefine(requireReceiptEvidence)
+ * ```
+ */
+export function requireReceiptEvidence(
+  receipt: {
+    status: 'applied' | 'rejected'
+    projection: unknown
+    reason?: unknown
+  },
+  context: z.RefinementCtx,
+): void {
+  if (receipt.status === 'applied' && !receipt.projection)
+    context.addIssue({
+      code: 'custom',
+      message: 'Applied receipt requires its projection',
+    })
+  if (receipt.status === 'rejected' && !receipt.reason)
+    context.addIssue({
+      code: 'custom',
+      message: 'Rejected receipt requires a reason',
+    })
+}
+
 export const CompletionSyncReceiptSchema = z
   .object({
     operationId: identity,
@@ -77,16 +110,7 @@ export const CompletionSyncReceiptSchema = z
     reason: SyncFailureSchema.optional(),
   })
   .superRefine((receipt, context) => {
-    if (receipt.status === 'applied' && !receipt.projection)
-      context.addIssue({
-        code: 'custom',
-        message: 'Applied receipt requires its projection',
-      })
-    if (receipt.status === 'rejected' && !receipt.reason)
-      context.addIssue({
-        code: 'custom',
-        message: 'Rejected receipt requires a reason',
-      })
+    requireReceiptEvidence(receipt, context)
     if (
       receipt.projection &&
       receipt.projection.completionId !== receipt.completionId
