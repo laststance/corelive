@@ -9,6 +9,7 @@ import {
 } from '@corelive/desktop-contract/settings'
 import { useCycleEffect } from '@corelive/live-editor/hooks/use-cycle-effect'
 import { DEFAULT_THEME_PREFERENCE } from '@corelive/live-editor/themes'
+import { Button } from '@corelive/live-editor/ui/button'
 import {
   createContext,
   useContext,
@@ -92,6 +93,10 @@ export function SettingsProvider({
   const [snapshot, setSnapshot] = useState<SettingsSnapshot | null>(null)
   const [overlay, setOverlay] = useState<PendingChange>(EMPTY_CHANGE)
   const [saveFailed, setSaveFailed] = useState(false)
+  // True only while the first read has failed; any later successful read clears it.
+  const [loadFailed, setLoadFailed] = useState(false)
+  // Bumped by "Try again" to re-run the initial read.
+  const [attempt, setAttempt] = useState(0)
   const [writer] = useState(
     () =>
       new PreferenceWriter(api, {
@@ -105,7 +110,11 @@ export function SettingsProvider({
   useCycleEffect(() => {
     let alive = true
     const read = (): void => {
-      void writer.refresh().catch(() => undefined)
+      writer.refresh().then(
+        () => alive && setLoadFailed(false),
+        // Kept as state so a failed first read shows a notice instead of a blank window.
+        () => alive && setLoadFailed(true),
+      )
     }
     read()
     const unsubscribe = api.onChanged(() => alive && read())
@@ -113,7 +122,7 @@ export function SettingsProvider({
       alive = false
       unsubscribe()
     }
-  }, [api, writer])
+  }, [api, writer, attempt])
 
   // Unacknowledged edits sit on top of the stored value so a slider never snaps back mid-drag.
   const base = snapshot?.phase === 'ready' ? snapshot.preferences : null
@@ -123,7 +132,23 @@ export function SettingsProvider({
   )
   const theme = overlay.theme ?? base?.theme ?? DEFAULT_THEME_PREFERENCE
 
-  if (!snapshot) return null
+  if (!snapshot) {
+    // Before the first snapshot: blank while loading, a calm notice with a retry if the read failed.
+    return loadFailed ? (
+      <div
+        role="status"
+        className="mx-auto max-w-sm space-y-3 p-8 text-center text-sm"
+      >
+        <p>Settings didn&apos;t open just yet. Your writing is safe.</p>
+        <Button
+          variant="outline"
+          onClick={() => setAttempt((count) => count + 1)}
+        >
+          Try again
+        </Button>
+      </div>
+    ) : null
+  }
   const value: SettingsContextValue = {
     api,
     snapshot,

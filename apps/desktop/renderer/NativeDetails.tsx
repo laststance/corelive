@@ -753,8 +753,9 @@ function DetailsConnection({
       {' '}
       {main.sync.state === 'waiting' && (
         <p>
-          Connect to manage categories. You can still move writing to another
-          saved category below.
+          Categories work offline. Create or change them in the editor picker or
+          in Settings &gt; Categories, or move this writing to another saved
+          category below.
         </p>
       )}
       {main.sync.state === 'sign-in-to-sync' && (
@@ -868,7 +869,9 @@ function RepairFields({
             ))}
           </select>
           {!destinations.length && (
-            <span>Connect to create another category first.</span>
+            <span>
+              Create another category first, in Settings &gt; Categories.
+            </span>
           )}
         </label>
       )}

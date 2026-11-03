@@ -406,11 +406,14 @@ async function main(): Promise<void> {
     } else if (argument === '--completions') {
       sizes = String(argv[++index])
         .split(',')
-        .map(Number)
-        .filter((size) => Number.isInteger(size) && size >= 0)
-      if (sizes.length === 0) {
+        .map((part) => (/^[1-9]\d*$/.test(part.trim()) ? Number(part) : NaN))
+      // Reject the whole argument when any element is not a positive integer.
+      if (
+        sizes.length === 0 ||
+        sizes.some((size) => !Number.isSafeInteger(size))
+      ) {
         process.stderr.write(
-          `${COMMAND}: --completions needs a comma-separated list of counts (ARGUMENT_UNKNOWN). Fix: pnpm ${COMMAND} --help\n`,
+          `${COMMAND}: --completions needs a comma-separated list of positive integers (ARGUMENT_UNKNOWN). Fix: pnpm ${COMMAND} --help\n`,
         )
         process.exit(2)
       }

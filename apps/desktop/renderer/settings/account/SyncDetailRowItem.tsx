@@ -89,7 +89,14 @@ export function SyncDetailRowItem({ row, onAction }: SyncDetailRowItemProps) {
   ): Promise<void> => {
     setStatus('applying')
     setError(null)
-    const outcome = await onAction(row, action, name)
+    let outcome: Awaited<ReturnType<typeof onAction>>
+    try {
+      outcome = await onAction(row, action, name)
+    } catch {
+      // A rejected action (IPC failure) must not leave the row stuck on "Applying…".
+      setStatus('failed')
+      return
+    }
     if (outcome.ok) {
       setStatus('idle')
       setRenaming(false)

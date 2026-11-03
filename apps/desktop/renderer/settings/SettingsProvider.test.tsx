@@ -139,3 +139,35 @@ test('picks up a main-side change notification by re-reading the snapshot', asyn
     expect(screen.getByLabelText('ember')).toHaveTextContent('true'),
   )
 })
+
+// Regression: /ship CodeRabbit review on PR #222 2026-11-03 — a rejected first read left Settings blank with no message or retry
+test('shows a calm notice with Try again when the first read fails, then opens Settings once the retry succeeds', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  const fake = createFakeSettingsApi()
+  const working = await fake.api.snapshot()
+  fake.api.snapshot.mockRejectedValueOnce(new Error('ipc down'))
+  await act(async () => {
+    render(
+      <SettingsProvider api={fake.api}>
+        <p>Settings content</p>
+      </SettingsProvider>,
+    )
+  })
+
+  // Assert (failed first read)
+  expect(
+    await screen.findByText(
+      "Settings didn't open just yet. Your writing is safe.",
+    ),
+  ).toBeVisible()
+  expect(screen.queryByText('Settings content')).not.toBeInTheDocument()
+
+  // Act
+  fake.api.snapshot.mockResolvedValue(working)
+  await user.click(screen.getByRole('button', { name: 'Try again' }))
+
+  // Assert
+  expect(await screen.findByText('Settings content')).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
+})

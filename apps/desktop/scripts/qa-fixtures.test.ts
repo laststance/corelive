@@ -149,6 +149,19 @@ describe('qa:settings CLI contract', () => {
     expect(result.status).toBe(2)
     expect(result.stderr).toContain('(ARGUMENT_UNKNOWN)')
   })
+
+  // Regression: /ship CodeRabbit review on PR #222 2026-11-03 — `--screenshots=` (empty inline value) resolved to the caller's directory instead of reporting a missing value
+  test('an empty inline --screenshots value exits 2 with ARGUMENT_UNKNOWN instead of writing into the current directory', () => {
+    // Arrange + Act
+    const result = runDesktopScript('scripts/qa-settings.ts', [
+      '--screenshots=',
+    ])
+
+    // Assert
+    expect(result.status).toBe(2)
+    expect(result.stderr).toContain('"--screenshots" needs a value')
+    expect(result.stderr).toContain('(ARGUMENT_UNKNOWN)')
+  })
 })
 
 describe.skipIf(!existsSync(builtSettings))(
@@ -165,7 +178,16 @@ describe.skipIf(!existsSync(builtSettings))(
         { cwd: desktop, stdio: ['ignore', 'pipe', 'pipe'] },
       )
       const line = await new Promise<string>((resolveLine, reject) => {
-        child.stdout.once('data', (chunk) => resolveLine(String(chunk)))
+        // A chunk may split a line or carry several; parse only the first complete line.
+        let buffered = ''
+        const onData = (chunk: Buffer): void => {
+          buffered += String(chunk)
+          const newline = buffered.indexOf('\n')
+          if (newline === -1) return
+          child.stdout.off('data', onData)
+          resolveLine(buffered.slice(0, newline))
+        }
+        child.stdout.on('data', onData)
         child.once('exit', () => reject(new Error('fixture exited early')))
       })
       return {
@@ -423,6 +445,22 @@ describe('benchmark:offline', () => {
       /^benchmark:offline: keep-commit p95 attached [\d.]+ ms, local-only [\d.]+ ms > 0 ms at 20 completions \(BENCH_GATE_FAILED\)\. Fix: rerun once on an idle Mac;/,
     )
   }, 120_000)
+
+  // Regression: /ship CodeRabbit review on PR #222 2026-11-03 — invalid --completions elements were silently dropped (`10000,abc` ran as `[10000]`, `20,` added size 0)
+  test.each(['10000,abc', '20,', '0', '-5', '1.5'])(
+    'rejects --completions %s with exit 2 and ARGUMENT_UNKNOWN',
+    (value) => {
+      // Arrange + Act
+      const result = runDesktopScript(
+        'scripts/benchmark-offline-workspace.ts',
+        ['--completions', value],
+      )
+
+      // Assert
+      expect(result.status).toBe(2)
+      expect(result.stderr).toContain('(ARGUMENT_UNKNOWN)')
+    },
+  )
 
   test('--help exits 0 and --json prints the contract object', () => {
     // Arrange + Act

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import '@testing-library/jest-dom/vitest'
 import type { AccountStatus } from '@corelive/desktop-contract/offline-account'
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useRef } from 'react'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
@@ -199,10 +199,14 @@ test('Connect this Mac sends the connect request, then shows progress and the on
   await waitFor(() =>
     expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalled(),
   )
+  const reloadsBefore = fake.api.snapshot.mock.calls.length
   fake.setAccount({ firstUpload: null })
-  expect(
-    await screen.findByText('12 keeps are on your dashboard'),
-  ).toBeVisible()
+  // Wait for the reload that carries `firstUpload: null`, so the next assertion cannot match stale DOM.
+  await waitFor(() =>
+    expect(fake.api.snapshot.mock.calls.length).toBeGreaterThan(reloadsBefore),
+  )
+  await act(async () => undefined)
+  expect(screen.getByText('12 keeps are on your dashboard')).toBeVisible()
 })
 
 test('Open dashboard asks main to open it without supplying an address', async () => {

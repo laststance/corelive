@@ -663,7 +663,9 @@ export class WorkspaceService {
    * @example const { uncertain, sendable } = await service.categoryPending(16)
    */
   async categoryPending(limit: number) {
-    return categoryWork(await this.file.read(), limit)
+    // A shared no-op read avoids cloning the whole workspace; callers only serialize the entries.
+    const state = await this.file.update((current) => current, { shared: true })
+    return categoryWork(state, limit)
   }
 
   /**
@@ -759,7 +761,9 @@ export class WorkspaceService {
    * @example const details = await service.syncDetails()
    */
   async syncDetails() {
-    return buildSyncDetails(await this.file.read())
+    // A shared no-op read avoids cloning the whole workspace; the view is serialized across the worker boundary.
+    const state = await this.file.update((current) => current, { shared: true })
+    return buildSyncDetails(state)
   }
 
   /**

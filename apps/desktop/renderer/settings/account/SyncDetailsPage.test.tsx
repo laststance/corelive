@@ -392,6 +392,25 @@ test('a failed action shows "Couldn\'t apply. Try again." on the row and keeps i
   expect(screen.getByRole('button', { name: 'Use "red"' })).toBeEnabled()
 })
 
+// Regression: /ship CodeRabbit review on PR #222 2026-11-03 — a rejected action left the row on "Applying…" with its buttons disabled forever
+test('a rejected action returns the row to "Couldn\'t apply. Try again." with its actions enabled', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  const { fake } = await renderWithSettings(
+    <SyncDetailsPage onBack={vi.fn()} />,
+    { syncDetails: withRows([CONFLICT]) },
+  )
+  fake.api.categories.command.mockRejectedValue(new Error('ipc down'))
+
+  // Act
+  await user.click(await screen.findByRole('button', { name: 'Use "red"' }))
+
+  // Assert
+  expect(await screen.findByText("Couldn't apply. Try again.")).toBeVisible()
+  expect(screen.queryByText('Applying…')).toBeNull()
+  expect(screen.getByRole('button', { name: 'Use "red"' })).toBeEnabled()
+})
+
 test('resolving a row moves focus to the next row, and to the Needs a look heading after the last one', async () => {
   // Arrange
   const user = userEvent.setup()

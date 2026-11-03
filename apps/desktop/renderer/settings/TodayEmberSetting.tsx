@@ -23,7 +23,7 @@ export function TodayEmberSetting() {
           id="today-ember-description"
           className="type-small leading-5 text-muted-foreground"
         >
-          Show today's keeps and a warm glow above the LiveEditor.
+          Show today&apos;s keeps and a warm glow above the LiveEditor.
         </p>
       </div>
       <Switch

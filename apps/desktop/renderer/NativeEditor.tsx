@@ -260,6 +260,13 @@ function PreparedEditor({
         ? 'Account total · last confirmed'
         : undefined
 
+  // Migration placeholders are not selectable or editable (Settings > Categories hides them too);
+  // the active one stays so the trigger can still name it.
+  const pickerCategories = workspace.categories.filter(
+    (category) =>
+      !category.historical || category.id === workspace.selectedCategoryId,
+  )
+
   return (
     <SharedEditorSurface
       noteMaxLength={getDraftInputLimit(workspace.draft)}
@@ -271,7 +278,7 @@ function PreparedEditor({
       categoryCount={workspace.categories.length}
       categoryPicker={
         <SharedCategoryPicker
-          categories={workspace.categories}
+          categories={pickerCategories}
           activeCategoryId={workspace.selectedCategoryId}
           onCategoryValueChange={(value) => void select(value)}
           onCategoryCommand={async (command) => store.categoryCommand(command)}

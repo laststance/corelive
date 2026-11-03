@@ -51,6 +51,7 @@ function mountEditor(
   showStatus = true,
   theme = 'light',
   syncStatus: OfflineSyncStatus = LOCAL_ONLY_SYNC,
+  placeholderName?: string,
 ) {
   const shown = new Set<() => void>()
   const snapshot: OfflineEditorSnapshot = {
@@ -72,6 +73,21 @@ function mountEditor(
           historical: false,
           fieldRevisions: { name: 0, color: 0, parentLocalId: 0 },
         },
+        // A migration-created placeholder that Settings > Categories also hides.
+        ...(placeholderName
+          ? [
+              {
+                id: '00000000-0000-4000-8000-0000000000a2',
+                name: placeholderName,
+                color: 'blue' as const,
+                parentId: null,
+                isDefault: false,
+                removed: false,
+                historical: true,
+                fieldRevisions: { name: 0, color: 0, parentLocalId: 0 },
+              },
+            ]
+          : []),
       ],
       preferences: {
         revision: 0,
@@ -558,4 +574,51 @@ test('an attached Mac that is waiting reports its pending completion updates', a
   expect(screen.getByLabelText('Writing status')).toHaveTextContent(
     'Offline · 2 completion updates pending',
   )
+})
+
+// Regression: /ship CodeRabbit review on PR #222 2026-11-03 — migration "historical" placeholder categories were selectable and editable in the editor picker
+test('the category picker and Manage categories leave out migration placeholder categories', async () => {
+  // Arrange
+  mountEditor(
+    'ready',
+    false,
+    false,
+    true,
+    'light',
+    LOCAL_ONLY_SYNC,
+    'Old import',
+  )
+  fireEvent.click(
+    await screen.findByRole('combobox', { name: 'Writing category: General' }),
+  )
+
+  // Assert (selectable list)
+  expect(await screen.findByText('Manage categories…')).toBeVisible()
+  expect(screen.queryByText('Old import')).toBeNull()
+
+  // Act
+  fireEvent.click(screen.getByText('Manage categories…'))
+
+  // Assert (manage list)
+  expect(await screen.findByRole('button', { name: 'General' })).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Old import' })).toBeNull()
+})
+
+// Regression: /ship CodeRabbit review on PR #222 2026-11-03 — Details told an offline Mac to "Connect to manage categories" although categories work offline
+test('Details for a waiting Mac points to offline category management instead of asking to connect', async () => {
+  // Arrange
+  mountEditor('ready', false, false, true, 'light', {
+    state: 'waiting',
+    waitingCount: 2,
+    lastSyncedAt: null,
+    boundEmail: 'owner@example.com',
+  })
+  await screen.findByRole('textbox', { name: 'Write one thing' })
+
+  // Act
+  fireEvent.click(screen.getByRole('button', { name: 'Details' }))
+
+  // Assert
+  expect(await screen.findByText(/Categories work offline\./)).toBeVisible()
+  expect(screen.queryByText(/Connect to manage categories/)).toBeNull()
 })

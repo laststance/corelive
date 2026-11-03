@@ -89,7 +89,9 @@ export class TokenBroker {
     expectedAccountId: string | null,
     generation: number,
   ): Promise<BrokerOutcome> {
+    // Never join a sign-out challenge: its outcome is `signed-out`, not an identity answer.
     if (
+      this.pending?.request.action !== 'sign-out' &&
       this.pending?.request.expectedAccountId === expectedAccountId &&
       this.pending.request.generation === generation
     ) {

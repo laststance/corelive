@@ -90,7 +90,8 @@ export function parseFixtureArgs(
     const [flag, inline] = argument.split(/=(.*)/s, 2) as [string, string?]
     const value = (): string => {
       const next = inline ?? argv[++index]
-      if (next === undefined || next.startsWith('--'))
+      // An empty inline value (`--flag=`) counts as missing, like a bare trailing flag.
+      if (next === undefined || next === '' || next.startsWith('--'))
         throw new FixtureCliError(
           'ARGUMENT_UNKNOWN',
           `${command}: "${flag}" needs a value (ARGUMENT_UNKNOWN). ${hint}`,

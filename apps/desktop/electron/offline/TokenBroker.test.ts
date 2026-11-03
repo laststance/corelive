@@ -121,6 +121,30 @@ describe('Clerk session token broker boundary', () => {
     expect(await pending).toBe('revoked')
   })
 
+  // Regression: /ship CodeRabbit review on PR #222 2026-11-03 — an identity check during sign-out joined the revoke promise and received a sign-out result
+  test('an identity check during sign-out starts its own token challenge instead of joining the revoke', async () => {
+    // Arrange
+    const fixture = brokerFixture()
+    const revoking = fixture.broker.revoke(3, 1000)
+
+    // Act
+    const identity = fixture.broker.acquire(null, 3)
+    const challenge = fixture.request()
+    fixture.reply({
+      requestId: challenge.requestId,
+      generation: 3,
+      expectedAccountId: null,
+      status: 'ready',
+      accountId: 'account-a',
+      token: 'opaque-test-token',
+    })
+
+    // Assert
+    expect(challenge.action).toBeUndefined()
+    expect(await identity).toMatchObject({ status: 'ready' })
+    expect(await revoking).toBe('skipped')
+  })
+
   test('uses the existing session in a hidden sandboxed window with a credential-only preload', async () => {
     // Arrange
     const fixture = brokerFixture()
