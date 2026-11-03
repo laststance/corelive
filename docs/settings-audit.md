@@ -51,9 +51,9 @@ The desktop-only toggles, such as Today Ember, are not on the web.
 | Open dashboard            | Main opens the configured `serverUrl`; the renderer supplies no address  |
 | Sync details              | {@link syncDetails} rows and the History list                            |
 
-The shared settings page contains LiveEditor and Appearance. Electron adds
-Shortcuts & Sound, Application, and Updates, and expands LiveEditor with native
-controls. The strikethrough description names its
+The web `/settings` page contains only Appearance. The bundled desktop
+Settings window contains LiveEditor (with its native controls), Appearance,
+Shortcuts & Sound, Application, Categories, Updates and Account. The strikethrough description names its
 actual scope: completed history, rather than all editor/task surfaces.
 The native status toggle hides only the routine save/sync footer; Details and
 eligible Undo remain in the header, with save-failure recovery in Details. See the

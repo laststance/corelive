@@ -63,7 +63,7 @@ interactive variant are in [Desktop states in two commands](docs/headless-develo
 
 ```bash
 pnpm electron:build:ts
-pnpm qa:offline-editor --fixture local-only --screenshots .gstack/qa-reports/desktop
+pnpm qa:offline-editor --fixture all --screenshots .gstack/qa-reports/desktop
 ```
 
 ### Workspace layout
