@@ -10,11 +10,13 @@ import type {
   OfflineWorkspaceV1,
 } from '@corelive/desktop-contract/offline-workspace'
 import {
+  DEVICE_ARCHIVE_FILE_NAME,
   DEVICE_OWNER_ID,
   DEVICE_REGISTRY_FILE_NAME,
   DEVICE_WORKSPACE_FILE_NAME,
   DeviceRegistrySchema,
   OfflineWorkspaceSchema,
+  WorkspaceArchiveSchema,
   type DeviceRegistry,
   type MigrationReceipt,
   type OfflineWorkspace,
@@ -146,6 +148,7 @@ export async function migrateWorkspaceV1(
   if (existing) {
     const importedWorkspace = await importOlderVersionChanges(
       v2File,
+      workspacesDirectory,
       existing,
       v1.files,
       now,
@@ -310,6 +313,30 @@ function decodeEnvelope(
   } catch {
     return { ok: false, errorClass: 'json' }
   }
+}
+
+/**
+ * Lists the completion identities held by the archive file; empty when it is absent or
+ * unreadable (an extra recovery copy is a safer outcome than a dropped one).
+ *
+ * @param directory - The `workspaces` directory.
+ * @returns Every archived completion and retired-completion id.
+ * @example const ids = await readArchivedIds(join(userData, 'offline', 'workspaces'))
+ */
+async function readArchivedIds(directory: string): Promise<Set<string>> {
+  const archive = await readOrNull(
+    new AtomicWorkspaceFile({
+      directory,
+      ownerId: DEVICE_OWNER_ID,
+      fileName: DEVICE_ARCHIVE_FILE_NAME,
+      parse: WorkspaceArchiveSchema.parse,
+    }),
+  )
+  if (!archive || archive === 'invalid') return new Set()
+  return new Set([
+    ...Object.keys(archive.completions),
+    ...Object.keys(archive.retiredCompletions),
+  ])
 }
 
 /** Reads a v2 file: its value, null when missing, or 'invalid' (never overwritten). */
@@ -726,6 +753,7 @@ function buildWorkspace(input: BuildInput): OfflineWorkspace {
  */
 async function importOlderVersionChanges(
   file: AtomicWorkspaceFile<OfflineWorkspace>,
+  workspacesDirectory: string,
   current: OfflineWorkspace,
   v1Files: V1File[],
   now: () => number,
@@ -734,6 +762,8 @@ async function importOlderVersionChanges(
     (v1File) => current.migration.v1Files[v1File.fileName] !== v1File.checksum,
   )
   if (!changed.length) return current
+  // Settled history lives in the archive file; those identities are not "missing" from v2.
+  const archivedIds = await readArchivedIds(workspacesDirectory)
   return file.update((state) => {
     const next = structuredClone(state)
     const defaultCategoryId =
@@ -800,7 +830,8 @@ async function importOlderVersionChanges(
         // Identity, not send state, decides what v2 lacks (EA13a).
         if (
           next.completions[completion.id] ||
-          next.retiredCompletions[completion.id]
+          next.retiredCompletions[completion.id] ||
+          archivedIds.has(completion.id)
         )
           continue
         push(
@@ -811,7 +842,12 @@ async function importOlderVersionChanges(
       for (const [id, retired] of Object.entries(
         workspace.retiredCompletions,
       )) {
-        if (next.completions[id] || next.retiredCompletions[id]) continue
+        if (
+          next.completions[id] ||
+          next.retiredCompletions[id] ||
+          archivedIds.has(id)
+        )
+          continue
         next.migration.dashboardOnly[id] = {
           completedAt: retired.completedAt,
           originalCategoryId:

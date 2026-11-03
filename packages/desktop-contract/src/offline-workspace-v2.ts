@@ -41,6 +41,8 @@ export const DEVICE_OWNER_ID = 'device'
 /** File names (without `.json`) of the v2 files, written through `AtomicWorkspaceFile` `fileName` (E1). */
 export const DEVICE_WORKSPACE_FILE_NAME = 'device'
 export const DEVICE_REGISTRY_FILE_NAME = 'device-registry'
+/** The settled-history file next to the device workspace (`device-archive.json`, #216 perf gate). */
+export const DEVICE_ARCHIVE_FILE_NAME = 'device-archive'
 
 /** A category with a local UUID. `historical` ones only keep old references alive (EA9). */
 export const LocalCategorySchema = z.object({
@@ -291,6 +293,13 @@ export const MigrationReceiptSchema = z.object({
 })
 export type MigrationReceipt = z.infer<typeof MigrationReceiptSchema>
 
+/** A durable answer to a replayed command id. */
+export const CommandReceiptSchema = z.object({
+  digest: z.string(),
+  completionId: identity.optional(),
+  revision,
+})
+
 /** Version 2 of the workspace: one per device, `ownerId: "device"` (D1, C29). */
 export const OfflineWorkspaceSchema = z.object({
   version: z.literal(2),
@@ -307,14 +316,7 @@ export const OfflineWorkspaceSchema = z.object({
   outbox: z.record(identity, OutboxEntrySchema),
   categoryOutbox: z.record(identity, CategoryOutboxEntrySchema).default({}),
   syncHistory: z.array(SyncHistoryItemSchema).default([]),
-  commandReceipts: z.record(
-    identity,
-    z.object({
-      digest: z.string(),
-      completionId: identity.optional(),
-      revision,
-    }),
-  ),
+  commandReceipts: z.record(identity, CommandReceiptSchema),
   categoryMoves: z.record(identity, identity),
   binding: AccountBindingSchema.nullable(),
   migration: MigrationReceiptSchema,
@@ -333,6 +335,78 @@ export const OfflineWorkspaceSchema = z.object({
   recoveryCopies: z.array(RecoveryCopySchema),
 })
 export type OfflineWorkspace = z.infer<typeof OfflineWorkspaceSchema>
+
+/** The records that grow with use; {@link validateWorkspaceChange} validates them per entry. */
+const BULK_RECORD_SCHEMAS = {
+  completions: OfflineCompletionSchema,
+  retiredCompletions: RetiredCompletionSchema,
+  outbox: OutboxEntrySchema,
+  categoryOutbox: CategoryOutboxEntrySchema,
+  commandReceipts: CommandReceiptSchema,
+} as const
+const BULK_RECORD_KEYS = Object.keys(BULK_RECORD_SCHEMAS) as Array<
+  keyof typeof BULK_RECORD_SCHEMAS
+>
+const WorkspaceWithoutBulkRecordsSchema = OfflineWorkspaceSchema.omit({
+  completions: true,
+  retiredCompletions: true,
+  outbox: true,
+  categoryOutbox: true,
+  commandReceipts: true,
+})
+
+/**
+ * Validates a candidate workspace against the schema, re-checking only what changed.
+ *
+ * Entries of the growing records that are the very same object as in the previously
+ * validated workspace are valid by construction and are reused, so a commit that changes
+ * one completion validates one completion instead of the whole history (#216 perf gate).
+ * Everything else, including every other field, goes through the full schema, and a
+ * candidate that shares nothing with `previous` costs exactly one full parse.
+ *
+ * @param candidate - The reducer's output; may share unchanged entry objects with `previous`.
+ * @param previous - The last fully validated workspace.
+ * @returns The validated workspace (shared entries are the same references as in `previous`).
+ * @throws {z.ZodError} When any field or changed entry is invalid.
+ * @example const next = validateWorkspaceChange({ ...state, revision: state.revision + 1 }, state)
+ */
+export function validateWorkspaceChange(
+  candidate: unknown,
+  previous: OfflineWorkspace,
+): OfflineWorkspace {
+  const rest = WorkspaceWithoutBulkRecordsSchema.parse(candidate)
+  const source = candidate as Record<string, unknown>
+  const bulk: Record<string, Record<string, unknown>> = {}
+  for (const key of BULK_RECORD_KEYS) {
+    const container = source[key] ?? {}
+    // A malformed container (not a plain object) fails the full record schema.
+    if (typeof container !== 'object' || container === null)
+      OfflineWorkspaceSchema.shape[key].parse(container)
+    const before: Record<string, unknown> = previous[key]
+    const after: Record<string, unknown> = {}
+    for (const [id, entry] of Object.entries(container)) {
+      after[id] =
+        before[id] === entry
+          ? entry
+          : (identity.parse(id), BULK_RECORD_SCHEMAS[key].parse(entry))
+    }
+    bulk[key] = after
+  }
+  return { ...rest, ...bulk } as OfflineWorkspace
+}
+
+/**
+ * Settled history moved out of the keep path (#216 perf gate): completions and retired
+ * records old enough that no Undo, clear, outbox or conflict flow can touch them.
+ * Same envelope and durability as the workspace; nothing here is ever deleted.
+ */
+export const WorkspaceArchiveSchema = z.object({
+  version: z.literal(1),
+  ownerId: z.literal(DEVICE_OWNER_ID),
+  completions: z.record(identity, OfflineCompletionSchema),
+  retiredCompletions: z.record(identity, RetiredCompletionSchema),
+})
+export type WorkspaceArchive = z.infer<typeof WorkspaceArchiveSchema>
 
 /** Registry v2 = sync attachment (D2) with the sign-out journal (EA1) and pending Connect (EA2b). */
 export const DeviceRegistrySchema = z.object({

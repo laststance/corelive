@@ -8,26 +8,22 @@ import {
   DEVICE_OWNER_ID,
   DEVICE_WORKSPACE_FILE_NAME,
   OfflineWorkspaceSchema,
-  type OfflineWorkspace,
 } from '@corelive/desktop-contract/offline-workspace-v2'
 
 import { AtomicWorkspaceFile } from '../electron/offline/AtomicWorkspaceFile'
-import {
-  buildDeviceWorkspace,
-  categoryUuid,
-} from '../electron/offline/deviceWorkspaceFixture'
+import { categoryUuid } from '../electron/offline/deviceWorkspaceFixture'
 import { WorkspaceWorkerClient } from '../electron/offline/WorkspaceWorkerClient'
-import { COMPLETED_TITLE_MAX_LENGTH } from '../renderer/editor/liveEditorUtils'
+
+import { buildBenchmarkWorkspace } from './benchmark-offline-fixture'
 
 const COMMAND = 'benchmark:offline'
 /** The size the merge gate (D1: p95 <= 100 ms) is measured at. */
 const GATE_COMPLETIONS = 36_500
 const DEFAULT_SIZES = [3_650, GATE_COMPLETIONS]
 const WARMUP_SAMPLES = 3
-const MEASURED_SAMPLES = 20
+/** 40 samples keep one or two disk stalls from deciding the p95 (nearest rank: the 38th). */
+const MEASURED_SAMPLES = 40
 const COLD_PARSE_SAMPLES = 5
-const CATEGORY_COUNT = 20
-const DRAFT_ROWS = 100
 const BYTES_PER_GIGABYTE = 1024 ** 3
 
 type Operation = 'keep' | 'autosave' | 'cold-parse'
@@ -45,10 +41,12 @@ const HELP = `pnpm ${COMMAND} - measures the offline workspace's durable write p
 Usage: pnpm ${COMMAND} [--json] [--max-p95-ms <n>] [--completions <n,n,...>] [--help]
 
 Measures, at ${DEFAULT_SIZES.map((size) => size.toLocaleString('en-US')).join(' and ')} completions (an outbox, command receipts,
-one recovery generation, 10% of lines at the title length limit):
+one recovery generation, 20 completions a day over the real span, 10% of titles and draft
+lines at the title length limit, 10% still waiting to send):
   keep        worker round trip of a completion, request to durable acknowledgement
   autosave    worker round trip of a draft save
-  cold-parse  reading and validating the whole file from disk
+  cold-parse  reading and validating the keep-path file from disk, after the archive roll
+              (settled history older than two days lives in device-archive.json)
 
 Options:
   --json               Print one JSON object {machine, runs, peakRssMb, gate} instead of the table.
@@ -78,83 +76,6 @@ function percentiles(samples: number[]): { p50Ms: number; p95Ms: number } {
 }
 
 /**
- * Builds the realistic benchmark workspace: completions with receipts, a partial outbox,
- * a 100-line draft whose every tenth line is at the title length limit.
- *
- * @param completions - Number of kept completions to hold.
- * @returns A schema-valid v2 workspace bound to a synthetic account.
- * @example const workspace = buildBenchmarkWorkspace(100)
- */
-function buildBenchmarkWorkspace(completions: number): OfflineWorkspace {
-  const seeded = buildDeviceWorkspace({
-    categoryCount: CATEGORY_COUNT,
-    boundAccountId: 'synthetic-benchmark',
-  })
-  const firstCategory = categoryUuid(1)
-  seeded.drafts[firstCategory] = {
-    revision: 0,
-    rows: Array.from({ length: DRAFT_ROWS }, (_, index) => ({
-      id: randomUUID(),
-      text:
-        index % 10 === 9
-          ? 'x'.repeat(COMPLETED_TITLE_MAX_LENGTH)
-          : `Synthetic line ${index}`,
-    })),
-  }
-  for (let index = 0; index < completions; index++) {
-    const id = randomUUID()
-    const categoryId = categoryUuid((index % CATEGORY_COUNT) + 1)
-    const title = `Recorded synthetic work ${index}`
-    const completedAt = Date.now() - index * 1000
-    seeded.completions[id] = {
-      id,
-      categoryId,
-      originalCategoryId: categoryId,
-      title,
-      rawText: title,
-      lineId: randomUUID(),
-      lineIndex: 0,
-      completedAt,
-      originalCompletedAt: completedAt,
-      timezone: 'Asia/Tokyo',
-      revision: 1,
-      undoUntil: completedAt,
-      cancelled: false,
-      restored: false,
-      remote: null,
-      clearAfter: null,
-      cleared: false,
-    }
-    seeded.commandReceipts[randomUUID()] = {
-      digest: 'f'.repeat(64),
-      completionId: id,
-      revision: index + 1,
-    }
-    // One completion in ten is still waiting to send.
-    if (index % 10 === 0) {
-      const operationId = randomUUID()
-      seeded.outbox[operationId] = {
-        state: 'queued',
-        operation: {
-          operationId,
-          completionId: id,
-          deviceId: seeded.deviceId,
-          revision: 1,
-          expectedRemoteRevision: 0,
-          kind: 'create',
-          categoryId,
-          title,
-          completedAt,
-          originalCompletedAt: completedAt,
-          timezone: 'Asia/Tokyo',
-        },
-      }
-    }
-  }
-  return seeded
-}
-
-/**
  * Measures the three operations for one fixture size in its own temp directory.
  *
  * @param root - Temp directory owned by this invocation.
@@ -179,13 +100,6 @@ async function measureSize(root: string, completions: number): Promise<Run[]> {
     revision: current.revision + 1,
   }))
 
-  const coldParse: number[] = []
-  for (let sample = 0; sample < COLD_PARSE_SAMPLES; sample++) {
-    const start = performance.now()
-    await new AtomicWorkspaceFile(fileOptions).read()
-    coldParse.push(performance.now() - start)
-  }
-
   const worker = new WorkspaceWorkerClient({
     script: new URL('../electron/offline/workspace-worker.ts', import.meta.url),
     directory,
@@ -196,6 +110,8 @@ async function measureSize(root: string, completions: number): Promise<Run[]> {
   const autosave: number[] = []
   try {
     let view = await worker.call('open', null)
+    // The idle roll that keeps the keep-path snapshot bounded (D1 size budget); not timed.
+    await worker.call('archive', null)
     for (let sample = 0; sample < WARMUP_SAMPLES + MEASURED_SAMPLES; sample++) {
       // Autosave: edit one short line of the draft.
       const saveStart = performance.now()
@@ -234,6 +150,14 @@ async function measureSize(root: string, completions: number): Promise<Run[]> {
   } finally {
     await worker.close()
   }
+  // Steady state: the file a restart parses after the idle archive roll has run.
+  const coldParse: number[] = []
+  for (let sample = 0; sample < COLD_PARSE_SAMPLES; sample++) {
+    const start = performance.now()
+    await new AtomicWorkspaceFile(fileOptions).read()
+    coldParse.push(performance.now() - start)
+  }
+
   const run = (operation: Operation, samples: number[]): Run => ({
     completions,
     operation,

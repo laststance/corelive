@@ -15,6 +15,7 @@ Electron's user-data directory:
 | ----------------------------------------- | ----------------------------------------------------------------------- |
 | `offline/workspaces/device.json`          | Categories, drafts, completions, outbox, receipts, the account binding  |
 | `offline/workspaces/device.recovery.json` | The previous validated generation, kept for explicit recovery           |
+| `offline/workspaces/device-archive.json`  | Settled history older than two days (same envelope, own recovery copy)  |
 | `offline/registry/device-registry.json`   | Which account is attached, the sign-out journal and the pending Connect |
 
 The workspace has no machine-bound key. `deviceId` is an identifier, not a
@@ -24,23 +25,48 @@ A development or QA build (`!app.isPackaged`) uses a separate
 
 ### Size envelope
 
-One snapshot file holds everything, so the file grows with the number of kept
-completions (about 4.6 MB per year at 20 a day; title text is retained even
-after the dashboard has the completion).
+The keep path rewrites `device.json`, so it must stay small. Completions and retired
+records that nothing can touch any more (older than two days, no pending send, Undo
+over, no delayed clear) move to `device-archive.json`, with their text, in an idle roll
+at startup and once per local day (never inside a keep). The archive uses the same
+checksummed envelope, atomic rename, file and directory flush and its own
+`device-archive.recovery.json`. The record is made durable in the archive first and only
+then dropped from `device.json`, so a crash can leave it in both files but never in
+neither. Export includes the archive, and an existing v2 file migrates by simply having
+its old records moved on the first roll. Command receipts are kept for the last 2,000
+commits only (a receipt answers a replayed command id, which cannot span more than a
+few commits); they used to grow by about 160 bytes per command forever.
 
-| Completions      | File size | Notes                                  |
-| ---------------- | --------- | -------------------------------------- |
-| 3,650 (1 year)   | ~2.3 MB   | design measurement, 2026-11-03         |
-| 10,000           | ~6.4 MB   |                                        |
-| 36,500 (5 years) | ~23 MB    | the size the merge gate is measured at |
+Commits also skip work they do not need: the file keeps the validated state it last
+wrote and does not re-read-and-parse its own bytes, the previous generation becomes the
+recovery copy by a hard link (the primary is only ever replaced by rename, so the linked
+inode is immutable) instead of a second 20 MB write, and a save or keep validates only
+the entries it changed.
 
-The 2026-11-03 run of `pnpm benchmark:offline` on an Apple M4 Max (Node
-26.12.1, worker round trip, 36,500-completion fixture with outbox, receipts, one
-recovery generation and 10% maximum-length lines) measured keep p95 227 ms at 3,650
-completions and 1,091 ms at 36,500, with a cold parse of about 200 ms and a peak
-RSS near 2.9 GB. That is slower than the 100 ms design target at five years of
-data; the gate below reports it, and the single-snapshot decision needs review
-before a release depends on it.
+| Completions      | `device.json` (steady state) | `device-archive.json` |
+| ---------------- | ---------------------------- | --------------------- |
+| 3,650 (1 year)   | ~0.5 MB                      | ~1.7 MB               |
+| 10,000           | ~1.5 MB                      | ~4.6 MB               |
+| 36,500 (5 years) | ~4.6 MB                      | ~17 MB                |
+
+The 36,500 row was measured; the smaller rows are scaled from it.
+
+The 2026-11-03 run of `pnpm benchmark:offline` on an Apple M4 Max (Node 26.12.1,
+worker round trip; fixture: 20 completions a day over the real span, an outbox with
+10% of completions still waiting to send, command receipts, one recovery generation,
+10% of titles and draft lines at the 255-character limit) measured, before this
+change, keep p95 227 ms at 3,650 completions and 1,091 ms at 36,500 (cold parse about
+200 ms, peak RSS 2.9 GB). After it, three runs measured:
+
+| Run | keep p50 / p95 at 3,650 | at 10,000   | at 36,500   | peak RSS |
+| --- | ----------------------- | ----------- | ----------- | -------- |
+| 1   | 19.7 / 20.8 ms          | 22.9 / 24.1 | 33.0 / 35.2 | 1,209 MB |
+| 2   | 20.4 / 22.2 ms          | 23.3 / 24.8 | 33.0 / 37.2 | 1,211 MB |
+| 3   | 20.4 / 21.5 ms          | 23.3 / 24.2 | 32.2 / 35.1 | 1,234 MB |
+
+The cold parse of the keep-path file is about 40 ms at 36,500 (the archive is not read
+on open). Peak RSS is the benchmark process holding the 36,500-record fixture it
+built, not the worker.
 
 Measure it on your own Mac with `pnpm benchmark:offline` (see
 [Recipes](#recipes)). The gate is a keep-commit p95 of at most 100 ms at
@@ -304,13 +330,13 @@ shape (values vary by Mac):
     {
       "completions": 36500,
       "operation": "keep",
-      "p50Ms": 872.64,
-      "p95Ms": 1091.34,
-      "samples": 20
+      "p50Ms": 32.16,
+      "p95Ms": 35.09,
+      "samples": 40
     }
   ],
-  "peakRssMb": 2949,
-  "gate": { "maxP95Ms": 100, "passed": false }
+  "peakRssMb": 1234,
+  "gate": { "maxP95Ms": 100, "passed": true }
 }
 ```
 

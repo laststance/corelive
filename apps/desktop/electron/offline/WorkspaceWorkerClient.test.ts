@@ -3,9 +3,16 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import {
+  DEVICE_OWNER_ID,
+  DEVICE_WORKSPACE_FILE_NAME,
+  OfflineWorkspaceSchema,
+} from '@corelive/desktop-contract/offline-workspace-v2'
 import { expect, test } from 'vitest'
 
+import { AtomicWorkspaceFile } from './AtomicWorkspaceFile'
 import {
+  buildDeviceWorkspace,
   categoryUuid,
   initializeDeviceWorkspace,
 } from './deviceWorkspaceFixture'
@@ -244,6 +251,67 @@ test('a corrupt device workspace can export its exact damaged file and validated
     })
   } finally {
     await client.close()
+    await rm(directory, { recursive: true })
+  }
+})
+
+test('an archived completion survives a restart and travels with the export', async () => {
+  // Arrange: a five-year-old completion that the idle roll moves out of the keep-path file.
+  const directory = await mkdtemp(join(tmpdir(), 'corelive-worker-archive-'))
+  const id = randomUUID()
+  const old = Date.now() - 5 * 365 * 24 * 60 * 60 * 1000
+  const workspace = buildDeviceWorkspace({ categoryCount: 1 })
+  workspace.completions[id] = {
+    id,
+    categoryId: categoryUuid(1),
+    originalCategoryId: categoryUuid(1),
+    title: 'Five years ago',
+    rawText: 'Five years ago',
+    lineId: randomUUID(),
+    lineIndex: 0,
+    completedAt: old,
+    originalCompletedAt: old,
+    timezone: 'Asia/Tokyo',
+    revision: 1,
+    undoUntil: old,
+    cancelled: false,
+    restored: false,
+    remote: null,
+    clearAfter: null,
+    cleared: false,
+  }
+  await new AtomicWorkspaceFile({
+    directory,
+    ownerId: DEVICE_OWNER_ID,
+    fileName: DEVICE_WORKSPACE_FILE_NAME,
+    parse: OfflineWorkspaceSchema.parse,
+  }).initialize(workspace)
+  const options = {
+    directory,
+    ownerId: 'device' as const,
+    script: new URL('./workspace-worker.ts', import.meta.url),
+    execArgv: ['--import', 'tsx'],
+  }
+  const first = new WorkspaceWorkerClient(options)
+  try {
+    await first.call('open', null)
+
+    // Act
+    const { archived } = await first.call('archive', null)
+    await first.close()
+    const second = new WorkspaceWorkerClient(options)
+    const exported = JSON.parse(await second.call('export', null)) as {
+      completions: Record<string, unknown>
+      archive: { completions: Record<string, { title: string }> }
+    }
+    await second.close()
+
+    // Assert
+    expect(archived).toBe(1)
+    expect(exported.completions[id]).toBeUndefined()
+    expect(exported.archive.completions[id]?.title).toBe('Five years ago')
+  } finally {
+    await first.close()
     await rm(directory, { recursive: true })
   }
 })

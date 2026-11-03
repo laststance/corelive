@@ -2,6 +2,8 @@ import type { OfflineTodayCount } from '@corelive/desktop-contract/offline-works
 import type { OfflineWorkspace } from '@corelive/desktop-contract/offline-workspace-v2'
 import { toLocalDayKey } from '@corelive/live-editor/day'
 
+const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000
+
 /** Projects one day from durable identities, overlaying each pending identity exactly once.
  * Worker views use this after commits. Receipt lookup/queued-operation counts alone cannot
  * establish a fresh server total; absent uncertain identities fall back to this device.
@@ -18,6 +20,9 @@ export function workspaceToday(
   ): number =>
     record &&
     !record.cancelled &&
+    // A record from the same local day is within two days of now in every timezone; skipping
+    // the rest avoids a formatter call per historical record (#216 perf gate).
+    Math.abs(record.completedAt - now) <= TWO_DAYS_MS &&
     toLocalDayKey(new Date(record.completedAt), timezone) === day
       ? 1
       : 0

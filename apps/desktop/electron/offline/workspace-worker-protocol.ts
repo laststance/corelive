@@ -91,6 +91,8 @@ export interface WorkspaceWorkerCalls {
     output: { total: number; copies: OfflineWorkspace['recoveryCopies'] }
   }
   clearDue: { input: null; output: WorkspaceView }
+  /** Moves settled history to the archive file; idle work, never on the keep path. */
+  archive: { input: null; output: { archived: number } }
   details: {
     input: { offset: number; limit: number }
     output: {

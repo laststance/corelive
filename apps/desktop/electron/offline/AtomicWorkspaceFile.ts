@@ -1,5 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { mkdir, open, readFile, rename, stat, unlink } from 'node:fs/promises'
+import {
+  link,
+  mkdir,
+  open,
+  readFile,
+  rename,
+  stat,
+  unlink,
+} from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { z } from 'zod'
@@ -27,6 +35,12 @@ type WorkspaceFileOptions<T> = {
   directory: string
   ownerId: string
   parse: (value: unknown) => T
+  /**
+   * Optional cheaper validation of a reducer's output against the previously validated
+   * state. Used only by {@link AtomicWorkspaceFile.update}; every read and recovery path
+   * still runs the full {@link parse}. Must be equivalent to `parse` for any candidate.
+   */
+  validateChange?: (candidate: T, previous: T) => T
   /**
    * v2 file stem (`device` -> `device.json` + `device.recovery.json`). Omitted for the
    * v1 layout, which hashes the owner id into the path.
@@ -62,15 +76,23 @@ export class AtomicWorkspaceFile<T> {
   private readonly directory: string
   private readonly ownerId: string
   private readonly parse: (value: unknown) => T
+  private readonly validateChange: WorkspaceFileOptions<T>['validateChange']
   private readonly onStage: WorkspaceFileOptions<T>['onStage']
   private tail: Promise<void> = Promise.resolve()
   private committedBytes: string | undefined
+  /**
+   * The validated state that {@link committedBytes} decodes to. Valid only while the primary's
+   * bytes still equal `committedBytes`, so a command skips parsing and validating a file this
+   * instance wrote itself (#216 perf gate). Never handed out: callers get clones.
+   */
+  private committedState: T | undefined
   private primaryDirectoryFlushed = false
 
   constructor(options: WorkspaceFileOptions<T>) {
     this.directory = options.directory
     this.ownerId = options.ownerId
     this.parse = options.parse
+    this.validateChange = options.validateChange
     this.onStage = options.onStage
     if (
       options.fileName !== undefined &&
@@ -91,7 +113,8 @@ export class AtomicWorkspaceFile<T> {
    * @example const workspace = await file.read()
    */
   async read(): Promise<T> {
-    return this.serialize(async () => this.readPrimary())
+    // Clone: the cached generation must never be mutated by a caller.
+    return this.serialize(async () => structuredClone(await this.readPrimary()))
   }
 
   /**
@@ -123,9 +146,15 @@ export class AtomicWorkspaceFile<T> {
    * The callback must check its command receipt before mutating; returning the same
    * object is an idempotent replay and avoids another disk write.
    * @throws Storage/validation failures without reporting a saved acknowledgement.
+   * @param change - Pure reducer; it must clone before mutating, because `current` is the cached committed state.
+   * @param options - `shared: true` returns the committed state itself instead of a clone,
+   *   for callers that only project it (the keep path saves a full clone). Never mutate it.
    * @example await file.update((state) => reduceWorkspace(state, command))
    */
-  async update(change: (current: T) => T): Promise<T> {
+  async update(
+    change: (current: T) => T,
+    options: { shared?: boolean } = {},
+  ): Promise<T> {
     return this.serialize(async () => {
       const current = await this.readPrimary()
       const candidate = change(current)
@@ -135,8 +164,45 @@ export class AtomicWorkspaceFile<T> {
           await this.flushDirectory(true)
           this.primaryDirectoryFlushed = true
         }
-        return structuredClone(current)
+        return options.shared ? current : structuredClone(current)
       }
+      const validated = this.validateChange
+        ? this.validateChange(candidate, current)
+        : this.parse(candidate)
+      await this.commit(validated)
+      return options.shared ? validated : structuredClone(validated)
+    })
+  }
+
+  /**
+   * Like {@link update}, but starts from `empty` when neither generation exists yet. Used by
+   * files that appear lazily (the archive); an existing recovery copy without a primary is
+   * still evidence of a lost file, so it throws instead of starting fresh (EA14).
+   * @throws {@link WorkspaceFileError} `exists` when only the recovery copy is present.
+   * @example await archive.updateOrInitialize(emptyArchive, (current) => merge(current))
+   */
+  async updateOrInitialize(empty: T, change: (current: T) => T): Promise<T> {
+    return this.serialize(async () => {
+      let current: T
+      try {
+        current = await this.readPrimary()
+      } catch (error) {
+        if (
+          !(error instanceof WorkspaceFileError) ||
+          error.reason !== 'missing'
+        )
+          throw error
+        await mkdir(this.directory, { recursive: true, mode: 0o700 })
+        try {
+          await readFile(this.recoveryPath)
+          throw new WorkspaceFileError('exists')
+        } catch (inner) {
+          if (!isMissingFile(inner)) throw inner
+        }
+        current = this.parse(empty)
+      }
+      const candidate = change(current)
+      if (candidate === current) return structuredClone(current)
       const validated = this.parse(candidate)
       await this.commit(validated)
       return structuredClone(validated)
@@ -256,6 +322,7 @@ export class AtomicWorkspaceFile<T> {
         if (!isMissingFile(error)) throw error
       }
       this.committedBytes = undefined
+      this.committedState = undefined
       await this.commit(candidate)
       return structuredClone(candidate)
     })
@@ -304,9 +371,13 @@ export class AtomicWorkspaceFile<T> {
       if (isMissingFile(error)) throw new WorkspaceFileError('missing')
       throw error
     }
+    // Unchanged bytes are the generation this instance already validated: skip parse + schema.
+    if (bytes === this.committedBytes && this.committedState !== undefined)
+      return this.committedState
     const state = this.decode(bytes)
     if (bytes !== this.committedBytes) this.primaryDirectoryFlushed = false
     this.committedBytes = bytes
+    this.committedState = state
     return state
   }
 
@@ -333,18 +404,63 @@ export class AtomicWorkspaceFile<T> {
       checksum: createHash('sha256').update(payload).digest('hex'),
       payload,
     })
-    if (this.committedBytes !== undefined) {
-      await this.replace(this.recoveryPath, this.committedBytes, false)
-    }
+    // The previous generation is preserved while the new bytes are written and flushed; the
+    // primary is only renamed after both finished, so the order guarantee is unchanged:
+    // a durable recovery copy exists before the primary is replaced.
+    const preserved =
+      this.committedBytes === undefined
+        ? undefined
+        : this.preservePreviousGeneration(this.committedBytes)
+    // A rejection before `replace` awaits it must not become an unhandled rejection.
+    preserved?.catch(() => undefined)
     try {
       this.primaryDirectoryFlushed = false
-      await this.replace(this.path, bytes, true)
+      await this.replace(this.path, bytes, true, preserved)
       this.committedBytes = bytes
+      this.committedState = value
       this.primaryDirectoryFlushed = true
     } catch (error) {
       // A rename may already have committed; reread before accepting another command.
       this.committedBytes = undefined
+      this.committedState = undefined
       throw error
+    } finally {
+      // Recovery work never keeps running behind a failed or finished commit.
+      await preserved?.catch(() => undefined)
+    }
+  }
+
+  /**
+   * Makes the previous primary generation the recovery copy without rewriting its bytes.
+   *
+   * Atomicity argument: the primary inode was fully written and fsynced before the rename
+   * that published it, and the primary is only ever replaced by renaming a new file over it,
+   * never modified in place. So a hard link to it is a complete, immutable copy of the
+   * previous generation. The link is created under a temporary name and renamed over the
+   * recovery path (atomic), then the directory is flushed, all before the primary is
+   * replaced, which keeps the old order: a valid previous generation exists at every
+   * instant of the commit. Where hard links are unsupported it falls back to writing the
+   * bytes (the original behaviour).
+   * @param previousBytes - The bytes of the generation being demoted (fallback copy source).
+   * @throws Filesystem failures other than "links unsupported".
+   * @example await this.preservePreviousGeneration(this.committedBytes)
+   */
+  private async preservePreviousGeneration(
+    previousBytes: string,
+  ): Promise<void> {
+    const temporary = `${this.recoveryPath}.${randomUUID()}.tmp`
+    try {
+      await link(this.path, temporary)
+      await rename(temporary, this.recoveryPath)
+      await this.flushDirectory(false)
+    } catch (error) {
+      if (!isLinkUnsupported(error)) throw error
+      await this.replace(this.recoveryPath, previousBytes, false)
+    } finally {
+      // Only a failed rename leaves the temporary link behind; the data is never at risk.
+      await unlink(temporary).catch((error: unknown) => {
+        if (!isMissingFile(error)) throw error
+      })
     }
   }
 
@@ -355,6 +471,7 @@ export class AtomicWorkspaceFile<T> {
     path: string,
     bytes: string | Uint8Array,
     observe: boolean,
+    before?: Promise<void>,
   ): Promise<void> {
     const temporary = `${path}.${randomUUID()}.tmp`
     try {
@@ -367,6 +484,8 @@ export class AtomicWorkspaceFile<T> {
         await handle.close()
       }
       if (observe) await this.onStage?.('file-flushed')
+      // Work that must be durable before this replacement becomes visible.
+      await before
       await rename(temporary, path)
       if (observe) await this.onStage?.('replaced')
       await this.flushDirectory(observe)
@@ -391,6 +510,19 @@ export class AtomicWorkspaceFile<T> {
     }
     if (observe) await this.onStage?.('directory-flushed')
   }
+}
+
+/** Recognizes filesystems or sandboxes that cannot hard-link, so the caller can copy instead.
+ * @example if (isLinkUnsupported(error)) await copyInstead()
+ */
+function isLinkUnsupported(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    'code' in error &&
+    ['EPERM', 'ENOTSUP', 'EOPNOTSUPP', 'EXDEV', 'EMLINK', 'ENOSYS'].includes(
+      String(error.code),
+    )
+  )
 }
 
 /** Recognizes a missing path without swallowing permission or I/O failures.

@@ -1,9 +1,13 @@
+import { randomUUID } from 'node:crypto'
 import { parentPort, workerData } from 'node:worker_threads'
 
 import {
+  DEVICE_ARCHIVE_FILE_NAME,
   DEVICE_OWNER_ID,
   DEVICE_WORKSPACE_FILE_NAME,
   OfflineWorkspaceSchema,
+  validateWorkspaceChange,
+  WorkspaceArchiveSchema,
   type WorkspaceCommand,
 } from '@corelive/desktop-contract/offline-workspace-v2'
 import { z } from 'zod'
@@ -36,8 +40,41 @@ const file = new AtomicWorkspaceFile({
       throw new WorkspaceFileError('invalid')
     return state
   },
+  // Commands change a few entries; only those are re-validated (#216 perf gate).
+  validateChange: validateWorkspaceChange,
 })
-const service = new WorkspaceService(file)
+const archive = new AtomicWorkspaceFile({
+  directory: options.directory,
+  ownerId: options.ownerId,
+  fileName: DEVICE_ARCHIVE_FILE_NAME,
+  parse: WorkspaceArchiveSchema.parse,
+})
+const service = new WorkspaceService(file, Date.now, randomUUID, archive)
+/** Quiet period before the archive roll, so it never lands inside a keep. */
+const ARCHIVE_IDLE_MS = 1500
+let archivedDay: string | null = null
+let archiveTimer: ReturnType<typeof setTimeout> | undefined
+
+/**
+ * Schedules one archive roll per local day (and one at startup), after a quiet period.
+ * Failures only delay the roll: the workspace keeps every record until it is archived.
+ *
+ * @example scheduleArchive()
+ */
+function scheduleArchive(): void {
+  const day = new Date().toDateString()
+  if (archivedDay === day || archiveTimer) return
+  archiveTimer = setTimeout(() => {
+    archiveTimer = undefined
+    service.archiveSettled().then(
+      () => {
+        archivedDay = day
+      },
+      () => undefined,
+    )
+  }, ARCHIVE_IDLE_MS)
+  archiveTimer.unref()
+}
 const pageSchema = z.object({
   offset: z.number().int().nonnegative(),
   limit: z.number().int().min(1).max(100),
@@ -49,12 +86,20 @@ const pageSchema = z.object({
  */
 async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
   switch (request.type) {
-    case 'open':
-      return workspaceView(await service.clearDue())
+    case 'open': {
+      const view = workspaceView(await service.clearDue())
+      scheduleArchive()
+      return view
+    }
+    case 'archive':
+      return { archived: await service.archiveSettled() }
     case 'clearDue':
       return workspaceView(await service.clearDue())
-    case 'command':
-      return executeCommand(request.input)
+    case 'command': {
+      const result = await executeCommand(request.input)
+      scheduleArchive()
+      return result
+    }
     case 'draft':
       return readDraft(request.input.categoryId)
     case 'markSentBatch':
@@ -207,12 +252,37 @@ async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
  * @example const json = await exportWriting()
  */
 async function exportWriting(): Promise<string> {
+  let workspace
   try {
-    return JSON.stringify(await file.read(), null, 2)
+    workspace = await file.read()
   } catch (error) {
     if (!(error instanceof WorkspaceFileError)) throw error
     return file.exportRecoveryFiles()
   }
+  // C28/C29: settled history lives in the archive file and must travel with the export.
+  try {
+    const archived = await archive.read()
+    if (
+      Object.keys(archived.completions).length ||
+      Object.keys(archived.retiredCompletions).length
+    )
+      return JSON.stringify({ ...workspace, archive: archived }, null, 2)
+  } catch (error) {
+    if (!(error instanceof WorkspaceFileError)) throw error
+    // A missing archive is normal; an unreadable one is exported as raw files, never dropped.
+    if (error.reason === 'invalid')
+      return JSON.stringify(
+        {
+          ...workspace,
+          archiveRecoveryFiles: JSON.parse(
+            await archive.exportRecoveryFiles(),
+          ) as unknown,
+        },
+        null,
+        2,
+      )
+  }
+  return JSON.stringify(workspace, null, 2)
 }
 
 /** Reads the owned effective category draft without changing the selection.

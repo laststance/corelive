@@ -11,6 +11,7 @@ import {
 import {
   DeviceRegistrySchema,
   OfflineWorkspaceSchema,
+  validateWorkspaceChange,
 } from './offline-workspace-v2'
 import { UserSettingsStateSchema } from './settings'
 
@@ -308,5 +309,73 @@ describe('category sync contract', () => {
     ])
     expect(OFFLINE_ERROR_CODES).toContain('WORKSPACE_MIGRATION_FAILED')
     expect(status.state).toBe('waiting')
+  })
+})
+
+describe('validateWorkspaceChange', () => {
+  const retired = {
+    completedAt: 1,
+    originalCompletedAt: 1,
+    originalCategoryId: localA,
+    timezone: 'Asia/Tokyo',
+    cancelled: false,
+    revision: 1,
+    remoteRevision: 1,
+    title: 'Kept',
+    rawText: 'Kept',
+  }
+
+  test('an untouched record entry is reused by reference while the rest is validated', () => {
+    // Arrange
+    const previous = OfflineWorkspaceSchema.parse({
+      ...minimalWorkspace(),
+      retiredCompletions: { [localB]: retired },
+    })
+
+    // Act
+    const next = validateWorkspaceChange({ ...previous, revision: 1 }, previous)
+
+    // Assert
+    expect(next.revision).toBe(1)
+    expect(next.retiredCompletions[localB]).toBe(
+      previous.retiredCompletions[localB],
+    )
+  })
+
+  test('a changed record entry that is invalid is rejected like the full schema would', () => {
+    // Arrange
+    const previous = OfflineWorkspaceSchema.parse({
+      ...minimalWorkspace(),
+      retiredCompletions: { [localB]: retired },
+    })
+    const broken = {
+      ...previous,
+      retiredCompletions: {
+        ...previous.retiredCompletions,
+        [operationId]: { ...retired, revision: -1 },
+      },
+    }
+
+    // Act
+    const validate = () => validateWorkspaceChange(broken, previous)
+
+    // Assert
+    expect(validate).toThrow()
+    expect(() => OfflineWorkspaceSchema.parse(broken)).toThrow()
+  })
+
+  test('an invalid field outside the record entries is rejected', () => {
+    // Arrange
+    const previous = OfflineWorkspaceSchema.parse(minimalWorkspace())
+
+    // Act
+    const validate = () =>
+      validateWorkspaceChange(
+        { ...previous, selectedCategoryId: 'x' },
+        previous,
+      )
+
+    // Assert
+    expect(validate).toThrow()
   })
 })

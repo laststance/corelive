@@ -19,6 +19,8 @@ import {
   type OfflineCompletion,
   type OfflineWorkspace,
   type OutboxEntry,
+  type RetiredCompletion,
+  type WorkspaceArchive,
   type WorkspaceCommand,
 } from '@corelive/desktop-contract/offline-workspace-v2'
 
@@ -48,6 +50,103 @@ import { WorkspaceCommandError } from './WorkspaceCommandError'
 export { WorkspaceCommandError }
 
 /**
+ * Commands whose receipts are kept. A receipt only answers a replay of the same command id
+ * (a lost reply, a retried IPC), which can only span a handful of commits; an unbounded map
+ * grew by about 160 bytes per command forever (#216 perf gate).
+ */
+export const COMMAND_RECEIPT_WINDOW = 2000
+
+/** Settled records must be older than this before they leave the keep-path snapshot. */
+export const ARCHIVE_MIN_AGE_MS = 48 * 60 * 60 * 1000
+
+/**
+ * Copies a workspace for a reducer that only adds or replaces whole records.
+ *
+ * Small fields are deep-cloned. The growing records get new containers but share their
+ * entry objects with `current`, so a reducer must replace an entry (`state.x[id] = {...}`)
+ * and never mutate one in place. Sharing is also what lets
+ * the file's change validator skip the untouched entries. Used by the hot save and
+ * keep commands.
+ *
+ * @param current - The committed state; never mutated.
+ * @returns A state safe to hand to {@link WorkspaceService.apply} for save and complete.
+ * @example const state = forkWorkspace(current)
+ */
+function forkWorkspace(current: OfflineWorkspace): OfflineWorkspace {
+  const {
+    completions,
+    retiredCompletions,
+    outbox,
+    categoryOutbox,
+    commandReceipts,
+    ...small
+  } = current
+  return {
+    ...structuredClone(small),
+    completions: { ...completions },
+    retiredCompletions: { ...retiredCompletions },
+    outbox: { ...outbox },
+    categoryOutbox: { ...categoryOutbox },
+    commandReceipts: { ...commandReceipts },
+  }
+}
+
+/**
+ * Drops receipts older than {@link COMMAND_RECEIPT_WINDOW} commits (by workspace revision).
+ *
+ * @param state - The candidate state, already at its new revision; mutated in place.
+ * @example pruneCommandReceipts(state)
+ */
+function pruneCommandReceipts(state: OfflineWorkspace): void {
+  const receipts = Object.keys(state.commandReceipts)
+  if (receipts.length <= COMMAND_RECEIPT_WINDOW) return
+  const oldest = state.revision - COMMAND_RECEIPT_WINDOW
+  for (const id of receipts)
+    if (state.commandReceipts[id]!.revision <= oldest)
+      delete state.commandReceipts[id]
+}
+
+/**
+ * Whether a live completion can no longer be touched by Undo, a delayed clear, a sync
+ * operation or a conflict flow, so it may move to the archive.
+ *
+ * @param completion - A record from `completions`.
+ * @param pending - Completion ids that still have an outbox entry.
+ * @param now - Epoch ms.
+ * @returns True when nothing in the product reads or writes it any more.
+ * @example if (isSettledCompletion(c, pending, Date.now())) archive(c)
+ */
+function isSettledCompletion(
+  completion: OfflineCompletion,
+  pending: ReadonlySet<string>,
+  now: number,
+): boolean {
+  const cutoff = now - ARCHIVE_MIN_AGE_MS
+  return (
+    !pending.has(completion.id) &&
+    completion.completedAt < cutoff &&
+    completion.originalCompletedAt < cutoff &&
+    (completion.restored || completion.undoUntil < now) &&
+    (completion.cancelled ||
+      completion.cleared ||
+      completion.clearAfter === null)
+  )
+}
+
+/**
+ * Whether a retired record is old enough to leave the keep-path snapshot.
+ *
+ * @param retired - A record from `retiredCompletions`.
+ * @param now - Epoch ms.
+ * @returns True when it can no longer count toward today.
+ * @example if (isSettledRetired(r, Date.now())) archive(r)
+ */
+function isSettledRetired(retired: RetiredCompletion, now: number): boolean {
+  const cutoff = now - ARCHIVE_MIN_AGE_MS
+  return retired.completedAt < cutoff && retired.originalCompletedAt < cutoff
+}
+
+/**
  * Commits editor commands, captured Undo and outgoing completion identities together.
  * The storage worker owns one instance for the device workspace. Renderer commands
  * never receive success until {@link AtomicWorkspaceFile} has flushed the transaction.
@@ -62,6 +161,7 @@ export class WorkspaceService {
     readonly file: AtomicWorkspaceFile<OfflineWorkspace>,
     private readonly now: () => number = Date.now,
     private readonly nextId: () => string = randomUUID,
+    private readonly archive: AtomicWorkspaceFile<WorkspaceArchive> | null = null,
   ) {}
 
   /**
@@ -72,30 +172,136 @@ export class WorkspaceService {
   async execute(input: unknown): Promise<OfflineWorkspace> {
     const command = WorkspaceCommandSchema.parse(input)
     const commandDigest = digest(JSON.stringify(command))
-    return this.file.update((current) => {
-      const receipt = current.commandReceipts[command.commandId]
-      if (receipt) {
-        if (receipt.digest !== commandDigest)
-          throw new WorkspaceCommandError('command-conflict')
-        return current
+    return this.file.update(
+      (current) => {
+        const receipt = current.commandReceipts[command.commandId]
+        if (receipt) {
+          if (receipt.digest !== commandDigest)
+            throw new WorkspaceCommandError('command-conflict')
+          return current
+        }
+        // Typing and keeping only touch drafts and add records, so they fork cheaply; every
+        // other command deep-clones.
+        const state =
+          command.type === 'save' || command.type === 'complete'
+            ? forkWorkspace(current)
+            : structuredClone(current)
+        this.apply(state, command)
+        // Trusted reducers can preserve larger documents; normal saves cannot grant themselves capacity.
+        for (const [id, draft] of Object.entries(state.drafts)) {
+          if (draft.revision !== current.drafts[id]?.revision)
+            draft.inputLimit = getDraftInputLimit(draft)
+        }
+        state.revision++
+        state.commandReceipts[command.commandId] = {
+          digest: commandDigest,
+          revision: state.revision,
+          ...('completionId' in command
+            ? { completionId: command.completionId }
+            : {}),
+        }
+        pruneCommandReceipts(state)
+        return state
+        // The worker only projects the result, so it skips the defensive clone.
+      },
+      { shared: true },
+    )
+  }
+
+  /**
+   * Moves settled history out of the keep-path snapshot into the archive file.
+   *
+   * Order is the safety argument: the records are made durable in the archive first, and only
+   * then removed from the workspace, re-checked against the then-current state. A crash in
+   * between leaves a record in both files (the workspace wins on read, the next pass rewrites
+   * the archive copy); nothing can be in neither. Runs off the keep path (startup, day roll).
+   * @returns How many records left the workspace.
+   * @example const moved = await service.archiveSettled()
+   */
+  async archiveSettled(): Promise<number> {
+    const archive = this.archive
+    if (!archive) return 0
+    const now = this.now()
+    const chosen: {
+      completions: Record<string, OfflineCompletion>
+      retired: Record<string, RetiredCompletion>
+    } = { completions: {}, retired: {} }
+    // A shared no-op update scans the cached state without cloning it (the callback only reads).
+    await this.file.update(
+      (state) => {
+        const pending = new Set(
+          Object.values(state.outbox).map(
+            (entry) => entry.operation.completionId,
+          ),
+        )
+        for (const [id, completion] of Object.entries(state.completions))
+          if (isSettledCompletion(completion, pending, now))
+            chosen.completions[id] = completion
+        for (const [id, record] of Object.entries(state.retiredCompletions))
+          if (isSettledRetired(record, now)) chosen.retired[id] = record
+        return state
+      },
+      { shared: true },
+    )
+    if (
+      !Object.keys(chosen.completions).length &&
+      !Object.keys(chosen.retired).length
+    )
+      return 0
+    await archive.updateOrInitialize(
+      {
+        version: 1,
+        ownerId: 'device',
+        completions: {},
+        retiredCompletions: {},
+      },
+      (current) => ({
+        ...current,
+        // The newest copy wins if a record was archived before and has changed since.
+        completions: { ...current.completions, ...chosen.completions },
+        retiredCompletions: {
+          ...current.retiredCompletions,
+          ...chosen.retired,
+        },
+      }),
+    )
+    let moved = 0
+    await this.file.update((current) => {
+      const pending = new Set(
+        Object.values(current.outbox).map(
+          (entry) => entry.operation.completionId,
+        ),
+      )
+      const completions = { ...current.completions }
+      const retiredCompletions = { ...current.retiredCompletions }
+      for (const [id, archived] of Object.entries(chosen.completions)) {
+        const live = completions[id]
+        // Skip anything that changed or became active since it was archived.
+        if (
+          live &&
+          live.revision === archived.revision &&
+          isSettledCompletion(live, pending, now)
+        ) {
+          delete completions[id]
+          moved++
+        }
       }
-      const state = structuredClone(current)
-      this.apply(state, command)
-      // Trusted reducers can preserve larger documents; normal saves cannot grant themselves capacity.
-      for (const [id, draft] of Object.entries(state.drafts)) {
-        if (draft.revision !== current.drafts[id]?.revision)
-          draft.inputLimit = getDraftInputLimit(draft)
+      for (const [id, archived] of Object.entries(chosen.retired)) {
+        const live = retiredCompletions[id]
+        if (live && live.revision === archived.revision) {
+          delete retiredCompletions[id]
+          moved++
+        }
       }
-      state.revision++
-      state.commandReceipts[command.commandId] = {
-        digest: commandDigest,
-        revision: state.revision,
-        ...('completionId' in command
-          ? { completionId: command.completionId }
-          : {}),
+      if (!moved) return current
+      return {
+        ...current,
+        revision: current.revision + 1,
+        completions,
+        retiredCompletions,
       }
-      return state
     })
+    return moved
   }
 
   /**
@@ -533,18 +739,26 @@ export class WorkspaceService {
           : [],
       ),
     )
-    for (const completion of Object.values(state.completions)) {
+    for (const [id, completion] of Object.entries(state.completions)) {
       if (completion.categoryId !== command.categoryId || completion.restored)
         continue
       // A single rewritten occurrence remains a placement anchor, never the captured completion itself.
       const replacement = replacements.get(completion.lineId)
-      if (replacement) completion.nextRowId = replacement
-      else if (completion.nextRowId)
-        completion.nextRowId =
-          replacements.get(completion.nextRowId) ?? completion.nextRowId
-      if (completion.previousRowId)
-        completion.previousRowId =
-          replacements.get(completion.previousRowId) ?? completion.previousRowId
+      const nextRowId = replacement
+        ? replacement
+        : completion.nextRowId
+          ? (replacements.get(completion.nextRowId) ?? completion.nextRowId)
+          : completion.nextRowId
+      const previousRowId = completion.previousRowId
+        ? (replacements.get(completion.previousRowId) ??
+          completion.previousRowId)
+        : completion.previousRowId
+      // Replace the entry rather than mutate it: forked states share unchanged records.
+      if (
+        nextRowId !== completion.nextRowId ||
+        previousRowId !== completion.previousRowId
+      )
+        state.completions[id] = { ...completion, nextRowId, previousRowId }
     }
 
     draft.rows = command.rows.map((row) => {
@@ -666,11 +880,17 @@ export class WorkspaceService {
     const removed = draft.rows[index]!
     const previous = draft.rows[index - 1]?.id
     const next = draft.rows[index + 1]?.id
-    for (const completion of Object.values(state.completions)) {
+    for (const [id, completion] of Object.entries(state.completions)) {
       // Retarget references before deleting the row so a later completion cannot erase an earlier Undo anchor.
-      if (completion.previousRowId === removed.id)
-        completion.previousRowId = previous
-      if (completion.nextRowId === removed.id) completion.nextRowId = next
+      const retargetPrevious = completion.previousRowId === removed.id
+      const retargetNext = completion.nextRowId === removed.id
+      // Replace the entry rather than mutate it: forked states share unchanged records.
+      if (retargetPrevious || retargetNext)
+        state.completions[id] = {
+          ...completion,
+          ...(retargetPrevious ? { previousRowId: previous } : {}),
+          ...(retargetNext ? { nextRowId: next } : {}),
+        }
     }
     draft.rows.splice(index, 1)
   }
