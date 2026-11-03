@@ -52,10 +52,16 @@ type ControllerOptions = {
   revokeTimeoutMs?: number
   /** Bound on awaiting an in-flight sync request at sign-out (C9). */
   settleTimeoutMs?: number
+  /** Bound on Clear again waiting for a sign-in that is still being handled. */
+  sessionWaitMs?: number
 }
 
 /** Sign-out's remote revoke bound (D3 step 3). */
 const REMOTE_REVOKE_TIMEOUT_MS = 5000
+
+/** Clear again's bound on waiting for a sign-in still being handled; one stuck in its identity
+ * check fails its epoch check afterwards and never attaches. */
+const SESSION_WAIT_TIMEOUT_MS = 2000
 
 /**
  * Owns the device workspace, the optional account attachment and background synchronization.
@@ -201,9 +207,10 @@ export class OfflineEditorController {
    * @example await controller.authenticated('user_123')
    */
   async authenticated(clerkId: string): Promise<void> {
-    // One arriving while a sign-out or Clear again ends the session belongs to that session: drop it
-    // now, not when its turn in the queue comes after the sweep.
-    if (this.signOutRun) return
+    // One arriving while a sign-out or Clear again runs waits for it, outside the queue so Clear again
+    // never waits on it: a run that ended the session takes it along, a cancelled sign-out does not.
+    const ending = this.signOutRun
+    if (ending && (await ending).status !== 'flush-failed') return
     // A notification queued before a sign-out belongs to the session that sign-out ended.
     const epoch = this.signOutEpoch
     this.sessionTail = this.sessionTail
@@ -321,18 +328,26 @@ export class OfflineEditorController {
   }
 
   /**
+   * Whether this Mac is attached to its account; used by {@link accountState} and {@link signOut}.
+   * A journaled sign-out is never attached, even if its detach write was deferred.
+   * @returns True when an account is attached and no sign-out is journaled.
+   * @example if (!this.isAttached()) return shared
+   */
+  private isAttached(): boolean {
+    return Boolean(
+      this.registryState?.attachedAccountId &&
+      !this.registryState.signOutPending,
+    )
+  }
+
+  /**
    * Classifies the account relationship: attached, signed out with a binding, or another account.
    * @param binding - The workspace binding, or null before the first attach.
    * @returns The {@link AccountState} shown by Settings ▸ Account.
    * @example const state = this.accountState(view?.binding ?? null)
    */
   private accountState(binding: { accountId: string } | null): AccountState {
-    // A journaled sign-out is never reported as attached, even if its detach write was deferred.
-    if (
-      this.registryState?.attachedAccountId &&
-      !this.registryState.signOutPending
-    )
-      return 'attached'
+    if (this.isAttached()) return 'attached'
     if (!binding) return 'never-attached'
     const isOtherAccount =
       this.signedIn !== null && this.signedIn.clerkId !== binding.accountId
@@ -375,6 +390,13 @@ export class OfflineEditorController {
    * @example const result = await controller.signOut()
    */
   async signOut(): Promise<SignOutResult> {
+    const running = this.signOutRun
+    if (running) {
+      const shared = await running
+      // Sharing a run is right unless it was a Clear again that found a racing sign-in attached and
+      // swept nothing; this request then still signs that sign-in out.
+      if (shared.status === 'flush-failed' || !this.isAttached()) return shared
+    }
     if (!this.signOutRun) this.signOutEpoch += 1
     this.signOutRun ??= this.runSignOut().finally(() => {
       this.signOutRun = null
@@ -491,7 +513,17 @@ export class OfflineEditorController {
    * @example this.signOutRun = this.clearPendingSession()
    */
   private async clearPendingSession(): Promise<SignOutResult> {
-    await this.sessionTail
+    let timer: ReturnType<typeof setTimeout> | undefined
+    await Promise.race([
+      this.sessionTail,
+      new Promise<void>((resolve) => {
+        timer = setTimeout(
+          resolve,
+          this.options.sessionWaitMs ?? SESSION_WAIT_TIMEOUT_MS,
+        )
+      }),
+    ])
+    clearTimeout(timer)
     if (!this.registryState?.signOutPending) return { status: 'signed-out' }
     return this.finishPendingSignOut()
   }

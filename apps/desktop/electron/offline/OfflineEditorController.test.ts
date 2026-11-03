@@ -970,9 +970,9 @@ test('a sign-in that reports in while Clear again is sweeping cannot attach the 
   )
 
   // Act
-  await fixture.controller.authenticated('account-a')
+  const reported = fixture.controller.authenticated('account-a')
   sweep.resolve()
-  const result = await clearing
+  const [result] = await Promise.all([clearing, reported])
 
   // Assert
   expect(result).toMatchObject({ status: 'signed-out-residual' })
@@ -1067,6 +1067,118 @@ test('a sign-in reported while Clear again sweeps is dropped even when an older 
   expect(await fixture.registry.read()).toMatchObject({
     attachedAccountId: null,
     signOutPending: true,
+  })
+})
+
+// Regression: /ship exception review round 2 (Codex + Claude adversarial) 2026-11-03 — an explicit
+// sign-out during a Clear again that found a racing sign-in attached shared its no-op result.
+test('an explicit sign-out during a Clear again that finds the Mac signed in again still signs out', async () => {
+  // Arrange
+  const fixture = await createFixture({ bound: 'account-a', attached: true })
+  await fixture.controller.initialize()
+  fixture.endLocalSession.mockResolvedValueOnce({
+    status: 'signed-out-residual',
+    code: 'SIGNOUT_RESIDUAL_COOKIE',
+    cookieNames: ['__session'],
+    domains: ['corelive.app'],
+  })
+  await fixture.controller.signOut()
+  const attachSaved = deferred()
+  const realUpdate = fixture.registry.update.bind(fixture.registry)
+  const attachWrite = vi.fn()
+  vi.spyOn(fixture.registry, 'update').mockImplementation(async (patch) => {
+    if (patch.attachedAccountId === 'account-a') {
+      attachWrite()
+      await attachSaved.promise
+    }
+    return realUpdate(patch)
+  })
+  const signingIn = fixture.controller.authenticated('account-a')
+  await vi.waitFor(() => expect(attachWrite).toHaveBeenCalledOnce())
+  const clearing = fixture.controller.clearAgain()
+
+  // Act
+  const explicit = fixture.controller.signOut()
+  attachSaved.resolve()
+  const [cleared, signedOut] = await Promise.all([
+    clearing,
+    explicit,
+    signingIn,
+  ])
+
+  // Assert
+  expect(cleared).toEqual({ status: 'signed-out' })
+  expect(signedOut).toEqual({ status: 'signed-out' })
+  expect(fixture.endLocalSession).toHaveBeenCalledTimes(2)
+  expect(await fixture.registry.read()).toMatchObject({
+    attachedAccountId: null,
+    signOutPending: false,
+  })
+})
+
+// Regression: /ship exception review round 2 (Codex adversarial) 2026-11-03 — a sign-in reported
+// during a sign-out that was then cancelled by a failed save was dropped, so sync never resumed.
+test('a sign-in reported during a sign-out that fails to save is kept and attaches', async () => {
+  // Arrange
+  const fixture = await createFixture({ bound: 'account-a' })
+  await fixture.controller.initialize()
+  const flushed = deferred()
+  fixture.requestFlush.mockImplementationOnce(async () => {
+    await flushed.promise
+    return false
+  })
+  const signingOut = fixture.controller.signOut()
+
+  // Act
+  const reported = fixture.controller.authenticated('account-a')
+  flushed.resolve()
+  const [result] = await Promise.all([signingOut, reported])
+
+  // Assert
+  expect(result).toMatchObject({ status: 'flush-failed' })
+  expect(await fixture.registry.read()).toMatchObject({
+    attachedAccountId: 'account-a',
+    signOutPending: false,
+  })
+})
+
+// Regression: /ship exception review round 2 (Claude adversarial) 2026-11-03 — Clear again waited on
+// the whole sign-in queue, so a hung identity check left "Clearing…" forever.
+test('Clear again does not wait forever on a sign-in whose identity check hangs', async () => {
+  // Arrange
+  const fixture = await createFixture({
+    bound: 'account-a',
+    attached: true,
+    override: { sessionWaitMs: 50 },
+  })
+  await fixture.controller.initialize()
+  fixture.endLocalSession.mockResolvedValueOnce({
+    status: 'signed-out-residual',
+    code: 'SIGNOUT_RESIDUAL_COOKIE',
+    cookieNames: ['__session'],
+    domains: ['corelive.app'],
+  })
+  await fixture.controller.signOut()
+  const hung = deferred()
+  fixture.transport.whoami.mockImplementationOnce(async () => {
+    await hung.promise
+    return { clerkId: 'account-a', email: null }
+  })
+  const stuck = fixture.controller.authenticated('account-a')
+  await vi.waitFor(() =>
+    expect(fixture.transport.whoami).toHaveBeenCalledOnce(),
+  )
+
+  // Act
+  const result = await fixture.controller.clearAgain()
+  hung.resolve()
+  await stuck
+
+  // Assert
+  expect(result).toEqual({ status: 'signed-out' })
+  expect(await fixture.registry.read()).toMatchObject({
+    attachedAccountId: null,
+    signOutPending: false,
   })
 })
 
