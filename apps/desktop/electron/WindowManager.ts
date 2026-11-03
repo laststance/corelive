@@ -43,7 +43,9 @@ import {
 import { log } from './logger'
 import {
   isLocalEditorDocument,
+  isLocalSettingsDocument,
   LOCAL_EDITOR_URL,
+  LOCAL_SETTINGS_URL,
 } from './offline/localEditorOrigin'
 import { clampDimension } from './utils/clampDimension'
 import { isDevToolsEnabled } from './utils/debugMode'
@@ -62,6 +64,8 @@ const __dirname = path.dirname(__filename)
 interface PanelLoadRecoveryOptions {
   /** Bundled asset failures need reinstall guidance, never a connectivity instruction. */
   localEditor?: boolean
+  /** Names the bundled window in the recovery dialog (defaults to LiveEditor). */
+  localName?: string
   /** Reloads the panel route; run by each backoff retry and by the dialog's Retry button. */
   retry: () => void
   /** Run when the user picks Close in the recovery dialog. */
@@ -640,10 +644,10 @@ export class WindowManager {
     const messageBoxOptions: Electron.MessageBoxOptions = {
       type: 'warning',
       message: options.localEditor
-        ? "Couldn't open LiveEditor"
+        ? `Couldn't open ${options.localName ?? 'LiveEditor'}`
         : "Couldn't reach corelive.app",
       detail: options.localEditor
-        ? 'The bundled editor could not be loaded. Retry, or reinstall CoreLive if this continues. Saved writing remains on this Mac.'
+        ? `The bundled ${options.localName ? 'window' : 'editor'} could not be loaded. Retry, or reinstall CoreLive if this continues. Saved writing remains on this Mac.`
         : options.httpStatus === undefined
           ? 'Check your internet connection, then try again.'
           : `corelive.app returned HTTP ${options.httpStatus}. Try again in a moment.`,
@@ -1202,7 +1206,12 @@ export class WindowManager {
     // Resolve preload script path (built by electron-vite). It is packaged
     // inside `app.asar`, so resolve it relative to `__dirname`;
     // `process.resourcesPath` would miss it in production.
-    const preloadPath = path.join(__dirname, '..', 'preload', 'preload.cjs')
+    const preloadPath = path.join(
+      __dirname,
+      '..',
+      'preload',
+      'preload-settings.cjs',
+    )
 
     this.settingsWindow = new BrowserWindow({
       width: windowWidth,
@@ -1227,15 +1236,13 @@ export class WindowManager {
       hasShadow: true,
       backgroundColor: '#00000000',
       webPreferences: {
-        additionalArguments: [
-          `--corelive-app-origin=${this.getWebAppOrigin()}`,
-        ],
         nodeIntegration: false,
         contextIsolation: true,
         preload: preloadPath,
         webSecurity: true,
         allowRunningInsecureContent: false,
-        sandbox: false,
+        // The bundled Settings document runs sandboxed like the editor (D5).
+        sandbox: true,
         devTools: isDevToolsEnabled(
           this.isDev,
           this.configManager?.get('advanced.enableDevTools', false) ?? false,
@@ -1245,11 +1252,7 @@ export class WindowManager {
       show: false,
     })
 
-    // Load settings page
-    const baseUrl = this.serverUrl || 'https://corelive.app'
-    const settingsUrl = `${baseUrl}/settings`
-
-    log.debug('🔧 Loading settings URL:', settingsUrl)
+    log.debug('🔧 Loading settings URL:', LOCAL_SETTINGS_URL)
     this.watchSettingsLoad(this.settingsWindow, background)
     this.reloadSettings(this.settingsWindow)
 
@@ -1349,13 +1352,13 @@ export class WindowManager {
     }
   }
 
-  /** Reloads only the configured Settings route after a preparation timeout or explicit retry.
+  /** Reloads the bundled Settings document after a load failure or explicit retry.
    * @example this.reloadSettings(settings)
    */
   private reloadSettings(settings: BrowserWindow): void {
-    void Promise.resolve(
-      settings.loadURL(`${this.serverUrl || 'https://corelive.app'}/settings`),
-    ).catch(() => undefined)
+    void Promise.resolve(settings.loadURL(LOCAL_SETTINGS_URL)).catch(
+      () => undefined,
+    )
   }
 
   /** Keeps hidden preparation failures quiet while giving a visible Settings window Retry/Close.
@@ -1371,6 +1374,8 @@ export class WindowManager {
       this.settingsNeedsReload = true
       if (background && !settings.isVisible()) return
       this.recoverPanelFromLoadFailure(settings, {
+        localEditor: true,
+        localName: 'Settings',
         retry: () => this.reloadSettings(settings),
         dismiss: () => settings.hide(),
         parent: settings,
@@ -1386,10 +1391,13 @@ export class WindowManager {
         if (mainFrame && code !== ERR_ABORTED) fail()
       },
     )
-    settings.webContents.on('did-navigate', (_event, _url, status) => {
-      if (status >= HTTP_ERROR_STATUS_MIN) fail(status)
+    settings.webContents.on('did-navigate', (_event, url, status) => {
+      if (!isLocalSettingsDocument(url) || status >= HTTP_ERROR_STATUS_MIN)
+        fail()
     })
     settings.webContents.on('did-finish-load', () => {
+      // A finished load of any other document must not clear the failure (EA16).
+      if (!isLocalSettingsDocument(settings.webContents.getURL())) fail()
       if (failed) return
       this.settingsNeedsReload = false
       this.loadRecovery.delete(settings)

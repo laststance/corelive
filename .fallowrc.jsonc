@@ -8,9 +8,12 @@
     "apps/desktop/electron/dev-runner.ts",
     // Standalone sandbox entry bundled by scripts/build-offline-preloads.mjs.
     "apps/desktop/electron/preload-offline-editor.ts",
+    "apps/desktop/electron/preload-settings.ts",
+    // Second bundled renderer document (D5), loaded by corelive-editor://app/settings.html.
+    "apps/desktop/renderer/settings/main.tsx",
     "apps/desktop/scripts/after-build.js",
     // Loaded by the isolated Vite harness through HTML and explicit aliases.
-    "apps/web/scripts/qa-settings/*.{ts,tsx}",
+    "apps/web/scripts/qa-web/*.{ts,tsx}",
     // Run by .github/workflows/db-migrate.yml around `drizzle-kit migrate`, not by a package script.
     "apps/web/scripts/baseline-drizzle-migrations.mjs",
     "apps/web/src/components/ui/**/*.tsx",

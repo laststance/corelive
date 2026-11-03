@@ -25,6 +25,8 @@ const DESKTOP_ONLY_MODULES: Record<string, string> = {
 const SHARED_SUBPATHS = [
   'day',
   'ui/',
+  // Generic lifecycle-effect hooks shared by the web and the desktop Settings renderer (#216 D5).
+  'hooks/',
   'cn',
   'categoryHierarchy',
   'heatmap-intensity',

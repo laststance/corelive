@@ -517,3 +517,39 @@ describe('resetSettingsPopoverSize', () => {
     expect(() => windowManager.resetSettingsPopoverSize()).not.toThrow()
   })
 })
+
+describe('createSettingsWindow — bundled document (#216 D5)', () => {
+  test('loads the bundled settings document, never the remote site', () => {
+    // Arrange
+    const windowManager = new WindowManager(SERVER_URL)
+
+    // Act
+    windowManager.createSettingsWindow()
+    const captured = capturedWindows[0]
+    if (!captured) throw new Error('Expected a settings window to be created')
+
+    // Assert
+    expect(captured.win.loadURL).toHaveBeenCalledExactlyOnceWith(
+      'corelive-editor://app/settings.html',
+    )
+  })
+
+  test('runs sandboxed with context isolation and its own preload, so no remote capability leaks in', () => {
+    // Arrange
+    const windowManager = new WindowManager(SERVER_URL)
+
+    // Act
+    windowManager.createSettingsWindow()
+    const captured = capturedWindows[0]
+    if (!captured) throw new Error('Expected a settings window to be created')
+
+    // Assert
+    expect(captured.options.webPreferences).toMatchObject({
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: true,
+      preload: expect.stringMatching(/preload-settings\.cjs$/),
+    })
+  })
+})

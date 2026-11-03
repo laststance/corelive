@@ -150,7 +150,7 @@ The applied default is shadcn Default (neutral). Warm Cathedral is one selectabl
 **Theme-safe UI in three steps:**
 
 1. Use semantic token classes (`bg-background text-foreground`, `bg-primary text-primary-foreground`, `text-muted-foreground`, `border-border`), never a hue literal.
-2. View it on Default and Warm Cathedral (Settings fixture `apps/web/scripts/qa-settings`, or `pnpm dev` then Settings > Appearance > Palette). Expected result: neutral on Default light and dark.
+2. View it on Default and Warm Cathedral (Settings fixtures: the desktop Settings Appearance via `pnpm qa:settings`, and the web Appearance via `pnpm qa:web` (`apps/web/scripts/qa-web`, `?view=appearance`), or `pnpm dev` then Settings > Appearance > Palette). Expected result: neutral on Default light and dark.
 3. Run `pnpm test`; only when the registry changed, also `pnpm theme:generate && pnpm theme:check`.
 
 The guard `apps/web/src/lib/themes/no-hardcoded-amber.test.ts` gives **partial** coverage: it detects `oklch()` literals (hue 30-80, chroma >= 0.1) and Tailwind `amber-` classes in hand-authored UI code; hex, hsl and rgb are not parsed.

@@ -20,6 +20,7 @@ export function createOfflineEditor(
   windows: WindowManager,
   config: ConfigManager,
   mainDirectory: string,
+  deps: ConstructorParameters<typeof OfflineEditorIPC>[2],
 ) {
   const origin = windows.getWebAppOrigin()
   const broker = new TokenBroker({
@@ -43,9 +44,8 @@ export function createOfflineEditor(
       }),
     log: (line) => log.info(line),
     onSnapshot: (snapshot) => ipc.publish(snapshot),
-    onSettingsContext: () => ipc.settingsChanged(),
   })
-  const ipc: OfflineEditorIPC = new OfflineEditorIPC(windows, controller)
+  const ipc: OfflineEditorIPC = new OfflineEditorIPC(windows, controller, deps)
   ipc.register()
   windows.setBeforeEditorHide(async () =>
     ipc.flush(controller.getSnapshot().generation),

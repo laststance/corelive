@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { writeFile } from 'node:fs/promises'
 
+import type { SignOutResult } from '@corelive/desktop-contract/offline-account'
 import type {
   OfflineFlushRequest,
   OfflineSettingsResult,
+  SettingsSnapshot,
 } from '@corelive/desktop-contract/offline-editor-api'
 import type { OfflineEditorSnapshot } from '@corelive/desktop-contract/offline-workspace-v2'
 import {
@@ -16,9 +18,14 @@ import {
 import { typedHandle } from '../ipc/typedHandle'
 import { typedSend } from '../ipc/typedSend'
 import { isTrustedAppNavigation } from '../utils/isTrustedAppNavigation'
+import { openWebAppInBrowser } from '../utils/openWebAppInBrowser'
 import type { WindowManager } from '../WindowManager'
 
-import { isLocalEditorDocument, LOCAL_EDITOR_ORIGIN } from './localEditorOrigin'
+import {
+  isLocalEditorDocument,
+  isLocalSettingsDocument,
+  LOCAL_EDITOR_ORIGIN,
+} from './localEditorOrigin'
 import type { OfflineEditorController } from './OfflineEditorController'
 
 type PendingFlush = {
@@ -47,7 +54,8 @@ function isCurrentWindowFrame(
   )
 }
 
-/** Verifies current remote Settings/login main-frame notifications before changing native authentication state.
+/** Verifies that an authentication notification comes from the login window's main frame.
+ * Only the login window hosts Clerk (D5); the bundled Settings window is no longer an auth surface.
  * Main uses this predicate for the existing login and expiry IPC handlers.
  * @example if (!isTrustedAuthSender(event, windows)) throw new Error('Unauthorized sender')
  */
@@ -56,18 +64,17 @@ export function isTrustedAuthSender(
   windows: WindowManager,
 ): boolean {
   const origin = windows.getWebAppOrigin()
-  return [windows.getSettingsWindow(), windows.getLoginWindow()].some(
-    (window) =>
-      isCurrentWindowFrame(event, window, (url) =>
-        isTrustedAppNavigation(url, origin),
-      ) &&
-      event.senderFrame !== null &&
-      isTrustedAppNavigation(event.senderFrame.origin, origin),
+  return (
+    isCurrentWindowFrame(event, windows.getLoginWindow(), (url) =>
+      isTrustedAppNavigation(url, origin),
+    ) &&
+    event.senderFrame !== null &&
+    isTrustedAppNavigation(event.senderFrame.origin, origin)
   )
 }
 
 /**
- * Binds the local editor and remote Settings to their narrow main-process capabilities.
+ * Binds the bundled editor and bundled Settings window to their narrow main-process capabilities.
  * Main constructs this once, before loading either renderer. Reads recheck generation
  * after worker/dialog awaits so an account switch cannot disclose an earlier result.
  * @example const ipc = new OfflineEditorIPC(windowManager, controller)
@@ -79,6 +86,12 @@ export class OfflineEditorIPC {
   constructor(
     private readonly windows: WindowManager,
     private readonly controller: OfflineEditorController,
+    private readonly deps: {
+      /** Runs one sign-out implementation (C23) so `account.signOut` and `auth-logout` share steps 1-4. */
+      signOutDevice: (
+        run: () => Promise<SignOutResult>,
+      ) => Promise<SignOutResult>
+    },
   ) {}
 
   /** Registers every capability; runtime argument validation is supplied by {@link typedHandle}.
@@ -233,6 +246,8 @@ export class OfflineEditorIPC {
    * @example ipc.publish(snapshot)
    */
   publish(snapshot: OfflineEditorSnapshot): void {
+    // Settings re-reads its own projection; the editor's startup barrier does not apply to it.
+    this.settingsChanged()
     if (this.snapshotReaders > 0) return
     const editor = this.windows.getLiveEditorWindow()
     if (
@@ -260,13 +275,17 @@ export class OfflineEditorIPC {
       typedSend(editor.webContents, 'offline-editor-shown')
   }
 
-  /** Sends no account data in the notification; Settings re-reads through its verified capability.
+  /** Sends no data in the notification; Settings re-reads through its verified capability.
    * @example ipc.settingsChanged()
    */
   settingsChanged(): void {
     const settings = this.windows.getSettingsWindow()
-    if (settings && !settings.isDestroyed())
-      typedSend(settings.webContents, 'offline-settings-changed')
+    if (
+      settings &&
+      !settings.isDestroyed() &&
+      isLocalSettingsDocument(settings.webContents.getURL())
+    )
+      typedSend(settings.webContents, 'settings-window-changed')
   }
 
   /** Challenges the renderer's current live buffer before hide, account transition or quit.
@@ -312,64 +331,87 @@ export class OfflineEditorIPC {
     return promise
   }
 
-  /** Transfers only the verified account's preferences and acknowledges explicit field patches.
+  /** Registers the bundled Settings capabilities; each handler verifies the exact window and document first.
    * @example this.registerSettings()
    */
   private registerSettings(): void {
-    typedHandle('offline-settings-category-request', (event) => {
+    typedHandle('settings-window-snapshot', (event) => {
       this.assertSettings(event)
-      // Category management lives in the editor picker now; the remote dialog is retired in step 5.
-      return null
+      return this.settingsSnapshot()
     })
     typedHandle(
-      'offline-settings-category-created',
-      (event, ownerId, generation) => {
-        this.assertSettings(event)
-        const context = this.controller.settingsContext(ownerId)
-        if (context?.generation !== generation) return false
-        // The remote dialog's server id is advisory; the refresh mirrors the category locally.
-        this.controller.retrySync()
-        return true
-      },
-    )
-    typedHandle('offline-settings-refresh-categories', (event) => {
-      this.assertSettings(event)
-      if (this.controller.getSnapshot().phase === 'ready')
-        this.controller.retrySync()
-    })
-    typedHandle('offline-settings-read', (event, owner) => {
-      this.assertSettings(event)
-      return this.controller.settingsContext(owner)
-    })
-    // Preparation no longer needs Settings preferences (D1); the channel stays until D5 retires it.
-    typedHandle('offline-settings-prepare', (event) => {
-      this.assertSettings(event)
-      return false
-    })
-    typedHandle(
-      'offline-settings-patch',
-      async (
-        event,
-        owner,
-        generation,
-        command,
-      ): Promise<OfflineSettingsResult> => {
-        this.assertSettings(event)
-        const result = await this.controller.patchSettings(
-          owner,
-          generation,
-          command,
-        )
-        this.settingsChanged()
-        // A remote Settings document receives preferences only, never the workspace/draft projection.
+      'settings-window-preferences-patch',
+      async (event, generation, command): Promise<OfflineSettingsResult> => {
+        this.assertSettings(event, generation)
+        const result = await this.controller.command(generation, command)
+        this.assertSettings(event, generation)
         if (!result.ok) return result
-        this.assertSettings(event)
-        const current = this.controller.settingsContext(owner)
-        if (current?.generation !== generation || !current.preferences)
+        const current = this.controller.getSnapshot()
+        if (current.phase !== 'ready' || current.generation !== generation)
           return { ok: false, reason: 'account-changed' }
-        return { ok: true, generation, preferences: current.preferences }
+        return {
+          ok: true,
+          generation,
+          preferences: current.workspace.preferences,
+        }
       },
     )
+    typedHandle(
+      'settings-window-category-command',
+      async (event, generation, command) => {
+        this.assertSettings(event, generation)
+        return this.controller.command(generation, command)
+      },
+    )
+    typedHandle('settings-window-sync-details', async (event, generation) => {
+      this.assertSettings(event, generation)
+      const details = await this.controller.syncDetails(generation)
+      this.assertSettings(event, generation)
+      return details
+    })
+    typedHandle('settings-window-account-status', (event) => {
+      this.assertSettings(event)
+      return this.controller.accountStatus()
+    })
+    typedHandle('settings-window-account-connect', async (event) => {
+      this.assertSettings(event)
+      return this.controller.connect()
+    })
+    typedHandle('settings-window-account-not-now', async (event) => {
+      this.assertSettings(event)
+      return this.deps.signOutDevice(async () => this.controller.notNow())
+    })
+    typedHandle('settings-window-account-sign-in', (event) => {
+      this.assertSettings(event)
+      this.windows.showLoginWindow()
+    })
+    typedHandle('settings-window-account-sign-out', async (event) => {
+      this.assertSettings(event)
+      return this.deps.signOutDevice(async () => this.controller.signOut())
+    })
+    typedHandle('settings-window-account-open-dashboard', (event) => {
+      this.assertSettings(event)
+      // The address comes from the configured server URL only, never from the renderer (EA16).
+      openWebAppInBrowser(this.windows.getWebAppOrigin(), '/home')
+      return true
+    })
+  }
+
+  /** Projects the controller state to what Settings renders, without the draft text.
+   * @example const snapshot = this.settingsSnapshot()
+   */
+  private settingsSnapshot(): SettingsSnapshot {
+    const snapshot = this.controller.getSnapshot()
+    const account = this.controller.accountStatus()
+    if (snapshot.phase !== 'ready')
+      return { phase: snapshot.phase, generation: snapshot.generation, account }
+    return {
+      phase: 'ready',
+      generation: snapshot.generation,
+      preferences: snapshot.workspace.preferences,
+      categories: snapshot.workspace.categories,
+      account,
+    }
   }
 
   /** Rejects a former document, child frame, or generation before native data access.
@@ -392,23 +434,24 @@ export class OfflineEditorIPC {
       throw new Error('Account changed')
   }
 
-  /** Keeps preference transfer off login/handshake documents even within the same origin.
-   * @example this.assertSettings(event)
+  /** Accepts only the Settings window's own main frame at its exact bundled document (D5, EA16).
+   * @example this.assertSettings(event, generation)
    */
-  private assertSettings(event: IpcMainInvokeEvent): void {
-    const origin = this.windows.getWebAppOrigin()
+  private assertSettings(event: IpcMainInvokeEvent, generation?: number): void {
     if (
       !isCurrentWindowFrame(
         event,
         this.windows.getSettingsWindow(),
-        (url) =>
-          isTrustedAppNavigation(url, origin) &&
-          new URL(url).pathname === '/settings',
+        isLocalSettingsDocument,
       ) ||
-      !event.senderFrame ||
-      !isTrustedAppNavigation(event.senderFrame.origin, origin)
+      event.senderFrame?.origin !== LOCAL_EDITOR_ORIGIN
     )
       throw new Error('Unauthorized settings')
+    if (
+      generation !== undefined &&
+      generation !== this.controller.getSnapshot().generation
+    )
+      throw new Error('Account changed')
   }
 
   /** Completes one coalesced flush challenge and cancels its deadline.

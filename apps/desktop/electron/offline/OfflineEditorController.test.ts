@@ -183,7 +183,6 @@ async function createFixture(
     transport: () => transport,
     requestFlush,
     legacyNotes: () => ({}),
-    onSettingsContext: vi.fn(),
     onSnapshot: (snapshot) => snapshots.push(snapshot),
     endLocalSession,
     log,
@@ -288,6 +287,7 @@ test.each(['after', 'before', 'queued'] as const)(
         getSettingsWindow: () => null,
       } as unknown as WindowManager,
       controller,
+      { signOutDevice: vi.fn() },
     )
     ipc.register()
     const readSnapshot = vi
@@ -428,6 +428,7 @@ test.each(['crashed', 'loading', 'destroyed', 'contents-destroyed', 'missing'])(
           state === 'missing' ? null : (editor as unknown as BrowserWindow),
       } as unknown as WindowManager,
       controller,
+      { signOutDevice: vi.fn() },
     )
     requestFlush.mockImplementation(async (generation) => ipc.flush(generation))
     const save = {

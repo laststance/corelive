@@ -9,12 +9,16 @@ import type { WindowManager } from '../WindowManager'
 
 import { categoryUuid } from './deviceWorkspaceFixture'
 import type { OfflineEditorController } from './OfflineEditorController'
-import { OfflineEditorIPC } from './OfflineEditorIPC'
+import { isTrustedAuthSender, OfflineEditorIPC } from './OfflineEditorIPC'
 
 vi.mock('electron', () => ({
   ipcMain: { handle: vi.fn() },
   clipboard: { writeText: vi.fn() },
   dialog: { showSaveDialog: vi.fn() },
+  shell: { openExternal: vi.fn(async () => undefined) },
+}))
+vi.mock('../logger', () => ({
+  log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }))
 
 type Handler = (
@@ -31,8 +35,8 @@ function createFixture() {
     origin: 'corelive-editor://app',
   }
   const settingsFrame = {
-    url: 'https://www.corelive.app/settings',
-    origin: 'https://www.corelive.app',
+    url: 'corelive-editor://app/settings.html',
+    origin: 'corelive-editor://app',
   }
   const editor = {
     isDestroyed: () => false,
@@ -51,6 +55,7 @@ function createFixture() {
       mainFrame: settingsFrame,
       isDestroyed: () => false,
       isLoadingMainFrame: () => false,
+      getURL: () => settingsFrame.url,
       send: vi.fn(),
     },
   }
@@ -116,26 +121,30 @@ function createFixture() {
     retrySync: vi.fn(),
     syncDetails: vi.fn(),
     details: vi.fn(async () => ({ total: 0, records: [] })),
-    settingsContext: vi.fn((accountId: string) =>
-      accountId === 'account-a' ? { generation: 1, preferences } : null,
-    ),
-    patchSettings: vi.fn(async () => ({
+    command: vi.fn(async () => ({
       ok: true,
       generation: 1,
       revision: 1,
-      workspace: snapshot.phase === 'ready' ? snapshot.workspace : null,
+      workspace: null,
     })),
+    accountStatus: vi.fn(() => ({ state: 'never-attached' })),
+    connect: vi.fn(async () => true),
+    signOut: vi.fn(async () => ({ status: 'signed-out' })),
+    notNow: vi.fn(async () => ({ status: 'signed-out' })),
   }
   const windows = {
     openSettings: vi.fn(),
     getLiveEditorWindow: () => editor as unknown as BrowserWindow,
     getSettingsWindow: () => settings as unknown as BrowserWindow,
     getLoginWindow: () => null,
+    showLoginWindow: vi.fn(),
     getWebAppOrigin: () => 'https://corelive.app',
   }
+  const signOutDevice = vi.fn(async (run: () => Promise<unknown>) => run())
   const ipc = new OfflineEditorIPC(
     windows as unknown as WindowManager,
     controller as unknown as OfflineEditorController,
+    { signOutDevice: signOutDevice as never },
   )
   ipc.register()
   const handler = (channel: string): Handler => {
@@ -154,6 +163,8 @@ function createFixture() {
     settings,
     controller,
     windows,
+    signOutDevice,
+    preferences,
     handler,
     updateSnapshot: (next: OfflineEditorSnapshot): void => {
       snapshot = next
@@ -248,9 +259,8 @@ test('Settings receives only preferences after a patch, never the account draft'
   const { settingsEvent, handler } = createFixture()
 
   // Act
-  const result = await handler('offline-settings-patch')(
+  const result = await handler('settings-window-preferences-patch')(
     settingsEvent,
-    'account-a',
     1,
     {
       type: 'preferences',
@@ -268,6 +278,180 @@ test('Settings receives only preferences after a patch, never the account draft'
   })
   expect(JSON.stringify(result)).not.toContain('PRIVATE DRAFT')
   expect(result).not.toHaveProperty('workspace')
+})
+
+test('the Settings snapshot carries preferences, categories and account status but no draft text', async () => {
+  // Arrange
+  const { settingsEvent, handler } = createFixture()
+
+  // Act
+  const snapshot = await handler('settings-window-snapshot')(settingsEvent)
+
+  // Assert
+  expect(snapshot).toMatchObject({
+    phase: 'ready',
+    generation: 1,
+    account: { state: 'never-attached' },
+  })
+  expect(JSON.stringify(snapshot)).not.toContain('PRIVATE DRAFT')
+})
+
+test.each([
+  ['the editor window', (f: ReturnType<typeof createFixture>) => f.event],
+  [
+    'a child frame of Settings',
+    (f: ReturnType<typeof createFixture>) =>
+      ({
+        ...f.settingsEvent,
+        senderFrame: { ...f.settings.webContents.mainFrame },
+      }) as IpcMainInvokeEvent,
+  ],
+])('Settings capabilities reject %s', async (_name, pick) => {
+  // Arrange
+  const fixture = createFixture()
+
+  // Act / Assert
+  await expect(
+    fixture.handler('settings-window-snapshot')(pick(fixture)),
+  ).rejects.toThrow('Unauthorized settings')
+})
+
+test.each([
+  'corelive-editor://app/index.html',
+  'corelive-editor://app/settings.html?x=1',
+  'https://corelive.app/settings',
+])(
+  'the Settings window at %s is not trusted with native capabilities',
+  async (url) => {
+    // Arrange
+    const fixture = createFixture()
+    fixture.settings.webContents.mainFrame.url = url
+
+    // Act / Assert
+    await expect(
+      fixture.handler('settings-window-snapshot')(fixture.settingsEvent),
+    ).rejects.toThrow('Unauthorized settings')
+  },
+)
+
+test('a Settings request for a previous generation is rejected before it reaches the workspace', async () => {
+  // Arrange
+  const fixture = createFixture()
+
+  // Act / Assert
+  await expect(
+    fixture.handler('settings-window-category-command')(
+      fixture.settingsEvent,
+      0,
+      {
+        type: 'categoryRename',
+        commandId: randomUUID(),
+        categoryId: categoryUuid(1),
+        name: 'x',
+      },
+    ),
+  ).rejects.toThrow('Account changed')
+  expect(fixture.controller.command).not.toHaveBeenCalled()
+})
+
+test('Settings category commands reach the workspace with the current generation', async () => {
+  // Arrange
+  const fixture = createFixture()
+  const command = {
+    type: 'categoryRename',
+    commandId: randomUUID(),
+    categoryId: categoryUuid(1),
+    name: 'Reading',
+  }
+
+  // Act
+  await fixture.handler('settings-window-category-command')(
+    fixture.settingsEvent,
+    1,
+    command,
+  )
+
+  // Assert
+  expect(fixture.controller.command).toHaveBeenCalledExactlyOnceWith(1, command)
+})
+
+test('opening the dashboard uses the configured server origin and rejects any renderer-supplied address', async () => {
+  // Arrange
+  const fixture = createFixture()
+  const { shell } = await import('electron')
+  const open = fixture.handler('settings-window-account-open-dashboard')
+
+  // Act
+  await expect(
+    open(fixture.settingsEvent, 'https://evil.example'),
+  ).rejects.toThrow('IPC validation failed')
+  await open(fixture.settingsEvent)
+
+  // Assert
+  expect(shell.openExternal).toHaveBeenCalledExactlyOnceWith(
+    'https://corelive.app/home',
+  )
+})
+
+test('Settings sign-out and Not now run through the one shared sign-out implementation', async () => {
+  // Arrange
+  const fixture = createFixture()
+
+  // Act
+  await fixture.handler('settings-window-account-sign-out')(
+    fixture.settingsEvent,
+  )
+  await fixture.handler('settings-window-account-not-now')(
+    fixture.settingsEvent,
+  )
+
+  // Assert
+  expect(fixture.signOutDevice).toHaveBeenCalledTimes(2)
+  expect(fixture.controller.signOut).toHaveBeenCalledOnce()
+  expect(fixture.controller.notNow).toHaveBeenCalledOnce()
+})
+
+test('Settings sign-in opens the login window and Connect attaches the pending account', async () => {
+  // Arrange
+  const fixture = createFixture()
+
+  // Act
+  await fixture.handler('settings-window-account-sign-in')(
+    fixture.settingsEvent,
+  )
+  const connected = await fixture.handler('settings-window-account-connect')(
+    fixture.settingsEvent,
+  )
+
+  // Assert
+  expect(fixture.windows.showLoginWindow).toHaveBeenCalledOnce()
+  expect(connected).toBe(true)
+})
+
+test('only the login window may send authentication notifications, never Settings', () => {
+  // Arrange
+  const fixture = createFixture()
+  const loginFrame = {
+    url: 'https://corelive.app/login-shell',
+    origin: 'https://corelive.app',
+  }
+  const login = {
+    isDestroyed: () => false,
+    webContents: { mainFrame: loginFrame },
+  }
+  const windows = {
+    ...fixture.windows,
+    getLoginWindow: () => login,
+  } as unknown as WindowManager
+  const loginEvent = {
+    sender: login.webContents,
+    senderFrame: loginFrame,
+  } as unknown as IpcMainInvokeEvent
+
+  // Act / Assert
+  expect(isTrustedAuthSender(loginEvent, windows)).toBe(true)
+  expect(isTrustedAuthSender(fixture.settingsEvent, windows)).toBe(false)
+  expect(isTrustedAuthSender(fixture.event, windows)).toBe(false)
 })
 
 test('hide and quit share one flush challenge and reject stale or foreign acknowledgements', async () => {
@@ -328,54 +512,6 @@ test('a crashed editor permits quitting or updating without waiting for an unrea
 
   // Assert
   await expect(flush).resolves.toBe(true)
-})
-
-test('category creation triggers a sync refresh only for the attached account and current generation', async () => {
-  // Arrange
-  const fixture = createFixture()
-  const created = fixture.handler('offline-settings-category-created')
-
-  // Act
-  const otherAccount = await created(
-    fixture.settingsEvent,
-    'another-account',
-    1,
-    42,
-  )
-  const staleGeneration = await created(
-    fixture.settingsEvent,
-    'account-a',
-    0,
-    42,
-  )
-  const accepted = await created(fixture.settingsEvent, 'account-a', 1, 42)
-
-  // Assert
-  expect(otherAccount).toBe(false)
-  expect(staleGeneration).toBe(false)
-  expect(accepted).toBe(true)
-  expect(fixture.controller.retrySync).toHaveBeenCalledOnce()
-  expect(fixture.editor.webContents.send).not.toHaveBeenCalledWith(
-    'offline-editor-category-created',
-    expect.anything(),
-  )
-})
-
-test('category management in the editor picker no longer needs a live account, so the retired settings request stays empty', async () => {
-  // Arrange
-  const fixture = createFixture()
-  const snapshot = fixture.controller.getSnapshot()
-  if (snapshot.phase !== 'ready') throw new Error('Missing fixture workspace')
-  fixture.updateSnapshot({
-    ...snapshot,
-    sync: { ...snapshot.sync, state: 'local-only' },
-  })
-
-  // Act / Assert
-  await expect(
-    fixture.handler('offline-settings-category-request')(fixture.settingsEvent),
-  ).resolves.toBeNull()
-  expect(() => fixture.handler('offline-editor-manage-categories')).toThrow()
 })
 
 test('the Sync details read is served to the editor window of the current generation only', async () => {

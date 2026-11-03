@@ -9,7 +9,7 @@
  */
 
 import type { ConfigSection, UpdaterStatus, IPCResponse } from './ipc'
-import type { OfflineEditorAPI, OfflineSettingsAPI } from './offline-editor-api'
+import type { OfflineEditorAPI, SettingsWindowAPI } from './offline-editor-api'
 
 /**
  * Electron API exposed to renderer via contextBridge.
@@ -53,8 +53,108 @@ export interface OAuthBridge {
   clearPendingToken: () => Promise<boolean>
 }
 
+/** Configuration management bridge (config.json through main). */
+export interface ElectronConfigAPI {
+  /** Get config value by path */
+  get: <T = unknown>(path: string, defaultValue?: T) => Promise<T>
+  /** Set config value by path */
+  set: <T = unknown>(path: string, value: T) => Promise<boolean>
+  /** Get all config values */
+  getAll: () => Promise<Record<string, unknown>>
+  /** Get config section */
+  getSection: (
+    section: ConfigSection,
+  ) => Promise<Record<string, unknown> | null>
+  /** Update multiple config values */
+  update: (updates: Record<string, unknown>) => Promise<boolean>
+  /** Reset all config to defaults */
+  reset: () => Promise<void>
+  /** Reset config section to defaults */
+  resetSection: (section: ConfigSection) => Promise<void>
+  /** Validate config values */
+  validate: () => Promise<{ isValid: boolean; errors: string[] }>
+  /** Export config — main process shows a save dialog; no path from renderer */
+  export: () => Promise<boolean>
+  /** Import config — main process shows an open dialog; no path from renderer */
+  import: () => Promise<boolean>
+  /** Create config backup */
+  backup: () => Promise<string | null>
+  /** Get config file paths */
+  getPaths: () => Promise<{
+    config: string
+    windowState: string
+    directory: string
+  }>
+  /** Open config.json in the default application (path resolved in main process) */
+  open: () => Promise<boolean>
+  /** Save config to file (no-op - config auto-persists on modification) */
+  save?: () => Promise<boolean>
+  /** Load config from file (async via IPC) */
+  load?: () => Promise<Record<string, unknown>>
+}
+
+/** LiveEditor panel booleans (legacy wire name `floatingPanels` is frozen in installed preloads). */
+export interface ElectronPanelsAPI {
+  /** Read whether LiveEditor follows macOS Spaces. */
+  getVisibleOnAllWorkspaces: () => Promise<boolean>
+  /** Persist and apply whether LiveEditor follows macOS Spaces. */
+  setVisibleOnAllWorkspaces: (enabled: boolean) => Promise<boolean>
+  /** Read LiveEditor's always-on-top setting (config-backed, default off). */
+  getLiveEditorAlwaysOnTop: () => Promise<boolean>
+  /** Persist and apply LiveEditor's always-on-top setting. */
+  setLiveEditorAlwaysOnTop: (enabled: boolean) => Promise<boolean>
+  /** @deprecated Pre-rename installed preload method; use `getLiveEditorAlwaysOnTop`. */
+  getBrainDumpAlwaysOnTop?: () => Promise<boolean>
+  /** @deprecated Pre-rename installed preload method; use `setLiveEditorAlwaysOnTop`. */
+  setBrainDumpAlwaysOnTop?: (enabled: boolean) => Promise<boolean>
+}
+
+/** Auto-updater controls. */
+export interface ElectronUpdaterAPI {
+  /** Check for updates */
+  checkForUpdates: () => Promise<boolean>
+  /** Quit and install update */
+  quitAndInstall: () => Promise<boolean>
+  /** Get current update status */
+  getStatus: () => Promise<UpdaterStatus>
+}
+
+/** Electron-specific app behavior (dock, menu bar, login item). */
+export interface ElectronSettingsAPI {
+  /**
+   * Set whether the app icon should be hidden from the dock (macOS).
+   * @param hide - true to hide from dock, false to show
+   * @returns Promise resolving to success status
+   */
+  setHideAppIcon: (hide: boolean) => Promise<boolean>
+  /**
+   * Set whether the app should show in the menu bar.
+   * @param show - true to show in menu bar, false to hide
+   * @returns Promise resolving to success status
+   */
+  setShowInMenuBar: (show: boolean) => Promise<boolean>
+  /**
+   * Set whether the app should start at system login.
+   * @param enable - true to enable start at login, false to disable
+   * @returns Promise resolving to success status
+   */
+  setStartAtLogin: (enable: boolean) => Promise<boolean>
+  /**
+   * Read the current OS login-item settings.
+   * @returns Promise resolving to the login-item state
+   */
+  getLoginItemSettings: () => Promise<
+    IPCResponse<'settings:getLoginItemSettings'>
+  >
+  /**
+   * Resets the Settings popover window to default size (360×380) and
+   * re-anchors it to the tray icon.
+   * @returns Promise resolving to true on success, false on IPC failure.
+   */
+  resetPopoverSize: () => Promise<boolean>
+}
+
 export interface ElectronAPI {
-  offlineSettings?: OfflineSettingsAPI
   /**
    * Authentication operations.
    */
@@ -66,44 +166,7 @@ export interface ElectronAPI {
   /**
    * Configuration management.
    */
-  config: {
-    /** Get config value by path */
-    get: <T = unknown>(path: string, defaultValue?: T) => Promise<T>
-    /** Set config value by path */
-    set: <T = unknown>(path: string, value: T) => Promise<boolean>
-    /** Get all config values */
-    getAll: () => Promise<Record<string, unknown>>
-    /** Get config section */
-    getSection: (
-      section: ConfigSection,
-    ) => Promise<Record<string, unknown> | null>
-    /** Update multiple config values */
-    update: (updates: Record<string, unknown>) => Promise<boolean>
-    /** Reset all config to defaults */
-    reset: () => Promise<void>
-    /** Reset config section to defaults */
-    resetSection: (section: ConfigSection) => Promise<void>
-    /** Validate config values */
-    validate: () => Promise<{ isValid: boolean; errors: string[] }>
-    /** Export config — main process shows a save dialog; no path from renderer */
-    export: () => Promise<boolean>
-    /** Import config — main process shows an open dialog; no path from renderer */
-    import: () => Promise<boolean>
-    /** Create config backup */
-    backup: () => Promise<string | null>
-    /** Get config file paths */
-    getPaths: () => Promise<{
-      config: string
-      windowState: string
-      directory: string
-    }>
-    /** Open config.json in the default application (path resolved in main process) */
-    open: () => Promise<boolean>
-    /** Save config to file (no-op - config auto-persists on modification) */
-    save?: () => Promise<boolean>
-    /** Load config from file (async via IPC) */
-    load?: () => Promise<Record<string, unknown>>
-  }
+  config: ElectronConfigAPI
 
   /**
    * Shared settings for the LiveEditor panel.
@@ -111,20 +174,7 @@ export interface ElectronAPI {
    * `floatingPanels` is the legacy wire name — frozen preloads in installed
    * builds expose it under this key; do not rename.
    */
-  floatingPanels?: {
-    /** Read whether LiveEditor follows macOS Spaces. */
-    getVisibleOnAllWorkspaces: () => Promise<boolean>
-    /** Persist and apply whether LiveEditor follows macOS Spaces. */
-    setVisibleOnAllWorkspaces: (enabled: boolean) => Promise<boolean>
-    /** Read LiveEditor's always-on-top setting (config-backed, default off). */
-    getLiveEditorAlwaysOnTop: () => Promise<boolean>
-    /** Persist and apply LiveEditor's always-on-top setting. */
-    setLiveEditorAlwaysOnTop: (enabled: boolean) => Promise<boolean>
-    /** @deprecated Pre-rename installed preload method; use `getLiveEditorAlwaysOnTop`. */
-    getBrainDumpAlwaysOnTop?: () => Promise<boolean>
-    /** @deprecated Pre-rename installed preload method; use `setLiveEditorAlwaysOnTop`. */
-    setBrainDumpAlwaysOnTop?: (enabled: boolean) => Promise<boolean>
-  }
+  floatingPanels?: ElectronPanelsAPI
 
   /**
    * App operations.
@@ -139,52 +189,13 @@ export interface ElectronAPI {
   /**
    * Auto-updater operations.
    */
-  updater: {
-    /** Check for updates */
-    checkForUpdates: () => Promise<boolean>
-    /** Quit and install update */
-    quitAndInstall: () => Promise<boolean>
-    /** Get current update status */
-    getStatus: () => Promise<UpdaterStatus>
-  }
+  updater: ElectronUpdaterAPI
 
   /**
    * Electron-specific settings management.
    * Controls app behavior like dock visibility and startup settings.
    */
-  settings?: {
-    /**
-     * Set whether the app icon should be hidden from the dock (macOS).
-     * @param hide - true to hide from dock, false to show
-     * @returns Promise resolving to success status
-     */
-    setHideAppIcon: (hide: boolean) => Promise<boolean>
-    /**
-     * Set whether the app should show in the menu bar.
-     * @param show - true to show in menu bar, false to hide
-     * @returns Promise resolving to success status
-     */
-    setShowInMenuBar: (show: boolean) => Promise<boolean>
-    /**
-     * Set whether the app should start at system login.
-     * @param enable - true to enable start at login, false to disable
-     * @returns Promise resolving to success status
-     */
-    setStartAtLogin: (enable: boolean) => Promise<boolean>
-    /**
-     * Read the current OS login-item settings.
-     * @returns Promise resolving to the login-item state
-     */
-    getLoginItemSettings: () => Promise<
-      IPCResponse<'settings:getLoginItemSettings'>
-    >
-    /**
-     * Resets the Settings popover window to default size (360×380) and
-     * re-anchors it to the tray icon.
-     * @returns Promise resolving to true on success, false on IPC failure.
-     */
-    resetPopoverSize: () => Promise<boolean>
-  }
+  settings?: ElectronSettingsAPI
 
   /**
    * LiveEditor Note window configuration from the Settings window's UI.
@@ -307,6 +318,12 @@ declare global {
      * Only available when running in the LiveEditor window.
      */
     liveEditorAPI?: LiveEditorAPI
+
+    /**
+     * Named capabilities of the bundled Settings window (`preload-settings.ts`).
+     * Only available in `corelive-editor://app/settings.html`.
+     */
+    settingsAPI?: SettingsWindowAPI
 
     /**
      * LiveEditor environment information.

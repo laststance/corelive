@@ -11,7 +11,11 @@ const desktopDirectory = fileURLToPath(new URL('../', import.meta.url))
  * @example await buildOfflinePreloads()
  */
 async function buildOfflinePreloads() {
-  for (const name of ['preload-offline-auth', 'preload-offline-editor']) {
+  for (const name of [
+    'preload-offline-auth',
+    'preload-offline-editor',
+    'preload-settings',
+  ]) {
     const result = await build({
       configFile: false,
       envDir: false,

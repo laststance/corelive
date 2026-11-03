@@ -112,20 +112,19 @@ pnpm qa:offline-editor
 # In another terminal, use the printed loopback URL:
 pnpm qa:browser open http://127.0.0.1:<port>
 
-# For Settings, run separately and navigate to its printed URL:
-pnpm qa:settings
+# For the web dashboard, run separately and open the printed URL:
+pnpm qa:web   # ?view=home (default) or ?view=appearance
 ```
 
 The offline fixture serves the built renderer and real workspace worker against
 a temporary synthetic workspace. It injects a test-only preload bridge for save
-failure, delayed acknowledgement, sync state and preference changes. Settings
-renders the production components, Redux and preference coordinator with synthetic
-native and account adapters. `?bridge=legacy`, `?bridge=rejected`,
-`?bridge=pending`, `?bridge=lost-ack` and `?bridge=web` exercise compatibility and failure states.
-In the synthetic Settings page, `window.__settingsFixture.control('supported')`
-restores transport availability and releases a delayed acknowledgement.
+failure, delayed acknowledgement, sync state and preference changes.
+`pnpm qa:web` serves the web Home sidebar and Completed card against an in-page
+fake oRPC router, and the web `/settings` Appearance section. The desktop
+Settings window is bundled (`corelive-editor://app/settings.html`); its
+headless fixture, `pnpm qa:settings`, arrives with the Account section.
 Neither helper launches Electron, reads an owner profile, authenticates, or sends
-completion records to production. The Settings Vite server disables env-file
+completion records to production. The web Vite server disables env-file
 loading. Both listen only on loopback and are outside production bundle entries.
 Stop each server with Ctrl-C; the offline helper closes its worker and deletes
 its temporary workspace. Save videos and screenshots under the ignored `.gstack/`

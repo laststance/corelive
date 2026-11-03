@@ -7,7 +7,6 @@ import type {
 } from '@corelive/desktop-contract/offline-account'
 import type { OfflineRecoveryPreview } from '@corelive/desktop-contract/offline-editor-api'
 import type { CompletionSyncTransport } from '@corelive/desktop-contract/offline-sync'
-import type { OfflinePreferences } from '@corelive/desktop-contract/offline-workspace'
 import {
   DEVICE_OWNER_ID,
   WorkspaceCommandSchema,
@@ -41,12 +40,6 @@ type ControllerOptions = {
   legacyNotes: () => Record<string, string>
   requestFlush: (generation: number) => Promise<boolean>
   onSnapshot: (snapshot: OfflineEditorSnapshot) => void
-  /** Tells Settings that the attached account's preferences or status changed. */
-  onSettingsContext: (
-    accountId: string,
-    generation: number,
-    preferences: OfflinePreferences | null,
-  ) => void
   /** D3 step 4 against the default session (wraps `endLocalSession`). */
   endLocalSession: () => Promise<SessionEnd>
   registry?: OfflineAccountRegistry
@@ -523,35 +516,6 @@ export class OfflineEditorController {
     )
   }
 
-  /** Returns the attached account's settings authority; no other account receives preferences.
-   * @example controller.settingsContext(accountId)
-   */
-  settingsContext(
-    accountId: string,
-  ): { generation: number; preferences: OfflinePreferences | null } | null {
-    if (this.registryState?.attachedAccountId !== accountId) return null
-    return {
-      generation: this.generation,
-      preferences:
-        this.snapshot.phase === 'ready'
-          ? this.snapshot.workspace.preferences
-          : null,
-    }
-  }
-
-  /** Applies an explicit field patch for the attached account's Settings document.
-   * @example await controller.patchSettings(accountId, generation, command)
-   */
-  async patchSettings(
-    accountId: string,
-    generation: number,
-    command: Extract<WorkspaceCommand, { type: 'preferences' }>,
-  ): Promise<OfflineCommandResult> {
-    if (this.registryState?.attachedAccountId !== accountId)
-      return { ok: false, reason: 'account-changed' }
-    return this.command(generation, command)
-  }
-
   /** Provides bounded recovery/sync inspection only to the currently selected account generation.
    * @example await controller.details(generation, 0, 50)
    */
@@ -721,7 +685,6 @@ export class OfflineEditorController {
         ? { unsavedDraft: this.failedDrafts.get(view.ownerId)! }
         : {}),
     })
-    this.notifySettings(view, generation)
     if (this.clearTimer) clearTimeout(this.clearTimer)
     this.clearTimer = null
     const now = Date.now()
@@ -777,14 +740,6 @@ export class OfflineEditorController {
     )
       this.firstUpload = { state: 'done', count: this.firstUpload.count }
     this.publish({ ...this.snapshot, sync })
-    this.notifySettings(workspace, this.snapshot.generation)
-  }
-
-  /** Tells the Settings window that account-visible state changed. */
-  private notifySettings(view: WorkspaceView, generation: number): void {
-    const accountId = this.registryState?.attachedAccountId
-    if (accountId)
-      this.options.onSettingsContext(accountId, generation, view.preferences)
   }
 
   /** Clears acknowledged completed lines on schedule even if the renderer is hidden or restarted.

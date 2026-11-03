@@ -1,0 +1,466 @@
+// @vitest-environment happy-dom
+import '@testing-library/jest-dom/vitest'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+
+import { LiveEditorSettings } from './LiveEditorSettings'
+
+const getOpacityMock = vi.fn()
+const setOpacityMock = vi.fn()
+const getShortcutMock = vi.fn()
+const setShortcutMock = vi.fn()
+const getShortcutSecondaryMock = vi.fn()
+const setShortcutSecondaryMock = vi.fn()
+const openConfigMock = vi.fn()
+
+type LiveEditorBridge = {
+  getOpacity: () => Promise<number>
+  setOpacity: (value: number) => Promise<number>
+  getShortcut: () => Promise<string>
+  setShortcut: (accelerator: string) => Promise<boolean>
+  getShortcutSecondary: () => Promise<string>
+  setShortcutSecondary: (accelerator: string) => Promise<boolean>
+}
+
+type ConfigBridge = {
+  open: () => Promise<boolean>
+}
+
+/**
+ * Defines the preload bridge shape the Settings card expects during renderer tests.
+ *
+ * @param api - Fake Electron preload API, or undefined for a web renderer.
+ * @returns Nothing; mutates the happy-dom window object for this test.
+ * @example
+ * installElectronAPI({ liveEditor: fakeBridge })
+ */
+function installElectronAPI(
+  api:
+    | {
+        liveEditor?: Partial<LiveEditorBridge>
+        config?: Partial<ConfigBridge>
+      }
+    | undefined,
+): void {
+  Object.defineProperty(window, 'settingsAPI', {
+    configurable: true,
+    writable: true,
+    value: api,
+  })
+}
+
+/**
+ * Installs a successful LiveEditor preload bridge so loading can advance to ready state.
+ *
+ * @param saved - Persisted settings returned by the main process mocks.
+ * @returns Nothing; prepares all LiveEditor mocks for a component render.
+ * @example
+ * installLiveEditorBridge({ opacity: 0.7, shortcut: 'CommandOrControl+Shift+B' })
+ */
+function installLiveEditorBridge(saved: {
+  opacity: number
+  shortcut: string
+  /**
+   * Second-slot accelerator. Omit to simulate an OLD preload that predates the
+   * two-slot bridge — the card must then render a single capture box.
+   */
+  secondaryShortcut?: string
+}): void {
+  getOpacityMock.mockResolvedValue(saved.opacity)
+  setOpacityMock.mockResolvedValue(saved.opacity)
+  getShortcutMock.mockResolvedValue(saved.shortcut)
+  setShortcutMock.mockResolvedValue(true)
+  openConfigMock.mockResolvedValue(true)
+
+  installElectronAPI({
+    liveEditor: {
+      getOpacity: getOpacityMock,
+      setOpacity: setOpacityMock,
+      getShortcut: getShortcutMock,
+      setShortcut: setShortcutMock,
+      // Only a bridge that reports a second slot gets the second-slot methods.
+      ...(saved.secondaryShortcut === undefined
+        ? {}
+        : {
+            getShortcutSecondary: getShortcutSecondaryMock,
+            setShortcutSecondary: setShortcutSecondaryMock,
+          }),
+    },
+    config: {
+      open: openConfigMock,
+    },
+  })
+
+  getShortcutSecondaryMock.mockResolvedValue(saved.secondaryShortcut ?? '')
+  setShortcutSecondaryMock.mockResolvedValue(true)
+}
+
+/** Mirrors the Settings page's separated slots so error locality is observable.
+ * @example renderSplitSettings()
+ */
+function renderSplitSettings(): void {
+  render(
+    <LiveEditorSettings>
+      {(controls) => (
+        <>
+          <section aria-label="LiveEditor">{controls.opacity}</section>
+          <section aria-label="Shortcuts & Sound">{controls.shortcuts}</section>
+          <section aria-label="Application">{controls.config}</section>
+        </>
+      )}
+    </LiveEditorSettings>,
+  )
+}
+
+describe('LiveEditorSettings', () => {
+  beforeEach(() => {
+    getOpacityMock.mockReset()
+    setOpacityMock.mockReset()
+    getShortcutMock.mockReset()
+    setShortcutMock.mockReset()
+    getShortcutSecondaryMock.mockReset()
+    setShortcutSecondaryMock.mockReset()
+    openConfigMock.mockReset()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  test('shows saved LiveEditor settings after loading without changing hook order', async () => {
+    // Arrange: the preload bridge resolves and flips the card from loading to ready.
+    installLiveEditorBridge({
+      opacity: 0.7,
+      shortcut: 'Alt+Space',
+    })
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {})
+
+    // Act
+    render(<LiveEditorSettings />)
+
+    // Assert: the ready UI renders; the old conditional useMemo crash would abort here.
+    expect(await screen.findByText('Window opacity')).toBeInTheDocument()
+    expect(screen.getByText('70%')).toBeInTheDocument()
+    // The capture box renders the bound chord as a macOS glyph, not the raw
+    // "Alt+Space" accelerator string.
+    expect(screen.getByLabelText('Toggle shortcut')).toHaveTextContent('⌥Space')
+    expect(consoleErrorSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining(
+        'React has detected a change in the order of Hooks',
+      ),
+    )
+  })
+
+  test('binds a second key to the same toggle without disturbing the first', async () => {
+    // Arrange: a desktop app whose bridge carries both slots.
+    installLiveEditorBridge({
+      opacity: 0.7,
+      shortcut: 'Alt+Space',
+      secondaryShortcut: '',
+    })
+    render(<LiveEditorSettings />)
+    const secondBox = await screen.findByLabelText('Second toggle shortcut')
+
+    // Act: record ⌘3 into the SECOND box.
+    fireEvent.click(secondBox)
+    fireEvent.keyDown(secondBox, { code: 'Digit3', metaKey: true })
+
+    // Assert: the second slot took the new chord and the first kept its own.
+    expect(setShortcutSecondaryMock).toHaveBeenCalledWith('CommandOrControl+3')
+    expect(setShortcutMock).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Toggle shortcut')).toHaveTextContent('⌥Space')
+  })
+
+  test('hides the second shortcut box on a desktop app whose preload predates it', async () => {
+    // Arrange: an installed app updates its web bundle before its preload, so the
+    // bridge can carry the first slot only. Offering a box that cannot persist
+    // would silently swallow the user's chord.
+    installLiveEditorBridge({
+      opacity: 0.7,
+      shortcut: 'Alt+Space',
+    })
+
+    // Act
+    render(<LiveEditorSettings />)
+
+    // Assert: the first box still works; the second is not offered at all.
+    expect(await screen.findByLabelText('Toggle shortcut')).toHaveTextContent(
+      '⌥Space',
+    )
+    expect(
+      screen.queryByLabelText('Second toggle shortcut'),
+    ).not.toBeInTheDocument()
+  })
+
+  test('reverts the binding and explains why when the captured chord is already in use', async () => {
+    // Arrange: load with Alt+Space bound, then make the next register attempt fail.
+    installLiveEditorBridge({
+      opacity: 0.7,
+      shortcut: 'Alt+Space',
+    })
+    renderSplitSettings()
+    const box = await screen.findByLabelText('Toggle shortcut')
+    expect(box).toHaveTextContent('⌥Space')
+    // The main process rejects the next accelerator as already registered.
+    setShortcutMock.mockResolvedValueOnce(false)
+
+    // Act: record a new chord (⌘3) that gets refused.
+    fireEvent.click(box)
+    fireEvent.keyDown(box, { code: 'Digit3', metaKey: true })
+
+    // Assert: the conflict copy appears and the box rolls back to the last
+    // accepted binding rather than keeping the rejected ⌘3.
+    expect(
+      await within(
+        screen.getByRole('region', { name: 'Shortcuts & Sound' }),
+      ).findByRole('alert'),
+    ).toHaveTextContent("That combo's already in use — try another.")
+    expect(
+      within(screen.getByRole('region', { name: 'LiveEditor' })).queryByRole(
+        'alert',
+      ),
+    ).toBeNull()
+    expect(
+      within(screen.getByRole('region', { name: 'Application' })).queryByRole(
+        'alert',
+      ),
+    ).toBeNull()
+    expect(box).toHaveTextContent('⌥Space')
+  })
+
+  test('degrades gracefully when an old preload exposes liveEditor but not the settings getters', async () => {
+    // Arrange: an OUTDATED desktop app exposes the `liveEditor` namespace
+    // but predates the getOpacity/getShortcut settings getters that
+    // the load effect's Promise.all calls.
+    installElectronAPI({ liveEditor: {} })
+
+    // Act + Assert: mounting must NOT throw a synchronous TypeError from the
+    // Promise.all (which would bubble out of useEffect to Next.js global-error
+    // and blank the whole page). A graceful update card must render instead.
+    render(<LiveEditorSettings />)
+    expect(
+      await screen.findByText(/Update CoreLive to the latest version/i),
+    ).toBeInTheDocument()
+  })
+
+  test('shows a desktop-only message when the LiveEditor bridge is absent', async () => {
+    // Arrange: a web renderer has no settingsAPI at all.
+    installElectronAPI(undefined)
+
+    // Act
+    render(<LiveEditorSettings />)
+
+    // Assert: the fallback copy renders and no toggles are offered.
+    expect(
+      await screen.findByText(
+        'LiveEditor Note is only available in the desktop application.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument()
+  })
+
+  test('shows a loading state until the saved LiveEditor settings arrive', async () => {
+    // Arrange: getOpacity never resolves, so the load Promise.all keeps the
+    // card in its loading state (both getters exist, so the guards pass).
+    getOpacityMock.mockReturnValue(new Promise<number>(() => {}))
+    getShortcutMock.mockResolvedValue('CommandOrControl+Shift+B')
+    installElectronAPI({
+      liveEditor: {
+        getOpacity: getOpacityMock,
+        setOpacity: setOpacityMock,
+        getShortcut: getShortcutMock,
+        setShortcut: setShortcutMock,
+      },
+      config: {
+        open: openConfigMock,
+      },
+    })
+
+    // Act
+    render(<LiveEditorSettings />)
+
+    // Assert: the loading copy shows and no toggles have rendered yet.
+    expect(
+      await screen.findByText('Loading LiveEditor settings…'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument()
+  })
+
+  test('offers shortcut and config controls without a window toggle', async () => {
+    // Arrange: a current preload that can load the ready card.
+    installLiveEditorBridge({
+      opacity: 0.7,
+      shortcut: 'Alt+Space',
+    })
+    render(<LiveEditorSettings />)
+
+    // Act: wait until the card has left its loading state.
+    const openConfig = await screen.findByRole('button', {
+      name: 'Open config.json',
+    })
+
+    // Assert: config and shortcut controls stay; the window toggle is gone.
+    expect(openConfig).toBeVisible()
+    expect(screen.getByLabelText('Toggle shortcut')).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: 'Toggle LiveEditor window' }),
+    ).not.toBeInTheDocument()
+  })
+
+  test('opens config.json via the main-process config bridge when the button is clicked', async () => {
+    // Arrange
+    installLiveEditorBridge({
+      opacity: 0.7,
+      shortcut: 'Alt+Space',
+    })
+    render(<LiveEditorSettings />)
+    const openButton = await screen.findByRole('button', {
+      name: 'Open config.json',
+    })
+
+    // Act
+    fireEvent.click(openButton)
+
+    // Assert
+    expect(openConfigMock).toHaveBeenCalledTimes(1)
+  })
+
+  test('keeps a config failure beside its button when another settings control succeeds', async () => {
+    // Arrange
+    installLiveEditorBridge({
+      opacity: 0.7,
+      shortcut: 'Alt+Space',
+    })
+    openConfigMock.mockResolvedValueOnce(false)
+    renderSplitSettings()
+    const openButton = await screen.findByRole('button', {
+      name: 'Open config.json',
+    })
+
+    // Act
+    fireEvent.click(openButton)
+
+    // Assert
+    const application = screen.getByRole('region', { name: 'Application' })
+    expect(await within(application).findByRole('alert')).toHaveTextContent(
+      'Failed to open config file',
+    )
+    const box = screen.getByLabelText('Toggle shortcut')
+    fireEvent.click(box)
+    fireEvent.keyDown(box, { code: 'Digit3', metaKey: true })
+    expect(await within(application).findByRole('alert')).toBeVisible()
+    expect(
+      within(screen.getByRole('region', { name: 'LiveEditor' })).queryByRole(
+        'alert',
+      ),
+    ).toBeNull()
+    expect(
+      within(
+        screen.getByRole('region', { name: 'Shortcuts & Sound' }),
+      ).queryByRole('alert'),
+    ).toBeNull()
+  })
+
+  test('shows an opacity load failure beside opacity while preserving loaded shortcuts', async () => {
+    // Arrange
+    installLiveEditorBridge({ opacity: 0.7, shortcut: 'Alt+Space' })
+    getOpacityMock.mockRejectedValueOnce(new Error('Opacity unavailable'))
+
+    // Act
+    renderSplitSettings()
+
+    // Assert
+    const liveEditor = await screen.findByRole('region', { name: 'LiveEditor' })
+    expect(await within(liveEditor).findByRole('alert')).toHaveTextContent(
+      'Failed to load window opacity',
+    )
+    expect(screen.getByLabelText('Toggle shortcut')).toHaveTextContent('⌥Space')
+    expect(
+      within(
+        screen.getByRole('region', { name: 'Shortcuts & Sound' }),
+      ).queryByRole('alert'),
+    ).toBeNull()
+  })
+
+  test('shows the opacity saved elsewhere when the Settings window regains focus', async () => {
+    // Arrange: opacity loads at 70%, then another surface saves 40%.
+    installLiveEditorBridge({ opacity: 0.7, shortcut: 'Alt+Space' })
+    render(<LiveEditorSettings />)
+    expect(await screen.findByText('70%')).toBeVisible()
+    getOpacityMock.mockResolvedValue(0.4)
+
+    // Act
+    fireEvent.focus(window)
+
+    // Assert
+    expect(await screen.findByText('40%')).toBeVisible()
+  })
+
+  test('keeps the chosen opacity when focus returns while its save is still in flight', async () => {
+    // Arrange: the opacity save hangs while the disk still holds 70%.
+    installLiveEditorBridge({ opacity: 0.7, shortcut: 'Alt+Space' })
+    let finishSave: (applied: number) => void = () => {}
+    setOpacityMock.mockImplementation(
+      async () =>
+        new Promise<number>((resolve) => {
+          finishSave = resolve
+        }),
+    )
+    render(<LiveEditorSettings />)
+    const slider = await screen.findByRole('slider', {
+      name: 'LiveEditor window opacity',
+    })
+    slider.focus()
+    fireEvent.keyDown(slider, { key: 'ArrowLeft' })
+    fireEvent.keyUp(slider, { key: 'ArrowLeft' })
+    await waitFor(() => expect(setOpacityMock).toHaveBeenCalledTimes(1))
+
+    // Act
+    fireEvent.focus(window)
+    await waitFor(() => expect(getOpacityMock).toHaveBeenCalledTimes(2))
+
+    // Assert
+    expect(screen.queryByText('70%')).toBeNull()
+    finishSave(0.65)
+    expect(await screen.findByText('65%')).toBeVisible()
+  })
+
+  test('a successful native preferences re-read on window focus clears load errors while retaining an unrelated config failure', async () => {
+    // Arrange: both preference reads fail before a separate config action fails.
+    installLiveEditorBridge({ opacity: 0.7, shortcut: 'Alt+Space' })
+    getOpacityMock.mockRejectedValueOnce(new Error('Opacity unavailable'))
+    getShortcutMock.mockRejectedValueOnce(new Error('Shortcuts unavailable'))
+    openConfigMock.mockResolvedValueOnce(false)
+    renderSplitSettings()
+    expect(
+      await screen.findByText('Failed to load window opacity'),
+    ).toBeVisible()
+    expect(
+      await screen.findByText('Failed to load toggle shortcuts'),
+    ).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Open config.json' }))
+    expect(await screen.findByText('Failed to open config file')).toBeVisible()
+
+    // Act: the Settings window regains focus and the native reads now succeed.
+    fireEvent.focus(window)
+
+    // Assert: only the successfully reloaded sources lose their error messages.
+    await waitFor(() => {
+      expect(screen.queryByText('Failed to load window opacity')).toBeNull()
+      expect(screen.queryByText('Failed to load toggle shortcuts')).toBeNull()
+    })
+    expect(screen.getByText('70%')).toBeVisible()
+    expect(screen.getByLabelText('Toggle shortcut')).toHaveTextContent('⌥Space')
+    expect(screen.getByText('Failed to open config file')).toBeVisible()
+    expect(getOpacityMock).toHaveBeenCalledTimes(2)
+    expect(getShortcutMock).toHaveBeenCalledTimes(2)
+  })
+})

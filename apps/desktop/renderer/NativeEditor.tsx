@@ -3,11 +3,7 @@ import type {
   OfflineCompletion,
   OfflineEditorSnapshot,
 } from '@corelive/desktop-contract/offline-workspace-v2'
-import { applyThemeAttribute } from '@corelive/live-editor/theme-transition'
-import {
-  DEFAULT_THEME_PREFERENCE,
-  normalizeThemePreference,
-} from '@corelive/live-editor/themes'
+import { DEFAULT_THEME_PREFERENCE } from '@corelive/live-editor/themes'
 import {
   useCallback,
   useEffect,
@@ -28,6 +24,7 @@ import { useEditorInput } from './editor/editorInput'
 import { SharedCategoryPicker } from './editor/SharedCategoryPicker'
 import { SharedEditorSurface } from './editor/SharedEditorSurface'
 import { TodayEmber } from './editor/TodayEmber'
+import { useEditorTheme } from './editor/useEditorTheme'
 import { useEditorWindowSettings } from './editor/useEditorWindowSettings'
 import { NativeDetails } from './NativeDetails'
 import {
@@ -40,34 +37,6 @@ import {
 import { NativeStateScene } from './NativeStateScene'
 
 type ReadySnapshot = Extract<OfflineEditorSnapshot, { phase: 'ready' }>
-
-/**
- * Applies the cached theme preference locally. The raw workspace value is mapped
- * through {@link normalizeThemePreference} (legacy `default-*` aliases and unknown
- * values included) and `system` follows the OS without a network request.
- * Mounted once by {@link NativeEditor}; re-runs when the stored theme changes.
- * @param theme - Raw workspace theme preference, or {@link DEFAULT_THEME_PREFERENCE} before the workspace is ready.
- * @example useEditorTheme(preferences.theme)
- */
-function useEditorTheme(theme: string): void {
-  useLayoutEffect(() => {
-    const preference = normalizeThemePreference(theme)
-    const media = window.matchMedia('(prefers-color-scheme: dark)')
-    const apply = (): void => {
-      // `system` resolves to the Default pair, the only family that owns light/dark.
-      applyThemeAttribute(
-        preference === 'system'
-          ? media.matches
-            ? 'dark'
-            : 'light'
-          : preference,
-      )
-    }
-    apply()
-    media.addEventListener('change', apply)
-    return (): void => media.removeEventListener('change', apply)
-  }, [theme])
-}
 
 /** Mounts one durable store for the local document, with account transitions replacing the visible session.
  * @example <NativeEditor api={window.liveEditorAPI} store={store} />

@@ -34,3 +34,28 @@ export function resolveHideAppIcon(
 ): boolean {
   return configReader.get(HIDE_APP_ICON_CONFIG_PATH) === true
 }
+
+/**
+ * Dot-path of the persisted "show in menu bar" setting in config.json (#216 D5).
+ * The bundled Settings window writes it; boot reads it through {@link resolveShowInMenuBar}.
+ */
+export const SHOW_IN_MENU_BAR_CONFIG_PATH = 'behavior.showInMenuBar'
+
+/**
+ * Resolves whether the tray (menu-bar) icon should be visible at boot.
+ *
+ * Defaults to visible: only the boolean `false` hides it, so a missing key (an older
+ * config.json) or a corrupt scalar never strands the app without a tray surface.
+ * Called by main after system integration created the tray.
+ *
+ * @param configReader - Persisted-config reader; a `ConfigManager` instance satisfies it.
+ * @returns false only when `behavior.showInMenuBar` is the boolean `false`.
+ * @example
+ * resolveShowInMenuBar({ get: () => false })     // => false
+ * resolveShowInMenuBar({ get: () => undefined }) // => true
+ */
+export function resolveShowInMenuBar(
+  configReader: HideAppIconConfigReader,
+): boolean {
+  return configReader.get(SHOW_IN_MENU_BAR_CONFIG_PATH) !== false
+}
