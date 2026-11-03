@@ -221,6 +221,8 @@ function categoryNameConflictMessage(
  * @param tx - Locked transaction.
  * @param userId - Owner whose categories are judged.
  * @param action - The edit about to be written.
+ * @param renamedTo - For a move that also renames: the new name, applied before the move is
+ *   judged so the final name + parent pair is what counts (never one field against the other's old value).
  * @throws ORPCError CONFLICT with the sidebar's existing duplicate-name copy when the name path is taken.
  * @example await assertSharedCategoryRules(tx, user.id, { type: 'create', name: 'Work', parentId: null })
  */
@@ -228,8 +230,9 @@ async function assertSharedCategoryRules(
   tx: CategoryTransaction,
   userId: number,
   action: CategoryAction<number>,
+  renamedTo?: string,
 ): Promise<void> {
-  const rows = await tx
+  const stored = await tx
     .select({
       id: categoryTable.id,
       name: categoryTable.name,
@@ -238,6 +241,12 @@ async function assertSharedCategoryRules(
     })
     .from(categoryTable)
     .where(eq(categoryTable.userId, userId))
+  const rows =
+    renamedTo === undefined || action.type !== 'reparent'
+      ? stored
+      : stored.map((row) =>
+          row.id === action.id ? { ...row, name: renamedTo } : row,
+        )
   const verdict = validateCategoryAction(rows, action)
   if (!verdict.ok && verdict.reason === 'name-taken-local') {
     const name =
@@ -360,17 +369,22 @@ export const updateCategory = authMiddleware
         if (data.parentId !== undefined)
           await validateCategoryParent(tx, context.user.id, data.parentId, id)
         // Judge only real changes so a no-op resubmit of the same name or parent never self-conflicts.
-        if (data.name !== undefined && data.name !== existing.name)
+        const renamed = data.name !== undefined && data.name !== existing.name
+        const moved =
+          data.parentId !== undefined && data.parentId !== existing.parentId
+        if (moved)
+          // A combined edit is judged once, as the move with the new name already applied.
+          await assertSharedCategoryRules(
+            tx,
+            context.user.id,
+            { type: 'reparent', id, parentId: data.parentId ?? null },
+            renamed ? data.name : undefined,
+          )
+        else if (renamed)
           await assertSharedCategoryRules(tx, context.user.id, {
             type: 'rename',
             id,
-            name: data.name,
-          })
-        if (data.parentId !== undefined && data.parentId !== existing.parentId)
-          await assertSharedCategoryRules(tx, context.user.id, {
-            type: 'reparent',
-            id,
-            parentId: data.parentId,
+            name: data.name ?? existing.name,
           })
         // Empty edits preserve updatedAt and avoid Drizzle's empty SET error.
         if (Object.values(data).every((value) => value === undefined))

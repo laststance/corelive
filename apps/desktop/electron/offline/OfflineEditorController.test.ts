@@ -851,6 +851,139 @@ test('a sign-out that starts while the sign-in identity check is in flight is ne
   expect(fixture.transport.bootstrap).not.toHaveBeenCalled()
 })
 
+// Regression: /ship Step 11 (Codex adversarial) 2026-11-03 — a sign-in notification queued before
+// a sign-out was evaluated after it with the new epoch and re-attached the account.
+test('a sign-in notification queued before a sign-out is dropped after that sign-out', async () => {
+  // Arrange
+  const fixture = await createFixture({ bound: 'account-a' })
+  await fixture.controller.initialize()
+  const firstReply = deferred()
+  fixture.transport.whoami.mockImplementationOnce(async () => {
+    await firstReply.promise
+    return { clerkId: 'account-a', email: null }
+  })
+  const first = fixture.controller.authenticated('account-a')
+  await vi.waitFor(() =>
+    expect(fixture.transport.whoami).toHaveBeenCalledOnce(),
+  )
+  const queued = fixture.controller.authenticated('account-a')
+
+  // Act
+  await fixture.controller.signOut()
+  firstReply.resolve()
+  await Promise.all([first, queued])
+
+  // Assert
+  expect(await fixture.registry.read()).toMatchObject({
+    attachedAccountId: null,
+    signOutPending: false,
+  })
+  expect(fixture.transport.whoami).toHaveBeenCalledOnce()
+  expect(fixture.transport.bootstrap).not.toHaveBeenCalled()
+})
+
+// Regression: /ship Step 11 (Codex adversarial) 2026-11-03 — the attached fast path skipped the
+// verified sign-in that clears a journaled sign-out, so sync never resumed.
+test('signing in again after a sign-out whose detach and sweep both failed re-attaches and clears the journal', async () => {
+  // Arrange
+  const fixture = await createFixture({ bound: 'account-a', attached: true })
+  await fixture.controller.initialize()
+  const realUpdate = fixture.registry.update.bind(fixture.registry)
+  vi.spyOn(fixture.registry, 'update').mockImplementation(async (patch) => {
+    if (Object.keys(patch).join() === 'attachedAccountId')
+      throw new Error('disk full')
+    return realUpdate(patch)
+  })
+  fixture.endLocalSession.mockResolvedValueOnce({
+    status: 'signed-out-residual',
+    code: 'SIGNOUT_RESIDUAL_COOKIE',
+    cookieNames: ['__session'],
+    domains: ['corelive.app'],
+  })
+  await fixture.controller.signOut()
+
+  // Act
+  await fixture.controller.authenticated('account-a')
+
+  // Assert
+  expect(await fixture.registry.read()).toMatchObject({
+    attachedAccountId: 'account-a',
+    signOutPending: false,
+  })
+  expect(fixture.controller.accountStatus().state).toBe('attached')
+})
+
+// Regression: /ship Step 11 (Codex adversarial) 2026-11-03 — Clear again detached a sign-in that
+// had completed after the residual result.
+test('Clear again after a later successful sign-in leaves that sign-in attached and sweeps nothing', async () => {
+  // Arrange
+  const fixture = await createFixture({ bound: 'account-a', attached: true })
+  await fixture.controller.initialize()
+  fixture.endLocalSession.mockResolvedValueOnce({
+    status: 'signed-out-residual',
+    code: 'SIGNOUT_RESIDUAL_COOKIE',
+    cookieNames: ['__session'],
+    domains: ['corelive.app'],
+  })
+  await fixture.controller.signOut()
+  await fixture.controller.authenticated('account-a')
+  const sweepsBefore = fixture.endLocalSession.mock.calls.length
+
+  // Act
+  const result = await fixture.controller.clearAgain()
+
+  // Assert
+  expect(result).toEqual({ status: 'signed-out' })
+  expect(fixture.endLocalSession).toHaveBeenCalledTimes(sweepsBefore)
+  expect(await fixture.registry.read()).toMatchObject({
+    attachedAccountId: 'account-a',
+    signOutPending: false,
+  })
+})
+
+// Regression: /ship Step 11 (Codex adversarial) 2026-11-03 — a sweep that threw rejected the
+// sign-out, so Settings showed neither the cleanup note nor Clear again.
+test('a session sweep that throws ends in the residual result with the journal kept for Clear again', async () => {
+  // Arrange
+  const fixture = await createFixture({ bound: 'account-a', attached: true })
+  await fixture.controller.initialize()
+  fixture.endLocalSession.mockRejectedValueOnce(
+    new Error('cookies unavailable'),
+  )
+
+  // Act
+  const result = await fixture.controller.signOut()
+
+  // Assert
+  expect(result).toEqual({
+    status: 'signed-out-residual',
+    code: 'SIGNOUT_RESIDUAL_COOKIE',
+    cookieNames: [],
+    domains: [],
+  })
+  expect((await fixture.registry.read()).signOutPending).toBe(true)
+  expect(fixture.log).toHaveBeenCalledWith('SIGNOUT_SWEEP_FAILED')
+})
+
+// Regression: /ship Step 11 (Codex structured review) 2026-11-03 — the sign-out flush left the
+// open editor's exit barrier set, so writing stayed disabled after a Settings sign-out.
+test('signing out releases the open editor once its writing is saved, so editing continues', async () => {
+  // Arrange
+  const releaseEditorBarrier = vi.fn()
+  const fixture = await createFixture({
+    bound: 'account-a',
+    attached: true,
+    override: { releaseEditorBarrier },
+  })
+  await fixture.controller.initialize()
+
+  // Act
+  await fixture.controller.signOut()
+
+  // Assert
+  expect(releaseEditorBarrier).toHaveBeenCalledOnce()
+})
+
 test('sign-out completes offline with unsent operations, keeps the editor ready and the binding untouched', async () => {
   // Arrange
   const transport = createTransport({ clerkId: 'account-a', email: null })

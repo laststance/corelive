@@ -9,6 +9,7 @@ import {
 } from '@corelive/desktop-contract/offline-workspace-v2'
 import { describe, expect, test } from 'vitest'
 
+import { applyCategoryReceipts } from './categoryReceipts'
 import {
   selectUploads,
   uploadKind,
@@ -237,6 +238,81 @@ describe('selectUploads', () => {
 
     // Assert
     expect(candidates).toEqual([])
+  })
+
+  // Regression: /ship Step 11 (Codex structured review) 2026-11-03 — deleting a synced category
+  // relocated its records a second time against a stale revision, which always conflicted.
+  test('a keep whose dashboard category is being deleted waits for that delete instead of relocating', () => {
+    // Arrange
+    const workspace = boundWorkspace()
+    const uploaded = keep('moved')
+    workspace.completions['moved'] = {
+      ...uploaded,
+      categoryId: categoryUuid(2),
+      revision: 2,
+      remote: remoteCopy(uploaded, 1, categoryUuid(1)),
+    }
+    workspace.categoryOutbox[categoryUuid(800)] = {
+      operation: {
+        operationId: categoryUuid(800),
+        type: 'delete',
+        localId: categoryUuid(1),
+        destinationLocalId: categoryUuid(2),
+      },
+      state: 'sent',
+      receiptQueries: 0,
+      frozenRevisions: [],
+    }
+
+    // Act
+    const candidates = selectUploads(workspace, new Map(), 16)
+
+    // Assert
+    expect(candidates).toEqual([])
+  })
+
+  test('an applied category delete moves the dashboard copy of its records too, so nothing is relocated again', () => {
+    // Arrange
+    const workspace = boundWorkspace()
+    const uploaded = keep('moved')
+    workspace.completions['moved'] = {
+      ...uploaded,
+      categoryId: categoryUuid(2),
+      revision: 2,
+      remote: remoteCopy(uploaded, 1, categoryUuid(1)),
+    }
+    workspace.categoryOutbox[categoryUuid(800)] = {
+      operation: {
+        operationId: categoryUuid(800),
+        type: 'delete',
+        localId: categoryUuid(1),
+        destinationLocalId: categoryUuid(2),
+      },
+      state: 'sent',
+      receiptQueries: 0,
+      frozenRevisions: [],
+    }
+
+    // Act
+    applyCategoryReceipts(
+      workspace,
+      [
+        {
+          kind: 'category',
+          operationId: categoryUuid(800),
+          result: 'applied',
+          serverId: 1,
+        },
+      ],
+      { now: completedAt, nextId: () => categoryUuid(900) },
+    )
+
+    // Assert
+    expect(workspace.completions['moved']?.remote).toMatchObject({
+      categoryId: categoryUuid(2),
+      revision: 2,
+    })
+    expect(selectUploads(workspace, new Map(), 16)).toEqual([])
   })
 
   test('an archived keep is sent to the category its deleted source was merged into', () => {

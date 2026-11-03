@@ -189,7 +189,9 @@ export function AccountSection({
   }
 
   const email = account.boundEmail ?? 'your account'
-  const working = ui.kind === 'busy'
+  // Sign-in waits while a sign-out or Clear again is still ending the session.
+  const working =
+    ui.kind === 'busy' || ui.kind === 'signing-out' || ui.kind === 'clearing'
   const signInLabel = account.signIn === 'unreachable' ? 'Try again' : 'Sign in'
 
   const signInButton = (

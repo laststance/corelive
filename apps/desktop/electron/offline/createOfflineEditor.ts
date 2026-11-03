@@ -35,6 +35,7 @@ export function createOfflineEditor(
     legacyNotes: () =>
       config.get<Record<string, string>>('liveEditor.notes', {}),
     requestFlush: async (generation) => ipc.flush(generation),
+    releaseEditorBarrier: () => ipc.shown(),
     // D3 step 4 always targets the default session; no partition exists anywhere (C3).
     endLocalSession: async () =>
       endLocalSession({

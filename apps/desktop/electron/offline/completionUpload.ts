@@ -132,9 +132,16 @@ export function selectUploads(
   const serverIds = state.binding?.serverCategoryIds
   if (!serverIds || limit <= 0) return []
   const grouped = outboxByCompletion(state)
+  // The dashboard moves a deleted category's records itself; relocating them first would conflict.
+  const deleting = new Set(
+    Object.values(state.categoryOutbox).flatMap((entry) =>
+      entry.operation.type === 'delete' ? [entry.operation.localId] : [],
+    ),
+  )
   const cancels: UploadCandidate[] = []
   const others: UploadCandidate[] = []
   const consider = (completion: OfflineCompletion, archived: boolean): void => {
+    if (completion.remote && deleting.has(completion.remote.categoryId)) return
     const kind = uploadKind(completion, grouped.get(completion.id) ?? [])
     if (!kind) return
     let resolved = completion

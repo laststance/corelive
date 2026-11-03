@@ -39,6 +39,8 @@ type ControllerOptions = {
   /** Pre-offline plaintext notes, imported once by the v1 migration (D7). */
   legacyNotes: () => Record<string, string>
   requestFlush: (generation: number) => Promise<boolean>
+  /** Releases the editor's exit barrier after a flush that does not close the window (sign-out). */
+  releaseEditorBarrier?: () => void
   onSnapshot: (snapshot: OfflineEditorSnapshot) => void
   /** D3 step 4 against the default session (wraps `endLocalSession`). */
   endLocalSession: () => Promise<SessionEnd>
@@ -199,19 +201,21 @@ export class OfflineEditorController {
    * @example await controller.authenticated('user_123')
    */
   async authenticated(clerkId: string): Promise<void> {
+    // A notification queued before a sign-out belongs to the session that sign-out ended.
+    const epoch = this.signOutEpoch
     this.sessionTail = this.sessionTail
-      .then(async () => this.handleSession(clerkId))
+      .then(async () => this.handleSession(clerkId, epoch))
       .catch(() => undefined)
     await this.sessionTail
   }
 
   /** Verifies the identity and routes it; see {@link authenticated}. */
-  private async handleSession(clerkId: string): Promise<void> {
-    if (!this.context || this.signOutRun) return
-    const epoch = this.signOutEpoch
+  private async handleSession(clerkId: string, epoch: number): Promise<void> {
+    if (!this.context || this.signOutRun || epoch !== this.signOutEpoch) return
     const attached = this.registryState?.attachedAccountId
-    // Already attached to this account: only a wake, no identity round trip.
-    if (attached === clerkId) {
+    // Already attached to this account: only a wake, no identity round trip. A journaled sign-out
+    // is not attached, so it takes the full path below and is cleared by the verified sign-in.
+    if (attached === clerkId && !this.registryState?.signOutPending) {
       this.loop.wake()
       return
     }
@@ -381,6 +385,8 @@ export class OfflineEditorController {
       .requestFlush(generation)
       .catch(() => false)
     if (!flushed || generation !== this.generation) return this.flushFailed()
+    // Sign-out keeps the editor open, so its flush must not leave editing blocked.
+    this.options.releaseEditorBarrier?.()
     try {
       this.registryState = await this.registry.update({
         signOutPending: true,
@@ -431,7 +437,18 @@ export class OfflineEditorController {
    */
   private async finishPendingSignOut(): Promise<SessionEnd> {
     this.options.broker.reset()
-    const result = await this.options.endLocalSession()
+    // A sweep that throws may have left sign-in data; keep the journal and offer Clear again.
+    const result: SessionEnd = await this.options
+      .endLocalSession()
+      .catch((): SessionEnd => {
+        this.options.log?.('SIGNOUT_SWEEP_FAILED')
+        return {
+          status: 'signed-out-residual',
+          code: 'SIGNOUT_RESIDUAL_COOKIE',
+          cookieNames: [],
+          domains: [],
+        }
+      })
     // A journaled sign-out always ends detached, even when the earlier detach write failed.
     if (result.status === 'signed-out')
       this.registryState = await this.registry.update({
@@ -446,6 +463,10 @@ export class OfflineEditorController {
    * @example await controller.clearAgain()
    */
   async clearAgain(): Promise<SessionEnd> {
+    // A sign-in that completed since the residual result already cleared the journal; leave it alone.
+    if (!this.registryState?.signOutPending) return { status: 'signed-out' }
+    // Like a sign-out, clearing ends the session: a login racing it must not attach.
+    this.signOutEpoch += 1
     return this.finishPendingSignOut()
   }
 
