@@ -10,7 +10,7 @@ import { db } from '@/db'
 import {
   categoryTable,
   completedTable,
-  completionSyncReceiptTable,
+  syncReceiptTable,
   completionSyncStateTable,
   userTable,
 } from '@/db/schema'
@@ -496,11 +496,11 @@ describeIfDb('offline completion synchronization', () => {
     expect(
       await db
         .select()
-        .from(completionSyncReceiptTable)
+        .from(syncReceiptTable)
         .where(
           and(
-            eq(completionSyncReceiptTable.userId, account.userId),
-            eq(completionSyncReceiptTable.operationId, operation.operationId),
+            eq(syncReceiptTable.userId, account.userId),
+            eq(syncReceiptTable.operationId, operation.operationId),
           ),
         ),
     ).toEqual([])

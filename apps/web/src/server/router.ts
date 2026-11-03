@@ -5,6 +5,10 @@ import {
   updateCategory,
   deleteCategory,
 } from './procedures/category'
+import {
+  syncCategoryApply,
+  syncCategoryReceipts,
+} from './procedures/categorySync'
 import { getDayDetail, getHeatmap, getJournal } from './procedures/completed'
 import {
   syncApply,
@@ -36,6 +40,8 @@ export const router = {
     create: createCategory,
     update: updateCategory,
     delete: deleteCategory,
+    syncApply: syncCategoryApply,
+    syncReceipts: syncCategoryReceipts,
   },
   completed: {
     syncApply,

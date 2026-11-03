@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 
+import { SyncOutcomeSchema } from '@corelive/desktop-contract/category-sync'
 import {
   SyncApplyInputSchema,
   SyncBootstrapOutputSchema,
@@ -23,7 +24,7 @@ import { requireRow } from '@/db/requireRow'
 import {
   categoryDeletionTable,
   completedTable,
-  completionSyncReceiptTable,
+  syncReceiptTable,
   completionSyncStateTable,
 } from '@/db/schema'
 import { runTransaction } from '@/db/transaction'
@@ -51,6 +52,23 @@ function projection(state: SyncState): CompletionProjection {
     title: state.title,
     completedAt: state.completedAt.getTime(),
   }
+}
+
+/**
+ * Reads a stored receipt row as a completion receipt, tolerating the shared table (EA6).
+ *
+ * Rows written before `kind` existed are completions forever; category rows (written by
+ * `category.syncApply`) return null so completion procedures never surface them.
+ *
+ * @param outcome - The raw `outcome` JSON of a `CompletionSyncReceipt` row.
+ * @returns The completion receipt, or null for a category row.
+ * @example readCompletionOutcome(row.outcome)
+ */
+function readCompletionOutcome(outcome: unknown): CompletionSyncReceipt | null {
+  const parsed = SyncOutcomeSchema.parse(outcome)
+  return parsed.kind === 'completion'
+    ? CompletionSyncReceiptSchema.parse(parsed)
+    : null
 }
 
 /** Builds a typed rejection without losing the observed server version needed for repair.
@@ -97,11 +115,11 @@ async function applySyncOperation(
       .digest('hex')
     const [receipt] = await tx
       .select()
-      .from(completionSyncReceiptTable)
+      .from(syncReceiptTable)
       .where(
         and(
-          eq(completionSyncReceiptTable.userId, userId),
-          eq(completionSyncReceiptTable.operationId, operation.operationId),
+          eq(syncReceiptTable.userId, userId),
+          eq(syncReceiptTable.operationId, operation.operationId),
         ),
       )
       .limit(1)
@@ -117,12 +135,14 @@ async function applySyncOperation(
       .limit(1)
     if (receipt) {
       // Reusing an ID with other bytes is a conflict; the original evidence is immutable.
-      return receipt.payloadDigest === digest
-        ? CompletionSyncReceiptSchema.parse(receipt.outcome)
-        : rejected(operation, 'conflict', current)
+      const stored =
+        receipt.payloadDigest === digest
+          ? readCompletionOutcome(receipt.outcome)
+          : null
+      return stored ?? rejected(operation, 'conflict', current)
     }
     const outcome = await mutateSyncIdentity(tx, userId, operation, current)
-    await tx.insert(completionSyncReceiptTable).values({
+    await tx.insert(syncReceiptTable).values({
       userId,
       operationId: operation.operationId,
       payloadDigest: digest,
@@ -360,18 +380,19 @@ export const syncReceipts = authMiddleware
   .output(SyncReceiptsOutputSchema)
   .handler(async ({ input, context }) => {
     const rows = await db
-      .select({ outcome: completionSyncReceiptTable.outcome })
-      .from(completionSyncReceiptTable)
+      .select({ outcome: syncReceiptTable.outcome })
+      .from(syncReceiptTable)
       .where(
         and(
-          eq(completionSyncReceiptTable.userId, context.user.id),
-          inArray(completionSyncReceiptTable.operationId, input.operationIds),
+          eq(syncReceiptTable.userId, context.user.id),
+          inArray(syncReceiptTable.operationId, input.operationIds),
         ),
       )
     return {
-      receipts: rows.map((row) =>
-        CompletionSyncReceiptSchema.parse(row.outcome),
-      ),
+      receipts: rows.flatMap((row) => {
+        const receipt = readCompletionOutcome(row.outcome)
+        return receipt ? [receipt] : []
+      }),
     }
   })
 
