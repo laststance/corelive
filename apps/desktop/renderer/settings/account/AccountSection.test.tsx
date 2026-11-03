@@ -135,7 +135,8 @@ test('a long email is shortened in the middle with the full address in the title
 
   // Assert
   expect(screen.getByTitle(email)).toBeVisible()
-  expect(screen.getByText(email)).toBeInTheDocument()
+  expect(screen.getByText('someone.with.a.v…ple-company.com')).toBeVisible()
+  expect(screen.getByText(email)).toHaveClass('sr-only')
 })
 
 test('Not now declines the pending connect and keeps state A', async () => {
@@ -383,6 +384,22 @@ test('sign-in while offline shows the offline note and never claims the login wi
   expect(
     screen.queryByText('Finishing sign-in in the other window…'),
   ).toBeNull()
+})
+
+// Regression: /ship pre-landing review 2026-11-03 — a rejected account IPC call left the section stuck busy.
+test('a sign-in request that fails in main re-enables Sign in instead of staying busy', async () => {
+  // Arrange
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+  const { fake } = await renderWithSettings(<Harness />)
+  fake.api.account.signIn.mockRejectedValue(new Error('main unavailable'))
+
+  // Act
+  await user.click(screen.getByRole('button', { name: 'Sign in' }))
+
+  // Assert
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeEnabled(),
+  )
 })
 
 test('while the login window is open Account shows Finishing sign-in with Cancel, and Cancel asks main to close it', async () => {

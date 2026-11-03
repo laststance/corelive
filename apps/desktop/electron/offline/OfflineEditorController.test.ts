@@ -820,6 +820,37 @@ test('the bound account signing in again re-attaches and resumes sync', async ()
   expect((await fixture.registry.read()).attachedAccountId).toBe('account-a')
 })
 
+// Regression: /ship pre-landing review 2026-11-03 — a sign-out that started during the sign-in
+// identity round trip was undone when that round trip resumed (re-attach + loop restart).
+test('a sign-out that starts while the sign-in identity check is in flight is never undone by that check', async () => {
+  // Arrange
+  const fixture = await createFixture({ bound: 'account-a' })
+  await fixture.controller.initialize()
+  const identityReply = deferred()
+  fixture.transport.whoami.mockImplementationOnce(async () => {
+    await identityReply.promise
+    return { clerkId: 'account-a', email: null }
+  })
+  const signingIn = fixture.controller.authenticated('account-a')
+  await vi.waitFor(() =>
+    expect(fixture.transport.whoami).toHaveBeenCalledOnce(),
+  )
+
+  // Act
+  const result = await fixture.controller.signOut()
+  identityReply.resolve()
+  await signingIn
+
+  // Assert
+  expect(result).toEqual({ status: 'signed-out' })
+  expect(await fixture.registry.read()).toMatchObject({
+    attachedAccountId: null,
+    signOutPending: false,
+  })
+  expect(fixture.controller.accountStatus().state).toBe('signed-out')
+  expect(fixture.transport.bootstrap).not.toHaveBeenCalled()
+})
+
 test('sign-out completes offline with unsent operations, keeps the editor ready and the binding untouched', async () => {
   // Arrange
   const transport = createTransport({ clerkId: 'account-a', email: null })

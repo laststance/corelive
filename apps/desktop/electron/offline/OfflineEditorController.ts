@@ -87,6 +87,8 @@ export class OfflineEditorController {
   private firstUpload: AccountStatus['firstUpload'] = null
   private signOutRun: Promise<SignOutResult> | null = null
   private sessionTail: Promise<void> = Promise.resolve()
+  /** Bumped by every sign-out; an attach decided before a newer sign-out began is dropped. */
+  private signOutEpoch = 0
   private snapshot: OfflineEditorSnapshot = {
     phase: 'opening',
     generation: 0,
@@ -206,6 +208,7 @@ export class OfflineEditorController {
   /** Verifies the identity and routes it; see {@link authenticated}. */
   private async handleSession(clerkId: string): Promise<void> {
     if (!this.context || this.signOutRun) return
+    const epoch = this.signOutEpoch
     const attached = this.registryState?.attachedAccountId
     // Already attached to this account: only a wake, no identity round trip.
     if (attached === clerkId) {
@@ -213,9 +216,11 @@ export class OfflineEditorController {
       return
     }
     const who = await this.verifyIdentity(clerkId)
-    if (!who) return
+    // A sign-out during the identity round trip wins, even one that already finished.
+    if (!who || epoch !== this.signOutEpoch) return
     this.signedIn = who
     const bound = await this.context.worker.call('binding', null)
+    if (epoch !== this.signOutEpoch) return
     if (!bound) {
       // DA4/EA2b: an unbound Mac waits for Connect; nothing is sent to the sync endpoints.
       this.registryState = await this.registry.update({
@@ -279,10 +284,13 @@ export class OfflineEditorController {
   async connect(): Promise<boolean> {
     const pending = this.registryState?.pendingConnect
     if (!pending || !this.context || this.signOutRun) return false
+    const epoch = this.signOutEpoch
     const bound = await this.context.worker.call('binding', null)
     if (bound && bound.accountId !== pending.accountId) return false
     // DA4: the progress count is every unsent keep, archived history included.
     const total = await this.context.worker.call('pendingTotal', null)
+    // A sign-out that started while the worker answered wins; never attach behind it.
+    if (epoch !== this.signOutEpoch) return false
     this.firstUpload = { state: 'uploading', count: total }
     this.pendingEmail = pending.displayEmail || null
     this.registryState = await this.registry.update({
@@ -355,6 +363,7 @@ export class OfflineEditorController {
    * @example const result = await controller.signOut()
    */
   async signOut(): Promise<SignOutResult> {
+    if (!this.signOutRun) this.signOutEpoch += 1
     this.signOutRun ??= this.runSignOut().finally(() => {
       this.signOutRun = null
     })
@@ -376,7 +385,14 @@ export class OfflineEditorController {
       return this.flushFailed()
     }
     await this.loop.stop()
-    this.registryState = await this.registry.update({ attachedAccountId: null })
+    try {
+      this.registryState = await this.registry.update({
+        attachedAccountId: null,
+      })
+    } catch {
+      // The journaled `signOutPending` still forces the detach in finishPendingSignOut (or on restart).
+      this.options.log?.('SIGNOUT_DETACH_DEFERRED')
+    }
     this.signedIn = null
     this.firstUpload = null
     this.pendingEmail = null
@@ -411,8 +427,12 @@ export class OfflineEditorController {
   private async finishPendingSignOut(): Promise<SessionEnd> {
     this.options.broker.reset()
     const result = await this.options.endLocalSession()
+    // A journaled sign-out always ends detached, even when the earlier detach write failed.
     if (result.status === 'signed-out')
-      this.registryState = await this.registry.update({ signOutPending: false })
+      this.registryState = await this.registry.update({
+        signOutPending: false,
+        attachedAccountId: null,
+      })
     return result
   }
 

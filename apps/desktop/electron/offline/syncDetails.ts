@@ -178,6 +178,10 @@ export function applySyncDetailAction(
   const marker = binding?.declined[localId ?? '']?.[field ?? '']
   if (!binding || !localId || !field || !marker || !ROW_KINDS.has(marker.kind))
     throw new WorkspaceCommandError('record-unavailable')
+  // Only an action the page offers for this row may run; a stale or malformed command is refused.
+  const offered = actionsFor(marker.kind, field)
+  if (!offered.includes(command.action))
+    throw new WorkspaceCommandError('record-unavailable')
   const category = state.categories.find((item) => item.id === localId)
   const resolved = (
     macValue: string | null,

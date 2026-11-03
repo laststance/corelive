@@ -29,7 +29,9 @@ test('Settings keeps a downloaded update when a later status poll fails', async 
 
   // Act / Assert: failures must reject, so the renderer keeps the last successful snapshot.
   await expect(bridge.updater.getStatus()).resolves.toEqual(ready)
-  await expect(bridge.updater.getStatus()).rejects.toThrow()
+  await expect(bridge.updater.getStatus()).rejects.toThrow(
+    'Update status unavailable',
+  )
   expect(invoke.mock.calls).toEqual([
     ['updater-get-status'],
     ['updater-get-status'],

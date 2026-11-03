@@ -83,7 +83,7 @@ function listSourceFiles(dir: string): string[] {
 function findBoundaryViolations(): string[] {
   const violations: string[] = []
   for (const file of listSourceFiles(path.join(root, 'apps/web/src'))) {
-    // This repo's own web tests may mention the package name in prose; scan import statements only.
+    // Every subpath mention counts (imports, mocks and prose alike), so even a comment cannot name a desktop-only module.
     const text = readFileSync(file, 'utf8')
     for (const match of text.matchAll(IMPORT_PATTERN)) {
       const subpath = match[1] ?? ''

@@ -67,6 +67,7 @@ test('reports in-progress while the login window is open and idle again when Can
   // Arrange
   const fixture = createFixture()
   fixture.coordinator.start()
+  expect(fixture.coordinator.state).toBe('in-progress')
 
   // Act
   fixture.coordinator.cancel()

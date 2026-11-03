@@ -275,7 +275,19 @@ async function readV1Workspace(
   path: string,
   fileName: string,
 ): Promise<V1File> {
-  const bytes = await readFile(path, 'utf8')
+  let bytes: string
+  try {
+    bytes = await readFile(path, 'utf8')
+  } catch {
+    // An unreadable file (permissions, a directory) is reported like a corrupt one, never thrown;
+    // the per-name checksum lets it import once it becomes readable.
+    return {
+      fileName,
+      checksum: hash(`unreadable:${fileName}`),
+      valid: false,
+      errorClass: 'read',
+    }
+  }
   const checksum = hash(bytes)
   const decoded = decodeEnvelope(bytes, null)
   if (!decoded.ok)
@@ -1070,7 +1082,9 @@ function importOlderFile(
     ))
       reverse.set(serverId, localId)
   const { defaultCategoryId, archivedIds } = context
-  const push = (categoryId: string, text: string) =>
+  const preserved: string[] = []
+  const push = (categoryId: string, text: string): void => {
+    preserved.push(text)
     next.recoveryCopies.push({
       id: uuidFrom(`${v1File.checksum}:older:${next.recoveryCopies.length}`),
       categoryId,
@@ -1079,6 +1093,7 @@ function importOlderFile(
       createdAt: context.now(),
       origin: { kind: 'older-version' as const, accountId: workspace.ownerId },
     })
+  }
   for (const draft of describeWriting(workspace).drafts) {
     const fresh = draft.rows.filter(
       (line) => line.trim() && !context.knownLines.has(line),
@@ -1112,6 +1127,9 @@ function importOlderFile(
     outcome: 'older-version-imported',
     at: context.now(),
   }
+  // A later changed v1 file must not preserve a line this file already preserved.
+  for (const text of preserved)
+    for (const line of text.split('\n')) context.knownLines.add(line)
 }
 
 /** SHA-256 hex of a string. */

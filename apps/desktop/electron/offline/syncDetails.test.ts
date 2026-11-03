@@ -70,6 +70,32 @@ describe('applySyncDetailAction refusals keep the unresolved row', () => {
     expect(state.binding!.declined[work]!.name!.kind).toBe('forbidden')
   })
 
+  // Regression: /ship pre-landing review 2026-11-03 — try-again on a conflict row only cleared it.
+  test('an action the page does not offer for the row is refused and leaves the marker', () => {
+    // Arrange
+    const state = withMarker('name', {
+      kind: 'conflict',
+      localValue: 'Mine',
+      serverValue: 'Theirs',
+    })
+
+    // Act
+    const act = (): void =>
+      applySyncDetailAction(
+        state,
+        { rowId: `${work}:name`, action: 'try-again' },
+        context,
+      )
+
+    // Assert
+    expect(act).toThrow(WorkspaceCommandError)
+    expect(state.binding!.declined[work]!.name).toEqual({
+      kind: 'conflict',
+      localValue: 'Mine',
+      serverValue: 'Theirs',
+    })
+  })
+
   test('use-mac-value on a delete-blocked row is refused and leaves the marker', () => {
     // Arrange
     const state = withMarker('delete', {

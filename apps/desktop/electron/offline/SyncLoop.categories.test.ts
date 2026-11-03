@@ -184,7 +184,7 @@ test('a rejected category batch is resent as single operations and only the oper
     expect.stringContaining('CATEGORY_SYNC_REJECTED'),
   )
   // The log carries counts and ids, never names.
-  expect(fixture.log.mock.calls.flat().join(' ')).not.toContain('Bad ')
+  expect(fixture.log.mock.calls.flat().join(' ')).not.toContain('Bad')
 })
 
 test('Try again re-sends a parked operation once and it parks again when still rejected', async () => {

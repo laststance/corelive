@@ -27,8 +27,8 @@ export default function DesktopAuthPage(): null {
         // D3 step 3: the desktop asked for a best-effort remote sign-out.
         if (request.action === 'sign-out') {
           await clerk.signOut({ redirectUrl: window.location.pathname })
-          if (!disposed)
-            await bridge.respond({ ...request, status: 'signed-out' })
+          // Ending the session re-runs this effect and disposes it, but main still awaits this reply.
+          await bridge.respond({ ...request, status: 'signed-out' })
           return
         }
         if (

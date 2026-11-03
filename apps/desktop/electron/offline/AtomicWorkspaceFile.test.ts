@@ -469,7 +469,7 @@ describe('commit cost on a large file (#216 perf gate)', () => {
   test('an unchanged file is not parsed again, but a changed one is', async () => {
     // Arrange
     let parses = 0
-    const { directory, options } = await createFixture()
+    const { options } = await createFixture()
     const file = new AtomicWorkspaceFile({
       ...options,
       parse: (value) => {
@@ -487,7 +487,6 @@ describe('commit cost on a large file (#216 perf gate)', () => {
 
     // Assert: one parse for the candidate only, none for the two reads of our own bytes.
     expect(parses).toBe(1)
-    expect(directory).toBeTruthy()
   })
 
   test('a primary damaged behind the cache is detected, never served from memory', async () => {

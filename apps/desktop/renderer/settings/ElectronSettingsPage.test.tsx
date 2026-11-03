@@ -2,10 +2,16 @@
 import '@testing-library/jest-dom/vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { expect, test, vi } from 'vitest'
+import { afterEach, expect, test, vi } from 'vitest'
 
 import { ElectronSettingsPage } from './ElectronSettingsPage'
 import { renderWithSettings } from './settingsTestkit'
+
+// Global stubs and the document theme must not leak into the next test, even after a failure.
+afterEach(() => {
+  vi.unstubAllGlobals()
+  delete document.documentElement.dataset.theme
+})
 
 test('shows the Settings sections in the DA1 order, each labelled for assistive technology', async () => {
   // Arrange / Act
@@ -39,7 +45,6 @@ test('renders without any network request, so Settings works offline', async () 
   // Assert
   expect(screen.getByRole('heading', { name: 'Application' })).toBeVisible()
   expect(fetchSpy).not.toHaveBeenCalled()
-  vi.unstubAllGlobals()
 })
 
 test('applies the stored theme to the document before the first frame', async () => {
@@ -54,13 +59,15 @@ test('applies the stored theme to the document before the first frame', async ()
 
 test('shows the three native switches at the values main reports', async () => {
   // Arrange / Act
-  const { fake } = await renderWithSettings(<ElectronSettingsPage />)
-  fake.api.settings.getLoginItemSettings.mockResolvedValue({
-    openAtLogin: true,
-  })
+  await renderWithSettings(<ElectronSettingsPage />, { openAtLogin: true })
 
   // Assert
   const application = screen.getByRole('region', { name: 'Application' })
+  await waitFor(() =>
+    expect(
+      within(application).getByRole('switch', { name: 'Start at Login' }),
+    ).toBeChecked(),
+  )
   expect(
     within(application).getByRole('switch', { name: 'Hide App Icon' }),
   ).not.toBeChecked()

@@ -60,6 +60,8 @@ export interface FakeSettingsOptions {
   account?: Partial<AccountStatus>
   /** The Sync details payload main would return. */
   syncDetails?: OfflineSyncDetails
+  /** What main's login-item query reports for Start at Login. */
+  openAtLogin?: boolean
 }
 
 /**
@@ -164,7 +166,9 @@ export function createFakeSettingsApi(options: FakeSettingsOptions = {}) {
       setHideAppIcon: vi.fn(async () => true),
       setShowInMenuBar: vi.fn(async () => true),
       setStartAtLogin: vi.fn(async () => true),
-      getLoginItemSettings: vi.fn(async () => ({ openAtLogin: false })),
+      getLoginItemSettings: vi.fn(async () => ({
+        openAtLogin: options.openAtLogin ?? false,
+      })),
       resetPopoverSize: vi.fn(async () => true),
     },
     floatingPanels: {

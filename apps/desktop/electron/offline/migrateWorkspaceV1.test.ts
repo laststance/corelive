@@ -1,5 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -463,6 +470,20 @@ describe('v1 to v2 workspace migration', () => {
     ).toEqual(['backup-preserved', 'source-converted'])
   })
 
+  // Regression: /ship pre-landing review 2026-11-03 — an unreadable v1 path threw out of the migration.
+  test('a v1 entry that cannot be read at all is preserved as a backup instead of failing the migration', async () => {
+    // Arrange
+    const directory = await installV1([{ id: 'user_a' }])
+    await mkdir(join(directory, 'workspaces', `${'e'.repeat(64)}.json`))
+
+    // Act
+    const result = await migrateWorkspaceV1({ directory, now: () => NOW })
+
+    // Assert
+    if (!result.ok) throw new Error('migration failed')
+    expect(result.summary?.preservedBackups).toBe(1)
+  })
+
   test('a Mac that never ran v1 gets a fresh workspace with the General category', async () => {
     // Arrange
     const directory = await mkdtemp(join(tmpdir(), 'corelive-migrate-'))
@@ -597,5 +618,37 @@ describe('downgrade round trip (DX8, EA13a)', () => {
     expect(third.workspace.recoveryCopies).toHaveLength(
       second.workspace.recoveryCopies.length,
     )
+  })
+
+  // Regression: /ship pre-landing review 2026-11-03 — the same line added to two v1 files was preserved twice.
+  test('the same line an older build added to two v1 files is preserved once', async () => {
+    // Arrange
+    const directory = await installV1([{ id: 'user_a' }, { id: 'user_b' }])
+    const first = await migrateWorkspaceV1({ directory, now: () => NOW })
+    if (!first.ok) throw new Error('migration failed')
+    for (const ownerId of ['user_a', 'user_b'])
+      await new AtomicWorkspaceFile({
+        directory: join(directory, 'workspaces'),
+        ownerId,
+        parse: OfflineWorkspaceV1Schema.parse,
+      }).update((state) => {
+        const next = structuredClone(state)
+        next.drafts['12']!.rows.push({
+          id: uid(960),
+          text: 'shared old-build line',
+        })
+        next.revision++
+        return next
+      })
+
+    // Act
+    const second = await migrateWorkspaceV1({ directory, now: () => NOW + 1 })
+
+    // Assert
+    if (!second.ok) throw new Error('migration failed')
+    const copies = second.workspace.recoveryCopies.filter((copy) =>
+      copy.text.split('\n').includes('shared old-build line'),
+    )
+    expect(copies).toHaveLength(1)
   })
 })

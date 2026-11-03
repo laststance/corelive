@@ -193,8 +193,11 @@ test('a corrupt device workspace can export its exact damaged file and validated
     execArgv: ['--import', 'tsx'],
   }
   let client = new WorkspaceWorkerClient(options)
-  const path = join(directory, 'device.json')
-  const recoveryPath = join(directory, 'device.recovery.json')
+  const path = join(directory, `${DEVICE_WORKSPACE_FILE_NAME}.json`)
+  const recoveryPath = join(
+    directory,
+    `${DEVICE_WORKSPACE_FILE_NAME}.recovery.json`,
+  )
   const damaged = Buffer.from([0x7b, 0x00, 0xff])
   try {
     await client.call('command', {

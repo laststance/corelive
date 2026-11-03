@@ -960,7 +960,7 @@ describe('delivery safety (EA3, EA4, EA16)', () => {
     expect(JSON.stringify(again!.wire)).toBe(firstBytes)
   })
 
-  test('a late receipt after detach applies only to its own operation id', async () => {
+  test('a receipt for an unknown operation id is ignored while the matching receipt applies', async () => {
     // Arrange
     const fx = await createFixture()
     await runUntilSettled(fx.service, fx.dashboard, accountId)

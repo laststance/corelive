@@ -54,6 +54,42 @@ describe('credential-only desktop auth route', () => {
     expect(signOut).toHaveBeenCalledTimes(1)
   })
 
+  // Regression: /ship pre-landing review 2026-11-03 — clerk.signOut() clears the session, which
+  // disposed the effect before the reply, so main waited out its 5 s revoke timeout.
+  test('still reports signed-out to main when the session ends before the remote sign-out resolves', async () => {
+    // Arrange
+    signOut.mockClear()
+    state.session = {
+      user: { id: 'account-a' },
+      getToken: async () => 'unused',
+    }
+    let finishSignOut: () => void = () => undefined
+    signOut.mockImplementationOnce(
+      async () =>
+        new Promise<undefined>((done) => {
+          finishSignOut = (): void => done(undefined)
+        }),
+    )
+    const respond = vi.fn(async () => true)
+    const revoke: OfflineAuthRequest = { ...challenge, action: 'sign-out' }
+    window.coreliveOfflineAuth = {
+      ready: async () => revoke,
+      respond,
+      onRequest: () => () => undefined,
+    }
+    const view = render(<DesktopAuthPage />)
+    await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1))
+
+    // Act: the cleared session disposes the effect before signOut resolves
+    view.unmount()
+    await act(async () => {
+      finishSignOut()
+    })
+
+    // Assert
+    expect(respond).toHaveBeenCalledWith({ ...revoke, status: 'signed-out' })
+  })
+
   test('refreshes the existing Clerk session only when main has supplied a challenge', async () => {
     // Arrange
     const getToken = vi.fn(async () => 'opaque-test-token')

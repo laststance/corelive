@@ -55,7 +55,7 @@ test('opening is a plain loading state without a Sign in button', () => {
 
   // Assert
   expect(
-    screen.getByRole('heading', { name: 'Opening your writing…' }),
+    screen.getByRole('heading', { name: 'Opening your writing…', level: 1 }),
   ).toBeVisible()
   expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull()
 })

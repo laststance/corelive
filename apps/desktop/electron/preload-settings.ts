@@ -93,8 +93,15 @@ export function createSettingsBridge(): SettingsWindowAPI {
     updater: {
       checkForUpdates: async () => typedInvoke('updater-check-for-updates'),
       quitAndInstall: async () => typedInvoke('updater-quit-and-install'),
-      // A failed poll must reject so the renderer keeps its last successful snapshot.
-      getStatus: async () => typedInvoke('updater-get-status'),
+      // A failed poll must reject so the renderer keeps its last successful snapshot; main's
+      // error text stays out of the renderer and its logs.
+      getStatus: async () => {
+        try {
+          return await typedInvoke('updater-get-status')
+        } catch {
+          throw new Error('Update status unavailable')
+        }
+      },
     },
     settings: {
       setHideAppIcon: async (hide) =>

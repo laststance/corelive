@@ -116,40 +116,57 @@ export function AccountSection({
     pendingFocus.current = 'sign-in'
   }
 
-  const signIn = async (): Promise<void> => {
-    setUi({ kind: 'busy' })
-    const result = await api.account.signIn()
-    setUi(result.status === 'offline' ? { kind: 'offline' } : { kind: 'idle' })
-    await reread()
+  /** Runs one account action; a rejected IPC call returns to idle instead of a stuck busy state. */
+  const guarded = async (action: () => Promise<void>): Promise<void> => {
+    try {
+      await action()
+    } catch {
+      setUi({ kind: 'idle' })
+      await reread()
+    }
   }
+
+  const signIn = async (): Promise<void> =>
+    guarded(async () => {
+      setUi({ kind: 'busy' })
+      const result = await api.account.signIn()
+      setUi(
+        result.status === 'offline' ? { kind: 'offline' } : { kind: 'idle' },
+      )
+      await reread()
+    })
   const cancelSignIn = async (): Promise<void> => {
     await api.account.cancelSignIn()
     await reread()
   }
-  const connect = async (): Promise<void> => {
-    setUi({ kind: 'busy' })
-    await api.account.connect()
-    setUi({ kind: 'idle' })
-    await reread()
-  }
-  const notNow = async (): Promise<void> => {
-    setUi({ kind: 'busy' })
-    const result = await api.account.notNow()
-    await reread()
-    if (result.status === 'flush-failed') applySignOut(result)
-    else setUi({ kind: 'idle' })
-  }
-  const confirmSignOut = async (): Promise<void> => {
-    setUi({ kind: 'signing-out' })
-    const result = await api.account.signOut()
-    await reread()
-    applySignOut(result)
-  }
-  const clearAgain = async (): Promise<void> => {
-    setUi({ kind: 'clearing' })
-    const result = await api.account.clearAgain()
-    applySignOut(result)
-  }
+  const connect = async (): Promise<void> =>
+    guarded(async () => {
+      setUi({ kind: 'busy' })
+      await api.account.connect()
+      setUi({ kind: 'idle' })
+      await reread()
+    })
+  const notNow = async (): Promise<void> =>
+    guarded(async () => {
+      setUi({ kind: 'busy' })
+      const result = await api.account.notNow()
+      await reread()
+      if (result.status === 'flush-failed') applySignOut(result)
+      else setUi({ kind: 'idle' })
+    })
+  const confirmSignOut = async (): Promise<void> =>
+    guarded(async () => {
+      setUi({ kind: 'signing-out' })
+      const result = await api.account.signOut()
+      await reread()
+      applySignOut(result)
+    })
+  const clearAgain = async (): Promise<void> =>
+    guarded(async () => {
+      setUi({ kind: 'clearing' })
+      const result = await api.account.clearAgain()
+      applySignOut(result)
+    })
   const openConfirm = (): void => {
     setUi({ kind: 'confirm-signout' })
     pendingFocus.current = 'cancel'
