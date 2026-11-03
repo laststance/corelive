@@ -195,7 +195,10 @@ export function AccountSection({
   // The sign-out confirm and its running state replace the action row (DA5).
   const confirmRow =
     ui.kind === 'signing-out' ? (
-      <Button disabled>Signing out…</Button>
+      // Same row wrapper as the other actions, so the Sync details link stays on its own line.
+      <div className="flex flex-wrap gap-2">
+        <Button disabled>Signing out…</Button>
+      </div>
     ) : ui.kind === 'confirm-signout' ? (
       <div
         role="group"
