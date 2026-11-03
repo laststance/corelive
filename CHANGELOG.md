@@ -6,7 +6,6 @@
 
 - On a Mac that never ran an earlier version, Sync details ▸ History now says "Nothing here yet." instead of showing an import summary where every count is zero.
 - "Open recovery copies" appears in History whenever a recovery copy is waiting to be restored, including copies kept from an earlier version, and no longer appears when there is nothing to open.
-- History no longer says "Nothing here yet." right under "Kept on the dashboard only".
 
 ## [0.30.0] - 2026-11-03
 
