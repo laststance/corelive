@@ -218,9 +218,9 @@ export class OfflineEditorController {
     const who = await this.verifyIdentity(clerkId)
     // A sign-out during the identity round trip wins, even one that already finished.
     if (!who || epoch !== this.signOutEpoch) return
-    this.signedIn = who
     const bound = await this.context.worker.call('binding', null)
     if (epoch !== this.signOutEpoch) return
+    this.signedIn = who
     if (!bound) {
       // DA4/EA2b: an unbound Mac waits for Connect; nothing is sent to the sync endpoints.
       this.registryState = await this.registry.update({
@@ -320,7 +320,12 @@ export class OfflineEditorController {
    * @example const state = this.accountState(view?.binding ?? null)
    */
   private accountState(binding: { accountId: string } | null): AccountState {
-    if (this.registryState?.attachedAccountId) return 'attached'
+    // A journaled sign-out is never reported as attached, even if its detach write was deferred.
+    if (
+      this.registryState?.attachedAccountId &&
+      !this.registryState.signOutPending
+    )
+      return 'attached'
     if (!binding) return 'never-attached'
     const isOtherAccount =
       this.signedIn !== null && this.signedIn.clerkId !== binding.accountId

@@ -116,12 +116,19 @@ export function AccountSection({
     pendingFocus.current = 'sign-in'
   }
 
-  /** Runs one account action; a rejected IPC call returns to idle instead of a stuck busy state. */
-  const guarded = async (action: () => Promise<void>): Promise<void> => {
+  /**
+   * Runs one account action; a rejected IPC call lands on `fallback` instead of a stuck busy state.
+   * @param action - The action body.
+   * @param fallback - What to show after a rejection (idle unless a retry must stay offered).
+   */
+  const guarded = async (
+    action: () => Promise<void>,
+    fallback: Ui = { kind: 'idle' },
+  ): Promise<void> => {
     try {
       await action()
     } catch {
-      setUi({ kind: 'idle' })
+      setUi(fallback)
       await reread()
     }
   }
@@ -135,10 +142,11 @@ export function AccountSection({
       )
       await reread()
     })
-  const cancelSignIn = async (): Promise<void> => {
-    await api.account.cancelSignIn()
-    await reread()
-  }
+  const cancelSignIn = async (): Promise<void> =>
+    guarded(async () => {
+      await api.account.cancelSignIn()
+      await reread()
+    })
   const connect = async (): Promise<void> =>
     guarded(async () => {
       setUi({ kind: 'busy' })
@@ -162,11 +170,15 @@ export function AccountSection({
       applySignOut(result)
     })
   const clearAgain = async (): Promise<void> =>
-    guarded(async () => {
-      setUi({ kind: 'clearing' })
-      const result = await api.account.clearAgain()
-      applySignOut(result)
-    })
+    guarded(
+      async () => {
+        setUi({ kind: 'clearing' })
+        const result = await api.account.clearAgain()
+        applySignOut(result)
+      },
+      // The journal is still set, so Clear again must stay offered.
+      { kind: 'residual' },
+    )
   const openConfirm = (): void => {
     setUi({ kind: 'confirm-signout' })
     pendingFocus.current = 'cancel'

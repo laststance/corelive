@@ -957,6 +957,34 @@ test('a residual cookie keeps the journal set and Clear again finishes it', asyn
   expect((await fixture.registry.read()).signOutPending).toBe(false)
 })
 
+// Regression: /ship pre-landing review 2026-11-03 (pass 2) — a deferred detach plus a residual sweep
+// left the signed-out Mac reported as attached.
+test('a sign-out whose detach write fails and whose sweep is residual never reports the Mac as attached', async () => {
+  // Arrange
+  const fixture = await createFixture({ bound: 'account-a', attached: true })
+  await fixture.controller.initialize()
+  const realUpdate = fixture.registry.update.bind(fixture.registry)
+  vi.spyOn(fixture.registry, 'update').mockImplementation(async (patch) => {
+    if (Object.keys(patch).join() === 'attachedAccountId')
+      throw new Error('disk full')
+    return realUpdate(patch)
+  })
+  fixture.endLocalSession.mockResolvedValueOnce({
+    status: 'signed-out-residual',
+    code: 'SIGNOUT_RESIDUAL_COOKIE',
+    cookieNames: ['__session'],
+    domains: ['corelive.app'],
+  })
+
+  // Act
+  const result = await fixture.controller.signOut()
+
+  // Assert
+  expect(result.status).toBe('signed-out-residual')
+  expect(fixture.controller.accountStatus().state).toBe('signed-out')
+  expect(fixture.log).toHaveBeenCalledWith('SIGNOUT_DETACH_DEFERRED')
+})
+
 test('a crash after detach is finished at the next launch before any attach, and a lingering session does not re-attach', async () => {
   // Arrange
   const fixture = await createFixture({

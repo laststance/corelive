@@ -402,6 +402,39 @@ test('a sign-in request that fails in main re-enables Sign in instead of staying
   )
 })
 
+// Regression: /ship pre-landing review 2026-11-03 (pass 2) — a failed Clear again dropped its own retry.
+test('a Clear again request that fails in main keeps the cleanup note and the Clear again retry', async () => {
+  // Arrange
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+  const { fake } = await renderWithSettings(<Harness />, { account: ATTACHED })
+  fake.api.account.signOut.mockImplementation(async () => {
+    fake.setAccount({ state: 'signed-out' })
+    return {
+      status: 'signed-out-residual',
+      code: 'SIGNOUT_RESIDUAL_COOKIE',
+      cookieNames: ['__client'],
+      domains: ['clerk.corelive.app'],
+    }
+  })
+  fake.api.account.clearAgain.mockRejectedValue(new Error('main unavailable'))
+  await user.click(screen.getByRole('button', { name: 'Sign out' }))
+  await user.click(
+    within(screen.getByRole('group', { name: 'Confirm sign out' })).getByRole(
+      'button',
+      { name: 'Sign out' },
+    ),
+  )
+  const clearAgain = await screen.findByRole('button', { name: 'Clear again' })
+
+  // Act
+  await user.click(clearAgain)
+
+  // Assert
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Clear again' })).toBeEnabled(),
+  )
+})
+
 test('while the login window is open Account shows Finishing sign-in with Cancel, and Cancel asks main to close it', async () => {
   // Arrange
   const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
