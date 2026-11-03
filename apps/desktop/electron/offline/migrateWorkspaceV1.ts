@@ -552,7 +552,8 @@ function untouchedCategory(
 /**
  * Converts the v1 categories (or seeds the default category on a fresh start).
  *
- * Ids with no live category stay referenced through a historical placeholder (EA9).
+ * Ids with no live category stay referenced through a historical placeholder (EA9). A v1 file
+ * with no live category at all also gets the seeded default, so there is always one to write in.
  *
  * @example const categories = convertCategories(conversion)
  */
@@ -597,7 +598,34 @@ function convertCategories(
           historical: true,
         }),
       )
+  // Removed and placeholder categories never sync, so writing needs at least one live category.
+  if (!categories.some(isLiveCategory))
+    categories.push(
+      untouchedCategory({
+        id: uuidFrom(`${seed}:default`),
+        name: DEFAULT_CATEGORY_SEED.name,
+        color: DEFAULT_CATEGORY_SEED.color,
+        isDefault: true,
+        parentId: null,
+        removed: false,
+        historical: false,
+      }),
+    )
   return categories
+}
+
+/**
+ * Tells whether a migrated category can be written in and synced: neither removed nor a placeholder.
+ *
+ * @example isLiveCategory({ removed: false, historical: false }) // => true
+ */
+function isLiveCategory(
+  category: Pick<
+    OfflineWorkspace['categories'][number],
+    'removed' | 'historical'
+  >,
+): boolean {
+  return !category.removed && !category.historical
 }
 
 /**
@@ -614,7 +642,7 @@ function convertDrafts(
   for (const [key, draft] of Object.entries(v1?.drafts ?? {}))
     drafts[local(Number(key))] = draft
   for (const category of categories)
-    if (!category.removed && !category.historical)
+    if (isLiveCategory(category))
       drafts[category.id] ??= {
         revision: 0,
         rows: [{ id: uuidFrom(`${seed}:row:${category.id}`), text: '' }],
@@ -934,9 +962,13 @@ function buildWorkspace(input: BuildInput): OfflineWorkspace {
   const { seed } = conversion
 
   const categories = convertCategories(conversion)
+  // convertCategories guarantees a live category, so the fallback never lands on a removed one.
   const defaultCategoryId =
-    categories.find((category) => category.isDefault && !category.removed)
-      ?.id ?? categories[0]!.id
+    categories.find(
+      (category) => category.isDefault && isLiveCategory(category),
+    )?.id ??
+    categories.find(isLiveCategory)?.id ??
+    categories[0]!.id
   const drafts = convertDrafts(conversion, categories)
 
   // Copy ids count up in creation order, so the file loop must run before the legacy notes.

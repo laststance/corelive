@@ -372,6 +372,43 @@ describe('v1 to v2 workspace migration', () => {
     ])
   })
 
+  // Regression: /ship pass 7 adversarial review on PR #222 2026-11-03 — a v1 file with no live category fell back to a removed default without a draft, so the editor could not open
+  test('a v1 workspace whose categories are all removed migrates with a new General to write into', async () => {
+    // Arrange
+    const base = v1Workspace('user_a')
+    const directory = await installV1([
+      {
+        id: 'user_a',
+        workspace: {
+          ...base,
+          selectedCategoryId: 11,
+          categories: base.categories.map((category) => ({
+            ...category,
+            removed: true,
+          })),
+        },
+      },
+    ])
+
+    // Act
+    const result = await migrateWorkspaceV1({ directory, now: () => NOW })
+
+    // Assert
+    if (!result.ok) throw new Error('migration failed')
+    const selected = result.workspace.categories.find(
+      (category) => category.id === result.workspace.selectedCategoryId,
+    )
+    expect(selected).toMatchObject({
+      name: 'General',
+      isDefault: true,
+      removed: false,
+      historical: false,
+    })
+    expect(workspaceView(result.workspace).draft.rows).toEqual([
+      { id: '099d01cc-4412-4663-9d62-ff9e58e19e5e', text: '' },
+    ])
+  })
+
   test('writes only the two new v2 files and leaves every v1 byte untouched (C32)', async () => {
     // Arrange
     const directory = await installV1([{ id: 'user_a' }, { id: 'user_b' }])
