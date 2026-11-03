@@ -285,9 +285,10 @@ test.each(['after', 'before', 'queued'] as const)(
       {
         getLiveEditorWindow: () => editor as unknown as BrowserWindow,
         getSettingsWindow: () => null,
+        setLoginWindowObserver: vi.fn(),
       } as unknown as WindowManager,
       controller,
-      { signOutDevice: vi.fn() },
+      { signOutDevice: vi.fn(), isOnline: () => true },
     )
     ipc.register()
     const readSnapshot = vi
@@ -426,9 +427,10 @@ test.each(['crashed', 'loading', 'destroyed', 'contents-destroyed', 'missing'])(
       {
         getLiveEditorWindow: () =>
           state === 'missing' ? null : (editor as unknown as BrowserWindow),
+        setLoginWindowObserver: vi.fn(),
       } as unknown as WindowManager,
       controller,
-      { signOutDevice: vi.fn() },
+      { signOutDevice: vi.fn(), isOnline: () => true },
     )
     requestFlush.mockImplementation(async (generation) => ipc.flush(generation))
     const save = {

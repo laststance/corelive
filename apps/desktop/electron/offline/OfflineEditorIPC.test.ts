@@ -131,6 +131,8 @@ function createFixture() {
     connect: vi.fn(async () => true),
     signOut: vi.fn(async () => ({ status: 'signed-out' })),
     notNow: vi.fn(async () => ({ status: 'signed-out' })),
+    clearAgain: vi.fn(async () => ({ status: 'signed-out' })),
+    acknowledgeFirstUpload: vi.fn(),
   }
   const windows = {
     openSettings: vi.fn(),
@@ -138,13 +140,17 @@ function createFixture() {
     getSettingsWindow: () => settings as unknown as BrowserWindow,
     getLoginWindow: () => null,
     showLoginWindow: vi.fn(),
+    hasLoginWindow: () => false,
+    closeLoginWindow: vi.fn(),
+    setLoginWindowObserver: vi.fn(),
     getWebAppOrigin: () => 'https://corelive.app',
   }
+  let online = true
   const signOutDevice = vi.fn(async (run: () => Promise<unknown>) => run())
   const ipc = new OfflineEditorIPC(
     windows as unknown as WindowManager,
     controller as unknown as OfflineEditorController,
-    { signOutDevice: signOutDevice as never },
+    { signOutDevice: signOutDevice as never, isOnline: () => online },
   )
   ipc.register()
   const handler = (channel: string): Handler => {
@@ -164,6 +170,9 @@ function createFixture() {
     controller,
     windows,
     signOutDevice,
+    goOffline: (): void => {
+      online = false
+    },
     preferences,
     handler,
     updateSnapshot: (next: OfflineEditorSnapshot): void => {
@@ -426,6 +435,39 @@ test('Settings sign-in opens the login window and Connect attaches the pending a
   // Assert
   expect(fixture.windows.showLoginWindow).toHaveBeenCalledOnce()
   expect(connected).toBe(true)
+})
+
+test('Settings sign-in offline answers without opening the login window', async () => {
+  // Arrange
+  const fixture = createFixture()
+  fixture.goOffline()
+
+  // Act
+  const result = await fixture.handler('settings-window-account-sign-in')(
+    fixture.settingsEvent,
+  )
+
+  // Assert
+  expect(result).toEqual({ status: 'offline' })
+  expect(fixture.windows.showLoginWindow).not.toHaveBeenCalled()
+})
+
+test('Settings Clear again reruns only the local session end, and the first-upload line is acknowledged once', async () => {
+  // Arrange
+  const fixture = createFixture()
+
+  // Act
+  const cleared = await fixture.handler('settings-window-account-clear-again')(
+    fixture.settingsEvent,
+  )
+  await fixture.handler('settings-window-account-ack-first-upload')(
+    fixture.settingsEvent,
+  )
+
+  // Assert
+  expect(cleared).toEqual({ status: 'signed-out' })
+  expect(fixture.controller.clearAgain).toHaveBeenCalledOnce()
+  expect(fixture.controller.acknowledgeFirstUpload).toHaveBeenCalledOnce()
 })
 
 test('only the login window may send authentication notifications, never Settings', () => {

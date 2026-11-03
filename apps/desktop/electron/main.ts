@@ -29,6 +29,7 @@ import {
   app,
   BrowserWindow,
   dialog,
+  net,
   session,
   powerMonitor,
   protocol,
@@ -700,7 +701,7 @@ async function createWindow(): Promise<void> {
       windowManager,
       configManager,
       mainDirectory,
-      { signOutDevice },
+      { signOutDevice, isOnline: () => net.isOnline() },
     )
     setupIPCHandlers()
     // Local readiness is read from disk; optional authentication/sync never blocks startup.

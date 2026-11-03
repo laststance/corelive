@@ -310,7 +310,7 @@ export class OfflineEditorController {
    * session verified in this run.
    * @example const status = controller.accountStatus()
    */
-  accountStatus(): AccountStatus {
+  accountStatus(): Omit<AccountStatus, 'signIn'> {
     const view =
       this.snapshot.phase === 'ready' ? this.snapshot.workspace : null
     const binding = view?.binding ?? null
@@ -414,6 +414,17 @@ export class OfflineEditorController {
    */
   async clearAgain(): Promise<SessionEnd> {
     return this.finishPendingSignOut()
+  }
+
+  /**
+   * Drops the finished first-upload progress once Settings has shown it, so the DA4 line
+   * "<N> keeps are on your dashboard" appears once.
+   * @example controller.acknowledgeFirstUpload()
+   */
+  acknowledgeFirstUpload(): void {
+    if (this.firstUpload?.state !== 'done') return
+    this.firstUpload = null
+    this.publishSync()
   }
 
   /** Session expiry pauses synchronization while preserving the local workspace.

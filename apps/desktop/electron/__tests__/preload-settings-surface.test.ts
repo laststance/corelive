@@ -98,3 +98,31 @@ test('opening the dashboard sends no address from the renderer', async () => {
     'settings-window-account-open-dashboard',
   )
 })
+
+test('sign-in controls travel as argument-free named channels', async () => {
+  // Arrange
+  await loadPreload('corelive-editor://app/settings.html')
+  const api = exposeInMainWorld.mock.calls[0]?.[1] as {
+    account: {
+      signIn: (...args: unknown[]) => Promise<unknown>
+      cancelSignIn: (...args: unknown[]) => Promise<unknown>
+      clearAgain: (...args: unknown[]) => Promise<unknown>
+      acknowledgeFirstUpload: (...args: unknown[]) => Promise<unknown>
+    }
+  }
+  invoke.mockResolvedValue(undefined)
+
+  // Act
+  await api.account.signIn('https://evil.example')
+  await api.account.cancelSignIn()
+  await api.account.clearAgain()
+  await api.account.acknowledgeFirstUpload()
+
+  // Assert
+  expect(invoke.mock.calls).toEqual([
+    ['settings-window-account-sign-in'],
+    ['settings-window-account-cancel-sign-in'],
+    ['settings-window-account-clear-again'],
+    ['settings-window-account-ack-first-upload'],
+  ])
+})

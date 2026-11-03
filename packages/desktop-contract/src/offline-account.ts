@@ -28,6 +28,15 @@ export type SignOutResult = z.infer<typeof SignOutResultSchema>
 export type AccountState =
   'never-attached' | 'attached' | 'signed-out' | 'other-account'
 
+/**
+ * Progress of a Settings-initiated sign-in (DA6, DX7): `in-progress` while the login window is
+ * open, `unreachable` after `SIGNIN_PAGE_UNREACHABLE`, otherwise `idle`.
+ */
+export type SignInProgress = 'idle' | 'in-progress' | 'unreachable'
+
+/** Result of asking main to start a sign-in (DA6): offline never opens the login window. */
+export type SignInStartResult = { status: 'opened' } | { status: 'offline' }
+
 /** What Settings ▸ Account renders (X1, DA3, DA4). */
 export interface AccountStatus {
   state: AccountState
@@ -42,4 +51,6 @@ export interface AccountStatus {
   pendingConnect: { displayEmail: string } | null
   /** First-upload progress after Connect (DA4). */
   firstUpload: { state: 'uploading' | 'done'; count: number } | null
+  /** The login window's progress, owned by main's sign-in coordinator (DA6). */
+  signIn: SignInProgress
 }

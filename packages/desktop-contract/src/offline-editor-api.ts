@@ -8,7 +8,11 @@ import type {
   ElectronUpdaterAPI,
   LiveEditorSettingsAPI,
 } from './electron-api'
-import type { AccountStatus, SignOutResult } from './offline-account'
+import type {
+  AccountStatus,
+  SignInStartResult,
+  SignOutResult,
+} from './offline-account'
 import type { OfflinePreferences } from './offline-workspace'
 import {
   WorkspaceCommandSchema,
@@ -139,8 +143,15 @@ export interface SettingsWindowAPI {
     status: () => Promise<AccountStatus>
     connect: () => Promise<boolean>
     notNow: () => Promise<SignOutResult>
-    signIn: () => Promise<void>
+    /** Opens the login window unless the Mac is offline (DA6). */
+    signIn: () => Promise<SignInStartResult>
+    /** Closes the login window opened by {@link signIn} (DA6 Cancel). */
+    cancelSignIn: () => Promise<void>
     signOut: () => Promise<SignOutResult>
+    /** Reruns only the local session end and its read-back after a residual result (DX6). */
+    clearAgain: () => Promise<SignOutResult>
+    /** Tells main the "keeps are on your dashboard" line was shown, so it appears once (DA4). */
+    acknowledgeFirstUpload: () => Promise<void>
     /** Opens the dashboard at the configured server URL; the renderer supplies no address. */
     openDashboard: () => Promise<boolean>
   }
@@ -210,7 +221,19 @@ export interface OfflineIPCChannels {
   'settings-window-account-status': { request: void; response: AccountStatus }
   'settings-window-account-connect': { request: void; response: boolean }
   'settings-window-account-not-now': { request: void; response: SignOutResult }
-  'settings-window-account-sign-in': { request: void; response: void }
+  'settings-window-account-sign-in': {
+    request: void
+    response: SignInStartResult
+  }
+  'settings-window-account-cancel-sign-in': { request: void; response: void }
+  'settings-window-account-clear-again': {
+    request: void
+    response: SignOutResult
+  }
+  'settings-window-account-ack-first-upload': {
+    request: void
+    response: void
+  }
   'settings-window-account-sign-out': {
     request: void
     response: SignOutResult
@@ -273,6 +296,9 @@ export const OFFLINE_IPC_ARGUMENT_SCHEMAS = {
   'settings-window-account-connect': z.tuple([]),
   'settings-window-account-not-now': z.tuple([]),
   'settings-window-account-sign-in': z.tuple([]),
+  'settings-window-account-cancel-sign-in': z.tuple([]),
+  'settings-window-account-clear-again': z.tuple([]),
+  'settings-window-account-ack-first-upload': z.tuple([]),
   'settings-window-account-sign-out': z.tuple([]),
   'settings-window-account-open-dashboard': z.tuple([]),
 } satisfies Record<keyof OfflineIPCChannels, z.ZodType>

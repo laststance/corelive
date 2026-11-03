@@ -65,9 +65,14 @@ export function createSettingsBridge(): SettingsWindowAPI {
       status: async () => typedInvoke('settings-window-account-status'),
       connect: async () => typedInvoke('settings-window-account-connect'),
       notNow: async () => typedInvoke('settings-window-account-not-now'),
-      signIn: async (): Promise<void> =>
-        typedInvoke('settings-window-account-sign-in'),
+      signIn: async () => typedInvoke('settings-window-account-sign-in'),
+      cancelSignIn: async (): Promise<void> =>
+        typedInvoke('settings-window-account-cancel-sign-in'),
       signOut: async () => typedInvoke('settings-window-account-sign-out'),
+      clearAgain: async () =>
+        typedInvoke('settings-window-account-clear-again'),
+      acknowledgeFirstUpload: async (): Promise<void> =>
+        typedInvoke('settings-window-account-ack-first-upload'),
       openDashboard: async () =>
         typedInvoke('settings-window-account-open-dashboard'),
     },

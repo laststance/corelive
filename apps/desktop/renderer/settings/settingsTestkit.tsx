@@ -1,4 +1,10 @@
 import type {
+  AccountStatus,
+  SignInStartResult,
+  SignOutResult,
+} from '@corelive/desktop-contract/offline-account'
+import type {
+  OfflineSyncDetails,
   SettingsSnapshot,
   SettingsWindowAPI,
 } from '@corelive/desktop-contract/offline-editor-api'
@@ -11,7 +17,7 @@ import { vi } from 'vitest'
 import { SettingsProvider } from './SettingsProvider'
 
 /** A signed-out, never-attached account, the default first-run state (DA3 state A). */
-const NEVER_ATTACHED_ACCOUNT = {
+const NEVER_ATTACHED_ACCOUNT: AccountStatus = {
   state: 'never-attached',
   boundEmail: null,
   signedInEmail: null,
@@ -20,7 +26,17 @@ const NEVER_ATTACHED_ACCOUNT = {
   lastSyncedAt: null,
   pendingConnect: null,
   firstUpload: null,
-} as const
+  signIn: 'idle',
+}
+
+/** An empty Sync details payload ("No sync issues"). */
+export const EMPTY_SYNC_DETAILS: OfflineSyncDetails = {
+  rows: [],
+  history: [],
+  migrationSummary: null,
+  preservedBackups: [],
+  dashboardOnlyCount: 0,
+}
 
 /** The device workspace's default General category. */
 export const GENERAL_CATEGORY: LocalCategory = {
@@ -40,6 +56,10 @@ export interface FakeSettingsOptions {
   theme?: string
   categories?: LocalCategory[]
   phase?: 'ready' | 'opening'
+  /** Overrides of the account status (DA3 states A-D, pending connect, ...). */
+  account?: Partial<AccountStatus>
+  /** The Sync details payload main would return. */
+  syncDetails?: OfflineSyncDetails
 }
 
 /**
@@ -56,16 +76,18 @@ export function createFakeSettingsApi(options: FakeSettingsOptions = {}) {
     theme: options.theme ?? 'system',
   }
   let categories = options.categories ?? [GENERAL_CATEGORY]
+  let account: AccountStatus = { ...NEVER_ATTACHED_ACCOUNT, ...options.account }
+  let syncDetails = options.syncDetails ?? EMPTY_SYNC_DETAILS
   const listeners = new Set<() => void>()
   const snapshot = (): SettingsSnapshot =>
     options.phase === 'opening'
-      ? { phase: 'opening', generation: 1, account: NEVER_ATTACHED_ACCOUNT }
+      ? { phase: 'opening', generation: 1, account }
       : {
           phase: 'ready',
           generation: 1,
           preferences: structuredClone(stored),
           categories,
-          account: NEVER_ATTACHED_ACCOUNT,
+          account,
         }
   const api = {
     version: 1,
@@ -100,14 +122,25 @@ export function createFakeSettingsApi(options: FakeSettingsOptions = {}) {
       })),
     },
     account: {
-      status: vi.fn(async () => NEVER_ATTACHED_ACCOUNT),
+      status: vi.fn(async () => account),
       connect: vi.fn(async () => true),
-      notNow: vi.fn(async () => ({ status: 'signed-out' as const })),
-      signIn: vi.fn(async () => undefined),
-      signOut: vi.fn(async () => ({ status: 'signed-out' as const })),
+      notNow: vi.fn(async (): Promise<SignOutResult> => ({
+        status: 'signed-out',
+      })),
+      signIn: vi.fn(async (): Promise<SignInStartResult> => ({
+        status: 'opened',
+      })),
+      cancelSignIn: vi.fn(async () => undefined),
+      signOut: vi.fn(async (): Promise<SignOutResult> => ({
+        status: 'signed-out',
+      })),
+      clearAgain: vi.fn(async (): Promise<SignOutResult> => ({
+        status: 'signed-out',
+      })),
+      acknowledgeFirstUpload: vi.fn(async () => undefined),
       openDashboard: vi.fn(async () => true),
     },
-    syncDetails: vi.fn(),
+    syncDetails: vi.fn(async () => structuredClone(syncDetails)),
     config: {
       get: vi.fn(
         async (_path: string, fallback?: unknown) => fallback,
@@ -154,6 +187,16 @@ export function createFakeSettingsApi(options: FakeSettingsOptions = {}) {
     api,
     /** The preferences main would have persisted. */
     stored,
+    /** Replaces the account status and notifies like a main-side change. */
+    setAccount(next: Partial<AccountStatus>): void {
+      account = { ...account, ...next }
+      for (const listener of listeners) listener()
+    },
+    /** Replaces the Sync details payload and notifies like a main-side change. */
+    setSyncDetails(next: OfflineSyncDetails): void {
+      syncDetails = next
+      for (const listener of listeners) listener()
+    },
     /** Replaces the category list and notifies like a main-side change. */
     setCategories(next: LocalCategory[]): void {
       categories = next

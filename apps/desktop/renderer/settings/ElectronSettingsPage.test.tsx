@@ -22,6 +22,7 @@ test('shows the Settings sections in the DA1 order, each labelled for assistive 
     'Application',
     'Categories',
     'Updates',
+    'Account',
   ])
   for (const region of screen.getAllByRole('region'))
     expect(region).toHaveAccessibleName()
@@ -125,5 +126,33 @@ test('calls resetPopoverSize through the preload when Restore default size is pr
   // Assert
   await waitFor(() =>
     expect(fake.api.settings.resetPopoverSize).toHaveBeenCalledTimes(1),
+  )
+})
+
+test('opens Sync details from Account, hides the Settings sections behind it, and Back returns focus to the Account heading', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  await renderWithSettings(<ElectronSettingsPage />, {
+    account: { needsALookCount: 2 },
+  })
+
+  // Act
+  await user.click(
+    screen.getByRole('button', { name: '2 changes need a look' }),
+  )
+
+  // Assert: the details page replaces the sections
+  expect(
+    await screen.findByRole('heading', { name: 'Needs a look' }),
+  ).toBeVisible()
+  expect(screen.queryByRole('heading', { name: 'Application' })).toBeNull()
+
+  // Act
+  await user.click(screen.getByRole('button', { name: /Back to Settings/ }))
+
+  // Assert
+  expect(screen.getByRole('heading', { name: 'Application' })).toBeVisible()
+  await waitFor(() =>
+    expect(screen.getByRole('heading', { name: 'Account' })).toHaveFocus(),
   )
 })

@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import { writeFile } from 'node:fs/promises'
 
-import type { SignOutResult } from '@corelive/desktop-contract/offline-account'
+import type {
+  AccountStatus,
+  SignOutResult,
+} from '@corelive/desktop-contract/offline-account'
 import type {
   OfflineFlushRequest,
   OfflineSettingsResult,
@@ -17,6 +20,7 @@ import {
 
 import { typedHandle } from '../ipc/typedHandle'
 import { typedSend } from '../ipc/typedSend'
+import { log } from '../logger'
 import { isTrustedAppNavigation } from '../utils/isTrustedAppNavigation'
 import { openWebAppInBrowser } from '../utils/openWebAppInBrowser'
 import type { WindowManager } from '../WindowManager'
@@ -27,6 +31,7 @@ import {
   LOCAL_EDITOR_ORIGIN,
 } from './localEditorOrigin'
 import type { OfflineEditorController } from './OfflineEditorController'
+import { SignInCoordinator } from './SignInCoordinator'
 
 type PendingFlush = {
   request: OfflineFlushRequest
@@ -82,6 +87,7 @@ export function isTrustedAuthSender(
 export class OfflineEditorIPC {
   private pending: PendingFlush | null = null
   private snapshotReaders = 0
+  private readonly signIn: SignInCoordinator
 
   constructor(
     private readonly windows: WindowManager,
@@ -91,8 +97,17 @@ export class OfflineEditorIPC {
       signOutDevice: (
         run: () => Promise<SignOutResult>,
       ) => Promise<SignOutResult>
+      /** `net.isOnline()`; gates the Settings sign-in (DA6). */
+      isOnline: () => boolean
     },
-  ) {}
+  ) {
+    this.signIn = new SignInCoordinator({
+      windows,
+      isOnline: deps.isOnline,
+      onChange: () => this.settingsChanged(),
+      log: (line) => log.info(line),
+    })
+  }
 
   /** Registers every capability; runtime argument validation is supplied by {@link typedHandle}.
    * @example ipc.register()
@@ -371,7 +386,7 @@ export class OfflineEditorIPC {
     })
     typedHandle('settings-window-account-status', (event) => {
       this.assertSettings(event)
-      return this.controller.accountStatus()
+      return this.accountStatus()
     })
     typedHandle('settings-window-account-connect', async (event) => {
       this.assertSettings(event)
@@ -383,7 +398,20 @@ export class OfflineEditorIPC {
     })
     typedHandle('settings-window-account-sign-in', (event) => {
       this.assertSettings(event)
-      this.windows.showLoginWindow()
+      // Offline answers without opening the login window (DA6).
+      return this.signIn.start()
+    })
+    typedHandle('settings-window-account-cancel-sign-in', (event) => {
+      this.assertSettings(event)
+      this.signIn.cancel()
+    })
+    typedHandle('settings-window-account-clear-again', async (event) => {
+      this.assertSettings(event)
+      return this.controller.clearAgain()
+    })
+    typedHandle('settings-window-account-ack-first-upload', (event) => {
+      this.assertSettings(event)
+      this.controller.acknowledgeFirstUpload()
     })
     typedHandle('settings-window-account-sign-out', async (event) => {
       this.assertSettings(event)
@@ -397,12 +425,19 @@ export class OfflineEditorIPC {
     })
   }
 
+  /** The controller's account status plus the login window's progress (DA6).
+   * @example const account = this.accountStatus()
+   */
+  private accountStatus(): AccountStatus {
+    return { ...this.controller.accountStatus(), signIn: this.signIn.state }
+  }
+
   /** Projects the controller state to what Settings renders, without the draft text.
    * @example const snapshot = this.settingsSnapshot()
    */
   private settingsSnapshot(): SettingsSnapshot {
     const snapshot = this.controller.getSnapshot()
-    const account = this.controller.accountStatus()
+    const account = this.accountStatus()
     if (snapshot.phase !== 'ready')
       return { phase: snapshot.phase, generation: snapshot.generation, account }
     return {

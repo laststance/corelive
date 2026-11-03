@@ -34,6 +34,7 @@ function slugifySectionId(label: string): string {
  * @param label - Section heading text.
  * @param children - The section's controls/cards.
  * @param id - Optional explicit id for the `<h2>`/`aria-labelledby` pair; defaults to a slug of `label`.
+ * @param headingRef - Optional ref to the `<h2>`; the heading is programmatically focusable (`tabIndex=-1`).
  * @returns A labelled `<section>` landmark.
  * @example
  * <SettingsSection label="Tasks"><TaskSettings /></SettingsSection>
@@ -42,15 +43,23 @@ export const SettingsSection = function SettingsSection({
   label,
   children,
   id,
+  headingRef,
 }: {
   label: string
   children: React.ReactNode
   id?: string
+  /** Lets a caller move focus to the heading (DA14: focus returns to the Account heading). */
+  headingRef?: React.Ref<HTMLHeadingElement>
 }): React.ReactNode {
   const headingId = id ?? slugifySectionId(label)
   return (
     <section aria-labelledby={headingId} className="settings-section space-y-6">
-      <h2 id={headingId} className={SETTINGS_SECTION_LABEL_CLASS}>
+      <h2
+        id={headingId}
+        ref={headingRef}
+        tabIndex={-1}
+        className={`${SETTINGS_SECTION_LABEL_CLASS} outline-none`}
+      >
         {label}
       </h2>
       {children}

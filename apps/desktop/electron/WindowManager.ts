@@ -47,6 +47,7 @@ import {
   LOCAL_EDITOR_URL,
   LOCAL_SETTINGS_URL,
 } from './offline/localEditorOrigin'
+import type { LoginWindowObserver } from './offline/SignInCoordinator'
 import { clampDimension } from './utils/clampDimension'
 import { isDevToolsEnabled } from './utils/debugMode'
 import type { WindowStateManager, WindowOptions } from './WindowStateManager'
@@ -101,6 +102,8 @@ export class WindowManager {
    * never ping-pong back into another handoff.
    */
   private loginHandoffPending: boolean
+  /** Settings sign-in coordinator hook; null when no Settings sign-in is tracked (DA6). */
+  private loginObserver: LoginWindowObserver | null = null
 
   /**
    * Per-window load-failure retry bookkeeping for {@link recoverPanelFromLoadFailure}.
@@ -462,6 +465,7 @@ export class WindowManager {
     loginWindow.on('closed', () => {
       log.debug('Login window closed')
       if (this.loginWindow === loginWindow) this.loginWindow = null
+      this.loginObserver?.closed()
     })
 
     loginWindow.on('ready-to-show', () => {
@@ -478,6 +482,7 @@ export class WindowManager {
       }
       log.debug('Login window content loaded')
       hasLoadedOnce = true
+      this.loginObserver?.loaded()
       this.loadRecovery.delete(loginWindow)
     })
 
@@ -496,6 +501,8 @@ export class WindowManager {
         errorPagePendingFinish = httpResponseCode >= HTTP_ERROR_STATUS_MIN
         if (!errorPagePendingFinish) return
         if (hasLoadedOnce) return
+        // A Settings-initiated sign-in reports the failure itself and closes the window (DX7).
+        if (this.loginObserver?.loadFailed()) return
         this.recoverPanelFromLoadFailure(loginWindow, {
           ...recoveryOptions,
           httpStatus: httpResponseCode,
@@ -513,6 +520,7 @@ export class WindowManager {
         // Once loaded, the live renderer owns its error UI — main-process
         // retry is only for a never-loaded (dead) window.
         if (hasLoadedOnce) return
+        if (this.loginObserver?.loadFailed()) return
         this.recoverPanelFromLoadFailure(loginWindow, recoveryOptions)
       },
     )
@@ -540,6 +548,28 @@ export class WindowManager {
         : this.createLoginWindow()
     loginWindow.show()
     loginWindow.focus()
+  }
+
+  /** Whether a login window currently exists (used to decide if a load timer is needed).
+   * @example if (!windowManager.hasLoginWindow()) armTimer()
+   */
+  hasLoginWindow(): boolean {
+    return Boolean(this.loginWindow && !this.loginWindow.isDestroyed())
+  }
+
+  /** Closes the login window if open; the Settings Cancel and the unreachable outcome use it.
+   * @example windowManager.closeLoginWindow()
+   */
+  closeLoginWindow(): void {
+    if (this.loginWindow && !this.loginWindow.isDestroyed())
+      this.loginWindow.close()
+  }
+
+  /** Registers the single observer of login-window load and close events (DA6, DX7).
+   * @example windowManager.setLoginWindowObserver(observer)
+   */
+  setLoginWindowObserver(observer: LoginWindowObserver | null): void {
+    this.loginObserver = observer
   }
 
   /** Reveals the local editor after its exact login window reports a signed-in user.
