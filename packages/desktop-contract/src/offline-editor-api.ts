@@ -2,17 +2,19 @@ import { z } from 'zod'
 
 import {
   OfflinePreferencesSchema,
+  type OfflinePreferences,
+} from './offline-workspace'
+import {
   WorkspaceCommandSchema,
   type OfflineCommandResult,
   type OfflineCompletion,
-  type OfflineEditorSnapshot,
-  type OfflinePreferences,
-  type OfflineWorkspaceView,
-  type OfflineWorkspace,
   type OfflineDraftRecord,
+  type OfflineEditorSnapshot,
+  type OfflineWorkspace,
+  type OfflineWorkspaceView,
   type OutboxEntry,
   type WorkspaceCommand,
-} from './offline-workspace'
+} from './offline-workspace-v2'
 import type { UserSettingsState } from './settings'
 
 export interface OfflineDetailsPage {
@@ -55,7 +57,7 @@ export interface OfflineFlushRequest {
 export interface OfflineEditorAPI {
   version: 1
   snapshot: () => Promise<OfflineEditorSnapshot>
-  draft: (generation: number, categoryId: number) => Promise<OfflineDraftRecord>
+  draft: (generation: number, categoryId: string) => Promise<OfflineDraftRecord>
   command: (
     generation: number,
     command: WorkspaceCommand,
@@ -86,7 +88,7 @@ export interface OfflineEditorAPI {
   onFlush: (listener: (request: OfflineFlushRequest) => void) => () => void
   onShown: (listener: () => void) => () => void
   onCategoryCreated: (
-    listener: (selection: { generation: number; categoryId: number }) => void,
+    listener: (selection: { generation: number; categoryId: string }) => void,
   ) => () => void
   replyFlush: (request: OfflineFlushRequest, saved: boolean) => Promise<boolean>
 }
@@ -119,7 +121,7 @@ export interface OfflineSettingsAPI {
 
 export interface OfflineIPCChannels {
   'offline-editor-draft': {
-    request: [number, number]
+    request: [number, string]
     response: OfflineDraftRecord
   }
   'offline-editor-snapshot': { request: void; response: OfflineEditorSnapshot }
@@ -192,7 +194,7 @@ const pagination = z.tuple([
 ])
 /** Validates every offline invoke tuple before the exact window/frame authorization check. */
 export const OFFLINE_IPC_ARGUMENT_SCHEMAS = {
-  'offline-editor-draft': z.tuple([generation, z.number().int().positive()]),
+  'offline-editor-draft': z.tuple([generation, z.uuid()]),
   'offline-editor-snapshot': z.tuple([]),
   'offline-editor-command': z.tuple([generation, WorkspaceCommandSchema]),
   'offline-editor-retry': z.tuple([]),

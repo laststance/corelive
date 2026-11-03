@@ -2,49 +2,59 @@ import type { OfflineRecoveryPreview } from '@corelive/desktop-contract/offline-
 import type {
   CountCheckpoint,
   EditorCategory,
+} from '@corelive/desktop-contract/offline-workspace'
+import type {
+  AccountBinding,
   OfflineCompletion,
   OfflineDraftRecord,
   OfflineWorkspace,
+  OfflineWorkspaceView as WorkspaceView,
   OutboxEntry,
   WorkspaceCommand,
-  OfflineWorkspaceView as WorkspaceView,
-} from '@corelive/desktop-contract/offline-workspace'
+} from '@corelive/desktop-contract/offline-workspace-v2'
 
 import { workspaceToday } from './workspaceCounts'
-import type { WorkspaceService } from './WorkspaceService'
 
-export type { OfflineWorkspaceView as WorkspaceView } from '@corelive/desktop-contract/offline-workspace'
+export type { OfflineWorkspaceView as WorkspaceView } from '@corelive/desktop-contract/offline-workspace-v2'
+
+/** The binding facts the controller needs for status and attach decisions. */
+export type BindingInfo = Pick<
+  AccountBinding,
+  'accountId' | 'displayEmail' | 'lastSyncedAt'
+>
 
 export interface WorkspaceWorkerCalls {
   open: { input: null; output: WorkspaceView }
-  prepare: {
-    input: Parameters<WorkspaceService['prepare']>[0]
-    output: WorkspaceView
-  }
   command: {
     input: WorkspaceCommand
     output: WorkspaceView & { writtenDraft: OfflineDraftRecord }
   }
-  draft: { input: { categoryId: number }; output: OfflineDraftRecord }
+  draft: { input: { categoryId: string }; output: OfflineDraftRecord }
+  /** Sendable work for the bound account: uncertain entries plus queued ones with a server category id. */
   pending: { input: { limit: number }; output: OutboxEntry[] }
-  markSent: { input: { operationId: string }; output: WorkspaceView }
-  markSentBatch: { input: { operationIds: string[] }; output: OutboxEntry[] }
+  markSentBatch: {
+    input: { accountId: string; operationIds: string[] }
+    output: OutboxEntry[]
+  }
   receipts: {
-    input: { ownerId: string; receipts: unknown[] }
+    input: { accountId: string; receipts: unknown[] }
     output: WorkspaceView
   }
-  receipt: {
-    input: { ownerId: string; receipt: unknown }
-    output: WorkspaceView
-  }
-  categories: {
+  reconcile: {
     input: {
+      accountId: string
+      displayEmail: string | null
       categories: EditorCategory[]
       deletions: { sourceId: number; destinationId: number }[]
-      legacyNotes?: Record<string, string>
     }
     output: WorkspaceView
   }
+  markSynced: {
+    input: { accountId: string; at: number }
+    output: WorkspaceView
+  }
+  binding: { input: null; output: BindingInfo | null }
+  localCategory: { input: { serverId: number }; output: string | null }
   recoveryCopies: {
     input: { offset: number; limit: number }
     output: { total: number; copies: OfflineWorkspace['recoveryCopies'] }
@@ -58,7 +68,11 @@ export interface WorkspaceWorkerCalls {
     }
   }
   checkpoint: {
-    input: { expectedRevision: number; checkpoint: CountCheckpoint }
+    input: {
+      accountId: string
+      expectedRevision: number
+      checkpoint: CountCheckpoint
+    }
     output: WorkspaceView
   }
   tracked: {
@@ -91,7 +105,7 @@ export type WorkspaceWorkerRequest = {
  * @example workspaceView(state)
  */
 export function workspaceView(state: OfflineWorkspace): WorkspaceView {
-  const draft = state.drafts[String(state.selectedCategoryId)]
+  const draft = state.drafts[state.selectedCategoryId]
   if (!draft) throw new Error('Invalid selected workspace category')
   const entries = Object.values(state.outbox)
   const eligible = eligibleUndo(state)
@@ -119,7 +133,15 @@ export function workspaceView(state: OfflineWorkspace): WorkspaceView {
       null,
     ),
     checkpoint: state.checkpoint,
-    categoryDeletions: state.categoryDeletions,
+    // Server-recorded destination of each removed category (suggestion for the confirmed move).
+    categoryMoves: state.binding?.deletionReceipts ?? {},
+    binding: state.binding
+      ? {
+          accountId: state.binding.accountId,
+          displayEmail: state.binding.displayEmail,
+          lastSyncedAt: state.binding.lastSyncedAt,
+        }
+      : null,
     recoveryCopyCount: state.recoveryCopies.filter(
       (copy) => copy.restoredTo === undefined,
     ).length,

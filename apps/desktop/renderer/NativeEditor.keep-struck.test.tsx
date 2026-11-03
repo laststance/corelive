@@ -2,7 +2,10 @@
 import '@testing-library/jest-dom/vitest'
 import type { LiveEditorAPI } from '@corelive/desktop-contract/electron-api'
 import type { OfflineEditorAPI } from '@corelive/desktop-contract/offline-editor-api'
-import type { OfflineEditorSnapshot } from '@corelive/desktop-contract/offline-workspace'
+import type {
+  OfflineEditorSnapshot,
+  OfflineSyncStatus,
+} from '@corelive/desktop-contract/offline-workspace-v2'
 import { UserSettingsStateSchema } from '@corelive/desktop-contract/settings'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
@@ -21,23 +24,31 @@ afterEach(() => {
  * @example const fixture = mountEditor()
  */
 function mountEditor(clearOnComplete: boolean, savedText: string) {
+  const syncStatus: OfflineSyncStatus = {
+    state: 'local-only',
+    waitingCount: 0,
+    lastSyncedAt: null,
+    boundEmail: null,
+  }
   const shown = new Set<() => void>()
   const snapshot: OfflineEditorSnapshot = {
     phase: 'ready',
     generation: 1,
-    sync: 'offline',
+    sync: syncStatus,
     workspace: {
       ownerId: 'synthetic-focus-account',
       revision: 0,
-      selectedCategoryId: 1,
+      selectedCategoryId: '00000000-0000-4000-8000-0000000000a1',
       categories: [
         {
-          id: 1,
+          id: '00000000-0000-4000-8000-0000000000a1',
           name: 'General',
           color: 'blue',
           parentId: null,
           isDefault: true,
           removed: false,
+          historical: false,
+          fieldRevisions: { name: 0, color: 0, parentLocalId: 0 },
         },
       ],
       preferences: {
@@ -69,14 +80,18 @@ function mountEditor(clearOnComplete: boolean, savedText: string) {
       },
       nextClearAt: null,
       nextUndoAt: null,
-      categoryDeletions: {},
+      categoryMoves: {},
+      binding: null,
       recoveryCopyCount: 0,
     },
   }
   const host: OfflineEditorAPI = {
     version: 1,
     snapshot: async () => snapshot,
-    draft: async () => ({ categoryId: 1, draft: snapshot.workspace.draft }),
+    draft: async () => ({
+      categoryId: '00000000-0000-4000-8000-0000000000a1',
+      draft: snapshot.workspace.draft,
+    }),
     command: async () => ({ ok: false, reason: 'unused-in-focus-test' }),
     retry: async () => undefined,
     details: async () => ({ total: 0, records: [] }),

@@ -10,7 +10,7 @@ import {
 } from './category-sync'
 import {
   DeviceRegistrySchema,
-  OfflineWorkspaceV2Schema,
+  OfflineWorkspaceSchema,
 } from './offline-workspace-v2'
 import { UserSettingsStateSchema } from './settings'
 
@@ -63,10 +63,10 @@ function minimalWorkspace() {
 describe('v2 device workspace contract', () => {
   test('a local-only workspace parses and survives a JSON round trip unchanged', () => {
     // Arrange
-    const parsed = OfflineWorkspaceV2Schema.parse(minimalWorkspace())
+    const parsed = OfflineWorkspaceSchema.parse(minimalWorkspace())
 
     // Act
-    const again = OfflineWorkspaceV2Schema.parse(
+    const again = OfflineWorkspaceSchema.parse(
       JSON.parse(JSON.stringify(parsed)),
     )
 
@@ -81,7 +81,7 @@ describe('v2 device workspace contract', () => {
     const workspace = { ...minimalWorkspace(), ownerId: 'user_1' }
 
     // Act
-    const result = OfflineWorkspaceV2Schema.safeParse(workspace)
+    const result = OfflineWorkspaceSchema.safeParse(workspace)
 
     // Assert
     expect(result.success).toBe(false)
@@ -143,7 +143,7 @@ describe('v2 device workspace contract', () => {
     }
 
     // Act
-    const parsed = OfflineWorkspaceV2Schema.parse(workspace)
+    const parsed = OfflineWorkspaceSchema.parse(workspace)
 
     // Assert
     expect(parsed.retiredCompletions[operationId]?.title).toBe('Ship it')

@@ -2,11 +2,13 @@ import type { OfflineEditorAPI } from '@corelive/desktop-contract/offline-editor
 import type {
   DraftRow,
   OfflineDraft,
-  OfflineDraftRecord,
+} from '@corelive/desktop-contract/offline-workspace'
+import type {
   OfflineCommandResult,
+  OfflineDraftRecord,
   OfflineEditorSnapshot,
   WorkspaceCommand,
-} from '@corelive/desktop-contract/offline-workspace'
+} from '@corelive/desktop-contract/offline-workspace-v2'
 
 import {
   applyDraftEdits,
@@ -22,7 +24,7 @@ import type { TextEditRange } from './rowIdentity'
 type Buffer = {
   ownerId: string
   generation: number
-  categoryId: number
+  categoryId: string
   base: OfflineDraft
   rows: DraftRow[]
   version: number

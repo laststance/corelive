@@ -3,18 +3,23 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import type {
+  CompletionProjection,
+  CompletionSyncOperation,
+  CompletionSyncReceipt,
+  EditorCategory,
+} from '@corelive/desktop-contract/offline-workspace'
 import {
+  DEVICE_OWNER_ID,
+  DEVICE_WORKSPACE_FILE_NAME,
   OfflineWorkspaceSchema,
-  type CompletionProjection,
-  type CompletionSyncOperation,
-  type CompletionSyncReceipt,
   type OfflineWorkspace,
   type WorkspaceCommand,
-} from '@corelive/desktop-contract/offline-workspace'
-import { UserSettingsStateSchema } from '@corelive/desktop-contract/settings'
+} from '@corelive/desktop-contract/offline-workspace-v2'
 import { afterEach, describe, expect, test } from 'vitest'
 
 import { AtomicWorkspaceFile } from './AtomicWorkspaceFile'
+import { buildDeviceWorkspace, categoryUuid } from './deviceWorkspaceFixture'
 import { checkpointIdentities, workspaceToday } from './workspaceCounts'
 import { WorkspaceService } from './WorkspaceService'
 
@@ -22,8 +27,12 @@ const directories: string[] = []
 const completionA = '00000000-0000-4000-8000-000000000001'
 const completionB = '00000000-0000-4000-8000-000000000002'
 const instant = Date.UTC(2026, 9, 21, 12)
+const category1 = categoryUuid(1)
+const category2 = categoryUuid(2)
+const category3 = categoryUuid(3)
+const accountId = 'account-a'
 
-/** Creates a verified synthetic account with three categories in an isolated directory.
+/** Creates a device workspace bound to a synthetic account with three categories in an isolated directory.
  * @example const fixture = await createWorkspace()
  */
 async function createWorkspace(
@@ -35,41 +44,29 @@ async function createWorkspace(
   directories.push(directory)
   const options = {
     directory,
-    ownerId: 'account-a',
+    ownerId: DEVICE_OWNER_ID,
+    fileName: DEVICE_WORKSPACE_FILE_NAME,
     parse: OfflineWorkspaceSchema.parse,
   }
   let now = initial?.now ?? instant
   const file = new AtomicWorkspaceFile(options)
-  const service = new WorkspaceService(file, () => now)
-  await service.prepare({
-    ownerId: 'account-a',
-    deviceId: '00000000-0000-4000-8000-000000000003',
-    categories: (
-      initial?.categoryNames ?? ['Category 1', 'Category 2', 'Category 3']
-    ).map((name, index) => ({
-      id: index + 1,
-      name,
-      color: 'blue',
-      parentId: null,
-      isDefault: index === 0,
-      removed: false,
-    })),
-    preferences: {
-      revision: 0,
-      theme: 'cathedral-light',
+  await file.initialize(
+    buildDeviceWorkspace({
+      categoryNames: initial?.categoryNames ?? [
+        'General',
+        'Category 2',
+        'Category 3',
+      ],
+      notes: { 1: text, 2: initial?.workText ?? 'Target writing' },
+      boundAccountId: accountId,
       settings: {
-        ...UserSettingsStateSchema.parse({}),
         liveEditorToastDurationMs: 5000,
         liveEditorClearOnComplete: clear,
         liveEditorClearDelayMs: 0,
       },
-    },
-    legacyNotes: {
-      '1': text,
-      '2': initial?.workText ?? 'Target writing',
-      '999': 'Unmapped writing',
-    },
-  })
+    }),
+  )
+  const service = new WorkspaceService(file, () => now)
   return {
     file,
     service,
@@ -91,13 +88,54 @@ function completionCommand(
   return {
     type: 'complete',
     commandId: randomUUID(),
-    categoryId: 1,
-    baseRevision: state.drafts['1']!.revision,
-    rowId: state.drafts['1']!.rows[index]!.id,
+    categoryId: category1,
+    baseRevision: state.drafts[category1]!.revision,
+    rowId: state.drafts[category1]!.rows[index]!.id,
     completionId: id,
     completedAt: instant,
     timezone: 'Asia/Tokyo',
   }
+}
+
+/** Builds a server-shaped category (numeric id) as the account API returns it.
+ * @example serverCategory(2, { name: 'Work' })
+ */
+function serverCategory(
+  id: number,
+  overrides: Partial<EditorCategory> = {},
+): EditorCategory {
+  return {
+    id,
+    name: id === 1 ? 'General' : `Category ${id}`,
+    color: 'blue',
+    isDefault: id === 1,
+    parentId: null,
+    removed: false,
+    ...overrides,
+  }
+}
+
+/** Creates an unbound device workspace (no account attached yet) with three categories.
+ * @example const fixture = await createUnboundWorkspace()
+ */
+async function createUnboundWorkspace(categoryNames?: string[]) {
+  const directory = await mkdtemp(join(tmpdir(), 'corelive-reconcile-'))
+  directories.push(directory)
+  const file = new AtomicWorkspaceFile({
+    directory,
+    ownerId: DEVICE_OWNER_ID,
+    fileName: DEVICE_WORKSPACE_FILE_NAME,
+    parse: OfflineWorkspaceSchema.parse,
+  })
+  await file.initialize(
+    buildDeviceWorkspace({
+      categoryNames: categoryNames ?? ['General', 'Category 2'],
+      notes: { 1: 'General draft', 2: 'Work draft' },
+    }),
+  )
+  let counter = 100
+  const nextId = (): string => categoryUuid(counter++)
+  return { file, service: new WorkspaceService(file, () => instant, nextId) }
 }
 
 afterEach(async () => {
@@ -125,22 +163,22 @@ describe('offline writing and completion transactions', () => {
       })
       let state = await fixture.file.read()
       for (const [categoryId, text] of [
-        [1, 'a'.repeat(55000)],
-        [2, target],
+        [category1, 'a'.repeat(55000)],
+        [category2, target],
       ] as const) {
         state = await fixture.service.execute({
           type: 'save',
           commandId: randomUUID(),
           categoryId,
-          baseRevision: state.drafts[String(categoryId)]!.revision,
-          rows: [{ id: state.drafts[String(categoryId)]!.rows[0]!.id, text }],
+          baseRevision: state.drafts[categoryId]!.revision,
+          rows: [{ id: state.drafts[categoryId]!.rows[0]!.id, text }],
         })
       }
 
       // Act: the same retained allowance must survive both source retirements.
       for (const [sourceId, destinationId] of [
-        [1, 2],
-        [2, 3],
+        [category1, category2],
+        [category2, category3],
       ] as const) {
         state = await fixture.service.execute({
           type: 'moveCategory',
@@ -149,10 +187,10 @@ describe('offline writing and completion transactions', () => {
           destinationId,
         })
         const reopened = await new AtomicWorkspaceFile(fixture.options).read()
-        expect(reopened.drafts[String(destinationId)]!.inputLimit).toBe(limit)
-        expect(reopened.drafts[String(sourceId)]).toBeUndefined()
+        expect(reopened.drafts[destinationId]!.inputLimit).toBe(limit)
+        expect(reopened.drafts[sourceId]).toBeUndefined()
         expect(
-          reopened.drafts[String(destinationId)]!.rows.map((row) => row.text),
+          reopened.drafts[destinationId]!.rows.map((row) => row.text),
         ).toEqual(
           target ? ['Work', '', 'a'.repeat(55000)] : ['a'.repeat(55000)],
         )
@@ -160,23 +198,23 @@ describe('offline writing and completion transactions', () => {
       state = await fixture.service.execute({
         type: 'save',
         commandId: randomUUID(),
-        categoryId: 3,
-        baseRevision: state.drafts['3']!.revision,
+        categoryId: category3,
+        baseRevision: state.drafts[category3]!.revision,
         rows: [{ id: randomUUID(), text: 'r'.repeat(limit) }],
       })
 
       // Assert: replacement within the retained absolute allowance works, additional growth does not.
       expect(
         (await new AtomicWorkspaceFile(fixture.options).read()).drafts[
-          '3'
+          category3
         ]!.rows.map((row) => row.text),
       ).toEqual(['r'.repeat(limit)])
       await expect(
         fixture.service.execute({
           type: 'save',
           commandId: randomUUID(),
-          categoryId: 3,
-          baseRevision: state.drafts['3']!.revision,
+          categoryId: category3,
+          baseRevision: state.drafts[category3]!.revision,
           rows: [{ id: randomUUID(), text: 'r'.repeat(limit + 1) }],
         }),
       ).rejects.toThrow('invalid-row')
@@ -198,18 +236,29 @@ describe('offline writing and completion transactions', () => {
         state = await fixture.service.execute({
           type: 'moveCategory',
           commandId: randomUUID(),
-          sourceId: 2,
-          destinationId: 1,
+          sourceId: category2,
+          destinationId: category1,
         })
       } else {
-        state = await fixture.service.refreshCategories(state.categories, [], {
-          '1': 'b'.repeat(30000),
-        })
+        // A recovery copy is what an earlier import or attach left behind for the user to restore.
+        state = await fixture.file.update((current) => ({
+          ...current,
+          revision: current.revision + 1,
+          recoveryCopies: [
+            {
+              id: randomUUID(),
+              categoryId: category1,
+              text: 'b'.repeat(30000),
+              reason: 'legacy-changed',
+              createdAt: instant,
+            },
+          ],
+        }))
         const command = {
           type: 'restoreRecovery',
           commandId: randomUUID(),
           copyId: state.recoveryCopies[0]!.id,
-          destinationId: 1,
+          destinationId: category1,
         }
         state = await fixture.service.execute(command)
         // A new request for the same recovered copy must not append it again.
@@ -218,7 +267,7 @@ describe('offline writing and completion transactions', () => {
           commandId: randomUUID(),
         })
       }
-      expect(state.drafts['1']!.rows.map((row) => row.text)).toEqual([
+      expect(state.drafts[category1]!.rows.map((row) => row.text)).toEqual([
         'a'.repeat(30000),
         '',
         'b'.repeat(30000),
@@ -235,9 +284,9 @@ describe('offline writing and completion transactions', () => {
         state = await new WorkspaceService(reopened).execute({
           type: 'save',
           commandId: randomUUID(),
-          categoryId: 1,
-          baseRevision: state.drafts['1']!.revision,
-          rows: state.drafts['1']!.rows.map((row, index) =>
+          categoryId: category1,
+          baseRevision: state.drafts[category1]!.revision,
+          rows: state.drafts[category1]!.rows.map((row, index) =>
             index === 0 ? { ...row, text } : row,
           ),
         })
@@ -245,18 +294,18 @@ describe('offline writing and completion transactions', () => {
 
       // Assert: capacity is retained, but submitted input cannot raise it.
       const durable = await new AtomicWorkspaceFile(fixture.options).read()
-      expect(durable.drafts['1']!.rows.map((row) => row.text)).toEqual([
+      expect(durable.drafts[category1]!.rows.map((row) => row.text)).toEqual([
         'd'.repeat(30000),
         '',
         'b'.repeat(30000),
       ])
-      expect(durable.drafts['1']!.inputLimit).toBe(60002)
+      expect(durable.drafts[category1]!.inputLimit).toBe(60002)
       await expect(
         fixture.service.execute({
           type: 'save',
           commandId: randomUUID(),
-          categoryId: 1,
-          baseRevision: durable.drafts['1']!.revision,
+          categoryId: category1,
+          baseRevision: durable.drafts[category1]!.revision,
           inputLimit: 999999,
           rows: [{ id: randomUUID(), text: 'x'.repeat(60003) }],
         }),
@@ -273,27 +322,27 @@ describe('offline writing and completion transactions', () => {
     let state = await fixture.service.execute(
       completionCommand(await fixture.file.read()),
     )
-    expect(state.drafts['1']!.inputLimit).toBe(51006)
+    expect(state.drafts[category1]!.inputLimit).toBe(51006)
 
     // Act
     state = await fixture.service.execute({
       type: 'save',
       commandId: randomUUID(),
-      categoryId: 1,
-      baseRevision: state.drafts['1']!.revision,
-      rows: state.drafts['1']!.rows.map((row, index) =>
+      categoryId: category1,
+      baseRevision: state.drafts[category1]!.revision,
+      rows: state.drafts[category1]!.rows.map((row, index) =>
         index === 1 ? { ...row, text: 'y'.repeat(50995) } : row,
       ),
     })
 
     // Assert
-    expect(state.drafts['1']!.rows.map((row) => row.text)).toEqual([
+    expect(state.drafts[category1]!.rows.map((row) => row.text)).toEqual([
       '- [x] Task',
       'y'.repeat(50995),
     ])
     expect(
-      (await new AtomicWorkspaceFile(fixture.options).read()).drafts['1'],
-    ).toEqual(state.drafts['1'])
+      (await new AtomicWorkspaceFile(fixture.options).read()).drafts[category1],
+    ).toEqual(state.drafts[category1])
   })
 
   test('Undo restores captured writing beside a full draft without making subsequent edits unsavable', async () => {
@@ -304,9 +353,11 @@ describe('offline writing and completion transactions', () => {
     state = await fixture.service.execute({
       type: 'save',
       commandId: randomUUID(),
-      categoryId: 1,
-      baseRevision: state.drafts['1']!.revision,
-      rows: [{ id: state.drafts['1']!.rows[0]!.id, text: 'x'.repeat(51000) }],
+      categoryId: category1,
+      baseRevision: state.drafts[category1]!.revision,
+      rows: [
+        { id: state.drafts[category1]!.rows[0]!.id, text: 'x'.repeat(51000) },
+      ],
     })
 
     // Act
@@ -315,25 +366,25 @@ describe('offline writing and completion transactions', () => {
       commandId: randomUUID(),
       completionId: completionA,
     })
-    expect(state.drafts['1']!.inputLimit).toBe(51005)
+    expect(state.drafts[category1]!.inputLimit).toBe(51005)
     state = await fixture.service.execute({
       type: 'save',
       commandId: randomUUID(),
-      categoryId: 1,
-      baseRevision: state.drafts['1']!.revision,
-      rows: state.drafts['1']!.rows.map((row) =>
+      categoryId: category1,
+      baseRevision: state.drafts[category1]!.revision,
+      rows: state.drafts[category1]!.rows.map((row) =>
         row.text === 'Task' ? { ...row, text: 'Edit' } : row,
       ),
     })
 
     // Assert
-    expect(state.drafts['1']!.rows.map((row) => row.text)).toEqual([
+    expect(state.drafts[category1]!.rows.map((row) => row.text)).toEqual([
       'Edit',
       'x'.repeat(51000),
     ])
     expect(
-      (await new AtomicWorkspaceFile(fixture.options).read()).drafts['1'],
-    ).toEqual(state.drafts['1'])
+      (await new AtomicWorkspaceFile(fixture.options).read()).drafts[category1],
+    ).toEqual(state.drafts[category1])
   })
 
   test('ordinary drafts count surrogate pairs and row separators within the unchanged 51000 limit', async () => {
@@ -345,7 +396,7 @@ describe('offline writing and completion transactions', () => {
     state = await fixture.service.execute({
       type: 'save',
       commandId: randomUUID(),
-      categoryId: 1,
+      categoryId: category1,
       baseRevision: 0,
       rows: [{ id: randomUUID(), text: '😀'.repeat(25500) }],
     })
@@ -353,14 +404,17 @@ describe('offline writing and completion transactions', () => {
       fixture.service.execute({
         type: 'save',
         commandId: randomUUID(),
-        categoryId: 1,
-        baseRevision: state.drafts['1']!.revision,
-        rows: [...state.drafts['1']!.rows, { id: randomUUID(), text: '' }],
+        categoryId: category1,
+        baseRevision: state.drafts[category1]!.revision,
+        rows: [
+          ...state.drafts[category1]!.rows,
+          { id: randomUUID(), text: '' },
+        ],
       }),
     ).rejects.toThrow('invalid-row')
 
     // Assert
-    expect(state.drafts['1']!.inputLimit).toBe(51000)
+    expect(state.drafts[category1]!.inputLimit).toBe(51000)
     expect(await new AtomicWorkspaceFile(fixture.options).read()).toEqual(state)
   })
 
@@ -368,22 +422,22 @@ describe('offline writing and completion transactions', () => {
     // Arrange
     const fixture = await createWorkspace('a'.repeat(60000))
     const original = await fixture.file.read()
-    expect(original.drafts['1']!.inputLimit).toBeUndefined()
+    expect(original.drafts[category1]!.inputLimit).toBeUndefined()
 
     // Act
     const state = await fixture.service.execute({
       type: 'save',
       commandId: randomUUID(),
-      categoryId: 1,
+      categoryId: category1,
       baseRevision: 0,
       rows: [{ id: randomUUID(), text: 'b'.repeat(55000) }],
     })
 
     // Assert
-    expect(state.drafts['1']!.inputLimit).toBe(60000)
+    expect(state.drafts[category1]!.inputLimit).toBe(60000)
     expect(
       (await new AtomicWorkspaceFile(fixture.options).read()).drafts[
-        '1'
+        category1
       ]!.rows.map((row) => row.text),
     ).toEqual(['b'.repeat(55000)])
   })
@@ -432,13 +486,13 @@ describe('offline writing and completion transactions', () => {
       return receipt
     }
     for (const [completionId, categoryId, completedAt] of [
-      [completionA, 1, firstTime],
-      [completionB, 2, secondTime],
-      [completionC, 1, thirdTime],
+      [completionA, category1, firstTime],
+      [completionB, category2, secondTime],
+      [completionC, category1, thirdTime],
     ] as const) {
       fixture.setNow(completedAt)
       const state = await fixture.file.read()
-      const draft = state.drafts[String(categoryId)]!
+      const draft = state.drafts[categoryId]!
       await fixture.service.execute({
         type: 'complete',
         commandId: randomUUID(),
@@ -457,22 +511,25 @@ describe('offline writing and completion transactions', () => {
       () => undoTime,
     )
     let state = await fixture.file.read()
-    expect(state.drafts['1']!.rows.map((row) => row.text)).toEqual([
+    expect(state.drafts[category1]!.rows.map((row) => row.text)).toEqual([
       'Keep General draft',
     ])
-    expect(state.drafts['2']!.rows.map((row) => row.text)).toEqual([
+    expect(state.drafts[category2]!.rows.map((row) => row.text)).toEqual([
       'Keep Work draft',
     ])
-    const creates = Object.values(state.outbox).map((entry) => entry.operation)
-    await service.markSentBatch(
-      creates.map((operation) => operation.operationId),
-    )
+    const queued = Object.values(state.outbox).map((entry) => entry.operation)
+    const creates = (
+      await service.markSentBatch(
+        accountId,
+        queued.map((operation) => operation.operationId),
+      )
+    ).map((entry) => entry.wire!)
     creates.forEach(deliver)
     service = new WorkspaceService(
       new AtomicWorkspaceFile(fixture.options),
       () => undoTime,
     )
-    state = await service.acceptReceipts('account-a', creates.map(deliver))
+    state = await service.acceptReceipts(accountId, creates.map(deliver))
 
     // Assert: equal titles remain separate, and replay retains both sides of local midnight.
     expect(
@@ -507,24 +564,27 @@ describe('offline writing and completion transactions', () => {
       (entry) => entry.operation,
     )
     expect(cancellations.map((operation) => operation.kind)).toEqual(['cancel'])
-    await service.markSentBatch(
-      cancellations.map((operation) => operation.operationId),
+    const sentCancellations = (
+      await service.markSentBatch(
+        accountId,
+        cancellations.map((operation) => operation.operationId),
+      )
+    ).map((entry) => entry.wire!)
+    state = await service.acceptReceipts(
+      accountId,
+      sentCancellations.map(deliver),
     )
     state = await service.acceptReceipts(
-      'account-a',
-      cancellations.map(deliver),
-    )
-    state = await service.acceptReceipts(
-      'account-a',
-      cancellations.map(deliver),
+      accountId,
+      sentCancellations.map(deliver),
     )
 
     // Assert
-    expect(state.drafts['1']!.rows.map((row) => row.text)).toEqual([
+    expect(state.drafts[category1]!.rows.map((row) => row.text)).toEqual([
       'Ship a small fix',
       'Keep General draft',
     ])
-    expect(state.drafts['2']!.rows.map((row) => row.text)).toEqual([
+    expect(state.drafts[category2]!.rows.map((row) => row.text)).toEqual([
       'Keep Work draft',
     ])
     expect(
@@ -535,74 +595,16 @@ describe('offline writing and completion transactions', () => {
     expect(Object.values(state.outbox)).toEqual([])
   })
 
-  test('a later upgrade preserves changed legacy writing as a separate owned recovery copy without overwriting current writing', async () => {
-    // Arrange
-    const { file, service } = await createWorkspace()
-    let state = await file.read()
-    await service.execute({
-      type: 'save',
-      commandId: randomUUID(),
-      categoryId: 1,
-      baseRevision: 0,
-      rows: [
-        {
-          id: state.drafts['1']!.rows[0]!.id,
-          text: 'New writing in upgraded app',
-        },
-      ],
-    })
-    const legacy = {
-      '1': 'Writing from an older app',
-      '999': 'Another account must never see this',
-    }
-
-    // Act
-    state = await service.refreshCategories(state.categories, [], legacy)
-    state = await service.refreshCategories(state.categories, [], legacy)
-
-    // Assert
-    expect(state.drafts['1']!.rows.map((row) => row.text)).toEqual([
-      'New writing in upgraded app',
-    ])
-    expect(state.recoveryCopies).toHaveLength(1)
-    expect(state.recoveryCopies[0]).toMatchObject({
-      categoryId: 1,
-      text: 'Writing from an older app',
-      reason: 'legacy-changed',
-    })
-    expect(JSON.stringify(state)).not.toContain(
-      'Another account must never see this',
-    )
-    const copyId = state.recoveryCopies[0]!.id
-    state = await service.execute({
-      type: 'restoreRecovery',
-      commandId: randomUUID(),
-      copyId,
-      destinationId: 1,
-    })
-    state = await service.execute({
-      type: 'restoreRecovery',
-      commandId: randomUUID(),
-      copyId,
-      destinationId: 1,
-    })
-    expect(state.drafts['1']!.rows.map((row) => row.text)).toEqual([
-      'New writing in upgraded app',
-      '',
-      'Writing from an older app',
-    ])
-    expect(state.recoveryCopies[0]!.restoredTo).toBe(1)
-  })
   test('a lost delivery reply cannot double count an identity already included in the server checkpoint', async () => {
     // Arrange
     const { file, service } = await createWorkspace()
     let state = await service.execute(completionCommand(await file.read()))
     const operation = Object.values(state.outbox)[0]!.operation
-    await service.markSent(operation.operationId)
+    await service.markSentBatch(accountId, [operation.operationId])
     state = await file.read()
 
     // Act
-    state = await service.checkpoint(state.revision, {
+    state = await service.checkpoint(accountId, state.revision, {
       day: '2026-10-21',
       timezone: 'Asia/Tokyo',
       total: 10,
@@ -645,7 +647,7 @@ describe('offline writing and completion transactions', () => {
     const { file, service } = await createWorkspace()
     let state = await service.execute(completionCommand(await file.read()))
     const operation = Object.values(state.outbox)[0]!.operation
-    state = await service.checkpoint(state.revision, {
+    state = await service.checkpoint(accountId, state.revision, {
       day: '2026-10-21',
       timezone: 'Asia/Tokyo',
       total: 10,
@@ -658,7 +660,8 @@ describe('offline writing and completion transactions', () => {
     })
 
     // Act
-    state = await service.markSent(operation.operationId)
+    await service.markSentBatch(accountId, [operation.operationId])
+    state = await file.read()
 
     // Assert
     expect(workspaceToday(state, instant, 'Asia/Tokyo')).toMatchObject({
@@ -692,32 +695,36 @@ describe('offline writing and completion transactions', () => {
       fetchedAt: instant + 6000,
       identities: { [completionA]: projection },
     }
-    state = await service.acceptReceipt('account-a', {
-      operationId: operation.operationId,
-      completionId: completionA,
-      revision: 1,
-      status: 'applied',
-      projection,
-    })
-    state = await service.checkpoint(state.revision, checkpoint)
+    state = await service.acceptReceipts(accountId, [
+      {
+        operationId: operation.operationId,
+        completionId: completionA,
+        revision: 1,
+        status: 'applied',
+        projection,
+      },
+    ])
+    state = await service.checkpoint(accountId, state.revision, checkpoint)
     expect(state.completions[completionA]).toBeDefined()
 
     // Act
     setNow(instant + 6000)
-    state = await service.checkpoint(state.revision, checkpoint)
+    state = await service.checkpoint(accountId, state.revision, checkpoint)
 
     // Assert
     expect(state.completions[completionA]).toBeUndefined()
     expect(state.retiredCompletions[completionA]).toEqual({
       completedAt: instant,
       originalCompletedAt: instant,
-      originalCategoryId: 1,
+      originalCategoryId: category1,
       timezone: 'Asia/Tokyo',
       cancelled: false,
       revision: 1,
       remoteRevision: 1,
+      title: 'Original',
+      rawText: 'Original',
     })
-    expect(state.drafts['1']!.rows.map((row) => row.text)).toEqual([
+    expect(state.drafts[category1]!.rows.map((row) => row.text)).toEqual([
       '- [x] Original',
       'Later',
     ])
@@ -729,7 +736,7 @@ describe('offline writing and completion transactions', () => {
     await expect(
       reopened.execute(completionCommand(state, completionB)),
     ).rejects.toMatchObject({ reason: 'invalid-row' })
-    expect(state.drafts['1']!.rows[0]).toHaveProperty(
+    expect(state.drafts[category1]!.rows[0]).toHaveProperty(
       'completionId',
       completionA,
     )
@@ -753,9 +760,9 @@ describe('offline writing and completion transactions', () => {
     state = await reopened.execute({
       type: 'save',
       commandId: randomUUID(),
-      categoryId: 1,
-      baseRevision: state.drafts['1']!.revision,
-      rows: state.drafts['1']!.rows.map((row, index) =>
+      categoryId: category1,
+      baseRevision: state.drafts[category1]!.revision,
+      rows: state.drafts[category1]!.rows.map((row, index) =>
         index === 0 ? { id: row.id, text: '- [x] A different task' } : row,
       ),
     })
@@ -781,7 +788,7 @@ describe('offline writing and completion transactions', () => {
           completionId: id,
           revision: 1,
           cancelled: false,
-          categoryId: 1,
+          categoryId: category1,
           title: 'Original',
           completedAt: instant,
         },
@@ -807,14 +814,14 @@ describe('offline writing and completion transactions', () => {
       patch: { liveEditorClearOnComplete: true, liveEditorClearDelayMs: 1000 },
     })
     let state = await service.execute(completionCommand(await file.read()))
-    const rows = state.drafts['1']!.rows.map((row, index) =>
+    const rows = state.drafts[category1]!.rows.map((row, index) =>
       index === 0 ? { ...row, text: 'Newer writing' } : row,
     )
     await service.execute({
       type: 'save',
       commandId: randomUUID(),
-      categoryId: 1,
-      baseRevision: state.drafts['1']!.revision,
+      categoryId: category1,
+      baseRevision: state.drafts[category1]!.revision,
       rows,
     })
 
@@ -823,28 +830,12 @@ describe('offline writing and completion transactions', () => {
     state = await service.clearDue()
 
     // Assert
-    expect(state.drafts['1']!.rows.map((row) => row.text)).toEqual([
+    expect(state.drafts[category1]!.rows.map((row) => row.text)).toEqual([
       'Newer writing',
       'Later',
     ])
     expect(state.completions[completionA]!.cleared).toBe(true)
   })
-  test('preparation imports only verified categories and retains every unmapped legacy note', async () => {
-    // Arrange / Act
-    const { file } = await createWorkspace()
-    const state = await file.read()
-
-    // Assert
-    expect(state.drafts['1']!.rows.map((row) => row.text)).toEqual([
-      'Original',
-      'Later',
-    ])
-    expect(state.migration.unmappedCategoryIds).toEqual(['999'])
-    expect(JSON.stringify(state)).not.toContain('Unmapped writing')
-    expect(state.drafts['999']).toBeUndefined()
-    expect(state.selectedCategoryId).toBe(1)
-  })
-
   test('completion acknowledgement atomically persists writing, outgoing identity and restart Undo', async () => {
     // Arrange
     const { file, service, options } = await createWorkspace(
@@ -866,7 +857,7 @@ describe('offline writing and completion transactions', () => {
     })
 
     // Assert
-    expect(state.drafts['1']!.rows.map((row) => row.text)).toEqual([
+    expect(state.drafts[category1]!.rows.map((row) => row.text)).toEqual([
       '  Original  ',
       'Later',
     ])
@@ -912,9 +903,9 @@ describe('offline writing and completion transactions', () => {
     const command = {
       type: 'save' as const,
       commandId: randomUUID(),
-      categoryId: 1,
+      categoryId: category1,
       baseRevision: 0,
-      rows: state.drafts['1']!.rows,
+      rows: state.drafts[category1]!.rows,
     }
     await service.execute(command)
 
@@ -925,7 +916,9 @@ describe('offline writing and completion transactions', () => {
         rows: [{ ...command.rows[0], text: 'Different' }],
       }),
     ).rejects.toMatchObject({ reason: 'command-conflict' })
-    expect((await file.read()).drafts['1']!.rows[0]!.text).toBe('Original')
+    expect((await file.read()).drafts[category1]!.rows[0]!.text).toBe(
+      'Original',
+    )
   })
 
   test('a stale autosave cannot resurrect text cleared by completion', async () => {
@@ -939,13 +932,13 @@ describe('offline writing and completion transactions', () => {
       service.execute({
         type: 'save',
         commandId: randomUUID(),
-        categoryId: 1,
+        categoryId: category1,
         baseRevision: 0,
-        rows: before.drafts['1']!.rows,
+        rows: before.drafts[category1]!.rows,
       }),
     ).rejects.toMatchObject({ reason: 'revision-conflict' })
     expect(
-      (await file.read()).drafts['1']!.rows.map((row) => row.text),
+      (await file.read()).drafts[category1]!.rows.map((row) => row.text),
     ).toEqual(['Later'])
   })
 
@@ -955,13 +948,13 @@ describe('offline writing and completion transactions', () => {
     const completed = await service.execute(
       completionCommand(await file.read()),
     )
-    const rows = completed.drafts['1']!.rows.map((row, index) =>
+    const rows = completed.drafts[category1]!.rows.map((row, index) =>
       index === 0 ? { ...row, text: 'Newer writing' } : row,
     )
     await service.execute({
       type: 'save',
       commandId: randomUUID(),
-      categoryId: 1,
+      categoryId: category1,
       baseRevision: 1,
       rows,
     })
@@ -979,12 +972,12 @@ describe('offline writing and completion transactions', () => {
     })
 
     // Assert
-    expect(restored.drafts['1']!.rows.map((row) => row.text)).toEqual([
+    expect(restored.drafts[category1]!.rows.map((row) => row.text)).toEqual([
       'Original',
       'Newer writing',
       'Later',
     ])
-    expect(repeated.drafts['1']!.rows.map((row) => row.text)).toEqual([
+    expect(repeated.drafts[category1]!.rows.map((row) => row.text)).toEqual([
       'Original',
       'Newer writing',
       'Later',
@@ -1005,11 +998,11 @@ describe('offline writing and completion transactions', () => {
       await service.execute({
         type: 'save',
         commandId: randomUUID(),
-        categoryId: 1,
-        baseRevision: completed.drafts['1']!.revision,
+        categoryId: category1,
+        baseRevision: completed.drafts[category1]!.revision,
         rows: [
           { id: randomUUID(), text: 'Inserted first' },
-          ...completed.drafts['1']!.rows.map((row) =>
+          ...completed.drafts[category1]!.rows.map((row) =>
             row.completionId ? { ...row, text: 'Newer writing' } : row,
           ),
           { id: randomUUID(), text: 'New tail' },
@@ -1028,7 +1021,7 @@ describe('offline writing and completion transactions', () => {
       })
 
       // Assert
-      expect(restored.drafts['1']!.rows.map((row) => row.text)).toEqual(
+      expect(restored.drafts[category1]!.rows.map((row) => row.text)).toEqual(
         clear
           ? ['Inserted first', 'Before', 'Original', 'After', 'New tail']
           : [
@@ -1055,12 +1048,12 @@ describe('offline writing and completion transactions', () => {
     await service.execute({
       type: 'save',
       commandId: randomUUID(),
-      categoryId: 1,
-      baseRevision: completed.drafts['1']!.revision,
+      categoryId: category1,
+      baseRevision: completed.drafts[category1]!.revision,
       rows: [
         { id: randomUUID(), text: 'Inserted first' },
         { id: randomUUID(), text: 'Inserted second' },
-        completed.drafts['1']!.rows[0]!,
+        completed.drafts[category1]!.rows[0]!,
         { id: randomUUID(), text: 'Later writing' },
       ],
     })
@@ -1073,7 +1066,7 @@ describe('offline writing and completion transactions', () => {
     })
 
     // Assert
-    expect(restored.drafts['1']!.rows.map((row) => row.text)).toEqual([
+    expect(restored.drafts[category1]!.rows.map((row) => row.text)).toEqual([
       'Inserted first',
       'Inserted second',
       'Before',
@@ -1094,8 +1087,8 @@ describe('offline writing and completion transactions', () => {
     await service.execute({
       type: 'save',
       commandId: randomUUID(),
-      categoryId: 1,
-      baseRevision: completed.drafts['1']!.revision,
+      categoryId: category1,
+      baseRevision: completed.drafts[category1]!.revision,
       rows: [
         'First replacement',
         'Second replacement',
@@ -1111,7 +1104,7 @@ describe('offline writing and completion transactions', () => {
     })
 
     // Assert
-    expect(restored.drafts['1']!.rows.map((row) => row.text)).toEqual([
+    expect(restored.drafts[category1]!.rows.map((row) => row.text)).toEqual([
       'First replacement',
       'Second replacement',
       'Third replacement',
@@ -1129,14 +1122,14 @@ describe('offline writing and completion transactions', () => {
     await service.execute({
       type: 'moveCategory',
       commandId: randomUUID(),
-      sourceId: 1,
-      destinationId: 2,
+      sourceId: category1,
+      destinationId: category2,
     })
     await service.execute({
       type: 'moveCategory',
       commandId: randomUUID(),
-      sourceId: 2,
-      destinationId: 3,
+      sourceId: category2,
+      destinationId: category3,
     })
     const restarted = new WorkspaceService(
       new AtomicWorkspaceFile(options),
@@ -1151,17 +1144,17 @@ describe('offline writing and completion transactions', () => {
     })
 
     // Assert
-    expect(restored.drafts['3']!.rows.map((row) => row.text)).toEqual([
+    expect(restored.drafts[category3]!.rows.map((row) => row.text)).toEqual([
       'Target writing',
       '',
       'Before',
       'Original',
       'After',
     ])
-    expect(restored.drafts['1']).toBeUndefined()
-    expect(restored.drafts['2']).toBeUndefined()
+    expect(restored.drafts[category1]).toBeUndefined()
+    expect(restored.drafts[category2]).toBeUndefined()
     expect(restored.completions[completionA]).toMatchObject({
-      categoryId: 3,
+      categoryId: category3,
       cancelled: true,
       restored: true,
     })
@@ -1191,23 +1184,26 @@ describe('offline writing and completion transactions', () => {
     // Arrange
     const { file, service } = await createWorkspace()
     let state = await service.execute(completionCommand(await file.read()))
-    state = await service.refreshCategories(
-      state.categories.filter((category) => category.id !== 1),
-    )
+    state = await service.reconcileCategories({
+      accountId,
+      displayEmail: null,
+      categories: [serverCategory(2), serverCategory(3)],
+      deletions: [{ sourceId: 1, destinationId: 2 }],
+    })
     expect(
-      state.categories.find((category) => category.id === 1)?.removed,
+      state.categories.find((category) => category.id === category1)?.removed,
     ).toBe(true)
     await service.execute({
       type: 'moveCategory',
       commandId: randomUUID(),
-      sourceId: 1,
-      destinationId: 2,
+      sourceId: category1,
+      destinationId: category2,
     })
     await service.execute({
       type: 'moveCategory',
       commandId: randomUUID(),
-      sourceId: 2,
-      destinationId: 3,
+      sourceId: category2,
+      destinationId: category3,
     })
 
     // Act
@@ -1218,22 +1214,22 @@ describe('offline writing and completion transactions', () => {
     })
 
     // Assert
-    expect(state.drafts['3']!.rows.map((row) => row.text)).toEqual([
+    expect(state.drafts[category3]!.rows.map((row) => row.text)).toEqual([
       'Target writing',
       '',
       'Original',
       'Later',
     ])
-    expect(state.drafts['1']).toBeUndefined()
-    expect(state.drafts['2']).toBeUndefined()
-    expect(state.completions[completionA]!.categoryId).toBe(3)
-    expect(state.selectedCategoryId).toBe(3)
+    expect(state.drafts[category1]).toBeUndefined()
+    expect(state.drafts[category2]).toBeUndefined()
+    expect(state.completions[completionA]!.categoryId).toBe(category3)
+    expect(state.selectedCategoryId).toBe(category3)
     expect(
       Object.values(state.outbox).map((entry) => [
         entry.operation.kind,
         entry.operation.categoryId,
       ]),
-    ).toEqual([['cancel', 3]])
+    ).toEqual([['cancel', category3]])
   })
 
   test('a confirmed move waits for an uncertain create receipt without rewriting its bytes', async () => {
@@ -1243,29 +1239,31 @@ describe('offline writing and completion transactions', () => {
       completionCommand(await file.read()),
     )
     const original = Object.values(completed.outbox)[0]!.operation
-    await service.markSent(original.operationId)
+    await service.markSentBatch(accountId, [original.operationId])
 
     // Act
     const moved = await service.execute({
       type: 'moveCategory',
       commandId: randomUUID(),
-      sourceId: 1,
-      destinationId: 2,
+      sourceId: category1,
+      destinationId: category2,
     })
-    const acknowledged = await service.acceptReceipt('account-a', {
-      operationId: original.operationId,
-      completionId: completionA,
-      revision: 1,
-      status: 'applied',
-      projection: {
+    const acknowledged = await service.acceptReceipts(accountId, [
+      {
+        operationId: original.operationId,
         completionId: completionA,
         revision: 1,
-        cancelled: false,
-        title: 'Original',
-        categoryId: 1,
-        completedAt: instant,
+        status: 'applied',
+        projection: {
+          completionId: completionA,
+          revision: 1,
+          cancelled: false,
+          title: 'Original',
+          categoryId: 1,
+          completedAt: instant,
+        },
       },
-    })
+    ])
 
     // Assert
     expect(moved.outbox[original.operationId]!.operation).toEqual(original)
@@ -1276,7 +1274,7 @@ describe('offline writing and completion transactions', () => {
         entry.operation.categoryId,
         entry.operation.expectedRemoteRevision,
       ]),
-    ).toEqual([['relocate', 2, 2, 1]])
+    ).toEqual([['relocate', 2, category2, 1]])
   })
 
   test('Undo during delivery survives a late create acknowledgement without resurrection', async () => {
@@ -1286,7 +1284,7 @@ describe('offline writing and completion transactions', () => {
       completionCommand(await file.read()),
     )
     const original = Object.values(completed.outbox)[0]!.operation
-    await service.markSent(original.operationId)
+    await service.markSentBatch(accountId, [original.operationId])
     await service.execute({
       type: 'undo',
       commandId: randomUUID(),
@@ -1294,24 +1292,26 @@ describe('offline writing and completion transactions', () => {
     })
 
     // Act
-    const state = await service.acceptReceipt('account-a', {
-      operationId: original.operationId,
-      completionId: completionA,
-      revision: 1,
-      status: 'applied',
-      projection: {
+    const state = await service.acceptReceipts(accountId, [
+      {
+        operationId: original.operationId,
         completionId: completionA,
         revision: 1,
-        cancelled: false,
-        title: 'Original',
-        categoryId: 1,
-        completedAt: instant,
+        status: 'applied',
+        projection: {
+          completionId: completionA,
+          revision: 1,
+          cancelled: false,
+          title: 'Original',
+          categoryId: 1,
+          completedAt: instant,
+        },
       },
-    })
+    ])
 
     // Assert
     expect(state.completions[completionA]!.cancelled).toBe(true)
-    expect(state.drafts['1']!.rows.map((row) => row.text)).toEqual([
+    expect(state.drafts[category1]!.rows.map((row) => row.text)).toEqual([
       'Original',
       'Later',
     ])
@@ -1378,7 +1378,7 @@ describe('offline writing and completion transactions', () => {
     ).toBe(false)
   })
 
-  test('an old account receipt cannot mutate the current workspace', async () => {
+  test('a receipt for an account the device is not attached to cannot mutate the current workspace', async () => {
     // Arrange
     const { file, service } = await createWorkspace()
     const state = await service.execute(completionCommand(await file.read()))
@@ -1386,20 +1386,22 @@ describe('offline writing and completion transactions', () => {
 
     // Act / Assert
     await expect(
-      service.acceptReceipt('account-b', {
-        operationId: operation.operationId,
-        completionId: completionA,
-        revision: 1,
-        status: 'applied',
-        projection: {
+      service.acceptReceipts('account-b', [
+        {
+          operationId: operation.operationId,
           completionId: completionA,
           revision: 1,
-          cancelled: false,
-          categoryId: 1,
-          title: 'Original',
-          completedAt: instant,
+          status: 'applied',
+          projection: {
+            completionId: completionA,
+            revision: 1,
+            cancelled: false,
+            categoryId: 1,
+            title: 'Original',
+            completedAt: instant,
+          },
         },
-      }),
+      ]),
     ).rejects.toMatchObject({ reason: 'command-conflict' })
     expect(Object.values((await file.read()).outbox)).toHaveLength(1)
   })
@@ -1411,20 +1413,22 @@ describe('offline writing and completion transactions', () => {
     const operation = Object.values(initial.outbox)[0]!.operation
 
     // Act
-    const conflicted = await service.acceptReceipt('account-a', {
-      operationId: operation.operationId,
-      completionId: completionA,
-      revision: 1,
-      status: 'applied',
-      projection: {
+    const conflicted = await service.acceptReceipts(accountId, [
+      {
+        operationId: operation.operationId,
         completionId: completionA,
-        revision: 2,
-        cancelled: true,
-        categoryId: 1,
-        title: 'Original',
-        completedAt: instant,
+        revision: 1,
+        status: 'applied',
+        projection: {
+          completionId: completionA,
+          revision: 2,
+          cancelled: true,
+          categoryId: 1,
+          title: 'Original',
+          completedAt: instant,
+        },
       },
-    })
+    ])
     const restored = await service.execute({
       type: 'resolveConflict',
       commandId: randomUUID(),
@@ -1436,7 +1440,7 @@ describe('offline writing and completion transactions', () => {
 
     // Assert
     expect(Object.values(conflicted.outbox)[0]?.failure).toBe('conflict')
-    expect(restored.drafts['1']!.rows.map((row) => row.text)).toEqual([
+    expect(restored.drafts[category1]!.rows.map((row) => row.text)).toEqual([
       'Original',
       'Later',
     ])
@@ -1455,13 +1459,15 @@ describe('offline writing and completion transactions', () => {
 
     // Act / Assert
     await expect(
-      service.acceptReceipt('account-a', {
-        operationId: operation.operationId,
-        completionId: completionA,
-        revision: 1,
-        status: 'applied',
-        projection: null,
-      }),
+      service.acceptReceipts(accountId, [
+        {
+          operationId: operation.operationId,
+          completionId: completionA,
+          revision: 1,
+          status: 'applied',
+          projection: null,
+        },
+      ]),
     ).rejects.toThrow()
     expect(Object.values((await file.read()).outbox)).toHaveLength(1)
   })
@@ -1472,21 +1478,23 @@ test('stale conflict confirmation cannot replace a newer server version the user
   const { file, service } = await createWorkspace()
   const initial = await service.execute(completionCommand(await file.read()))
   const operation = Object.values(initial.outbox)[0]!.operation
-  await service.acceptReceipt('account-a', {
-    operationId: operation.operationId,
-    completionId: completionA,
-    revision: 1,
-    status: 'rejected',
-    reason: 'conflict',
-    projection: {
+  await service.acceptReceipts(accountId, [
+    {
+      operationId: operation.operationId,
       completionId: completionA,
-      revision: 3,
-      cancelled: false,
-      categoryId: 1,
-      title: 'Newer server writing',
-      completedAt: instant,
+      revision: 1,
+      status: 'rejected',
+      reason: 'conflict',
+      projection: {
+        completionId: completionA,
+        revision: 3,
+        cancelled: false,
+        categoryId: 1,
+        title: 'Newer server writing',
+        completedAt: instant,
+      },
     },
-  })
+  ])
 
   // Act / Assert
   await expect(
@@ -1512,14 +1520,16 @@ test('retrying a rejected dependency queues one new operation while keeping the 
   const { file, service } = await createWorkspace()
   const initial = await service.execute(completionCommand(await file.read()))
   const operation = Object.values(initial.outbox)[0]!.operation
-  await service.acceptReceipt('account-a', {
-    operationId: operation.operationId,
-    completionId: completionA,
-    revision: 1,
-    status: 'rejected',
-    reason: 'dependency',
-    projection: null,
-  })
+  await service.acceptReceipts(accountId, [
+    {
+      operationId: operation.operationId,
+      completionId: completionA,
+      revision: 1,
+      status: 'rejected',
+      reason: 'dependency',
+      projection: null,
+    },
+  ])
 
   // Act
   const command = {
@@ -1546,6 +1556,355 @@ test('retrying a rejected dependency queues one new operation while keeping the 
   )
 })
 
+describe('outgoing delivery uses frozen server-id payloads', () => {
+  test('markSentBatch freezes the server-id payload once and a retry after the category binding is gone returns identical bytes', async () => {
+    // Arrange
+    const { file, service } = await createWorkspace()
+    const queued = await service.execute(completionCommand(await file.read()))
+    const operationId = Object.values(queued.outbox)[0]!.operation.operationId
+
+    // Act
+    const first = await service.markSentBatch(accountId, [operationId])
+    await file.update((current) => {
+      const state = structuredClone(current)
+      delete state.binding!.serverCategoryIds[category1]
+      state.revision++
+      return state
+    })
+    const retry = await service.markSentBatch(accountId, [operationId])
+
+    // Assert
+    expect(first).toHaveLength(1)
+    expect(first[0]!.state).toBe('sent')
+    expect(first[0]!.wire).toMatchObject({ operationId, categoryId: 1 })
+    expect(first[0]!.operation.categoryId).toBe(category1)
+    expect(JSON.stringify(retry[0]!.wire)).toBe(JSON.stringify(first[0]!.wire))
+  })
+
+  test('a completion whose category has no server id waits while another category still sends', async () => {
+    // Arrange
+    const { file, service } = await createWorkspace()
+    let state = await service.execute(completionCommand(await file.read()))
+    const secondCategoryDraft = state.drafts[category2]!
+    state = await service.execute({
+      type: 'complete',
+      commandId: randomUUID(),
+      categoryId: category2,
+      baseRevision: secondCategoryDraft.revision,
+      rowId: secondCategoryDraft.rows[0]!.id,
+      completionId: completionB,
+      completedAt: instant,
+      timezone: 'Asia/Tokyo',
+    })
+    await file.update((current) => {
+      const next = structuredClone(current)
+      delete next.binding!.serverCategoryIds[category2]
+      next.revision++
+      return next
+    })
+    const operationIds = Object.keys(state.outbox)
+
+    // Act
+    const batch = await service.markSentBatch(accountId, operationIds)
+
+    // Assert
+    expect(batch.map((entry) => entry.operation.completionId)).toEqual([
+      completionA,
+    ])
+    const after = await file.read()
+    const waiting = Object.values(after.outbox).find(
+      (entry) => entry.operation.completionId === completionB,
+    )!
+    expect(waiting.state).toBe('queued')
+    expect(waiting.wire).toBeUndefined()
+  })
+
+  test('markSentBatch for an account other than the attached one sends nothing', async () => {
+    // Arrange
+    const { file, service } = await createWorkspace()
+    const queued = await service.execute(completionCommand(await file.read()))
+    const operationId = Object.values(queued.outbox)[0]!.operation.operationId
+
+    // Act
+    const batch = await service.markSentBatch('account-b', [operationId])
+
+    // Assert
+    expect(batch).toEqual([])
+    expect((await file.read()).outbox[operationId]!.state).toBe('queued')
+  })
+
+  test('a late receipt after the editor changed applies only to its own operation', async () => {
+    // Arrange
+    const { file, service } = await createWorkspace('First\nSecond')
+    let state = await service.execute(completionCommand(await file.read()))
+    state = await service.execute(
+      completionCommand(await file.read(), completionB, 1),
+    )
+    const operationA = Object.values(state.outbox).find(
+      (entry) => entry.operation.completionId === completionA,
+    )!.operation
+    await service.markSentBatch(accountId, [operationA.operationId])
+    await service.execute({
+      type: 'undo',
+      commandId: randomUUID(),
+      completionId: completionA,
+    })
+    const queuedForB = Object.values(await file.read().then((v) => v.outbox))
+      .filter((entry) => entry.operation.completionId === completionB)
+      .map((entry) => structuredClone(entry))
+
+    // Act
+    state = await service.acceptReceipts(accountId, [
+      {
+        operationId: operationA.operationId,
+        completionId: completionA,
+        revision: 1,
+        status: 'applied',
+        projection: {
+          completionId: completionA,
+          revision: 1,
+          cancelled: false,
+          categoryId: 1,
+          title: 'First',
+          completedAt: instant,
+        },
+      },
+    ])
+
+    // Assert
+    const afterForB = Object.values(state.outbox).filter(
+      (entry) => entry.operation.completionId === completionB,
+    )
+    expect(afterForB).toEqual(queuedForB)
+    expect(state.completions[completionA]!.cancelled).toBe(true)
+  })
+
+  test('checkpointing a receipted completion keeps its title and text on the Mac and in the export', async () => {
+    // Arrange
+    const { file, service, setNow } = await createWorkspace(
+      'Distinct export title\nLater',
+      true,
+    )
+    let state = await service.execute(completionCommand(await file.read()))
+    const operation = Object.values(state.outbox)[0]!.operation
+    state = await service.clearDue()
+    const projection = {
+      completionId: completionA,
+      revision: 1,
+      cancelled: false,
+      categoryId: 1,
+      title: 'Distinct export title',
+      completedAt: instant,
+    }
+    const checkpoint = {
+      day: '2026-10-21',
+      timezone: 'Asia/Tokyo',
+      total: 1,
+      fetchedAt: instant + 6000,
+      identities: { [completionA]: projection },
+    }
+    await service.markSentBatch(accountId, [operation.operationId])
+    state = await service.acceptReceipts(accountId, [
+      {
+        operationId: operation.operationId,
+        completionId: completionA,
+        revision: 1,
+        status: 'applied',
+        projection,
+      },
+    ])
+
+    // Act
+    setNow(instant + 6000)
+    state = await service.checkpoint(accountId, state.revision, checkpoint)
+
+    // Assert
+    expect(state.completions[completionA]).toBeUndefined()
+    expect(state.retiredCompletions[completionA]).toMatchObject({
+      title: 'Distinct export title',
+      rawText: 'Distinct export title',
+    })
+    expect(JSON.stringify(await file.read())).toContain('Distinct export title')
+  })
+})
+
+describe('attaching the account categories to the device workspace', () => {
+  test('the first reconcile binds the account, pairs the default category and adds a server-only category', async () => {
+    // Arrange
+    const { file, service } = await createUnboundWorkspace()
+
+    // Act
+    const state = await service.reconcileCategories({
+      accountId,
+      displayEmail: 'owner@example.com',
+      categories: [
+        serverCategory(1),
+        serverCategory(2, { name: 'Category 2' }),
+        serverCategory(3, { name: 'Ideas' }),
+      ],
+      deletions: [],
+    })
+
+    // Assert
+    expect(state.binding).toMatchObject({
+      accountId,
+      displayEmail: 'owner@example.com',
+      serverCategoryIds: {
+        [category1]: 1,
+        [category2]: 2,
+        [categoryUuid(100)]: 3,
+      },
+    })
+    expect(state.categories.map((category) => category.name)).toEqual([
+      'General',
+      'Category 2',
+      'Ideas',
+    ])
+    expect(state.drafts[category1]!.rows.map((row) => row.text)).toEqual([
+      'General draft',
+    ])
+    expect(
+      state.drafts[categoryUuid(100)]!.rows.map((row) => row.text),
+    ).toEqual([''])
+    expect((await file.read()).binding?.accountId).toBe(accountId)
+  })
+
+  test('a server rename applies when the category is unchanged locally', async () => {
+    // Arrange
+    const { service } = await createUnboundWorkspace()
+    await service.reconcileCategories({
+      accountId,
+      displayEmail: null,
+      categories: [
+        serverCategory(1),
+        serverCategory(2, { name: 'Category 2' }),
+      ],
+      deletions: [],
+    })
+
+    // Act
+    const state = await service.reconcileCategories({
+      accountId,
+      displayEmail: null,
+      categories: [serverCategory(1), serverCategory(2, { name: 'Projects' })],
+      deletions: [],
+    })
+
+    // Assert
+    expect(
+      state.categories.find((category) => category.id === category2)?.name,
+    ).toBe('Projects')
+  })
+
+  test('a locally renamed category is not overwritten by a later server change', async () => {
+    // Arrange
+    const { file, service } = await createUnboundWorkspace()
+    await service.reconcileCategories({
+      accountId,
+      displayEmail: null,
+      categories: [
+        serverCategory(1),
+        serverCategory(2, { name: 'Category 2' }),
+      ],
+      deletions: [],
+    })
+    await file.update((current) => {
+      const next = structuredClone(current)
+      next.categories.find((category) => category.id === category2)!.name =
+        'My own name'
+      next.revision++
+      return next
+    })
+
+    // Act
+    const state = await service.reconcileCategories({
+      accountId,
+      displayEmail: null,
+      categories: [
+        serverCategory(1),
+        serverCategory(2, { name: 'Server name' }),
+      ],
+      deletions: [],
+    })
+
+    // Assert
+    expect(
+      state.categories.find((category) => category.id === category2)?.name,
+    ).toBe('My own name')
+  })
+
+  test('a bound category the server no longer lists keeps its writing until the user confirms a move', async () => {
+    // Arrange
+    const { service } = await createUnboundWorkspace()
+    await service.reconcileCategories({
+      accountId,
+      displayEmail: null,
+      categories: [
+        serverCategory(1),
+        serverCategory(2, { name: 'Category 2' }),
+      ],
+      deletions: [],
+    })
+
+    // Act
+    const removed = await service.reconcileCategories({
+      accountId,
+      displayEmail: null,
+      categories: [serverCategory(1)],
+      deletions: [{ sourceId: 2, destinationId: 1 }],
+    })
+    const confirmed = await service.execute({
+      type: 'moveCategory',
+      commandId: randomUUID(),
+      sourceId: category2,
+      destinationId: category1,
+    })
+
+    // Assert
+    expect(
+      removed.categories.find((category) => category.id === category2)?.removed,
+    ).toBe(true)
+    expect(removed.drafts[category2]!.rows.map((row) => row.text)).toEqual([
+      'Work draft',
+    ])
+    expect(removed.binding!.deletionReceipts).toEqual({
+      [category2]: category1,
+    })
+    expect(confirmed.drafts[category1]!.rows.map((row) => row.text)).toEqual([
+      'General draft',
+      '',
+      'Work draft',
+    ])
+    expect(confirmed.drafts[category2]).toBeUndefined()
+  })
+
+  test('reconciling a different account than the bound one is refused and changes nothing', async () => {
+    // Arrange
+    const { file, service } = await createUnboundWorkspace()
+    await service.reconcileCategories({
+      accountId,
+      displayEmail: null,
+      categories: [
+        serverCategory(1),
+        serverCategory(2, { name: 'Category 2' }),
+      ],
+      deletions: [],
+    })
+    const before = await file.read()
+
+    // Act / Assert
+    await expect(
+      service.reconcileCategories({
+        accountId: 'account-b',
+        displayEmail: null,
+        categories: [serverCategory(9, { name: 'Other' })],
+        deletions: [],
+      }),
+    ).rejects.toMatchObject({ reason: 'command-conflict' })
+    expect(await file.read()).toEqual(before)
+  })
+})
+
 describe('keep mode leaves finished lines in place', () => {
   test('completing a typed finished line in keep mode is refused as finished-line and records nothing', async () => {
     // Arrange
@@ -1559,7 +1918,7 @@ describe('keep mode leaves finished lines in place', () => {
     await expect(completing).rejects.toMatchObject({ reason: 'finished-line' })
     const after = await fixture.file.read()
     expect(Object.keys(after.completions)).toEqual([])
-    expect(after.drafts['1']!.rows.map((row) => row.text)).toEqual([
+    expect(after.drafts[category1]!.rows.map((row) => row.text)).toEqual([
       '- [x] Typed done',
       'Later',
     ])
@@ -1577,7 +1936,9 @@ describe('keep mode leaves finished lines in place', () => {
     // Assert
     expect(Object.keys(state.completions)).toEqual([completionA])
     expect(state.completions[completionA]!.title).toBe('Typed done')
-    expect(state.drafts['1']!.rows.map((row) => row.text)).toEqual(['Later'])
+    expect(state.drafts[category1]!.rows.map((row) => row.text)).toEqual([
+      'Later',
+    ])
   })
 
   test('a stale revision is still reported as a revision conflict before the finished-line refusal', async () => {
@@ -1611,7 +1972,7 @@ describe('keep mode leaves finished lines in place', () => {
 
     // Assert
     expect(Object.keys(state.completions)).toEqual([completionA])
-    expect(state.drafts['1']!.rows.map((row) => row.text)).toEqual([
+    expect(state.drafts[category1]!.rows.map((row) => row.text)).toEqual([
       '- [x] Write notes',
       'Later',
     ])

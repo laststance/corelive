@@ -32,15 +32,12 @@ import {
   powerMonitor,
   protocol,
 } from 'electron'
-import type {
-  WebContents,
-  Event as ElectronEvent,
-  IpcMainInvokeEvent,
-} from 'electron'
+import type { WebContents, Event as ElectronEvent } from 'electron'
 
 import type { AutoUpdater as AutoUpdaterType } from './AutoUpdater'
 import { ConfigManager } from './ConfigManager'
 import type { DeepLinkManager as DeepLinkManagerType } from './DeepLinkManager'
+import { applyDevUserData } from './devUserData'
 import { isRendererReadableConfigPath } from './ipc/ipc-schemas'
 import { registerAuthHandlers } from './ipc/registerAuthHandlers'
 import { typedHandle } from './ipc/typedHandle'
@@ -120,6 +117,9 @@ try {
 if (remoteDebuggingPort) {
   app.commandLine.appendSwitch('remote-debugging-port', remoteDebuggingPort)
 }
+
+// EA10: a dev or QA run uses its own userData folder. Must stay before `ready`.
+applyDevUserData(app)
 
 // ============================================================================
 // Environment Flags
@@ -351,7 +351,6 @@ function ensureDeepLinkManager(): DeepLinkManagerType | null {
  */
 async function setActiveUser(
   userPayload: AuthUserPayload,
-  event: IpcMainInvokeEvent,
 ): Promise<AuthUserPayload> {
   // Validate payload to prevent security issues
   if (!userPayload || typeof userPayload !== 'object' || !userPayload.clerkId) {
@@ -364,10 +363,8 @@ async function setActiveUser(
     emailAddresses: userPayload.emailAddresses || [],
     firstName: userPayload.firstName || null,
   }
-  offlineEditor?.controller.authenticated(
-    activeUser.clerkId,
-    event.sender === windowManager.getLoginWindow()?.webContents,
-  )
+  // The payload is only a trigger; the controller verifies the account itself (EA2).
+  void offlineEditor?.controller.authenticated(activeUser.clerkId)
   return activeUser
 }
 
@@ -1132,7 +1129,9 @@ function setupIPCHandlers(): void {
     getActiveUser: () => activeUser,
     setActiveUser,
     clearActiveUser: async () => {
-      if (!offlineEditor || !(await offlineEditor.controller.signOut())) {
+      const result = await offlineEditor?.controller.signOut()
+      // A failed disk flush cancels the sign-out; the editor stays up for Retry/Copy (D3 step 1).
+      if (!result || result.status === 'flush-failed') {
         windowManager.showLiveEditor()
         return false
       }

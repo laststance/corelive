@@ -3,22 +3,22 @@ import { access, readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { DEFAULT_CATEGORY_SEED } from '@corelive/desktop-contract/category'
-import { OfflineWorkspaceSchema } from '@corelive/desktop-contract/offline-workspace'
+import { OfflineWorkspaceV1Schema } from '@corelive/desktop-contract/offline-workspace'
 import type {
   CompletionProjection,
   CompletionSyncReceipt,
-  OfflineWorkspace,
+  OfflineWorkspaceV1,
 } from '@corelive/desktop-contract/offline-workspace'
 import {
   DEVICE_OWNER_ID,
   DEVICE_REGISTRY_FILE_NAME,
   DEVICE_WORKSPACE_FILE_NAME,
   DeviceRegistrySchema,
-  OfflineWorkspaceV2Schema,
+  OfflineWorkspaceSchema,
   type DeviceRegistry,
   type MigrationReceipt,
-  type OfflineWorkspaceV2,
-  type RecoveryCopyV2,
+  type OfflineWorkspace,
+  type RecoveryCopy,
 } from '@corelive/desktop-contract/offline-workspace-v2'
 import { UserSettingsStateSchema } from '@corelive/desktop-contract/settings'
 import { z } from 'zod'
@@ -48,7 +48,7 @@ export type MigrateWorkspaceV1Result =
   | {
       ok: true
       status: 'migrated' | 'created-fresh' | 'already-migrated'
-      workspace: OfflineWorkspaceV2
+      workspace: OfflineWorkspace
       registry: DeviceRegistry
       summary: MigrationSummary | null
       /** Recovery copies imported from a v1 file an older build changed (DX8). */
@@ -67,7 +67,7 @@ type V1File =
       fileName: string
       checksum: string
       valid: true
-      workspace: OfflineWorkspace
+      workspace: OfflineWorkspaceV1
     }
   | { fileName: string; checksum: string; valid: false; errorClass: string }
 
@@ -109,7 +109,7 @@ export async function migrateWorkspaceV1(
     directory: workspacesDirectory,
     ownerId: DEVICE_OWNER_ID,
     fileName: DEVICE_WORKSPACE_FILE_NAME,
-    parse: OfflineWorkspaceV2Schema.parse,
+    parse: OfflineWorkspaceSchema.parse,
   })
   const registryFile = new AtomicWorkspaceFile({
     directory: registryDirectory,
@@ -185,7 +185,7 @@ export async function migrateWorkspaceV1(
   if (source && !source.valid)
     return fail(source.fileName, source.checksum, source.errorClass)
 
-  let built: OfflineWorkspaceV2
+  let built: OfflineWorkspace
   try {
     built = buildWorkspace({
       source: source?.valid ? source : null,
@@ -279,7 +279,7 @@ async function readV1Workspace(
   const decoded = decodeEnvelope(bytes, null)
   if (!decoded.ok)
     return { fileName, checksum, valid: false, errorClass: decoded.errorClass }
-  const parsed = OfflineWorkspaceSchema.safeParse(decoded.value)
+  const parsed = OfflineWorkspaceV1Schema.safeParse(decoded.value)
   if (!parsed.success)
     return { fileName, checksum, valid: false, errorClass: 'schema' }
   // The file name is the owner hash; a mismatch means the file was moved or tampered with.
@@ -327,7 +327,7 @@ async function readOrNull<T>(
 /** Writes the registry only when missing (idempotent repair after a crash). */
 async function ensureRegistry(
   file: AtomicWorkspaceFile<DeviceRegistry>,
-  workspace: OfflineWorkspaceV2,
+  workspace: OfflineWorkspace,
   v1Registry: V1Registry | null | 'invalid',
   faultPoint: MigrateWorkspaceV1Options['faultPoint'],
 ): Promise<DeviceRegistry | 'invalid'> {
@@ -352,7 +352,7 @@ async function ensureRegistry(
 }
 
 /** Everything a v1 workspace holds that is worth keeping as text. */
-function describeWriting(workspace: OfflineWorkspace) {
+function describeWriting(workspace: OfflineWorkspaceV1) {
   const drafts = Object.entries(workspace.drafts).flatMap(([key, draft]) => {
     const text = draft.rows.map((row) => row.text).join('\n')
     return text.trim()
@@ -383,7 +383,7 @@ function describeWriting(workspace: OfflineWorkspace) {
 }
 
 /** Collects every category id a v1 workspace references anywhere (EA9). */
-function collectServerCategoryIds(workspace: OfflineWorkspace): Set<number> {
+function collectServerCategoryIds(workspace: OfflineWorkspaceV1): Set<number> {
   const ids = new Set<number>()
   const projection = (value: CompletionProjection | null | undefined): void => {
     if (value) ids.add(value.categoryId)
@@ -433,7 +433,7 @@ interface BuildInput {
 }
 
 /** Builds the complete v2 workspace in memory; pure apart from `randomUUID` for a fresh device id. */
-function buildWorkspace(input: BuildInput): OfflineWorkspaceV2 {
+function buildWorkspace(input: BuildInput): OfflineWorkspace {
   const { source, now } = input
   const v1 = source?.workspace ?? null
   const deviceId = v1?.deviceId ?? input.registryState?.deviceId ?? randomUUID()
@@ -458,7 +458,7 @@ function buildWorkspace(input: BuildInput): OfflineWorkspaceV2 {
   })
 
   const liveIds = new Set(v1?.categories.map((category) => category.id))
-  const categories: OfflineWorkspaceV2['categories'] = []
+  const categories: OfflineWorkspace['categories'] = []
   if (v1) {
     for (const category of v1.categories)
       categories.push({
@@ -500,7 +500,7 @@ function buildWorkspace(input: BuildInput): OfflineWorkspaceV2 {
     categories.find((category) => category.isDefault && !category.removed)
       ?.id ?? categories[0]!.id
 
-  const drafts: OfflineWorkspaceV2['drafts'] = {}
+  const drafts: OfflineWorkspace['drafts'] = {}
   for (const [key, draft] of Object.entries(v1?.drafts ?? {}))
     drafts[local(Number(key))] = draft
   for (const category of categories)
@@ -510,7 +510,7 @@ function buildWorkspace(input: BuildInput): OfflineWorkspaceV2 {
         rows: [{ id: uuidFrom(`${seed}:row:${category.id}`), text: '' }],
       }
 
-  const recoveryCopies: RecoveryCopyV2[] = (v1?.recoveryCopies ?? []).map(
+  const recoveryCopies: RecoveryCopy[] = (v1?.recoveryCopies ?? []).map(
     (copy) => ({
       ...copy,
       categoryId: local(copy.categoryId),
@@ -518,12 +518,12 @@ function buildWorkspace(input: BuildInput): OfflineWorkspaceV2 {
         copy.restoredTo === undefined ? undefined : local(copy.restoredTo),
     }),
   )
-  const created: RecoveryCopyV2[] = []
+  const created: RecoveryCopy[] = []
   const addCopy = (
     categoryId: string,
     text: string,
     reason: string,
-    origin: NonNullable<RecoveryCopyV2['origin']>,
+    origin: NonNullable<RecoveryCopy['origin']>,
   ) =>
     created.push({
       id: uuidFrom(`${seed}:recovery:${created.length}`),
@@ -595,7 +595,7 @@ function buildWorkspace(input: BuildInput): OfflineWorkspaceV2 {
     )
   }
 
-  const binding: OfflineWorkspaceV2['binding'] = v1
+  const binding: OfflineWorkspace['binding'] = v1
     ? {
         accountId: v1.ownerId,
         displayEmail: null,
@@ -640,7 +640,7 @@ function buildWorkspace(input: BuildInput): OfflineWorkspaceV2 {
     preservedBackups,
   }
 
-  return OfflineWorkspaceV2Schema.parse({
+  return OfflineWorkspaceSchema.parse({
     version: 2,
     ownerId: DEVICE_OWNER_ID,
     deviceId,
@@ -725,11 +725,11 @@ function buildWorkspace(input: BuildInput): OfflineWorkspaceV2 {
  * once, v2 content is never overwritten and nothing is queued.
  */
 async function importOlderVersionChanges(
-  file: AtomicWorkspaceFile<OfflineWorkspaceV2>,
-  current: OfflineWorkspaceV2,
+  file: AtomicWorkspaceFile<OfflineWorkspace>,
+  current: OfflineWorkspace,
   v1Files: V1File[],
   now: () => number,
-): Promise<OfflineWorkspaceV2> {
+): Promise<OfflineWorkspace> {
   const changed = v1Files.filter(
     (v1File) => current.migration.v1Files[v1File.fileName] !== v1File.checksum,
   )

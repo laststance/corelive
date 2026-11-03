@@ -4,12 +4,12 @@ import type {
   OfflineUndoPage,
 } from '@corelive/desktop-contract/offline-editor-api'
 import type {
-  EditorCategory,
+  LocalCategory,
   OfflineCompletion,
   OfflineEditorSnapshot,
   OfflineWorkspace,
   WorkspaceCommand,
-} from '@corelive/desktop-contract/offline-workspace'
+} from '@corelive/desktop-contract/offline-workspace-v2'
 import { Button } from '@corelive/live-editor/ui/button'
 import {
   Dialog,
@@ -24,7 +24,7 @@ import type { DurableEditorStore } from './editor/DurableEditorStore'
 type ReadySnapshot = Extract<OfflineEditorSnapshot, { phase: 'ready' }>
 type RecoveryCopy = OfflineWorkspace['recoveryCopies'][number]
 type Repair =
-  | { kind: 'category'; source: EditorCategory }
+  | { kind: 'category'; source: LocalCategory }
   | { kind: 'time' | 'conflict'; completion: OfflineCompletion }
   | { kind: 'recovery'; copy: RecoveryCopy }
 type Pages = {
@@ -145,7 +145,7 @@ export function NativeDetails({
   actions?: ReactNode
   onClose: () => void
   onUndo: (completion: OfflineCompletion) => Promise<void>
-  onSelect: (categoryId: number) => Promise<void>
+  onSelect: (categoryId: string) => Promise<void>
   onFeedback: (text: string) => void
 }) {
   const heading = useRef<HTMLHeadingElement>(null)
@@ -166,7 +166,7 @@ export function NativeDetails({
   useEffect(() => {
     heading.current?.focus()
   }, [])
-  const categoryName = (id: number): string =>
+  const categoryName = (id: string): string =>
     categories.find((category) => category.id === id)?.name ??
     `Removed category ${id}`
   const paginate = (kind: keyof typeof offsets, total: number) =>
@@ -502,16 +502,14 @@ function RepairDialog({
   )
   const suggestion =
     repair.kind === 'category'
-      ? main.workspace.categoryDeletions[String(repair.source.id)]
+      ? main.workspace.categoryMoves[repair.source.id]
       : repair.kind === 'recovery'
         ? repair.copy.categoryId
         : undefined
   const [destination, setDestination] = useState(
-    String(
-      destinations.find((category) => category.id === suggestion)?.id ??
-        destinations[0]?.id ??
-        '',
-    ),
+    destinations.find((category) => category.id === suggestion)?.id ??
+      destinations[0]?.id ??
+      '',
   )
   const [time, setTime] = useState(() => {
     if (repair.kind !== 'time') return ''
@@ -549,7 +547,7 @@ function RepairDialog({
     }
   }
   const title = repairTitles[repair.kind]
-  const categoryName = (id: number): string =>
+  const categoryName = (id: string): string =>
     main.workspace.categories.find((category) => category.id === id)?.name ??
     `Removed category ${id}`
   return (
@@ -634,7 +632,7 @@ function PendingActions({
 }: {
   entry: OfflineDetailsPage['records'][number]['entry']
   completion: OfflineCompletion
-  categories: EditorCategory[]
+  categories: LocalCategory[]
   busy: boolean
   loading: boolean
   onRepair: (repair: Repair) => void
@@ -711,7 +709,7 @@ function RemovedCategories({
   busy,
   onRepair,
 }: {
-  categories: EditorCategory[]
+  categories: LocalCategory[]
   busy: boolean
   onRepair: (repair: Repair) => void
 }) {
@@ -753,13 +751,13 @@ function DetailsConnection({
   return (
     <>
       {' '}
-      {main.sync === 'offline' && (
+      {main.sync.state === 'waiting' && (
         <p>
           Connect to manage categories. You can still move writing to another
           saved category below.
         </p>
       )}
-      {main.sync === 'sign-in-required' && (
+      {main.sync.state === 'sign-in-to-sync' && (
         <Button
           className="offline-action"
           variant="outline"
@@ -793,14 +791,14 @@ function repairCommand(
       type: 'moveCategory',
       commandId,
       sourceId: repair.source.id,
-      destinationId: Number(destination),
+      destinationId: destination,
     }
   else if (repair.kind === 'recovery')
     return {
       type: 'restoreRecovery',
       commandId,
       copyId: repair.copy.id,
-      destinationId: Number(destination),
+      destinationId: destination,
     }
   else if (repair.kind === 'conflict')
     return {
@@ -843,13 +841,13 @@ function RepairFields({
   categoryName,
 }: {
   repair: Repair
-  destinations: EditorCategory[]
+  destinations: LocalCategory[]
   destination: string
   setDestination: (value: string) => void
   time: string
   setTime: (value: string) => void
   pending: boolean
-  categoryName: (id: number) => string
+  categoryName: (id: string) => string
 }) {
   return (
     <>

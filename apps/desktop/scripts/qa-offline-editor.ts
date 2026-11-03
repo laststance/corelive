@@ -5,13 +5,11 @@ import { tmpdir } from 'node:os'
 import { extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { WorkspaceCommandSchema } from '@corelive/desktop-contract/offline-workspace'
-import {
-  UserSettingsStateSchema,
-  UserSettingsPatchSchema,
-} from '@corelive/desktop-contract/settings'
+import { WorkspaceCommandSchema } from '@corelive/desktop-contract/offline-workspace-v2'
+import { UserSettingsPatchSchema } from '@corelive/desktop-contract/settings'
 import { z } from 'zod'
 
+import { initializeDeviceWorkspace } from '../electron/offline/deviceWorkspaceFixture'
 import { WorkspaceWorkerClient } from '../electron/offline/WorkspaceWorkerClient'
 
 const run = fileURLToPath(new URL('.', import.meta.url))
@@ -21,57 +19,30 @@ const data = await mkdtemp(join(tmpdir(), 'corelive-offline-qa-'))
 const actor = () =>
   new WorkspaceWorkerClient({
     directory: data,
-    ownerId: 'synthetic-offline-qa',
+    ownerId: 'device',
     script: join(repo, 'apps/desktop/dist-electron/main/workspace-worker.cjs'),
   })
 let worker = actor()
-const categories = [
-  {
-    id: 1,
-    name: 'General',
-    color: 'blue' as const,
-    isDefault: true,
-    parentId: null,
-    removed: false,
-  },
-  {
-    id: 2,
-    name: 'Projects with a long name',
-    color: 'blue' as const,
-    isDefault: false,
-    parentId: null,
-    removed: false,
-  },
-  {
-    id: 3,
-    name: 'Old plans',
-    color: 'blue' as const,
-    isDefault: false,
-    parentId: null,
-    removed: false,
-  },
-]
-await worker.call('prepare', {
-  ownerId: 'synthetic-offline-qa',
-  deviceId: randomUUID(),
-  categories,
-  preferences: {
-    revision: 0,
-    // fresh workspace seed: follow the OS (DEFAULT_THEME_PREFERENCE)
-    theme: 'system',
-    settings: UserSettingsStateSchema.parse({
-      liveEditorFontFamily: 'sans',
-      liveEditorFontSize: 19,
-      liveEditorToastDurationMs: 30000,
-    }),
-  },
-  legacyNotes: {
-    '1': 'A small offline win\nAnother idea',
-    '2': 'Preserve destination writing',
-    '3': 'Writing in an old category',
+const QA_ACCOUNT_ID = 'synthetic-offline-qa'
+const categories = [1, 2, 3].map((id) => ({
+  id,
+  name:
+    id === 1 ? 'General' : id === 2 ? 'Projects with a long name' : 'Old plans',
+  color: 'blue' as const,
+  isDefault: id === 1,
+  parentId: null,
+  removed: false,
+}))
+await initializeDeviceWorkspace(data, {
+  categoryCount: 3,
+  boundAccountId: QA_ACCOUNT_ID,
+  notes: {
+    1: 'A small offline win\nAnother idea',
+    2: 'Preserve destination writing',
+    3: 'Writing in an old category',
   },
 })
-let phase: 'ready' | 'preparing' | 'recovery' = 'ready'
+let phase: 'ready' | 'recovery' = 'ready'
 let sync: 'offline' | 'idle' | 'syncing' | 'sign-in-required' = 'offline'
 let generation = 1,
   fail = false,
@@ -87,9 +58,30 @@ const broadcast = (event: string, value: unknown): void => {
   for (const response of clients)
     response.write(`event: ${event}\ndata: ${JSON.stringify(value)}\n\n`)
 }
+/** Maps the fixture's legacy control names onto the D2 sync status object. */
+const readySnapshot = async () => {
+  const workspace = await worker.call('open', null)
+  const state = {
+    offline: 'waiting',
+    idle: 'synced',
+    syncing: 'syncing',
+    'sign-in-required': 'sign-in-to-sync',
+  }[sync]
+  return {
+    phase: 'ready' as const,
+    generation,
+    sync: {
+      state,
+      waitingCount: workspace.pendingCount,
+      lastSyncedAt: null,
+      boundEmail: null,
+    },
+    workspace,
+  }
+}
 const snapshot = async () =>
   phase === 'ready'
-    ? { phase, generation, sync, workspace: await worker.call('open', null) }
+    ? await readySnapshot()
     : { phase, generation, canRecover: phase === 'recovery' }
 const publish = async (): Promise<void> =>
   broadcast('changed', await snapshot())
@@ -160,7 +152,7 @@ async function rpc(method: string, args: unknown[]): Promise<unknown> {
   }
   if (phase !== 'ready') throw new Error('Account locked')
   if (method === 'draft')
-    return worker.call('draft', { categoryId: Number(args[1]) })
+    return worker.call('draft', { categoryId: z.uuid().parse(args[1]) })
   if (
     method === 'details' ||
     method === 'undoHistory' ||
@@ -203,7 +195,7 @@ const controlSchema = z
     fail: z.boolean().optional(),
     delay: z.number().min(0).max(15000).optional(),
     sync: z.enum(['offline', 'idle', 'syncing', 'sign-in-required']).optional(),
-    phase: z.enum(['ready', 'preparing', 'recovery']).optional(),
+    phase: z.enum(['ready', 'recovery']).optional(),
     restart: z.boolean().optional(),
     shown: z.boolean().optional(),
     removeCategory: z.number().int().min(1).max(3).optional(),
@@ -233,7 +225,9 @@ async function control(input: z.infer<typeof controlSchema>) {
     broadcast('shown', null)
   }
   if (input.removeCategory)
-    await worker.call('categories', {
+    await worker.call('reconcile', {
+      accountId: QA_ACCOUNT_ID,
+      displayEmail: null,
       categories: categories.filter(
         (category) => category.id !== Number(input.removeCategory),
       ),
@@ -253,27 +247,33 @@ async function control(input: z.infer<typeof controlSchema>) {
     sync = 'syncing'
     await publish()
     const pending = await worker.call('pending', { limit: 100 })
-    for (const entry of pending) {
-      const operation = entry.operation
-      await worker.call('markSent', { operationId: operation.operationId })
-      await worker.call('receipt', {
-        ownerId: 'synthetic-offline-qa',
-        receipt: {
-          operationId: operation.operationId,
-          completionId: operation.completionId,
-          revision: operation.revision,
-          status: 'applied',
-          projection: {
-            completionId: operation.completionId,
-            revision: operation.revision,
-            cancelled: operation.kind === 'cancel',
-            categoryId: operation.categoryId,
-            title: operation.title,
-            completedAt: operation.completedAt,
-          },
-        },
-      })
-    }
+    const sent = await worker.call('markSentBatch', {
+      accountId: QA_ACCOUNT_ID,
+      operationIds: pending.map((entry) => entry.operation.operationId),
+    })
+    await worker.call('receipts', {
+      accountId: QA_ACCOUNT_ID,
+      receipts: sent.flatMap((entry) =>
+        entry.wire
+          ? [
+              {
+                operationId: entry.wire.operationId,
+                completionId: entry.wire.completionId,
+                revision: entry.wire.revision,
+                status: 'applied',
+                projection: {
+                  completionId: entry.wire.completionId,
+                  revision: entry.wire.revision,
+                  cancelled: entry.wire.kind === 'cancel',
+                  categoryId: entry.wire.categoryId,
+                  title: entry.wire.title,
+                  completedAt: entry.wire.completedAt,
+                },
+              },
+            ]
+          : [],
+      ),
+    })
     sync = 'idle'
   }
   await publish()

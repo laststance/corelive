@@ -5,10 +5,17 @@ import { cpus, platform, release, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { monitorEventLoopDelay, performance } from 'node:perf_hooks'
 
-import { OfflineWorkspaceSchema } from '@corelive/desktop-contract/offline-workspace'
-import { UserSettingsStateSchema } from '@corelive/desktop-contract/settings'
+import {
+  DEVICE_OWNER_ID,
+  DEVICE_WORKSPACE_FILE_NAME,
+  OfflineWorkspaceSchema,
+} from '@corelive/desktop-contract/offline-workspace-v2'
 
 import { AtomicWorkspaceFile } from '../electron/offline/AtomicWorkspaceFile'
+import {
+  buildDeviceWorkspace,
+  categoryUuid,
+} from '../electron/offline/deviceWorkspaceFixture'
 import { WorkspaceService } from '../electron/offline/WorkspaceService'
 import { WorkspaceWorkerClient } from '../electron/offline/WorkspaceWorkerClient'
 
@@ -33,37 +40,25 @@ async function main(): Promise<void> {
   const results = []
   try {
     for (const pendingIdentities of [0, 1, 100, 1000, 10000]) {
-      const ownerId = `fixture-${pendingIdentities}`
+      // One directory per size so each fixture is an independent device workspace.
+      const sizeDirectory = join(directory, `fixture-${pendingIdentities}`)
       const notes = Object.fromEntries(
         Array.from({ length: 20 }, (_, index) => [
-          String(index + 1),
+          index + 1,
           `Category ${index + 1}\n${'Synthetic writing only.\n'.repeat(100)}`,
         ]),
       )
-      const file = new AtomicWorkspaceFile({
-        directory,
-        ownerId,
+      const fileOptions = {
+        directory: sizeDirectory,
+        ownerId: DEVICE_OWNER_ID,
+        fileName: DEVICE_WORKSPACE_FILE_NAME,
         parse: OfflineWorkspaceSchema.parse,
-      })
+      }
+      const file = new AtomicWorkspaceFile(fileOptions)
       const service = new WorkspaceService(file)
-      let workspace = await service.prepare({
-        ownerId,
-        deviceId: randomUUID(),
-        categories: Array.from({ length: 20 }, (_, index) => ({
-          id: index + 1,
-          name: `Category ${index + 1}`,
-          color: 'blue',
-          isDefault: index === 0,
-          parentId: null,
-          removed: false,
-        })),
-        preferences: {
-          revision: 0,
-          theme: 'cathedral-light',
-          settings: UserSettingsStateSchema.parse({}),
-        },
-        legacyNotes: notes,
-      })
+      let workspace = await file.initialize(
+        buildDeviceWorkspace({ categoryCount: 20, notes }),
+      )
       const seeded = structuredClone(workspace)
       for (let index = 0; index < pendingIdentities; index++) {
         const id = randomUUID()
@@ -72,8 +67,8 @@ async function main(): Promise<void> {
         const completedAt = Date.now()
         seeded.completions[id] = {
           id,
-          categoryId: (index % 20) + 1,
-          originalCategoryId: (index % 20) + 1,
+          categoryId: categoryUuid((index % 20) + 1),
+          originalCategoryId: categoryUuid((index % 20) + 1),
           title,
           rawText: title,
           lineId: randomUUID(),
@@ -98,7 +93,7 @@ async function main(): Promise<void> {
             revision: 1,
             expectedRemoteRevision: 0,
             kind: 'create',
-            categoryId: (index % 20) + 1,
+            categoryId: categoryUuid((index % 20) + 1),
             title,
             completedAt,
             originalCompletedAt: completedAt,
@@ -113,11 +108,7 @@ async function main(): Promise<void> {
       }
       workspace = await file.update(() => seeded)
       const coldStart = performance.now()
-      await new AtomicWorkspaceFile({
-        directory,
-        ownerId,
-        parse: OfflineWorkspaceSchema.parse,
-      }).read()
+      await new AtomicWorkspaceFile(fileOptions).read()
       const firstReopenMs = performance.now() - coldStart
       const acknowledgements: number[] = []
       const serialization: number[] = []
@@ -142,11 +133,11 @@ async function main(): Promise<void> {
         JSON.stringify(workspace)
         const stringifyMs = performance.now() - stringifyStart
         const start = performance.now()
-        const currentDraft = workspace.drafts['1']!
+        const currentDraft = workspace.drafts[categoryUuid(1)]!
         workspace = await service.execute({
           type: 'save',
           commandId: randomUUID(),
-          categoryId: 1,
+          categoryId: categoryUuid(1),
           baseRevision: currentDraft.revision,
           rows: currentDraft.rows.map((row, index) =>
             index === 0 ? { ...row, text: `Edit ${sample}` } : row,
@@ -166,8 +157,8 @@ async function main(): Promise<void> {
           '../electron/offline/workspace-worker.ts',
           import.meta.url,
         ),
-        directory,
-        ownerId,
+        directory: sizeDirectory,
+        ownerId: DEVICE_OWNER_ID,
         execArgv: ['--import', 'tsx'],
       })
       const workerAcknowledgements: number[] = []
@@ -180,7 +171,7 @@ async function main(): Promise<void> {
           view = await worker.call('command', {
             type: 'save',
             commandId: randomUUID(),
-            categoryId: 1,
+            categoryId: categoryUuid(1),
             baseRevision: view.draft.revision,
             rows: view.draft.rows.map((row, index) =>
               index === 0 ? { ...row, text: `Worker edit ${sample}` } : row,

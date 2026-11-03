@@ -16,7 +16,7 @@ import type {
   OfflineFlushRequest,
   OfflineIPCChannels,
 } from './offline-editor-api'
-import type { OfflineEditorSnapshot } from './offline-workspace'
+import type { OfflineEditorSnapshot } from './offline-workspace-v2'
 
 /**
  * Auth user payload exchanged on auth IPC channels.
@@ -394,7 +394,7 @@ export interface IPCEventChannels {
   'offline-editor-changed': OfflineEditorSnapshot
   'offline-editor-flush': OfflineFlushRequest
   'offline-editor-shown': void
-  'offline-editor-category-created': { generation: number; categoryId: number }
+  'offline-editor-category-created': { generation: number; categoryId: string }
   'offline-settings-changed': void
   'offline-settings-manage-categories': void
   'offline-auth-request': OfflineAuthRequest

@@ -2,7 +2,7 @@ import type { LiveEditorAPI } from '@corelive/desktop-contract/electron-api'
 import type {
   OfflineCompletion,
   OfflineEditorSnapshot,
-} from '@corelive/desktop-contract/offline-workspace'
+} from '@corelive/desktop-contract/offline-workspace-v2'
 import { applyThemeAttribute } from '@corelive/live-editor/theme-transition'
 import {
   DEFAULT_THEME_PREFERENCE,
@@ -170,7 +170,8 @@ function PreparedEditor({
   }, [])
   const { workspace } = main
   const { settings } = workspace.preferences
-  const online = main.sync === 'idle' || main.sync === 'syncing'
+  const online =
+    main.sync.state !== 'waiting' && main.sync.state !== 'sign-in-to-sync'
   const input = useEditorInput({
     ref: textarea,
     value: state.text,
@@ -198,7 +199,7 @@ function PreparedEditor({
   }, [state.notice, store])
 
   const select = useCallback(
-    async (categoryId: number): Promise<void> => {
+    async (categoryId: string): Promise<void> => {
       if (
         await store.command({
           type: 'select',
@@ -312,7 +313,7 @@ function PreparedEditor({
         <SharedCategoryPicker
           categories={workspace.categories}
           activeCategoryId={workspace.selectedCategoryId}
-          onCategoryValueChange={(value) => void select(Number(value))}
+          onCategoryValueChange={(value) => void select(value)}
           actionsDisabled={!online}
           onManage={() => void run(async () => store.host.manageCategories())}
           onCreate={(initialName) =>

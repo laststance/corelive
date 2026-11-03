@@ -2,8 +2,7 @@
 /**
  * @fileoverview SharedCategoryPicker pins ported from the deleted web
  * LiveEditorCategoryPicker suite (#215). If these fail, the desktop panel's
- * category search misses parent/child paths, selects a still-pending category
- * ID, closes on an IME confirmation, or offers account actions while signed out.
+ * category search misses parent/child paths, closes on an IME confirmation, or offers account actions while signed out.
  */
 import '@testing-library/jest-dom/vitest'
 import {
@@ -21,10 +20,22 @@ import {
 } from './SharedCategoryPicker'
 
 const categories: PickerCategory[] = [
-  { id: 1, name: 'General', parentId: null },
-  { id: 2, name: 'Work', parentId: null },
-  { id: 3, name: 'CoreLive', parentId: 2 },
-  { id: 4, name: 'Client work', parentId: 2 },
+  {
+    id: '00000000-0000-4000-8000-0000000000a1',
+    name: 'General',
+    parentId: null,
+  },
+  { id: '00000000-0000-4000-8000-0000000000a2', name: 'Work', parentId: null },
+  {
+    id: '00000000-0000-4000-8000-0000000000a3',
+    name: 'CoreLive',
+    parentId: '00000000-0000-4000-8000-0000000000a2',
+  },
+  {
+    id: '00000000-0000-4000-8000-0000000000a4',
+    name: 'Client work',
+    parentId: '00000000-0000-4000-8000-0000000000a2',
+  },
 ]
 
 const ACTIVE_TRIGGER_NAME = 'Writing category: Work / CoreLive'
@@ -58,7 +69,7 @@ function renderPicker(rows: PickerCategory[] = categories) {
   render(
     <SharedCategoryPicker
       categories={rows}
-      activeCategoryId={3}
+      activeCategoryId="00000000-0000-4000-8000-0000000000a3"
       onCategoryValueChange={select}
       onCreate={create}
       onManage={manage}
@@ -100,25 +111,14 @@ describe('SharedCategoryPicker', () => {
     ).toBeVisible()
     expect(screen.queryByRole('option', { name: /CoreLive/ })).toBeNull()
     fireEvent.click(screen.getByRole('option', { name: 'Work / Client work' }))
-    expect(select).toHaveBeenCalledWith('4')
+    expect(select).toHaveBeenCalledWith('00000000-0000-4000-8000-0000000000a4')
     await waitFor(() => expect(trigger).toHaveFocus())
   })
 
-  test('never selects a pending category ID and keeps actions reachable when search has no results', async () => {
+  test('keeps the Create action reachable when search has no results', async () => {
     // Arrange
-    const { select, create } = renderPicker([
-      ...categories,
-      { id: -1, name: 'Pending', parentId: 2 },
-    ])
+    const { select, create } = renderPicker()
     openPicker(ACTIVE_TRIGGER_NAME)
-    const pendingOption = screen.getByRole('option', { name: 'Work / Pending' })
-
-    // Act: a pending option cannot be chosen.
-    fireEvent.click(pendingOption)
-
-    // Assert
-    expect(pendingOption).toHaveAttribute('aria-disabled', 'true')
-    expect(select).not.toHaveBeenCalled()
 
     // Act: no search result leaves the Create action as the first item.
     const input = screen.getByRole('combobox', { name: 'Search categories' })

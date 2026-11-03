@@ -1,11 +1,13 @@
 import { join } from 'node:path'
 
-import { app } from 'electron'
+import { app, session } from 'electron'
 
 import type { ConfigManager } from '../ConfigManager'
+import { log } from '../logger'
 import type { WindowManager } from '../WindowManager'
 
 import { createSyncTransport } from './createSyncTransport'
+import { endLocalSession } from './localSessionEnd'
 import { OfflineEditorController } from './OfflineEditorController'
 import { OfflineEditorIPC } from './OfflineEditorIPC'
 import { TokenBroker } from './TokenBroker'
@@ -32,11 +34,14 @@ export function createOfflineEditor(
     legacyNotes: () =>
       config.get<Record<string, string>>('liveEditor.notes', {}),
     requestFlush: async (generation) => ipc.flush(generation),
-    onPreparationCancelled: (generation) =>
-      ipc.resumeAfterCancelledTransition(generation),
-    openSettingsForPreparation: () => {
-      windows.createSettingsWindow(true)
-    },
+    // D3 step 4 always targets the default session; no partition exists anywhere (C3).
+    endLocalSession: async () =>
+      endLocalSession({
+        session: session.defaultSession,
+        appOrigin: origin,
+        log: (line) => log.info(line),
+      }),
+    log: (line) => log.info(line),
     onSnapshot: (snapshot) => ipc.publish(snapshot),
     onSettingsContext: () => ipc.settingsChanged(),
   })
@@ -47,8 +52,7 @@ export function createOfflineEditor(
   )
   windows.setOnEditorShown(() => {
     ipc.shown()
-    if (controller.getSnapshot().phase === 'ready')
-      controller.retryPreparation()
+    if (controller.getSnapshot().phase === 'ready') controller.retrySync()
   })
   return { controller, ipc }
 }

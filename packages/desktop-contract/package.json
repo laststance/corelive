@@ -16,6 +16,7 @@
     "./offline-workspace": "./src/offline-workspace.ts",
     "./offline-sync": "./src/offline-sync.ts",
     "./offline-workspace-v2": "./src/offline-workspace-v2.ts",
+    "./offline-account": "./src/offline-account.ts",
     "./category-sync": "./src/category-sync.ts",
     "./category-validator": "./src/category-validator.ts",
     "./offline-editor-api": "./src/offline-editor-api.ts"

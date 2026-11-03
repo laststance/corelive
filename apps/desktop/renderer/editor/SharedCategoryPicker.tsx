@@ -23,16 +23,16 @@ import { useMemo, useRef, useState } from 'react'
 import { isEditorComposing } from './editorInput'
 
 export interface PickerCategory {
-  id: number
+  id: string
   name: string
-  parentId?: number | null
+  parentId?: string | null
   createdAt?: Date | string
   removed?: boolean
 }
 
 export interface SharedCategoryPickerProps {
   categories: PickerCategory[]
-  activeCategoryId: number | null
+  activeCategoryId: string | null
   onCategoryValueChange: (value: string) => void
   isLoading?: boolean
   isError?: boolean
@@ -48,7 +48,7 @@ export interface SharedCategoryPickerProps {
  *
  * @param categories - Current category rows; pending IDs remain visible but unselectable.
  * @example
- * <SharedCategoryPicker categories={categories} activeCategoryId={12} onCategoryValueChange={setCategory} />
+ * <SharedCategoryPicker categories={categories} activeCategoryId="0b1f…" onCategoryValueChange={setCategory} />
  */
 export function SharedCategoryPicker({
   categories,
@@ -76,7 +76,8 @@ export function SharedCategoryPicker({
     () => searchCategoryHierarchy(categories, state.query),
     [categories, state.query],
   )
-  const active = hierarchy.byId.get(activeCategoryId ?? 0)
+  const active =
+    activeCategoryId === null ? undefined : hierarchy.byId.get(activeCategoryId)
   const activePath = active
     ? (hierarchy.paths.get(active.id) ?? active.name)
     : 'No categories'
@@ -199,15 +200,12 @@ export function SharedCategoryPicker({
                         ? 'Current writing category'
                         : undefined
                     }
-                    disabled={category.id <= 0}
                     className={cn(
                       'min-h-11 break-words',
                       !state.query.trim() && category.parentId ? 'pl-6' : '',
                     )}
                     onSelect={() => {
-                      // Pending (optimistic) IDs are not selectable until confirmed.
-                      if (category.id <= 0) return
-                      onCategoryValueChange(String(category.id))
+                      onCategoryValueChange(category.id)
                       setState((current) => ({ ...current, open: false }))
                     }}
                   >
@@ -216,7 +214,6 @@ export function SharedCategoryPicker({
                         ? hierarchy.paths.get(category.id)
                         : category.name}
                       {category.removed && ' (removed)'}
-                      {category.id < 0 && ' — Creating…'}
                     </span>
                     {category.id === activeCategoryId && (
                       <>

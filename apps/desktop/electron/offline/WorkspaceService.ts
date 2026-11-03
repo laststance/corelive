@@ -1,18 +1,22 @@
 import { createHash, randomUUID } from 'node:crypto'
 
 import {
-  CountCheckpointSchema,
   CompletionSyncReceiptSchema,
-  OfflineWorkspaceSchema,
-  WorkspaceCommandSchema,
+  CountCheckpointSchema,
+  type CompletionProjection,
+  type CompletionSyncReceipt,
   type DraftRow,
   type EditorCategory,
-  type OfflineCompletion,
   type OfflineDraft,
-  type OfflinePreferences,
-  type OfflineWorkspace,
-  type WorkspaceCommand,
 } from '@corelive/desktop-contract/offline-workspace'
+import {
+  WorkspaceCommandSchema,
+  type LocalCompletionProjection,
+  type OfflineCompletion,
+  type OfflineWorkspace,
+  type OutboxEntry,
+  type WorkspaceCommand,
+} from '@corelive/desktop-contract/offline-workspace-v2'
 
 import { diffDraftRows } from '../../renderer/editor/draftEdits'
 import { getDraftInputLimit } from '../../renderer/editor/draftInputLimit'
@@ -42,17 +46,9 @@ export class WorkspaceCommandError extends Error {
   }
 }
 
-type Preparation = {
-  ownerId: string
-  categories: EditorCategory[]
-  preferences: OfflinePreferences
-  legacyNotes: Record<string, string>
-  deviceId: string
-}
-
 /**
  * Commits editor commands, captured Undo and outgoing completion identities together.
- * The main-process controller owns this service per verified account. Renderer commands
+ * The storage worker owns one instance for the device workspace. Renderer commands
  * never receive success until {@link AtomicWorkspaceFile} has flushed the transaction.
  * No credentials, network calls or UI callbacks enter the reducer.
  *
@@ -66,54 +62,6 @@ export class WorkspaceService {
     private readonly now: () => number = Date.now,
     private readonly nextId: () => string = randomUUID,
   ) {}
-
-  /**
-   * Prepares only API-verified owned categories; unmapped legacy notes stay in recovery.
-   * Originals remain in legacy config and are never dual-written after migration.
-   * @example await service.prepare({ ownerId, categories, preferences, legacyNotes, deviceId })
-   */
-  async prepare(input: Preparation): Promise<OfflineWorkspace> {
-    const defaultCategory = input.categories.find(
-      (category) => category.isDefault && !category.removed,
-    )
-    if (!defaultCategory)
-      throw new WorkspaceCommandError('category-unavailable')
-    const drafts: OfflineWorkspace['drafts'] = {}
-    const sourceHashes: Record<string, string> = {}
-    const unmappedCategoryIds: string[] = []
-    for (const [key, text] of Object.entries(input.legacyNotes)) {
-      if (input.categories.some((category) => String(category.id) === key)) {
-        sourceHashes[key] = digest(text)
-        drafts[key] = { revision: 0, rows: this.rows(text) }
-      } else {
-        // Unverified plaintext stays only in preserved legacy config, never in this account's export.
-        unmappedCategoryIds.push(key)
-      }
-    }
-    for (const category of input.categories) {
-      drafts[String(category.id)] ??= { revision: 0, rows: this.rows('') }
-    }
-    return this.file.initialize(
-      OfflineWorkspaceSchema.parse({
-        version: 1,
-        ownerId: input.ownerId,
-        deviceId: input.deviceId,
-        revision: 0,
-        preparedAt: this.now(),
-        selectedCategoryId: defaultCategory.id,
-        categories: input.categories,
-        preferences: input.preferences,
-        drafts,
-        completions: {},
-        outbox: {},
-        commandReceipts: {},
-        categoryMoves: {},
-        migration: { version: 1, sourceHashes, unmappedCategoryIds },
-        checkpoint: null,
-        recoveryCopies: [],
-      }),
-    )
-  }
 
   /**
    * Validates/idempotently applies one user intent. Same command ID with different bytes
@@ -150,51 +98,62 @@ export class WorkspaceService {
   }
 
   /**
-   * Marks delivery uncertain before the network request; replay keeps exactly these bytes.
-   * @example const state = await service.markSent(operationId)
+   * Freezes and marks sendable operations in flight in one transaction, before any request leaves
+   * the process (D1, EA3). Only the bound account can send; an operation whose category has no
+   * server id yet stays queued (D4 last bullet).
+   * @param accountId - The attached account; anything but the binding's account sends nothing.
+   * @param operationIds - Candidate queued operations.
+   * @returns The entries that are now in flight, each with its frozen server-id `wire` payload.
+   * @example const sent = await service.markSentBatch(accountId, ids)
    */
-  async markSent(operationId: string): Promise<OfflineWorkspace> {
-    return this.markSentBatch([operationId])
-  }
-
-  /** Persists a bounded dispatch batch before any request leaves the process.
-   * @example await service.markSentBatch(operationIds)
-   */
-  async markSentBatch(operationIds: string[]): Promise<OfflineWorkspace> {
-    return this.file.update((current) => {
-      const ids = operationIds.filter(
-        (id) => current.outbox[id]?.state === 'queued',
+  async markSentBatch(
+    accountId: string,
+    operationIds: string[],
+  ): Promise<OutboxEntry[]> {
+    const state = await this.file.update((current) => {
+      const binding = current.binding
+      if (binding?.accountId !== accountId) return current
+      const candidates = operationIds.filter(
+        (id) =>
+          current.outbox[id]?.state === 'queued' &&
+          binding.serverCategoryIds[current.outbox[id].operation.categoryId] !==
+            undefined,
       )
-      if (!ids.length) return current
-      const state = structuredClone(current)
-      for (const id of ids) state.outbox[id]!.state = 'sent'
-      state.revision++
-      return state
+      if (!candidates.length) return current
+      const next = structuredClone(current)
+      for (const id of candidates) {
+        const entry = next.outbox[id]!
+        // Server ids are mapped exactly once here; every retry sends these stored bytes.
+        entry.wire = {
+          ...entry.operation,
+          categoryId: binding.serverCategoryIds[entry.operation.categoryId]!,
+        }
+        entry.state = 'sent'
+      }
+      next.revision++
+      return next
     })
+    return operationIds.flatMap((id) =>
+      state.outbox[id]?.state === 'sent' ? [state.outbox[id]] : [],
+    )
   }
 
-  /** Persists one exact receipt; batch delivery uses the same transaction reducer.
-   * @example await service.acceptReceipt(ownerId, receipt)
-   */
-  async acceptReceipt(
-    ownerId: string,
-    input: unknown,
-  ): Promise<OfflineWorkspace> {
-    return this.acceptReceipts(ownerId, [input])
-  }
-
-  /** Stores all returned receipts with one durable acknowledgement before retiring their work.
-   * @example await service.acceptReceipts(ownerId, response.receipts)
+  /**
+   * Stores all returned receipts with one durable acknowledgement before retiring their work.
+   * A late receipt after detach still applies, but only to its own `operationId` (EA16).
+   * @param accountId - Must equal the binding's account (C10, P3).
+   * @param inputs - Wire receipts with server category ids.
+   * @example await service.acceptReceipts(accountId, response.receipts)
    */
   async acceptReceipts(
-    ownerId: string,
+    accountId: string,
     inputs: unknown[],
   ): Promise<OfflineWorkspace> {
     const receipts = inputs.map((input) =>
       CompletionSyncReceiptSchema.parse(input),
     )
     return this.file.update((current) => {
-      if (current.ownerId !== ownerId)
+      if (current.binding?.accountId !== accountId)
         throw new WorkspaceCommandError('command-conflict')
       if (!receipts.some((receipt) => current.outbox[receipt.operationId]))
         return current
@@ -210,16 +169,23 @@ export class WorkspaceService {
    */
   private applyReceipt(
     state: OfflineWorkspace,
-    receipt: ReturnType<typeof CompletionSyncReceiptSchema.parse>,
+    wireReceipt: CompletionSyncReceipt,
   ): void {
-    const pending = state.outbox[receipt.operationId]
+    const pending = state.outbox[wireReceipt.operationId]
     if (!pending) return
     if (
-      pending.operation.completionId !== receipt.completionId ||
-      pending.operation.revision !== receipt.revision
+      pending.operation.completionId !== wireReceipt.completionId ||
+      pending.operation.revision !== wireReceipt.revision
     )
       throw new WorkspaceCommandError('command-conflict')
-    const completion = this.completion(state, receipt.completionId)
+    const completion = this.completion(state, wireReceipt.completionId)
+    const toLocal = localProjectionMapper(state, completion.categoryId)
+    const receipt = {
+      ...wireReceipt,
+      projection: wireReceipt.projection
+        ? toLocal(wireReceipt.projection)
+        : null,
+    }
     if (
       receipt.projection &&
       receipt.projection.revision >= (completion.remote?.revision ?? 0)
@@ -252,38 +218,142 @@ export class WorkspaceService {
   }
 
   /**
-   * Refreshes names/hierarchy without deleting any missing category's writing or Undo.
-   * Confirmed moves are a separate user command, including when a server receipt suggests one.
-   * @example await service.refreshCategories(ownedCategories)
+   * Mirrors the attached account's categories into the device workspace (minimal D2 attach merge).
+   * The first call binds the account; later calls apply one-sided server changes, add
+   * server-only categories and keep a removed category's writing (it is never dropped).
+   * Local-only edits are left for the full D4 merge.
+   * @param input - The verified account id/email and the server category list with deletions.
+   * @throws {@link WorkspaceCommandError} `command-conflict` when another account is bound (C10).
+   * @example await service.reconcileCategories({ accountId, displayEmail, categories, deletions })
    */
-  async refreshCategories(
-    categories: EditorCategory[],
-    deletions: { sourceId: number; destinationId: number }[] = [],
-    legacyNotes?: Record<string, string>,
-  ): Promise<OfflineWorkspace> {
+  async reconcileCategories(input: {
+    accountId: string
+    displayEmail: string | null
+    categories: EditorCategory[]
+    deletions: { sourceId: number; destinationId: number }[]
+  }): Promise<OfflineWorkspace> {
     return this.file.update((current) => {
+      if (current.binding && current.binding.accountId !== input.accountId)
+        throw new WorkspaceCommandError('command-conflict')
       const state = structuredClone(current)
-      const freshIds = new Set(categories.map((category) => category.id))
-      state.categories = [
-        ...categories.map((category) => ({ ...category, removed: false })),
-        ...state.categories
-          .filter(
-            (category) =>
-              !freshIds.has(category.id) &&
-              !state.categoryMoves[String(category.id)],
-          )
-          .map((category) => ({ ...category, removed: true })),
+      state.binding ??= {
+        accountId: input.accountId,
+        displayEmail: input.displayEmail,
+        serverCategoryIds: {},
+        base: {},
+        declined: {},
+        deletionReceipts: {},
+        lastSyncedAt: null,
+      }
+      const binding = state.binding
+      if (input.displayEmail) binding.displayEmail = input.displayEmail
+      const serverToLocal = new Map(
+        Object.entries(binding.serverCategoryIds).map(
+          ([localId, serverId]) => [serverId, localId] as const,
+        ),
+      )
+      const live = input.categories.filter((category) => !category.removed)
+      // Roots first so a child can resolve its parent's local id.
+      const ordered = [
+        ...live.filter((category) => category.parentId === null),
+        ...live.filter((category) => category.parentId !== null),
       ]
-      for (const deletion of deletions)
-        state.categoryDeletions[String(deletion.sourceId)] =
-          deletion.destinationId
-      for (const category of categories)
-        state.drafts[String(category.id)] ??= {
-          revision: 0,
-          rows: this.rows(''),
+      for (const server of ordered) {
+        const parentLocalId =
+          server.parentId === null
+            ? null
+            : (serverToLocal.get(server.parentId) ?? null)
+        let localId = serverToLocal.get(server.id)
+        if (!localId) {
+          const match = state.categories.find(
+            (category) =>
+              !category.removed &&
+              !category.historical &&
+              binding.serverCategoryIds[category.id] === undefined &&
+              (server.isDefault
+                ? category.isDefault
+                : !category.isDefault &&
+                  category.name === server.name &&
+                  category.parentId === parentLocalId),
+          )
+          localId = match?.id ?? this.nextId()
+          if (!match) {
+            state.categories.push({
+              id: localId,
+              name: server.name,
+              color: server.color,
+              isDefault: server.isDefault,
+              parentId: parentLocalId,
+              removed: false,
+              historical: false,
+              fieldRevisions: { name: 0, color: 0, parentLocalId: 0 },
+            })
+            state.drafts[localId] ??= { revision: 0, rows: this.rows('') }
+          }
+          binding.serverCategoryIds[localId] = server.id
+          serverToLocal.set(server.id, localId)
+          binding.base[localId] = {
+            name: server.name,
+            color: server.color,
+            parentLocalId,
+          }
+          continue
         }
-      if (legacyNotes)
-        this.preserveLegacyChanges(state, categories, legacyNotes)
+        // A field changed only on the server takes the server value; both-changed waits for D4.
+        const local = state.categories.find(
+          (category) => category.id === localId,
+        )
+        const base = binding.base[localId]
+        if (local && base) {
+          if (local.name === base.name && server.name !== base.name)
+            local.name = server.name
+          if (local.color === base.color && server.color !== base.color)
+            local.color = server.color
+          if (
+            local.parentId === base.parentLocalId &&
+            parentLocalId !== base.parentLocalId
+          )
+            local.parentId = parentLocalId
+          if (local.name === server.name) base.name = server.name
+          if (local.color === server.color) base.color = server.color
+          if (local.parentId === parentLocalId)
+            base.parentLocalId = parentLocalId
+        }
+      }
+      // A bound category the server no longer lists keeps its writing and awaits a confirmed move.
+      const liveServerIds = new Set(live.map((category) => category.id))
+      for (const [localId, serverId] of Object.entries(
+        binding.serverCategoryIds,
+      )) {
+        if (liveServerIds.has(serverId)) continue
+        const local = state.categories.find(
+          (category) => category.id === localId,
+        )
+        if (local) local.removed = true
+        const destination = resolveServerDeletion(
+          serverId,
+          input.deletions,
+          serverToLocal,
+        )
+        if (destination) binding.deletionReceipts[localId] = destination
+        delete binding.serverCategoryIds[localId]
+        delete binding.base[localId]
+        serverToLocal.delete(serverId)
+      }
+      state.revision++
+      return state
+    })
+  }
+
+  /**
+   * Records the end of a sync pass with nothing sendable left (C22).
+   * @example await service.markSynced(accountId, Date.now())
+   */
+  async markSynced(accountId: string, at: number): Promise<OfflineWorkspace> {
+    return this.file.update((current) => {
+      if (current.binding?.accountId !== accountId) return current
+      const state = structuredClone(current)
+      state.binding!.lastSyncedAt = at
       state.revision++
       return state
     })
@@ -291,17 +361,30 @@ export class WorkspaceService {
 
   /** Persists a coherent count checkpoint and retires only fully resolved payloads.
    * Undo, delayed clear and uncertain delivery keep their original recovery text alive.
-   * @example await service.checkpoint(expectedRevision, checkpoint)
+   * Retirement keeps each completion's text on the Mac (C28).
+   * @example await service.checkpoint(accountId, expectedRevision, checkpoint)
    */
   async checkpoint(
+    accountId: string,
     expectedRevision: number,
     input: unknown,
   ): Promise<OfflineWorkspace> {
-    const checkpoint = CountCheckpointSchema.parse(input)
+    const wire = CountCheckpointSchema.parse(input)
     return this.file.update((current) => {
-      if (current.revision !== expectedRevision) return current
+      if (
+        current.revision !== expectedRevision ||
+        current.binding?.accountId !== accountId
+      )
+        return current
       const state = structuredClone(current)
-      state.checkpoint = checkpoint
+      const toLocal = localProjectionMapper(state, null)
+      const identities: NonNullable<
+        OfflineWorkspace['checkpoint']
+      >['identities'] = {}
+      for (const [id, projection] of Object.entries(wire.identities))
+        identities[id] = projection ? toLocal(projection) : null
+      state.checkpoint = { ...wire, identities }
+      const checkpoint = state.checkpoint
       const pending = new Set(
         Object.values(state.outbox).map(
           (entry) => entry.operation.completionId,
@@ -328,6 +411,8 @@ export class WorkspaceService {
           cancelled: remote.cancelled,
           revision: completion.revision,
           remoteRevision: remote.revision,
+          title: completion.title,
+          rawText: completion.rawText,
         }
         delete state.completions[completion.id]
       }
@@ -421,7 +506,7 @@ export class WorkspaceService {
 
     for (const [key, other] of Object.entries(state.drafts)) {
       if (
-        key !== String(command.categoryId) &&
+        key !== command.categoryId &&
         other.rows.some((row) => unique.has(row.id))
       )
         throw new WorkspaceCommandError('invalid-row')
@@ -745,9 +830,9 @@ export class WorkspaceService {
       to.revision++
     }
 
-    state.categoryMoves[String(source)] = destination
+    state.categoryMoves[source] = destination
 
-    delete state.drafts[String(source)]
+    delete state.drafts[source]
 
     state.categories = state.categories.filter(
       (category) => category.id !== source,
@@ -880,35 +965,6 @@ export class WorkspaceService {
     this.queueDesired(state, completion)
   }
 
-  /** Preserves later changes from an older binary without replacing the upgraded workspace.
-   * Category ownership comes from the verified bootstrap; unknown plaintext stays outside this account.
-   * @example this.preserveLegacyChanges(state, ownedCategories, legacyNotes)
-   */
-  private preserveLegacyChanges(
-    state: OfflineWorkspace,
-    categories: EditorCategory[],
-    notes: Record<string, string>,
-  ): void {
-    const owned = new Set(categories.map((category) => String(category.id)))
-    for (const [key, text] of Object.entries(notes)) {
-      if (!owned.has(key)) continue
-      const hash = digest(text)
-      if (
-        hash === state.migration.sourceHashes[key] ||
-        hash === state.migration.observedHashes[key]
-      )
-        continue
-      state.recoveryCopies.push({
-        id: this.nextId(),
-        categoryId: Number(key),
-        text,
-        reason: 'legacy-changed',
-        createdAt: this.now(),
-      })
-      state.migration.observedHashes[key] = hash
-    }
-  }
-
   /** Appends an explicitly selected recovery copy once, preserving newer destination writing.
    * @example this.restoreRecoveryCopy(state, command)
    */
@@ -1010,8 +1066,8 @@ export class WorkspaceService {
   /** Resolves an accessible draft; retired sources require the caller's explicit rebase.
    * @example const draft = this.draft(state, categoryId)
    */
-  private draft(state: OfflineWorkspace, categoryId: number): OfflineDraft {
-    const draft = state.drafts[String(categoryId)]
+  private draft(state: OfflineWorkspace, categoryId: string): OfflineDraft {
+    const draft = state.drafts[categoryId]
     if (
       !draft ||
       !state.categories.some((category) => category.id === categoryId)
@@ -1047,17 +1103,65 @@ export class WorkspaceService {
  */
 export function effectiveCategory(
   state: OfflineWorkspace,
-  categoryId: number,
-): number {
-  const visited = new Set<number>()
+  categoryId: string,
+): string {
+  const visited = new Set<string>()
   let current = categoryId
-  while (state.categoryMoves[String(current)]) {
+  while (state.categoryMoves[current]) {
     if (visited.has(current))
       throw new WorkspaceCommandError('category-unavailable')
     visited.add(current)
-    current = state.categoryMoves[String(current)]!
+    current = state.categoryMoves[current]!
   }
   return current
+}
+
+/**
+ * Builds the server -> local projection mapper from the binding's reverse id map.
+ * An id the binding does not know keeps `fallbackCategoryId`, or the first local id, so a
+ * receipt never fails to apply just because a category was unbound meanwhile.
+ * @example const toLocal = localProjectionMapper(state, completion.categoryId)
+ */
+function localProjectionMapper(
+  state: OfflineWorkspace,
+  fallbackCategoryId: string | null,
+): (projection: CompletionProjection) => LocalCompletionProjection {
+  const reverse = new Map(
+    Object.entries(state.binding?.serverCategoryIds ?? {}).map(
+      ([localId, serverId]) => [serverId, localId] as const,
+    ),
+  )
+  const fallback = fallbackCategoryId ?? state.selectedCategoryId
+  return (projection) => ({
+    ...projection,
+    categoryId: reverse.get(projection.categoryId) ?? fallback,
+  })
+}
+
+/**
+ * Follows chained server deletions to a still-bound local destination (EA11c guard).
+ * @returns The local destination id, or undefined when the chain ends at an unknown category.
+ * @example resolveServerDeletion(7, deletions, serverToLocal)
+ */
+function resolveServerDeletion(
+  sourceServerId: number,
+  deletions: { sourceId: number; destinationId: number }[],
+  serverToLocal: Map<number, string>,
+): string | undefined {
+  const next = new Map(
+    deletions.map((entry) => [entry.sourceId, entry.destinationId] as const),
+  )
+  const visited = new Set<number>()
+  let current = next.get(sourceServerId)
+  // Visited-set and hop cap guard against cyclic or runaway chains.
+  for (let hop = 0; current !== undefined && hop < 1000; hop++) {
+    const local = serverToLocal.get(current)
+    if (local) return local
+    if (visited.has(current)) return undefined
+    visited.add(current)
+    current = next.get(current)
+  }
+  return undefined
 }
 
 /** Reuses the editor's established checkbox grammar for durable completion/Undo.

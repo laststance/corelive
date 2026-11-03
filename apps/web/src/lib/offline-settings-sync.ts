@@ -2,10 +2,8 @@ import type {
   OfflineSettingsAPI,
   OfflineSettingsContext,
 } from '@corelive/desktop-contract/offline-editor-api'
-import type {
-  WorkspaceCommand,
-  OfflinePreferences,
-} from '@corelive/desktop-contract/offline-workspace'
+import type { OfflinePreferences } from '@corelive/desktop-contract/offline-workspace'
+import type { WorkspaceCommand } from '@corelive/desktop-contract/offline-workspace-v2'
 import {
   UserSettingsStateSchema,
   type UserSettingsState,

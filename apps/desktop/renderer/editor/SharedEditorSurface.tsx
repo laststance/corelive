@@ -73,7 +73,7 @@ export interface SharedEditorSurfaceProps {
   onRetryCategories?: () => void
   isMounted: boolean
   isLiveEditorConfigReady: boolean
-  activeCategoryId: number | null
+  activeCategoryId: string | null
   isNoteFieldDisabled: boolean
   /**
    * Draws a hairline strike over every finished (`- [x]`) title. The desktop editor

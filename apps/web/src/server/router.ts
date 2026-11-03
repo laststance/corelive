@@ -1,3 +1,4 @@
+import { whoami } from './procedures/account'
 import {
   listCategories,
   createCategory,
@@ -24,6 +25,9 @@ import {
 } from './procedures/skillTree'
 
 export const router = {
+  account: {
+    whoami,
+  },
   home: {
     bootstrap: bootstrapHome,
   },

@@ -1,10 +1,10 @@
 /**
- * The v2 device workspace and device registry contracts (#216 D1, D2, D7).
+ * The device workspace, registry and editor runtime contracts (#216 D1, D2, D7).
  *
- * v2 sits next to the v1 schemas in `offline-workspace.ts` (which the v1 migration reads
- * and the running app still uses until the step that switches it over). Category ids are
- * local UUIDs everywhere; server ids live only in {@link AccountBindingSchema} and in
- * frozen wire payloads.
+ * These are the canonical runtime schemas. The v1 per-account schemas stay in
+ * `offline-workspace.ts` (`OfflineWorkspaceV1Schema`, ...) only for the v1 migration,
+ * together with the shared wire shapes. Category ids are local UUIDs everywhere; server
+ * ids live only in {@link AccountBindingSchema} and in frozen wire payloads.
  *
  * @module offline-workspace-v2
  */
@@ -13,15 +13,21 @@ import { z } from 'zod'
 import { CategoryColorSchema } from './category'
 import {
   CategoryFieldRevisionsSchema,
+  type SyncStatus,
   CategoryOperationSchema,
   CategoryWireOperationSchema,
 } from './category-sync'
 import {
   CompletionSyncOperationSchema,
+  DraftRowSchema,
   DraftSchema,
   OfflinePreferencesSchema,
   SyncFailureSchema,
+  type OfflineDraft,
+  type OfflinePreferences,
+  type OfflineTodayCount,
 } from './offline-workspace'
+import { UserSettingsPatchSchema } from './settings'
 
 const identity = z.uuid()
 const revision = z.number().int().nonnegative()
@@ -53,7 +59,7 @@ export const LocalCategorySchema = z.object({
 export type LocalCategory = z.infer<typeof LocalCategorySchema>
 
 /** Server projection of a completion with the category as a local id. */
-export const CompletionProjectionV2Schema = z.object({
+export const LocalCompletionProjectionSchema = z.object({
   completionId: identity,
   revision,
   cancelled: z.boolean(),
@@ -61,18 +67,18 @@ export const CompletionProjectionV2Schema = z.object({
   title: z.string(),
   completedAt: timestamp,
 })
-export type CompletionProjectionV2 = z.infer<
-  typeof CompletionProjectionV2Schema
+export type LocalCompletionProjection = z.infer<
+  typeof LocalCompletionProjectionSchema
 >
 
 /** Receipt for a completion operation, stored with local category ids. */
-export const CompletionReceiptV2Schema = z
+export const LocalCompletionReceiptSchema = z
   .object({
     operationId: identity,
     completionId: identity,
     revision,
     status: z.enum(['applied', 'rejected']),
-    projection: CompletionProjectionV2Schema.nullable(),
+    projection: LocalCompletionProjectionSchema.nullable(),
     reason: SyncFailureSchema.optional(),
   })
   .superRefine((receipt, context) => {
@@ -89,11 +95,12 @@ export const CompletionReceiptV2Schema = z
   })
 
 /** Completion operation as the editor queues it: local category id. */
-export const CompletionOperationV2Schema = CompletionSyncOperationSchema.omit({
-  categoryId: true,
-}).extend({ categoryId: identity })
+export const LocalCompletionOperationSchema =
+  CompletionSyncOperationSchema.omit({
+    categoryId: true,
+  }).extend({ categoryId: identity })
 
-export const CompletionV2Schema = z.object({
+export const OfflineCompletionSchema = z.object({
   id: identity,
   categoryId: identity,
   originalCategoryId: identity,
@@ -112,12 +119,12 @@ export const CompletionV2Schema = z.object({
   restored: z.boolean(),
   clearAfter: timestamp.nullable(),
   cleared: z.boolean(),
-  remote: CompletionProjectionV2Schema.nullable(),
+  remote: LocalCompletionProjectionSchema.nullable(),
 })
-export type CompletionV2 = z.infer<typeof CompletionV2Schema>
+export type OfflineCompletion = z.infer<typeof OfflineCompletionSchema>
 
 /** Retirement keeps the writing (C28). Entries migrated from v1 carry none (v1 never kept it). */
-export const RetiredCompletionV2Schema = z.object({
+export const RetiredCompletionSchema = z.object({
   completedAt: timestamp,
   originalCompletedAt: timestamp,
   originalCategoryId: identity,
@@ -128,19 +135,17 @@ export const RetiredCompletionV2Schema = z.object({
   title: z.string().min(1).max(255).optional(),
   rawText: z.string().optional(),
 })
-export type RetiredCompletionV2 = z.infer<typeof RetiredCompletionV2Schema>
+export type RetiredCompletion = z.infer<typeof RetiredCompletionSchema>
 
-export const CompletionOutboxEntryV2Schema = z.object({
-  operation: CompletionOperationV2Schema,
+export const OutboxEntrySchema = z.object({
+  operation: LocalCompletionOperationSchema,
   /** Frozen server-id payload, written when the entry is first marked in flight (EA3). */
   wire: CompletionSyncOperationSchema.optional(),
   state: z.enum(['queued', 'sent', 'blocked']),
   failure: SyncFailureSchema.optional(),
-  receipt: CompletionReceiptV2Schema.optional(),
+  receipt: LocalCompletionReceiptSchema.optional(),
 })
-export type CompletionOutboxEntryV2 = z.infer<
-  typeof CompletionOutboxEntryV2Schema
->
+export type OutboxEntry = z.infer<typeof OutboxEntrySchema>
 
 export const CategoryOutboxEntrySchema = z.object({
   operation: CategoryOperationSchema,
@@ -199,7 +204,7 @@ export const AccountBindingSchema = z.object({
 })
 export type AccountBinding = z.infer<typeof AccountBindingSchema>
 
-export const RecoveryCopyV2Schema = z.object({
+export const RecoveryCopySchema = z.object({
   id: identity,
   categoryId: identity,
   text: z.string(),
@@ -214,7 +219,7 @@ export const RecoveryCopyV2Schema = z.object({
     })
     .optional(),
 })
-export type RecoveryCopyV2 = z.infer<typeof RecoveryCopyV2Schema>
+export type RecoveryCopy = z.infer<typeof RecoveryCopySchema>
 
 /** D7.4 + DX8: what the migration did, keyed by v1 file checksum so each change imports once. */
 export const MigrationReceiptSchema = z.object({
@@ -261,7 +266,7 @@ export const MigrationReceiptSchema = z.object({
 export type MigrationReceipt = z.infer<typeof MigrationReceiptSchema>
 
 /** Version 2 of the workspace: one per device, `ownerId: "device"` (D1, C29). */
-export const OfflineWorkspaceV2Schema = z.object({
+export const OfflineWorkspaceSchema = z.object({
   version: z.literal(2),
   ownerId: z.literal(DEVICE_OWNER_ID),
   deviceId: identity,
@@ -271,9 +276,9 @@ export const OfflineWorkspaceV2Schema = z.object({
   categories: z.array(LocalCategorySchema),
   preferences: OfflinePreferencesSchema,
   drafts: z.record(identity, DraftSchema),
-  completions: z.record(identity, CompletionV2Schema),
-  retiredCompletions: z.record(identity, RetiredCompletionV2Schema).default({}),
-  outbox: z.record(identity, CompletionOutboxEntryV2Schema),
+  completions: z.record(identity, OfflineCompletionSchema),
+  retiredCompletions: z.record(identity, RetiredCompletionSchema).default({}),
+  outbox: z.record(identity, OutboxEntrySchema),
   categoryOutbox: z.record(identity, CategoryOutboxEntrySchema).default({}),
   commandReceipts: z.record(
     identity,
@@ -292,12 +297,15 @@ export const OfflineWorkspaceV2Schema = z.object({
       timezone: z.string(),
       total: z.number().int().nonnegative(),
       fetchedAt: timestamp,
-      identities: z.record(identity, CompletionProjectionV2Schema.nullable()),
+      identities: z.record(
+        identity,
+        LocalCompletionProjectionSchema.nullable(),
+      ),
     })
     .nullable(),
-  recoveryCopies: z.array(RecoveryCopyV2Schema),
+  recoveryCopies: z.array(RecoveryCopySchema),
 })
-export type OfflineWorkspaceV2 = z.infer<typeof OfflineWorkspaceV2Schema>
+export type OfflineWorkspace = z.infer<typeof OfflineWorkspaceSchema>
 
 /** Registry v2 = sync attachment (D2) with the sign-out journal (EA1) and pending Connect (EA2b). */
 export const DeviceRegistrySchema = z.object({
@@ -310,3 +318,126 @@ export const DeviceRegistrySchema = z.object({
     .nullable(),
 })
 export type DeviceRegistry = z.infer<typeof DeviceRegistrySchema>
+
+/** A draft read for one local category. */
+export interface OfflineDraftRecord {
+  categoryId: string
+  draft: OfflineDraft
+}
+
+const commandIdentity = z.object({ commandId: identity })
+export const WorkspaceCommandSchema = z.discriminatedUnion('type', [
+  commandIdentity.extend({
+    type: z.literal('save'),
+    categoryId: identity,
+    baseRevision: revision,
+    rows: z.array(DraftRowSchema),
+  }),
+  commandIdentity.extend({
+    type: z.literal('complete'),
+    categoryId: identity,
+    baseRevision: revision,
+    rowId: identity,
+    completionId: identity,
+    completedAt: timestamp,
+    timezone: z.string().min(1).max(100),
+  }),
+  commandIdentity.extend({ type: z.literal('undo'), completionId: identity }),
+  commandIdentity.extend({ type: z.literal('clear'), completionId: identity }),
+  commandIdentity.extend({ type: z.literal('select'), categoryId: identity }),
+  commandIdentity.extend({
+    type: z.literal('moveCategory'),
+    sourceId: identity,
+    destinationId: identity,
+  }),
+  commandIdentity.extend({
+    type: z.literal('correctTime'),
+    completionId: identity,
+    completedAt: timestamp,
+  }),
+  commandIdentity.extend({
+    type: z.literal('resolveConflict'),
+    completionId: identity,
+    choice: z.enum(['server', 'local']),
+    expectedLocalRevision: revision,
+    expectedRemoteRevision: revision,
+  }),
+  commandIdentity.extend({
+    type: z.literal('retrySync'),
+    completionId: identity,
+  }),
+  commandIdentity.extend({
+    type: z.literal('restoreRecovery'),
+    copyId: identity,
+    destinationId: identity,
+  }),
+  commandIdentity.extend({
+    type: z.literal('preferences'),
+    expectedRevision: revision,
+    patch: UserSettingsPatchSchema,
+    theme: z.string().min(1).max(50).optional(),
+  }),
+])
+export type WorkspaceCommand = z.infer<typeof WorkspaceCommandSchema>
+
+/** Bounded renderer-facing projection; large history and command ledgers stay in the worker. */
+export interface OfflineWorkspaceView {
+  ownerId: string
+  revision: number
+  selectedCategoryId: string
+  categories: LocalCategory[]
+  preferences: OfflinePreferences
+  draft: OfflineDraft
+  pendingCount: number
+  blockedCount: number
+  recentUndo: OfflineCompletion[]
+  eligibleUndoCount: number
+  checkpoint: OfflineWorkspace['checkpoint']
+  today: OfflineTodayCount
+  nextClearAt: number | null
+  nextUndoAt: number | null
+  /** Local source id -> local destination id of every removed category (D4). */
+  categoryMoves: Record<string, string>
+  recoveryCopyCount: number
+  /** The bound account's display facts; null on a Mac that never attached (DA2, X1). */
+  binding: {
+    accountId: string
+    displayEmail: string | null
+    lastSyncedAt: number | null
+  } | null
+}
+
+/**
+ * Editor sync health (D2/X1). `local-only` covers both a Mac that never attached and one
+ * that signed out; the editor then shows only the save line (DA2).
+ */
+export type OfflineSyncStatus = SyncStatus
+
+export type OfflineEditorSnapshot = {
+  /** Main's transient publication order, independent of durable workspace revisions. */
+  sequence?: number
+} & (
+  | {
+      phase: 'ready'
+      generation: number
+      workspace: OfflineWorkspaceView
+      sync: OfflineSyncStatus
+      storageError?: boolean
+      unsavedDraft?: Extract<WorkspaceCommand, { type: 'save' }>
+    }
+  | {
+      phase: 'opening' | 'recovery'
+      generation: number
+      reason?: string
+      canRecover?: boolean
+    }
+)
+export type OfflineCommandResult =
+  | {
+      ok: true
+      generation: number
+      revision: number
+      workspace: OfflineWorkspaceView | null
+      writtenDraft?: OfflineDraftRecord
+    }
+  | { ok: false; reason: string }

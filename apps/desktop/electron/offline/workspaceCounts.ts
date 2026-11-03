@@ -1,7 +1,5 @@
-import type {
-  OfflineTodayCount,
-  OfflineWorkspace,
-} from '@corelive/desktop-contract/offline-workspace'
+import type { OfflineTodayCount } from '@corelive/desktop-contract/offline-workspace'
+import type { OfflineWorkspace } from '@corelive/desktop-contract/offline-workspace-v2'
 import { toLocalDayKey } from '@corelive/live-editor/day'
 
 /** Projects one day from durable identities, overlaying each pending identity exactly once.

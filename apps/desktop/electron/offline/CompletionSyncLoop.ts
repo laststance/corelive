@@ -19,12 +19,11 @@ type LoopOptions = {
   transport: (token: string) => CompletionSyncTransport
   onView: (view: WorkspaceView, generation: number) => void
   onStatus: (status: CompletionSyncStatus, generation: number) => void
-  onCategories?: (
-    deletions: { sourceId: number; destinationId: number }[],
-    generation: number,
-  ) => void
+  /** The verified email stored in the binding at attach time (EA2). */
+  displayEmail?: () => string | null
   random?: () => number
-  legacyNotes?: () => Record<string, string>
+  /** Bound on how long {@link CompletionSyncLoop.stop} waits for an in-flight request (C9). */
+  settleTimeoutMs?: number
 }
 
 /**
@@ -40,6 +39,7 @@ export class CompletionSyncLoop {
   private stopped = false
   private failures = 0
   private abort: AbortController | null = null
+  private runPromise: Promise<void> | null = null
 
   constructor(private readonly options: LoopOptions) {}
 
@@ -57,15 +57,30 @@ export class CompletionSyncLoop {
     void this.run()
   }
 
-  /** Cancels network work and timers on logout/account transition or application shutdown.
-   * @example loop.stop()
+  /**
+   * Cancels network work and timers on sign-out, account transition or application shutdown.
+   * It aborts the in-flight request and waits for its settlement for at most
+   * `settleTimeoutMs` (5 s, C9); after the bound the request is treated as uncertain and its
+   * operations stay in the outbox for the bound account (P3).
+   * @returns Resolves once the pass settled or the bound elapsed.
+   * @example await loop.stop()
    */
-  stop(): void {
+  async stop(): Promise<void> {
     this.stopped = true
     this.again = false
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
     this.abort?.abort()
+    const running = this.runPromise
+    if (!running) return
+    let timer: ReturnType<typeof setTimeout> | undefined
+    await Promise.race([
+      running.catch(() => undefined),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, this.options.settleTimeoutMs ?? 5000)
+      }),
+    ])
+    clearTimeout(timer)
   }
 
   /** Keeps old credentials/results from updating a newly selected account's UI or worker.
@@ -88,6 +103,10 @@ export class CompletionSyncLoop {
     const context = this.options.context()
     if (!context || this.running || this.stopped) return
     this.running = true
+    let finished!: () => void
+    this.runPromise = new Promise<void>((resolve) => {
+      finished = resolve
+    })
     this.abort = new AbortController()
     const signal = this.abort.signal
     let delay = 50000
@@ -103,12 +122,23 @@ export class CompletionSyncLoop {
       if (await this.refreshCheckpoint(context, transport, signal)) delay = 20
       const remaining = await context.worker.call('pending', { limit: 1 })
       if (!this.current(context)) return
+      // C22: a pass with nothing sendable left counts as synced; dependency-waiting work does not block it.
+      if (!remaining.length) {
+        const view = await context.worker.call('markSynced', {
+          accountId: context.ownerId,
+          at: Date.now(),
+        })
+        if (!this.current(context)) return
+        this.options.onView(view, context.generation)
+      }
       this.options.onStatus('idle', context.generation)
       this.failures = 0
       if (remaining.length) delay = 20
     } catch (error) {
       this.failedPass(context, error)
     } finally {
+      this.runPromise = null
+      finished()
       this.finishPass(delay)
     }
   }
@@ -148,14 +178,14 @@ export class CompletionSyncLoop {
     if (!this.current(context)) return false
     if (bootstrap.accountId !== context.ownerId)
       throw Object.assign(new Error('Account changed'), { status: 401 })
-    const refreshed = await context.worker.call('categories', {
+    const refreshed = await context.worker.call('reconcile', {
+      accountId: context.ownerId,
+      displayEmail: this.options.displayEmail?.() ?? null,
       categories: bootstrap.categories,
       deletions: bootstrap.deletions,
-      legacyNotes: this.options.legacyNotes?.(),
     })
     if (!this.current(context)) return false
     this.options.onView(refreshed, context.generation)
-    this.options.onCategories?.(bootstrap.deletions, context.generation)
     return true
   }
 
@@ -183,7 +213,7 @@ export class CompletionSyncLoop {
     receipts: CompletionSyncReceipt[],
   ): Promise<void> {
     const view = await context.worker.call('receipts', {
-      ownerId: context.ownerId,
+      accountId: context.ownerId,
       receipts,
     })
     if (this.current(context)) this.options.onView(view, context.generation)
@@ -209,13 +239,26 @@ export class CompletionSyncLoop {
       if (!this.current(context) || !pending.length) return false
     }
     const confirmed = await context.worker.call('markSentBatch', {
+      accountId: context.ownerId,
       operationIds: pending.map((entry) => entry.operation.operationId),
     })
     if (!this.current(context)) return false
-    const operations = confirmed.map((entry) => entry.operation)
+    // The frozen server-id payload is what goes on the wire, byte for byte, on every retry (EA3).
+    const operations = confirmed.flatMap((entry) =>
+      entry.wire ? [entry.wire] : [],
+    )
     if (!operations.length) return true
     const response = await transport.apply({ operations }, signal)
-    if (!this.current(context)) return false
+    // C9/EA16: a receipt that arrives after detach still retires its own operations by operationId.
+    if (!this.current(context)) {
+      this.assertReceipts(
+        response.receipts,
+        operations.map((operation) => operation.operationId),
+        true,
+      )
+      await this.commitReceipts(context, response.receipts)
+      return false
+    }
     this.assertReceipts(
       response.receipts,
       operations.map((operation) => operation.operationId),
@@ -245,6 +288,7 @@ export class CompletionSyncLoop {
     this.assertCheckpoint(checkpoint, day, timezone, tracked.completionIds)
     if (toLocalDayKey(new Date(), timezone) !== day) return false
     const view = await context.worker.call('checkpoint', {
+      accountId: context.ownerId,
       expectedRevision: tracked.revision,
       checkpoint,
     })

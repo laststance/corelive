@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import { CategorySchema } from './category'
-import { UserSettingsPatchSchema, UserSettingsStateSchema } from './settings'
+import { UserSettingsStateSchema } from './settings'
 
 const identity = z.uuid()
 const revision = z.number().int().nonnegative()
@@ -32,10 +32,6 @@ export const DraftSchema = z.object({
   inputLimit: revision.optional(),
 })
 export type OfflineDraft = z.infer<typeof DraftSchema>
-export interface OfflineDraftRecord {
-  categoryId: number
-  draft: OfflineDraft
-}
 
 /** Shared public sync command, independently validated at the server boundary. */
 export const CompletionSyncOperationSchema = z.object({
@@ -99,7 +95,7 @@ export const CompletionSyncReceiptSchema = z
   })
 export type CompletionSyncReceipt = z.infer<typeof CompletionSyncReceiptSchema>
 
-export const OfflineCompletionSchema = z.object({
+export const OfflineCompletionV1Schema = z.object({
   id: identity,
   categoryId,
   originalCategoryId: categoryId,
@@ -121,15 +117,15 @@ export const OfflineCompletionSchema = z.object({
   cleared: z.boolean(),
   remote: CompletionProjectionSchema.nullable(),
 })
-export type OfflineCompletion = z.infer<typeof OfflineCompletionSchema>
+export type OfflineCompletionV1 = z.infer<typeof OfflineCompletionV1Schema>
 
-export const OutboxEntrySchema = z.object({
+export const OutboxEntryV1Schema = z.object({
   operation: CompletionSyncOperationSchema,
   state: z.enum(['queued', 'sent', 'blocked']),
   failure: SyncFailureSchema.optional(),
   receipt: CompletionSyncReceiptSchema.optional(),
 })
-export type OutboxEntry = z.infer<typeof OutboxEntrySchema>
+export type OutboxEntryV1 = z.infer<typeof OutboxEntryV1Schema>
 
 export const OfflinePreferencesSchema = z.object({
   revision,
@@ -148,7 +144,7 @@ export const CountCheckpointSchema = z.object({
 export type CountCheckpoint = z.infer<typeof CountCheckpointSchema>
 
 /** Versioned account snapshot. Credentials and arbitrary config are intentionally absent. */
-export const OfflineWorkspaceSchema = z.object({
+export const OfflineWorkspaceV1Schema = z.object({
   version: z.literal(1),
   ownerId: z.string().min(1),
   deviceId: identity,
@@ -158,7 +154,7 @@ export const OfflineWorkspaceSchema = z.object({
   categories: z.array(EditorCategorySchema),
   preferences: OfflinePreferencesSchema,
   drafts: z.record(z.string(), DraftSchema),
-  completions: z.record(identity, OfflineCompletionSchema),
+  completions: z.record(identity, OfflineCompletionV1Schema),
   retiredCompletions: z
     .record(
       identity,
@@ -173,7 +169,7 @@ export const OfflineWorkspaceSchema = z.object({
       }),
     )
     .default({}),
-  outbox: z.record(identity, OutboxEntrySchema),
+  outbox: z.record(identity, OutboxEntryV1Schema),
   commandReceipts: z.record(
     identity,
     z.object({
@@ -202,82 +198,7 @@ export const OfflineWorkspaceSchema = z.object({
     }),
   ),
 })
-export type OfflineWorkspace = z.infer<typeof OfflineWorkspaceSchema>
-
-const commandIdentity = z.object({ commandId: identity })
-export const WorkspaceCommandSchema = z.discriminatedUnion('type', [
-  commandIdentity.extend({
-    type: z.literal('save'),
-    categoryId,
-    baseRevision: revision,
-    rows: z.array(DraftRowSchema),
-  }),
-  commandIdentity.extend({
-    type: z.literal('complete'),
-    categoryId,
-    baseRevision: revision,
-    rowId: identity,
-    completionId: identity,
-    completedAt: timestamp,
-    timezone: z.string().min(1).max(100),
-  }),
-  commandIdentity.extend({ type: z.literal('undo'), completionId: identity }),
-  commandIdentity.extend({ type: z.literal('clear'), completionId: identity }),
-  commandIdentity.extend({ type: z.literal('select'), categoryId }),
-  commandIdentity.extend({
-    type: z.literal('moveCategory'),
-    sourceId: categoryId,
-    destinationId: categoryId,
-  }),
-  commandIdentity.extend({
-    type: z.literal('correctTime'),
-    completionId: identity,
-    completedAt: timestamp,
-  }),
-  commandIdentity.extend({
-    type: z.literal('resolveConflict'),
-    completionId: identity,
-    choice: z.enum(['server', 'local']),
-    expectedLocalRevision: revision,
-    expectedRemoteRevision: revision,
-  }),
-  commandIdentity.extend({
-    type: z.literal('retrySync'),
-    completionId: identity,
-  }),
-  commandIdentity.extend({
-    type: z.literal('restoreRecovery'),
-    copyId: identity,
-    destinationId: categoryId,
-  }),
-  commandIdentity.extend({
-    type: z.literal('preferences'),
-    expectedRevision: revision,
-    patch: UserSettingsPatchSchema,
-    theme: z.string().min(1).max(50).optional(),
-  }),
-])
-export type WorkspaceCommand = z.infer<typeof WorkspaceCommandSchema>
-
-/** Bounded renderer-facing projection; large history and command ledgers stay in the worker. */
-export interface OfflineWorkspaceView {
-  ownerId: string
-  revision: number
-  selectedCategoryId: number
-  categories: EditorCategory[]
-  preferences: OfflinePreferences
-  draft: OfflineDraft
-  pendingCount: number
-  blockedCount: number
-  recentUndo: OfflineCompletion[]
-  eligibleUndoCount: number
-  checkpoint: CountCheckpoint | null
-  today: OfflineTodayCount
-  nextClearAt: number | null
-  nextUndoAt: number | null
-  categoryDeletions: Record<string, number>
-  recoveryCopyCount: number
-}
+export type OfflineWorkspaceV1 = z.infer<typeof OfflineWorkspaceV1Schema>
 
 /** Identity-based today feedback; stale or incomplete account evidence is never labelled fresh. */
 export interface OfflineTodayCount {
@@ -290,35 +211,3 @@ export interface OfflineTodayCount {
   confirmedAt: number | null
   lastAccountTotal: number | null
 }
-
-export type OfflineSyncStatus =
-  'idle' | 'syncing' | 'offline' | 'sign-in-required'
-export type OfflineEditorSnapshot = {
-  /** Main's transient publication order, independent of durable workspace revisions. */
-  sequence?: number
-} & (
-  | {
-      phase: 'ready'
-      generation: number
-      workspace: OfflineWorkspaceView
-      sync: OfflineSyncStatus
-      storageError?: boolean
-      unsavedDraft?: Extract<WorkspaceCommand, { type: 'save' }>
-    }
-  | {
-      phase:
-        'opening' | 'preparing' | 'needs-preparation' | 'locked' | 'recovery'
-      generation: number
-      reason?: string
-      canRecover?: boolean
-    }
-)
-export type OfflineCommandResult =
-  | {
-      ok: true
-      generation: number
-      revision: number
-      workspace: OfflineWorkspaceView | null
-      writtenDraft?: OfflineDraftRecord
-    }
-  | { ok: false; reason: string }

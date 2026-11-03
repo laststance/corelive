@@ -9,19 +9,35 @@ import type {
 } from '@corelive/desktop-contract/offline-editor-api'
 import type {
   OfflineEditorSnapshot,
+  OfflineSyncStatus,
   WorkspaceCommand,
-} from '@corelive/desktop-contract/offline-workspace'
-import { UserSettingsStateSchema } from '@corelive/desktop-contract/settings'
+} from '@corelive/desktop-contract/offline-workspace-v2'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { DurableEditorStore } from '../../renderer/editor/DurableEditorStore'
 
+import {
+  categoryUuid,
+  initializeDeviceWorkspace,
+} from './deviceWorkspaceFixture'
 import {
   WorkspaceWorkerClient,
   WorkspaceWorkerError,
 } from './WorkspaceWorkerClient'
 
 const cleanups: (() => Promise<void>)[] = []
+const CATEGORY_ONE = categoryUuid(1)
+const CATEGORY_TWO = categoryUuid(2)
+const LOCAL_ONLY_SYNC: OfflineSyncStatus = {
+  state: 'local-only',
+  waitingCount: 0,
+  lastSyncedAt: null,
+  boundEmail: null,
+}
+const SIGN_IN_SYNC: OfflineSyncStatus = {
+  ...LOCAL_ONLY_SYNC,
+  state: 'sign-in-to-sync',
+}
 
 /** Runs the renderer store against the real durable worker and the native event-before-reply contract.
  * Only delivery timing is synthetic; no Electron window or real account is touched.
@@ -29,37 +45,22 @@ const cleanups: (() => Promise<void>)[] = []
  */
 async function createFixture(text = 'First\nSecond', clear = false) {
   const directory = await mkdtemp(join(tmpdir(), 'corelive-editor-store-'))
+  await initializeDeviceWorkspace(directory, {
+    categoryCount: 2,
+    notes: { 1: text, 2: 'Destination writing' },
+    settings: { liveEditorClearOnComplete: clear, liveEditorClearDelayMs: 0 },
+  })
   const worker = new WorkspaceWorkerClient({
     directory,
-    ownerId: 'account-a',
+    ownerId: 'device',
     script: new URL('./workspace-worker.ts', import.meta.url),
     execArgv: ['--import', 'tsx'],
   })
-  const workspace = await worker.call('prepare', {
-    ownerId: 'account-a',
-    deviceId: randomUUID(),
-    categories: [1, 2].map((id) => ({
-      id,
-      name: `Category ${id}`,
-      color: 'blue',
-      parentId: null,
-      isDefault: id === 1,
-      removed: false,
-    })),
-    preferences: {
-      revision: 0,
-      theme: 'light',
-      settings: UserSettingsStateSchema.parse({
-        liveEditorClearOnComplete: clear,
-        liveEditorClearDelayMs: 0,
-      }),
-    },
-    legacyNotes: { '1': text, '2': 'Destination writing' },
-  })
+  const workspace = await worker.call('open', null)
   let snapshot: OfflineEditorSnapshot = {
     phase: 'ready',
     generation: 0,
-    sync: 'offline',
+    sync: LOCAL_ONLY_SYNC,
     workspace,
   }
   const listeners = new Set<(snapshot: OfflineEditorSnapshot) => void>()
@@ -74,7 +75,12 @@ async function createFixture(text = 'First\nSecond', clear = false) {
       return { ok: false, reason: 'account-changed' }
     try {
       const { writtenDraft, ...view } = await worker.call('command', command)
-      publish({ phase: 'ready', generation, sync: 'offline', workspace: view })
+      publish({
+        phase: 'ready',
+        generation,
+        sync: LOCAL_ONLY_SYNC,
+        workspace: view,
+      })
       return {
         ok: true,
         generation,
@@ -105,7 +111,7 @@ async function createFixture(text = 'First\nSecond', clear = false) {
       publish({
         phase: 'ready',
         generation: snapshot.generation,
-        sync: 'offline',
+        sync: LOCAL_ONLY_SYNC,
         workspace: await worker.call('open', null),
       })
     },
@@ -183,7 +189,7 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) await cleanup()
 })
 
-test.each(['older', 'status', 'revision', 'account', 'prepared'] as const)(
+test.each(['older', 'status', 'revision', 'recovery', 'opening'] as const)(
   'initial reading preserves the latest %s publication without allowing premature writing',
   async (ordering) => {
     // Arrange
@@ -191,16 +197,16 @@ test.each(['older', 'status', 'revision', 'account', 'prepared'] as const)(
     const baseline = await fixture.host.snapshot()
     if (baseline.phase !== 'ready') throw new Error('Workspace not prepared')
     const initial: OfflineEditorSnapshot =
-      ordering === 'prepared'
-        ? { phase: 'preparing', generation: 0, sequence: 10 }
+      ordering === 'opening'
+        ? { phase: 'opening', generation: 0, sequence: 10 }
         : { ...baseline, sequence: 10 }
     const delivered: OfflineEditorSnapshot =
-      ordering === 'account'
-        ? { phase: 'locked', generation: 1, sequence: 11 }
+      ordering === 'recovery'
+        ? { phase: 'recovery', generation: 1, sequence: 11 }
         : {
             ...baseline,
             sequence: ordering === 'older' ? 9 : 11,
-            sync: 'sign-in-required',
+            sync: SIGN_IN_SYNC,
             workspace:
               ordering === 'revision'
                 ? {
@@ -237,13 +243,13 @@ test.each(['older', 'status', 'revision', 'account', 'prepared'] as const)(
 
     // Assert: the authoritative publication order wins, including unchanged disk revisions.
     const current = fixture.store.getSnapshot()
-    if (ordering === 'account') {
-      expect(current.main.phase).toBe('locked')
+    if (ordering === 'recovery') {
+      expect(current.main.phase).toBe('recovery')
       expect(current.text).toBe('')
     } else {
       expect(current.main).toMatchObject({
         phase: 'ready',
-        sync: ordering === 'older' ? 'offline' : 'sign-in-required',
+        sync: ordering === 'older' ? LOCAL_ONLY_SYNC : SIGN_IN_SYNC,
       })
       expect(current.text).toBe(
         ordering === 'revision' ? 'Newer writing' : 'Original writing',
@@ -613,7 +619,7 @@ test('a native exit receives failure when saving fails and Copy writing retains 
   expect(fixture.copyWriting).toHaveBeenCalledWith(0, '  Unsaved 日本語\n\n')
 })
 
-test('late old-account acknowledgement cannot restore its text or success toast into a new account', async () => {
+test('a late acknowledgement from a previous workspace owner cannot restore its text or success toast into a new owner', async () => {
   // Arrange
   const fixture = await createFixture()
   const delivery = fixture.hold('complete')
@@ -622,12 +628,12 @@ test('late old-account acknowledgement cannot restore its text or success toast 
   const first = await fixture.worker.call('open', null)
 
   // Act
-  fixture.publish({ phase: 'locked', generation: 1 })
+  fixture.publish({ phase: 'opening', generation: 1 })
   expect(fixture.store.getSnapshot().text).toBe('')
   fixture.publish({
     phase: 'ready',
     generation: 2,
-    sync: 'offline',
+    sync: LOCAL_ONLY_SYNC,
     workspace: {
       ...first,
       ownerId: 'account-b',
@@ -635,7 +641,7 @@ test('late old-account acknowledgement cannot restore its text or success toast 
       eligibleUndoCount: 0,
       draft: {
         revision: 0,
-        rows: [{ id: randomUUID(), text: 'Other account writing' }],
+        rows: [{ id: randomUUID(), text: 'Other owner writing' }],
       },
     },
   })
@@ -643,7 +649,7 @@ test('late old-account acknowledgement cannot restore its text or success toast 
   await completing
 
   // Assert
-  expect(fixture.store.getSnapshot().text).toBe('Other account writing')
+  expect(fixture.store.getSnapshot().text).toBe('Other owner writing')
   expect(fixture.store.getSnapshot().notice).toBeNull()
   expect(JSON.stringify(fixture.store.getSnapshot())).not.toContain('First')
 })
@@ -655,7 +661,7 @@ test('selecting another category never transplants late source edits into the de
   const selecting = fixture.store.command({
     type: 'select',
     commandId: randomUUID(),
-    categoryId: 2,
+    categoryId: CATEGORY_TWO,
   })
   await delivery.ready()
 
@@ -668,14 +674,14 @@ test('selecting another category never transplants late source edits into the de
   // Assert
   expect(fixture.store.getSnapshot().text).toBe('Destination writing')
   expect(
-    (await fixture.worker.call('draft', { categoryId: 1 })).draft.rows.map(
-      (row) => row.text,
-    ),
+    (
+      await fixture.worker.call('draft', { categoryId: CATEGORY_ONE })
+    ).draft.rows.map((row) => row.text),
   ).toEqual(['Source edited while saving', 'Second'])
   expect(
-    (await fixture.worker.call('draft', { categoryId: 2 })).draft.rows.map(
-      (row) => row.text,
-    ),
+    (
+      await fixture.worker.call('draft', { categoryId: CATEGORY_TWO })
+    ).draft.rows.map((row) => row.text),
   ).toEqual(['Destination writing'])
 })
 
@@ -686,8 +692,8 @@ test('a confirmed category move retains destination writing and late edits to th
   const moving = fixture.store.command({
     type: 'moveCategory',
     commandId: randomUUID(),
-    sourceId: 1,
-    destinationId: 2,
+    sourceId: CATEGORY_ONE,
+    destinationId: CATEGORY_TWO,
   })
   await delivery.ready()
 

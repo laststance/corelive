@@ -262,41 +262,6 @@ export class AtomicWorkspaceFile<T> {
   }
 
   /**
-   * Rebuilds invalid registry metadata only after the caller verifies an online account.
-   * Existing valid metadata must use normal update; invalid bytes remain preserved.
-   * This is not automatic workspace recovery and is never exposed to renderers.
-   * @example await registry.recoverVerified(verifiedRegistry)
-   */
-  async recoverVerified(value: T): Promise<T> {
-    return this.serialize(async () => {
-      try {
-        await this.readPrimary()
-        throw new WorkspaceFileError('exists')
-      } catch (error) {
-        if (
-          !(error instanceof WorkspaceFileError) ||
-          !['missing', 'invalid'].includes(error.reason)
-        )
-          throw error
-      }
-      const candidate = this.parse(value)
-      await mkdir(this.directory, { recursive: true, mode: 0o700 })
-      try {
-        await this.replace(
-          `${this.path}.preserved-${randomUUID()}`,
-          await readFile(this.path),
-          false,
-        )
-      } catch (error) {
-        if (!isMissingFile(error)) throw error
-      }
-      this.committedBytes = undefined
-      await this.commit(candidate)
-      return structuredClone(candidate)
-    })
-  }
-
-  /**
    * Keeps a rejected command from poisoning subsequent Retry commands.
    * @example return this.serialize(async () => this.readPrimary())
    */

@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto'
 
-import type { OfflineEditorSnapshot } from '@corelive/desktop-contract/offline-workspace'
+import type { OfflineEditorSnapshot } from '@corelive/desktop-contract/offline-workspace-v2'
 import { UserSettingsStateSchema } from '@corelive/desktop-contract/settings'
 import { ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import type { WindowManager } from '../WindowManager'
 
+import { categoryUuid } from './deviceWorkspaceFixture'
 import type { OfflineEditorController } from './OfflineEditorController'
 import { OfflineEditorIPC } from './OfflineEditorIPC'
 
@@ -69,11 +70,16 @@ function createFixture() {
   let snapshot: OfflineEditorSnapshot = {
     phase: 'ready',
     generation: 1,
-    sync: 'offline',
+    sync: {
+      state: 'local-only',
+      waitingCount: 0,
+      lastSyncedAt: null,
+      boundEmail: null,
+    },
     workspace: {
       ownerId: 'account-a',
       revision: 0,
-      selectedCategoryId: 1,
+      selectedCategoryId: categoryUuid(1),
       categories: [],
       preferences,
       draft: {
@@ -87,7 +93,8 @@ function createFixture() {
       checkpoint: null,
       nextClearAt: null,
       nextUndoAt: null,
-      categoryDeletions: {},
+      categoryMoves: {},
+      binding: null,
       recoveryCopyCount: 0,
       today: {
         day: '2026-10-21',
@@ -105,9 +112,11 @@ function createFixture() {
     getSnapshot: () => snapshot,
     readSnapshot: vi.fn(async () => snapshot),
     canLeaveWithoutRenderer: vi.fn(() => true),
-    retryPreparation: vi.fn(),
+    retrySync: vi.fn(),
     details: vi.fn(async () => ({ total: 0, records: [] })),
-    settingsContext: vi.fn(() => ({ generation: 1, preferences })),
+    settingsContext: vi.fn((accountId: string) =>
+      accountId === 'account-a' ? { generation: 1, preferences } : null,
+    ),
     patchSettings: vi.fn(async () => ({
       ok: true,
       generation: 1,
@@ -142,12 +151,13 @@ function createFixture() {
     editor,
     settings,
     controller,
+    windows,
     handler,
     updateSnapshot: (next: OfflineEditorSnapshot): void => {
       snapshot = next
     },
     changeAccount: (): void => {
-      snapshot = { phase: 'locked', generation: 2 }
+      snapshot = { phase: 'opening', generation: 2 }
     },
   }
 }
@@ -299,61 +309,6 @@ test('a missing flush reply cancels an ordinary exit rather than acknowledging l
   await expect(flush).resolves.toBe(false)
 })
 
-test('cancelling an account departure resumes editing without releasing a newer save or another account', async () => {
-  // Arrange
-  const { ipc, event, editor, handler, changeAccount } = createFixture()
-
-  // Act: cancellation after a completed flush releases the renderer barrier.
-  ipc.resumeAfterCancelledTransition(1)
-
-  // Assert
-  expect(editor.webContents.send).toHaveBeenCalledWith('offline-editor-shown')
-  editor.webContents.send.mockClear()
-
-  // Act: a newer final-save challenge owns the barrier until it finishes.
-  const pending = ipc.flush(1)
-  const request: unknown = editor.webContents.send.mock.calls[0]?.[1]
-  ipc.resumeAfterCancelledTransition(1)
-
-  // Assert
-  expect(editor.webContents.send).not.toHaveBeenCalledWith(
-    'offline-editor-shown',
-  )
-  await handler('offline-editor-flush-result')(event, request, false)
-  await expect(pending).resolves.toBe(false)
-  ipc.resumeAfterCancelledTransition(1)
-  expect(editor.webContents.send).toHaveBeenCalledWith('offline-editor-shown')
-  editor.webContents.send.mockClear()
-
-  // Act / Assert: a stale cancellation cannot unlock the next account.
-  changeAccount()
-  ipc.resumeAfterCancelledTransition(1)
-  expect(editor.webContents.send).not.toHaveBeenCalled()
-})
-
-test.each(['destroyed', 'loading', 'crashed'] as const)(
-  'cancelling an account departure does not notify a %s renderer',
-  (state) => {
-    // Arrange
-    const { ipc, editor } = createFixture()
-    vi.spyOn(editor.webContents, 'isDestroyed').mockReturnValue(
-      state === 'destroyed',
-    )
-    vi.spyOn(editor.webContents, 'isLoadingMainFrame').mockReturnValue(
-      state === 'loading',
-    )
-    vi.spyOn(editor.webContents, 'isCrashed').mockReturnValue(
-      state === 'crashed',
-    )
-
-    // Act
-    ipc.resumeAfterCancelledTransition(1)
-
-    // Assert
-    expect(editor.webContents.send).not.toHaveBeenCalled()
-  },
-)
-
 test('a crashed editor permits quitting or updating without waiting for an unreachable flush reply', async () => {
   // Arrange
   vi.useFakeTimers()
@@ -373,65 +328,70 @@ test('a crashed editor permits quitting or updating without waiting for an unrea
   await expect(flush).resolves.toBe(true)
 })
 
-test('category creation selects only an owned ID verified by the current account refresh', async () => {
+test('category creation triggers a sync refresh only for the attached account and current generation', async () => {
   // Arrange
   const fixture = createFixture()
-  const snapshot = fixture.controller.getSnapshot()
-  if (snapshot.phase !== 'ready') throw new Error('Missing fixture workspace')
+  const created = fixture.handler('offline-settings-category-created')
 
   // Act
-  await expect(
-    fixture.handler('offline-settings-category-created')(
-      fixture.settingsEvent,
-      'another-account',
-      1,
-      42,
-    ),
-  ).resolves.toBe(false)
-  await expect(
-    fixture.handler('offline-settings-category-created')(
-      fixture.settingsEvent,
-      'account-a',
-      1,
-      42,
-    ),
-  ).resolves.toBe(true)
-  fixture.ipc.publish(snapshot)
+  const otherAccount = await created(
+    fixture.settingsEvent,
+    'another-account',
+    1,
+    42,
+  )
+  const staleGeneration = await created(
+    fixture.settingsEvent,
+    'account-a',
+    0,
+    42,
+  )
+  const accepted = await created(fixture.settingsEvent, 'account-a', 1, 42)
 
   // Assert
-  expect(
-    fixture.editor.webContents.send.mock.calls.filter(
-      ([event]) => event === 'offline-editor-category-created',
-    ),
-  ).toHaveLength(0)
-  fixture.ipc.publish({
-    ...snapshot,
-    workspace: {
-      ...snapshot.workspace,
-      categories: [
-        {
-          id: 42,
-          name: 'Created category',
-          color: 'blue',
-          isDefault: false,
-          parentId: null,
-          removed: false,
-        },
-      ],
-    },
-  })
-  expect(fixture.editor.webContents.send).toHaveBeenCalledWith(
+  expect(otherAccount).toBe(false)
+  expect(staleGeneration).toBe(false)
+  expect(accepted).toBe(true)
+  expect(fixture.controller.retrySync).toHaveBeenCalledOnce()
+  expect(fixture.editor.webContents.send).not.toHaveBeenCalledWith(
     'offline-editor-category-created',
-    { generation: 1, categoryId: 42 },
+    expect.anything(),
   )
 })
+
+test.each(['local-only', 'waiting', 'sign-in-to-sync'] as const)(
+  'category management is a no-op while sync state is %s',
+  async (state) => {
+    // Arrange
+    const fixture = createFixture()
+    const snapshot = fixture.controller.getSnapshot()
+    if (snapshot.phase !== 'ready') throw new Error('Missing fixture workspace')
+    fixture.updateSnapshot({ ...snapshot, sync: { ...snapshot.sync, state } })
+
+    // Act
+    await fixture.handler('offline-editor-manage-categories')(fixture.event, {
+      action: 'manage',
+    })
+
+    // Assert
+    expect(fixture.windows.openSettings).not.toHaveBeenCalled()
+    await expect(
+      fixture.handler('offline-settings-category-request')(
+        fixture.settingsEvent,
+      ),
+    ).resolves.toBeNull()
+  },
+)
 
 test('category management retains the requested create form through Settings hydration and discards an old account request', async () => {
   // Arrange
   const fixture = createFixture()
   const snapshot = fixture.controller.getSnapshot()
   if (snapshot.phase !== 'ready') throw new Error('Missing fixture workspace')
-  fixture.updateSnapshot({ ...snapshot, sync: 'idle' })
+  fixture.updateSnapshot({
+    ...snapshot,
+    sync: { ...snapshot.sync, state: 'synced' },
+  })
 
   // Act / Assert
   await fixture.handler('offline-editor-manage-categories')(fixture.event, {

@@ -2,12 +2,12 @@ import type {
   OfflineEditorAPI,
   OfflineRecoveryPreview,
 } from '@corelive/desktop-contract/offline-editor-api'
-import type { OfflineEditorSnapshot } from '@corelive/desktop-contract/offline-workspace'
+import type { OfflineEditorSnapshot } from '@corelive/desktop-contract/offline-workspace-v2'
 import { Button } from '@corelive/live-editor/ui/button'
 import { useState } from 'react'
 
-/** Explains startup, explicit logout and preserved-file recovery without rendering account content while locked.
- * Recovery previews are available only through main's validated same-account capability.
+/** Explains startup and preserved-file recovery.
+ * The opening phase is a neutral loading state; recovery previews come from main's validated capability.
  * @example <NativeStateScene snapshot={snapshot} host={host} close={close} />
  */
 export function NativeStateScene({
@@ -60,25 +60,10 @@ export function NativeStateScene({
           Close
         </Button>
       </div>
-      <h1
-        className="text-lg font-semibold"
-        aria-live={snapshot.phase === 'preparing' ? 'polite' : undefined}
-      >
-        {title}
-      </h1>
+      <h1 className="text-lg font-semibold">{title}</h1>
       <p>{stateCopy[snapshot.phase].description}</p>
       <div className="flex flex-wrap gap-2">
-        {(snapshot.phase === 'locked' ||
-          snapshot.phase === 'needs-preparation') && (
-          <Button
-            className="offline-action"
-            disabled={busy}
-            onClick={() => void run(async () => host.signIn())}
-          >
-            Sign in
-          </Button>
-        )}
-        {snapshot.phase !== 'opening' && snapshot.phase !== 'locked' && (
+        {snapshot.phase !== 'opening' && (
           <Button
             className="offline-action"
             variant="outline"
@@ -210,21 +195,6 @@ const stateCopy = {
   opening: {
     title: 'Opening your writing…',
     description: 'Opening locally saved writing.',
-  },
-  preparing: {
-    title: 'Preparing offline access…',
-    description:
-      'Keep this window open while your account, categories and settings are prepared.',
-  },
-  locked: {
-    title: 'Signed out',
-    description:
-      'Saved writing stays on this Mac. Sign in with the same account to open it again. You will need an internet connection.',
-  },
-  'needs-preparation': {
-    title: 'Connect once to prepare this Mac.',
-    description:
-      'Your existing writing is preserved. Connect to the internet and sign in once to prepare offline access. Preparation resumes automatically when the connection returns.',
   },
   recovery: {
     title: 'Your writing needs recovery',

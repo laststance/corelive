@@ -1,18 +1,19 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import {
-  OfflineWorkspaceSchema,
-  type OfflineWorkspace,
+  OfflineWorkspaceV1Schema,
+  type OfflineWorkspaceV1,
 } from '@corelive/desktop-contract/offline-workspace'
 import { UserSettingsStateSchema } from '@corelive/desktop-contract/settings'
 import { afterEach, describe, expect, test } from 'vitest'
+import type { z } from 'zod'
 
 import { AtomicWorkspaceFile } from './AtomicWorkspaceFile'
 import { migrateWorkspaceV1, type MigrationStage } from './migrateWorkspaceV1'
-import { OfflineAccountRegistry } from './OfflineAccountRegistry'
+import { REGISTRY_OWNER_ID, registrySchema } from './OfflineAccountRegistry'
 
 const directories: string[] = []
 const NOW = 1_800_000_000_000
@@ -25,7 +26,7 @@ function uid(value: number): string {
 /** A full v1 workspace: drafts, a pending outbox entry, a receipted one, moves, deletions, Undo deadline, checkpoint. */
 function v1Workspace(
   ownerId: string,
-  overrides: Partial<OfflineWorkspace> = {},
+  overrides: Partial<OfflineWorkspaceV1> = {},
 ) {
   const operation = (
     completionId: string,
@@ -71,7 +72,7 @@ function v1Workspace(
     title: 'Sent task',
     completedAt: NOW,
   }
-  return OfflineWorkspaceSchema.parse({
+  return OfflineWorkspaceV1Schema.parse({
     version: 1,
     ownerId,
     deviceId: uid(1),
@@ -172,19 +173,55 @@ function v1Workspace(
   })
 }
 
+/** Writes the v1 registry file as the shipped `OfflineAccountRegistry` did (activate / lock). */
+function createV1Registry(directory: string) {
+  const file = new AtomicWorkspaceFile({
+    directory: join(directory, 'registry'),
+    ownerId: REGISTRY_OWNER_ID,
+    parse: registrySchema.parse,
+  })
+  const deviceId = randomUUID()
+  return {
+    async activateVerified(accountId: string): Promise<void> {
+      const next = (state: z.infer<typeof registrySchema>) => ({
+        ...state,
+        activeAccountId: accountId,
+        lastAccountId: accountId,
+        preparedAccounts: [...new Set([...state.preparedAccounts, accountId])],
+      })
+      try {
+        await file.update(next)
+      } catch {
+        await file.initialize(
+          next({
+            version: 1,
+            deviceId,
+            activeAccountId: null,
+            lastAccountId: null,
+            preparedAccounts: [],
+          }),
+        )
+      }
+    },
+    async lock(): Promise<void> {
+      await file.update((state) => ({ ...state, activeAccountId: null }))
+    },
+  }
+}
+
 /** Writes a v1 install the way the shipped app laid it out. */
 async function installV1(
-  accounts: { id: string; workspace?: OfflineWorkspace }[],
+  accounts: { id: string; workspace?: OfflineWorkspaceV1 }[],
   state: 'active' | 'locked' = 'active',
 ) {
   const directory = await mkdtemp(join(tmpdir(), 'corelive-migrate-'))
   directories.push(directory)
-  const registry = new OfflineAccountRegistry(directory)
+  const registry = createV1Registry(directory)
   for (const account of accounts) {
     await new AtomicWorkspaceFile({
       directory: join(directory, 'workspaces'),
       ownerId: account.id,
-      parse: OfflineWorkspaceSchema.parse,
+      parse: OfflineWorkspaceV1Schema.parse,
     }).initialize(account.workspace ?? v1Workspace(account.id))
     await registry.activateVerified(account.id)
   }
@@ -516,7 +553,7 @@ describe('downgrade round trip (DX8, EA13a)', () => {
     const v1File = new AtomicWorkspaceFile({
       directory: join(directory, 'workspaces'),
       ownerId: 'user_a',
-      parse: OfflineWorkspaceSchema.parse,
+      parse: OfflineWorkspaceV1Schema.parse,
     })
     await v1File.update((state) => {
       const next = structuredClone(state)

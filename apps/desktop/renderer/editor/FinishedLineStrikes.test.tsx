@@ -88,7 +88,7 @@ function renderSurface({
       isCategoryListError={false}
       isMounted
       isLiveEditorConfigReady
-      activeCategoryId={1}
+      activeCategoryId="00000000-0000-4000-8000-0000000000a1"
       isNoteFieldDisabled={false}
       strikeFinishedLines={strike}
       handleKeepLineClick={vi.fn()}

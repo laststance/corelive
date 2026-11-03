@@ -1,9 +1,11 @@
 import { parentPort, workerData } from 'node:worker_threads'
 
 import {
+  DEVICE_OWNER_ID,
+  DEVICE_WORKSPACE_FILE_NAME,
   OfflineWorkspaceSchema,
   type WorkspaceCommand,
-} from '@corelive/desktop-contract/offline-workspace'
+} from '@corelive/desktop-contract/offline-workspace-v2'
 import { z } from 'zod'
 
 import { AtomicWorkspaceFile, WorkspaceFileError } from './AtomicWorkspaceFile'
@@ -21,14 +23,16 @@ import {
 } from './WorkspaceService'
 
 const options = z
-  .object({ directory: z.string(), ownerId: z.string().min(1) })
+  .object({ directory: z.string(), ownerId: z.literal(DEVICE_OWNER_ID) })
   .parse(workerData as unknown)
 const file = new AtomicWorkspaceFile({
   directory: options.directory,
   ownerId: options.ownerId,
+  fileName: DEVICE_WORKSPACE_FILE_NAME,
   parse: (value) => {
     const state = OfflineWorkspaceSchema.parse(value)
-    if (state.ownerId !== options.ownerId)
+    // The worker accepts only the device workspace (D1).
+    if (state.ownerId !== DEVICE_OWNER_ID)
       throw new WorkspaceFileError('invalid')
     return state
   },
@@ -49,42 +53,45 @@ async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
       return workspaceView(await service.clearDue())
     case 'clearDue':
       return workspaceView(await service.clearDue())
-    case 'prepare':
-      return prepareWorkspace(request.input)
     case 'command':
       return executeCommand(request.input)
     case 'draft':
       return readDraft(request.input.categoryId)
-    case 'markSent':
-      return workspaceView(await service.markSent(request.input.operationId))
-    case 'markSentBatch': {
-      const state = await service.markSentBatch(request.input.operationIds)
-      return request.input.operationIds.flatMap((id) =>
-        state.outbox[id]?.state === 'sent' ? [state.outbox[id]] : [],
+    case 'markSentBatch':
+      return service.markSentBatch(
+        request.input.accountId,
+        request.input.operationIds,
       )
-    }
     case 'receipts':
       return workspaceView(
         await service.acceptReceipts(
-          request.input.ownerId,
+          request.input.accountId,
           request.input.receipts,
         ),
       )
-    case 'receipt':
+    case 'reconcile':
+      return workspaceView(await service.reconcileCategories(request.input))
+    case 'markSynced':
       return workspaceView(
-        await service.acceptReceipt(
-          request.input.ownerId,
-          request.input.receipt,
-        ),
+        await service.markSynced(request.input.accountId, request.input.at),
       )
-    case 'categories':
-      return workspaceView(
-        await service.refreshCategories(
-          request.input.categories,
-          request.input.deletions,
-          request.input.legacyNotes,
-        ),
+    case 'binding': {
+      const { binding } = await file.read()
+      return binding
+        ? {
+            accountId: binding.accountId,
+            displayEmail: binding.displayEmail,
+            lastSyncedAt: binding.lastSyncedAt,
+          }
+        : null
+    }
+    case 'localCategory': {
+      const { binding } = await file.read()
+      const entry = Object.entries(binding?.serverCategoryIds ?? {}).find(
+        ([, serverId]) => serverId === request.input.serverId,
       )
+      return entry?.[0] ?? null
+    }
     case 'recoveryCopies': {
       const { offset, limit } = pageSchema.parse(request.input)
       const state = await file.read()
@@ -99,8 +106,15 @@ async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
     case 'pending': {
       const state = await file.read()
       const limit = z.number().int().min(1).max(100).parse(request.input.limit)
+      const serverIds = state.binding?.serverCategoryIds ?? {}
       return Object.values(state.outbox)
-        .filter((entry) => entry.state !== 'blocked')
+        .filter(
+          (entry) =>
+            // Uncertain work is always recoverable; queued work needs its category on the server.
+            entry.state === 'sent' ||
+            (entry.state === 'queued' &&
+              serverIds[entry.operation.categoryId] !== undefined),
+        )
         .sort(
           (left, right) =>
             Number(right.operation.kind === 'cancel') -
@@ -124,6 +138,7 @@ async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
     }
     case 'checkpoint': {
       const state = await service.checkpoint(
+        request.input.accountId,
         request.input.expectedRevision,
         request.input.checkpoint,
       )
@@ -170,28 +185,18 @@ async function exportWriting(): Promise<string> {
   }
 }
 
-/** Validates main's account identity before first workspace initialization.
- * @example await prepareWorkspace(input)
- */
-async function prepareWorkspace(
-  input: WorkspaceWorkerCalls['prepare']['input'],
-): Promise<WorkspaceWorkerCalls['prepare']['output']> {
-  if (input.ownerId !== options.ownerId) throw new WorkspaceFileError('invalid')
-  return workspaceView(await service.prepare(input))
-}
-
 /** Reads the owned effective category draft without changing the selection.
  * @example await readDraft(categoryId)
  */
 async function readDraft(
-  requestedCategoryId: number,
+  requestedCategoryId: string,
 ): Promise<WorkspaceWorkerCalls['draft']['output']> {
   const state = await file.read()
   const categoryId = effectiveCategory(
     state,
-    z.number().int().positive().parse(requestedCategoryId),
+    z.uuid().parse(requestedCategoryId),
   )
-  const draft = state.drafts[String(categoryId)]
+  const draft = state.drafts[categoryId]
   if (!draft) throw new WorkspaceCommandError('category-unavailable')
   return { categoryId, draft }
 }
@@ -213,7 +218,7 @@ async function executeCommand(
           ? command.destinationId
           : state.selectedCategoryId
   const categoryId = effectiveCategory(state, affected)
-  const draft = state.drafts[String(categoryId)]
+  const draft = state.drafts[categoryId]
   if (!draft) throw new WorkspaceCommandError('category-unavailable')
   return { ...workspaceView(state), writtenDraft: { categoryId, draft } }
 }

@@ -11,7 +11,11 @@ const state = vi.hoisted(() => ({
     getToken: (options: { skipCache: boolean }) => Promise<string | null>
   },
 }))
-vi.mock('@clerk/nextjs', () => ({ useSession: () => state }))
+const signOut = vi.hoisted(() => vi.fn(async () => undefined))
+vi.mock('@clerk/nextjs', () => ({
+  useSession: () => state,
+  useClerk: () => ({ signOut }),
+}))
 
 const challenge: OfflineAuthRequest = {
   requestId: '6a7a0053-a065-430c-9d5e-e426c874d004',
@@ -26,6 +30,30 @@ afterEach(() => {
 })
 
 describe('credential-only desktop auth route', () => {
+  test('signs out of Clerk and reports signed-out when main asks for a remote revoke', async () => {
+    // Arrange
+    state.session = {
+      user: { id: 'account-a' },
+      getToken: async () => 'unused',
+    }
+    const respond = vi.fn(async () => true)
+    const revoke: OfflineAuthRequest = { ...challenge, action: 'sign-out' }
+    window.coreliveOfflineAuth = {
+      ready: async () => revoke,
+      respond,
+      onRequest: () => () => undefined,
+    }
+
+    // Act
+    render(<DesktopAuthPage />)
+
+    // Assert
+    await waitFor(() =>
+      expect(respond).toHaveBeenCalledWith({ ...revoke, status: 'signed-out' }),
+    )
+    expect(signOut).toHaveBeenCalledTimes(1)
+  })
+
   test('refreshes the existing Clerk session only when main has supplied a challenge', async () => {
     // Arrange
     const getToken = vi.fn(async () => 'opaque-test-token')

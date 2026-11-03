@@ -7,27 +7,35 @@ import type { CompletionSyncTransport } from '@corelive/desktop-contract/offline
 import type {
   CompletionProjection,
   CompletionSyncReceipt,
-  OfflineSyncStatus,
 } from '@corelive/desktop-contract/offline-workspace'
-import { UserSettingsStateSchema } from '@corelive/desktop-contract/settings'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import {
   CompletionSyncLoop,
   type SyncAccountContext,
 } from './CompletionSyncLoop'
+import {
+  categoryUuid,
+  initializeDeviceWorkspace,
+} from './deviceWorkspaceFixture'
 import { WorkspaceWorkerClient } from './WorkspaceWorkerClient'
+
+type OfflineSyncStatus = 'idle' | 'syncing' | 'offline' | 'sign-in-required'
 
 const cleanups: (() => Promise<void>)[] = []
 
 /** Combines the real durable worker with an in-memory remote receipt ledger and controlled delivery.
  * @example const fixture = await createFixture()
  */
-async function createFixture() {
+async function createFixture(options: { settleTimeoutMs?: number } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'corelive-sync-loop-'))
+  const initial = await initializeDeviceWorkspace(directory, {
+    boundAccountId: 'account-a',
+    notes: { 1: 'One completion' },
+  })
   const worker = new WorkspaceWorkerClient({
     directory,
-    ownerId: 'account-a',
+    ownerId: 'device',
     script: new URL('./workspace-worker.ts', import.meta.url),
     execArgv: ['--import', 'tsx'],
   })
@@ -39,24 +47,13 @@ async function createFixture() {
     parentId: null,
     removed: false,
   } as const
-  const initial = await worker.call('prepare', {
-    ownerId: 'account-a',
-    deviceId: randomUUID(),
-    categories: [category],
-    preferences: {
-      revision: 0,
-      settings: UserSettingsStateSchema.parse({}),
-      theme: 'light',
-    },
-    legacyNotes: { '1': 'One completion' },
-  })
   const completionId = randomUUID()
   await worker.call('command', {
     type: 'complete',
     commandId: randomUUID(),
-    categoryId: 1,
+    categoryId: categoryUuid(1),
     baseRevision: 0,
-    rowId: initial.draft.rows[0]!.id,
+    rowId: initial.drafts[categoryUuid(1)]!.rows[0]!.id,
     completionId,
     completedAt: Date.now(),
     timezone: 'UTC',
@@ -86,6 +83,10 @@ async function createFixture() {
     }),
   })
   const transport = {
+    whoami: vi.fn<CompletionSyncTransport['whoami']>(async () => ({
+      clerkId: 'account-a',
+      email: null,
+    })),
     bootstrap: vi.fn<CompletionSyncTransport['bootstrap']>(async () => ({
       accountId: 'account-a',
       categories: [category],
@@ -146,9 +147,10 @@ async function createFixture() {
     onView,
     onStatus,
     random: () => 0,
+    settleTimeoutMs: options.settleTimeoutMs,
   })
   cleanups.push(async () => {
-    loop.stop()
+    await loop.stop()
     await worker.close()
     await rm(directory, { recursive: true })
   })
@@ -163,7 +165,7 @@ async function createFixture() {
     nextStatus,
     leaveAccount: (): void => {
       context = null
-      loop.stop()
+      void loop.stop()
     },
   }
 }
@@ -261,7 +263,7 @@ test('authentication rejection pauses synchronization while the durable local wr
   expect(view.pendingCount).toBe(1)
 })
 
-test('an old account response cannot publish or retire its uncertain operation after a switch', async () => {
+test('a receipt that arrives after the account detached retires its own operation without publishing to the editor', async () => {
   // Arrange
   const fixture = await createFixture()
   let deliver!: () => Promise<void>
@@ -280,10 +282,50 @@ test('an old account response cannot publish or retire its uncertain operation a
   // Act
   fixture.leaveAccount()
   await deliver()
-  await Promise.resolve()
+  await vi.waitFor(async () =>
+    expect(await fixture.worker.call('pending', { limit: 16 })).toHaveLength(0),
+  )
 
   // Assert
   expect(fixture.onView).not.toHaveBeenCalled()
+})
+
+test('stop returns as soon as an in-flight request settles after aborting it', async () => {
+  // Arrange
+  const fixture = await createFixture()
+  fixture.transport.apply.mockImplementationOnce(
+    async (_input, signal) =>
+      new Promise((_resolve, reject) => {
+        signal?.addEventListener('abort', () => reject(new Error('aborted')))
+      }),
+  )
+  fixture.loop.wake()
+  await vi.waitFor(() => expect(fixture.transport.apply).toHaveBeenCalledOnce())
+  const startedAt = Date.now()
+
+  // Act
+  await fixture.loop.stop()
+
+  // Assert: the aborted request settled well inside the bound
+  expect(Date.now() - startedAt).toBeLessThan(2000)
+  expect((await fixture.worker.call('pending', { limit: 16 }))[0]?.state).toBe(
+    'sent',
+  )
+})
+
+test('stop gives up on a request that never settles after the bound and keeps the operation uncertain for the bound account', async () => {
+  // Arrange
+  const fixture = await createFixture({ settleTimeoutMs: 50 })
+  fixture.transport.apply.mockImplementationOnce(
+    async () => new Promise<never>(() => undefined),
+  )
+  fixture.loop.wake()
+  await vi.waitFor(() => expect(fixture.transport.apply).toHaveBeenCalledOnce())
+
+  // Act
+  await fixture.loop.stop()
+
+  // Assert
   expect((await fixture.worker.call('pending', { limit: 16 }))[0]?.state).toBe(
     'sent',
   )

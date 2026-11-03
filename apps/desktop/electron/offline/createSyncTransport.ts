@@ -1,7 +1,9 @@
 import {
+  AccountWhoamiOutputSchema,
   SyncBootstrapOutputSchema,
   SyncCheckpointOutputSchema,
   SyncReceiptsOutputSchema,
+  type AccountWhoami,
   type CompletionSyncTransport,
   type SyncBootstrap,
   type SyncCheckpointInput,
@@ -15,6 +17,9 @@ import { createORPCClient, type Client } from '@orpc/client'
 import { RPCLink } from '@orpc/client/fetch'
 
 type SyncClient = {
+  account: {
+    whoami: Client<object, undefined, AccountWhoami, Error>
+  }
   completed: {
     syncBootstrap: Client<object, undefined, SyncBootstrap, Error>
     syncApply: Client<
@@ -90,6 +95,10 @@ export function createSyncTransport(
     }),
   )
   return {
+    whoami: async (signal) =>
+      AccountWhoamiOutputSchema.parse(
+        await client.account.whoami(undefined, { signal }),
+      ),
     bootstrap: async (signal) =>
       SyncBootstrapOutputSchema.parse(
         await client.completed.syncBootstrap(undefined, { signal }),

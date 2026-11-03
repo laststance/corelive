@@ -6,7 +6,7 @@ import type {
   OfflineSettingsResult,
   OfflineCategoryRequest,
 } from '@corelive/desktop-contract/offline-editor-api'
-import type { OfflineEditorSnapshot } from '@corelive/desktop-contract/offline-workspace'
+import type { OfflineEditorSnapshot } from '@corelive/desktop-contract/offline-workspace-v2'
 import {
   clipboard,
   dialog,
@@ -77,11 +77,6 @@ export class OfflineEditorIPC {
   private pending: PendingFlush | null = null
   private snapshotReaders = 0
   private categoryRequest: OfflineCategoryRequest | null = null
-  private createdCategory: {
-    generation: number
-    categoryId: number
-    ownerId: string
-  } | null = null
 
   constructor(
     private readonly windows: WindowManager,
@@ -113,7 +108,7 @@ export class OfflineEditorIPC {
     )
     typedHandle('offline-editor-retry', (event) => {
       this.assertEditor(event)
-      this.controller.retryPreparation()
+      this.controller.retrySync()
     })
     typedHandle(
       'offline-editor-details',
@@ -157,10 +152,12 @@ export class OfflineEditorIPC {
     typedHandle('offline-editor-manage-categories', (event, request) => {
       this.assertEditor(event)
       const snapshot = this.controller.getSnapshot()
+      // Category management still runs in the remote Settings page until D4/D5 land; it needs a live account.
       if (
         snapshot.phase !== 'ready' ||
-        snapshot.sync === 'offline' ||
-        snapshot.sync === 'sign-in-required'
+        snapshot.sync.state === 'local-only' ||
+        snapshot.sync.state === 'waiting' ||
+        snapshot.sync.state === 'sign-in-to-sync'
       )
         return
       this.categoryRequest = { ...request, generation: snapshot.generation }
@@ -263,25 +260,6 @@ export class OfflineEditorIPC {
       isLocalEditorDocument(editor.webContents.getURL())
     ) {
       typedSend(editor.webContents, 'offline-editor-changed', snapshot)
-      const selection = this.createdCategory
-      if (selection && selection.generation !== snapshot.generation)
-        this.createdCategory = null
-      if (
-        selection &&
-        snapshot.phase === 'ready' &&
-        selection.generation === snapshot.generation &&
-        selection.ownerId === snapshot.workspace.ownerId &&
-        snapshot.workspace.categories.some(
-          (category) =>
-            category.id === selection.categoryId && !category.removed,
-        )
-      ) {
-        this.createdCategory = null
-        typedSend(editor.webContents, 'offline-editor-category-created', {
-          generation: selection.generation,
-          categoryId: selection.categoryId,
-        })
-      }
     }
   }
 
@@ -299,18 +277,6 @@ export class OfflineEditorIPC {
       isLocalEditorDocument(editor.webContents.getURL())
     )
       typedSend(editor.webContents, 'offline-editor-shown')
-  }
-
-  /**
-   * Resumes editing after the controller cancels a flushed account departure.
-   * A newer flush or account generation retains its own input barrier; this check
-   * and notification are synchronous so no newer challenge can slip between them.
-   * @example ipc.resumeAfterCancelledTransition(generation)
-   */
-  resumeAfterCancelledTransition(generation: number): void {
-    if (this.pending || generation !== this.controller.getSnapshot().generation)
-      return
-    this.shown()
   }
 
   /** Sends no account data in the notification; Settings re-reads through its verified capability.
@@ -379,38 +345,29 @@ export class OfflineEditorIPC {
     })
     typedHandle(
       'offline-settings-category-created',
-      (event, ownerId, generation, categoryId) => {
+      (event, ownerId, generation) => {
         this.assertSettings(event)
         const context = this.controller.settingsContext(ownerId)
-        const snapshot = this.controller.getSnapshot()
-        if (
-          context?.generation !== generation ||
-          snapshot.phase !== 'ready' ||
-          snapshot.workspace.ownerId !== ownerId
-        )
-          return false
-        this.createdCategory = { ownerId, generation, categoryId }
-        // The remote dialog's ID is advisory until a verified category refresh proves ownership.
-        this.controller.retryPreparation()
+        if (context?.generation !== generation) return false
+        // The remote dialog's server id is advisory; the refresh mirrors the category locally.
+        this.controller.retrySync()
         return true
       },
     )
     typedHandle('offline-settings-refresh-categories', (event) => {
       this.assertSettings(event)
       if (this.controller.getSnapshot().phase === 'ready')
-        this.controller.retryPreparation()
+        this.controller.retrySync()
     })
     typedHandle('offline-settings-read', (event, owner) => {
       this.assertSettings(event)
       return this.controller.settingsContext(owner)
     })
-    typedHandle(
-      'offline-settings-prepare',
-      (event, owner, generation, preferences) => {
-        this.assertSettings(event)
-        return this.controller.provideSettings(owner, generation, preferences)
-      },
-    )
+    // Preparation no longer needs Settings preferences (D1); the channel stays until D5 retires it.
+    typedHandle('offline-settings-prepare', (event) => {
+      this.assertSettings(event)
+      return false
+    })
     typedHandle(
       'offline-settings-patch',
       async (
