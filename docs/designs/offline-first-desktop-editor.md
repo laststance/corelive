@@ -546,7 +546,7 @@ Verification is deterministic: a fix counts when its `applied_text` is in the cu
     - `digest-mismatch` shows "Couldn't apply a change. It was kept on this Mac." with **Try again**
   - _Row states:_ while applying, the row shows "Applying…" with its actions disabled. A failure shows "Couldn't apply. Try again." inline. On success the row moves to History as "Resolved".
   - _Re-conflict:_ creates a new row.
-  - _History:_ lists resolved items (latest 50), the C34 migration summary with "Open recovery copies", and preserved v1 backups.
+  - _History:_ lists resolved items (latest 50), the C34 migration summary (hidden when every count is zero, as on a fresh install), "Open recovery copies" (shown while the live count of unrestored recovery copies is above zero, independent of the summary), and preserved v1 backups. "Nothing here yet." appears only when History has none of these.
   - _Empty "Needs a look":_ "No sync issues. Everything on this Mac is saved." It is never a sign-in prompt.
 
   - _Labels replace C8/C18's action names:_ `Use "<Mac value>"` is C8's "Apply this Mac's value"; `Keep "<dashboard value>"` and `Keep "<dashboard name>"` are "Use account name" (they clear the C18 marker and queue nothing); **Choose another name** replaces name-taken's "Try again" and queues a fresh rename whose `expected` is the current server name. digest-mismatch **Try again** re-derives the change through the C19 merge under a new `operationId`, so the stored receipt is never replayed.
@@ -1736,7 +1736,7 @@ DA15 (S1, verification): `qa:settings` and `qa:offline-editor` capture one headl
     - `digest-mismatch` shows "Couldn't apply a change. It was kept on this Mac." with **Try again**
   - _Row states:_ while applying, the row shows "Applying…" with its actions disabled. A failure shows "Couldn't apply. Try again." inline. On success the row moves to History as "Resolved".
   - _Re-conflict:_ creates a new row.
-  - _History:_ lists resolved items (latest 50), the C34 migration summary with "Open recovery copies", and preserved v1 backups.
+  - _History:_ lists resolved items (latest 50), the C34 migration summary (hidden when every count is zero, as on a fresh install), "Open recovery copies" (shown while the live count of unrestored recovery copies is above zero, independent of the summary), and preserved v1 backups. "Nothing here yet." appears only when History has none of these.
   - _Empty "Needs a look":_ "No sync issues. Everything on this Mac is saved." It is never a sign-in prompt.
 
   - _Labels replace C8/C18's action names:_ `Use "<Mac value>"` is C8's "Apply this Mac's value"; `Keep "<dashboard value>"` and `Keep "<dashboard name>"` are "Use account name" (they clear the C18 marker and queue nothing); **Choose another name** replaces name-taken's "Try again" and queues a fresh rename whose `expected` is the current server name. digest-mismatch **Try again** re-derives the change through the C19 merge under a new `operationId`, so the stored receipt is never replayed.

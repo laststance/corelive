@@ -271,7 +271,9 @@ recovery copies in the device workspace and nothing is sent to them. A draft on 
 category that no longer exists also becomes a recovery copy in the default
 category, because the editor never opens such an earlier category. A summary
 (source, imported drafts and completions, recovery copies, v1 files kept) is
-logged and shown on the Sync details page. A corrupt source opens `recovery`
+logged and shown in History on the Sync details page, unless every count is zero (a fresh
+install, where nothing was migrated). "Open recovery copies" follows the live count of
+unrestored recovery copies, not the summary's created count. A corrupt source opens `recovery`
 ([WORKSPACE_MIGRATION_FAILED](#workspace-migration-failed)); the migration is
 idempotent and retried once per launch.
 
