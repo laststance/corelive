@@ -489,6 +489,67 @@ test('History lists the migration summary with Open recovery copies, preserved b
   expect(fake.api.liveEditor.show).toHaveBeenCalledOnce()
 })
 
+// Regression: native VM QA of v0.30.0 on 2026-11-03 — a fresh install's History claimed "Brought your earlier writing" with all-zero counts and offered Open recovery copies with none to open
+test('a fresh install shows "Nothing here yet" in History instead of an empty import summary', async () => {
+  // Arrange
+  const syncDetails = withRows([], {
+    migrationSummary: {
+      sourceAccountId: null,
+      importedDrafts: 0,
+      importedCompletions: 0,
+      recoveryCopies: 0,
+      v1FilesKept: 0,
+      preservedBackups: 0,
+    },
+  })
+
+  // Act
+  await renderWithSettings(<SyncDetailsPage onBack={vi.fn()} />, {
+    syncDetails,
+  })
+
+  // Assert
+  const history = (
+    await screen.findByRole('heading', { name: 'History' })
+  ).closest('section')!
+  expect(within(history).getByText('Nothing here yet.')).toBeVisible()
+  expect(history).not.toHaveTextContent('Brought your earlier writing')
+  expect(
+    within(history).queryByRole('button', { name: 'Open recovery copies' }),
+  ).toBeNull()
+})
+
+// Regression: native VM QA of v0.30.0 on 2026-11-03 — Open recovery copies showed even when the import made no recovery copy
+test('an import without recovery copies keeps its summary but offers no Open recovery copies', async () => {
+  // Arrange
+  const syncDetails = withRows([], {
+    migrationSummary: {
+      sourceAccountId: 'acct-1',
+      importedDrafts: 2,
+      importedCompletions: 5,
+      recoveryCopies: 0,
+      v1FilesKept: 1,
+      preservedBackups: 0,
+    },
+  })
+
+  // Act
+  await renderWithSettings(<SyncDetailsPage onBack={vi.fn()} />, {
+    syncDetails,
+  })
+
+  // Assert
+  const history = (
+    await screen.findByRole('heading', { name: 'History' })
+  ).closest('section')!
+  expect(history).toHaveTextContent(
+    "Brought your earlier writing into this Mac's workspace: 2 drafts, 5 keeps, 0 recovery copies. 1 earlier files kept as backups.",
+  )
+  expect(
+    within(history).queryByRole('button', { name: 'Open recovery copies' }),
+  ).toBeNull()
+})
+
 test('History shows only the latest 50 entries', async () => {
   // Arrange
   const history = Array.from({ length: 60 }, (_, index) => ({

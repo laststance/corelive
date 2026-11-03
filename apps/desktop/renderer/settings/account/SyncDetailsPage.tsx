@@ -33,12 +33,42 @@ function historyMessage(item: SyncHistoryItem): string {
 }
 
 /**
+ * Tells whether the migration summary reports anything that was brought over or kept.
+ *
+ * The v1 to v2 migration always writes a summary, so a Mac that never ran an earlier build
+ * gets one with every count at zero. Called by {@link SyncDetailsPage} to decide whether
+ * History shows the "Brought your earlier writing" block.
+ *
+ * @param summary - The migration summary from Sync details, or null when there is none.
+ * @returns
+ * - true when any imported, copied or kept count is above zero
+ * - false for a missing summary or an all-zero one
+ * @example
+ * hasImportedWriting({ importedDrafts: 0, importedCompletions: 0, recoveryCopies: 0, v1FilesKept: 0, preservedBackups: 0, sourceAccountId: null }) // => false
+ * hasImportedWriting({ importedDrafts: 2, importedCompletions: 0, recoveryCopies: 0, v1FilesKept: 1, preservedBackups: 0, sourceAccountId: 'acct-1' }) // => true
+ */
+function hasImportedWriting(
+  summary: OfflineSyncDetails['migrationSummary'],
+): boolean {
+  if (!summary) return false
+  return (
+    summary.importedDrafts +
+      summary.importedCompletions +
+      summary.recoveryCopies +
+      summary.v1FilesKept +
+      summary.preservedBackups >
+    0
+  )
+}
+
+/**
  * The Sync details page inside the Settings window (#216 DA7, DA9, DA13, DA14, C31, C34).
  *
  * Reached from Account and always headed by a sticky "Back to Settings". "Needs a look" lists
  * actionable rows (or "No sync issues. Everything on this Mac is saved."); "History" lists the
- * latest resolved or informational entries, the migration summary with "Open recovery copies"
- * and preserved v1 backups. Each action is a `syncDetailAction` category command; focus then
+ * latest resolved or informational entries, the migration summary when it reports anything
+ * (with "Open recovery copies" only when copies exist) and preserved v1 backups.
+ * Each action is a `syncDetailAction` category command; focus then
  * moves to the next row, or to the "Needs a look" heading when none remain.
  * Rendered by {@link ElectronSettingsPage} while the Sync details view is active.
  *
@@ -107,7 +137,9 @@ export function SyncDetailsPage({ onBack }: { onBack: () => void }) {
 
   const rows = details?.rows ?? []
   const history = (details?.history ?? []).slice(0, HISTORY_LIMIT)
-  const summary = details?.migrationSummary ?? null
+  const migrationSummary = details?.migrationSummary ?? null
+  // A fresh install records an all-zero summary; it has nothing to report.
+  const summary = hasImportedWriting(migrationSummary) ? migrationSummary : null
   const backups = details?.preservedBackups ?? []
 
   return (
@@ -154,13 +186,16 @@ export function SyncDetailsPage({ onBack }: { onBack: () => void }) {
               keeps, {summary.recoveryCopies} recovery copies.{' '}
               {summary.v1FilesKept} earlier files kept as backups.
             </p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void api.liveEditor.show()}
-            >
-              Open recovery copies
-            </Button>
+            {/* Only offered when the import actually left recovery copies to open. */}
+            {summary.recoveryCopies > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void api.liveEditor.show()}
+              >
+                Open recovery copies
+              </Button>
+            )}
           </div>
         )}
         {backups.map((backup) => (
