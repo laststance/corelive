@@ -1766,6 +1766,64 @@ describe('outgoing delivery uses frozen server-id payloads', () => {
       revision: 2,
     })
   })
+
+  // Regression: /ship exception review (Claude adversarial) 2026-11-03 — a keep cancelled here and
+  // already cancelled on the dashboard was never retired once checkpoints kept unsent changes.
+  test('a count checkpoint retires an Undo the dashboard already holds as cancelled', async () => {
+    // Arrange
+    const { file, service, setNow } = await createWorkspace()
+    let state = await service.execute(completionCommand(await file.read()))
+    const operation = (await freeze(service))[0]!.operation
+    const uploaded = {
+      completionId: completionA,
+      revision: 1,
+      cancelled: false,
+      categoryId: 1,
+      title: 'Original',
+      completedAt: instant,
+    }
+    state = await service.acceptReceipts(accountId, [
+      {
+        operationId: operation.operationId,
+        completionId: completionA,
+        revision: 1,
+        status: 'applied',
+        projection: uploaded,
+      },
+    ])
+    state = await service.execute({
+      type: 'undo',
+      commandId: randomUUID(),
+      completionId: completionA,
+    })
+    const cancel = (await freeze(service))[0]!.operation
+    const tombstone = { ...uploaded, revision: 1, cancelled: true }
+    state = await service.acceptReceipts(accountId, [
+      {
+        operationId: cancel.operationId,
+        completionId: completionA,
+        revision: cancel.revision,
+        status: 'applied',
+        projection: tombstone,
+      },
+    ])
+
+    // Act
+    setNow(instant + 60 * 60_000)
+    state = await service.checkpoint(accountId, state.revision, {
+      day: '2026-10-21',
+      timezone: 'Asia/Tokyo',
+      total: 0,
+      fetchedAt: instant + 60 * 60_000,
+      identities: { [completionA]: tombstone },
+    })
+
+    // Assert
+    expect(state.completions[completionA]).toBeUndefined()
+    expect(state.retiredCompletions[completionA]).toMatchObject({
+      cancelled: true,
+    })
+  })
 })
 
 describe('attaching the account categories to the device workspace', () => {

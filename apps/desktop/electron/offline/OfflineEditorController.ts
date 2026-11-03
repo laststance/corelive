@@ -201,6 +201,9 @@ export class OfflineEditorController {
    * @example await controller.authenticated('user_123')
    */
   async authenticated(clerkId: string): Promise<void> {
+    // One arriving while a sign-out or Clear again ends the session belongs to that session: drop it
+    // now, not when its turn in the queue comes after the sweep.
+    if (this.signOutRun) return
     // A notification queued before a sign-out belongs to the session that sign-out ended.
     const epoch = this.signOutEpoch
     this.sessionTail = this.sessionTail
@@ -473,12 +476,24 @@ export class OfflineEditorController {
     // A sign-in that completed since the residual result already cleared the journal; leave it alone.
     if (!this.registryState?.signOutPending) return { status: 'signed-out' }
     // Like a sign-out, clearing ends the session: the epoch drops logins queued before it, and the
-    // in-flight run makes a login arriving during the sweep stand down (handleSession, connect).
+    // in-flight run drops logins arriving during it (authenticated, handleSession, connect).
     this.signOutEpoch += 1
-    this.signOutRun = this.finishPendingSignOut().finally(() => {
+    this.signOutRun = this.clearPendingSession().finally(() => {
       this.signOutRun = null
     })
     return this.signOutRun
+  }
+
+  /**
+   * The body of {@link clearAgain}: a sign-in already saving its attach finishes first, so the sweep
+   * and an attach never interleave; when that sign-in cleared the journal, nothing is swept.
+   * @returns The sweep's result, or `signed-out` when a sign-in that was saving cleared the journal.
+   * @example this.signOutRun = this.clearPendingSession()
+   */
+  private async clearPendingSession(): Promise<SignOutResult> {
+    await this.sessionTail
+    if (!this.registryState?.signOutPending) return { status: 'signed-out' }
+    return this.finishPendingSignOut()
   }
 
   /**

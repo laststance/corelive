@@ -983,6 +983,93 @@ test('a sign-in that reports in while Clear again is sweeping cannot attach the 
   expect(fixture.controller.accountStatus().state).not.toBe('attached')
 })
 
+// Regression: /ship exception review (Codex adversarial) 2026-11-03 — an attach already being saved
+// when Clear again started landed during the sweep, leaving a residual result on an attached Mac.
+test('a sign-in already saving its attach when Clear again starts wins, and Clear again sweeps nothing', async () => {
+  // Arrange
+  const fixture = await createFixture({ bound: 'account-a', attached: true })
+  await fixture.controller.initialize()
+  const residual = {
+    status: 'signed-out-residual' as const,
+    code: 'SIGNOUT_RESIDUAL_COOKIE' as const,
+    cookieNames: ['__session'],
+    domains: ['corelive.app'],
+  }
+  fixture.endLocalSession.mockResolvedValueOnce(residual)
+  await fixture.controller.signOut()
+  fixture.endLocalSession.mockResolvedValueOnce(residual)
+  const attachSaved = deferred()
+  const realUpdate = fixture.registry.update.bind(fixture.registry)
+  const attachWrite = vi.fn()
+  vi.spyOn(fixture.registry, 'update').mockImplementation(async (patch) => {
+    if (patch.attachedAccountId === 'account-a') {
+      attachWrite()
+      await attachSaved.promise
+    }
+    return realUpdate(patch)
+  })
+  const signingIn = fixture.controller.authenticated('account-a')
+  await vi.waitFor(() => expect(attachWrite).toHaveBeenCalledOnce())
+
+  // Act
+  const clearing = fixture.controller.clearAgain()
+  attachSaved.resolve()
+  const [result] = await Promise.all([clearing, signingIn])
+
+  // Assert
+  expect(result).toEqual({ status: 'signed-out' })
+  expect(fixture.endLocalSession).toHaveBeenCalledOnce()
+  expect(await fixture.registry.read()).toMatchObject({
+    attachedAccountId: 'account-a',
+    signOutPending: false,
+  })
+})
+
+// Regression: /ship exception review (Codex adversarial) 2026-11-03 — a sign-in reported during the
+// sweep waited behind an older identity check and attached once the sweep had finished.
+test('a sign-in reported while Clear again sweeps is dropped even when an older sign-in check is still waiting', async () => {
+  // Arrange
+  const fixture = await createFixture({ bound: 'account-a', attached: true })
+  await fixture.controller.initialize()
+  const residual = {
+    status: 'signed-out-residual' as const,
+    code: 'SIGNOUT_RESIDUAL_COOKIE' as const,
+    cookieNames: ['__session'],
+    domains: ['corelive.app'],
+  }
+  fixture.endLocalSession.mockResolvedValueOnce(residual)
+  await fixture.controller.signOut()
+  const olderReply = deferred()
+  fixture.transport.whoami.mockImplementationOnce(async () => {
+    await olderReply.promise
+    return { clerkId: 'account-a', email: null }
+  })
+  const older = fixture.controller.authenticated('account-a')
+  await vi.waitFor(() =>
+    expect(fixture.transport.whoami).toHaveBeenCalledOnce(),
+  )
+  const sweep = deferred()
+  fixture.endLocalSession.mockImplementationOnce(async () => {
+    await sweep.promise
+    return residual
+  })
+  const clearing = fixture.controller.clearAgain()
+
+  // Act
+  const reported = fixture.controller.authenticated('account-a')
+  sweep.resolve()
+  olderReply.resolve()
+  const [result] = await Promise.all([clearing, older, reported])
+
+  // Assert
+  expect(result).toEqual(residual)
+  expect(fixture.transport.whoami).toHaveBeenCalledOnce()
+  expect(await fixture.registry.read()).toMatchObject({
+    attachedAccountId: null,
+    signOutPending: true,
+  })
+})
+
 // Regression: /ship Step 11 (Codex adversarial) 2026-11-03 — a sweep that threw rejected the
 // sign-out, so Settings showed neither the cleanup note nor Clear again.
 test('a session sweep that throws ends in the residual result with the journal kept for Clear again', async () => {

@@ -170,6 +170,25 @@ describe('uploadKind', () => {
     expect(kind).toBe('cancel')
   })
 
+  // Regression: /ship exception review (Claude adversarial) 2026-11-03 — a keep cancelled on two
+  // devices re-sent its cancel every pass because the tombstone's revision stayed below the local one.
+  test('a keep undone here that the dashboard already cancelled sends nothing', () => {
+    // Arrange
+    const base = keep('a')
+    const record = {
+      ...base,
+      cancelled: true,
+      revision: 4,
+      remote: { ...remoteCopy(base, 2, base.categoryId), cancelled: true },
+    }
+
+    // Act
+    const kind = uploadKind(record, [])
+
+    // Assert
+    expect(kind).toBeNull()
+  })
+
   test('a keep the dashboard already holds at the same revision is not re-sent', () => {
     // Arrange
     const base = keep('a')

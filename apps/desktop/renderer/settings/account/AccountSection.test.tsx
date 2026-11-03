@@ -441,6 +441,49 @@ test('a sign-in that re-attaches the Mac after a residual sign-out removes the c
   expect(screen.queryByRole('button', { name: 'Clear again' })).toBeNull()
 })
 
+// Regression: /ship exception review (Claude adversarial) 2026-11-03 — hiding the cleanup note while
+// attached kept it pending, so it came back when the session later ended.
+test('a cleanup note retired by a re-attach does not come back when the session later ends', async () => {
+  // Arrange
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+  const { fake } = await renderWithSettings(<Harness />, { account: ATTACHED })
+  fake.api.account.signOut.mockImplementation(async () => {
+    fake.setAccount({ state: 'signed-out' })
+    return {
+      status: 'signed-out-residual',
+      code: 'SIGNOUT_RESIDUAL_COOKIE',
+      cookieNames: ['__client'],
+      domains: ['clerk.corelive.app'],
+    }
+  })
+  await user.click(screen.getByRole('button', { name: 'Sign out' }))
+  await user.click(
+    within(screen.getByRole('group', { name: 'Confirm sign out' })).getByRole(
+      'button',
+      { name: 'Sign out' },
+    ),
+  )
+  await screen.findByRole('button', { name: 'Clear again' })
+  fake.setAccount(ATTACHED)
+  await waitFor(() =>
+    expect(screen.getByText('raphtalia@example.com')).toBeVisible(),
+  )
+
+  // Act
+  fake.setAccount({ state: 'signed-out' })
+
+  // Assert
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeVisible(),
+  )
+  expect(screen.queryByRole('button', { name: 'Clear again' })).toBeNull()
+  expect(
+    screen.queryByText(
+      "Signed out. Some sign-in data couldn't be cleared from this Mac.",
+    ),
+  ).toBeNull()
+})
+
 // Regression: /ship fix-check 2026-11-03 — Clear again that found the Mac re-attached reported
 // "Signed out" above the attached account.
 test('Clear again that finds the Mac signed in again never says it signed out', async () => {

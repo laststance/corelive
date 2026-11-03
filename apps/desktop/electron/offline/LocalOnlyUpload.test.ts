@@ -194,7 +194,11 @@ describe('upload work is derived at attach', () => {
       revision: 2,
       cancelled: true,
     })
-    cancelledAfterUpload.remote = remoteOf(cancelledAfterUpload, 1)
+    // The dashboard holds the revision uploaded before the Undo, still uncancelled.
+    cancelledAfterUpload.remote = {
+      ...remoteOf(cancelledAfterUpload, 1),
+      cancelled: false,
+    }
     const cancelledBeforeUpload = completion({
       id: randomUUID(),
       revision: 2,

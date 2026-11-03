@@ -265,8 +265,8 @@ function rejectedRevision(
  * @param operation - The incoming edit; creates and cancels never qualify.
  * @param current - The live sync state the conflict was judged against.
  * @returns
- * - true when category, title and time all equal the dashboard's
- * - false otherwise, so a different target still asks for a decision
+ * - true when category, title and time all equal the dashboard's and its revision is not past the edit's
+ * - false otherwise, so a different target or a newer dashboard edit still asks for a decision
  * @example requestsCurrentState({ ...move, categoryId: 4 }, { ...state, categoryId: 4 }) // => true
  */
 function requestsCurrentState(
@@ -275,6 +275,9 @@ function requestsCurrentState(
 ): boolean {
   return (
     (operation.kind === 'relocate' || operation.kind === 'correctTime') &&
+    // A dashboard revision past the edit's own means other edits landed; the returned projection
+    // would then cover local changes made after this edit was sent, so those still need a decision.
+    current.revision <= operation.revision &&
     current.categoryId === operation.categoryId &&
     current.title === operation.title &&
     current.completedAt.getTime() === operation.completedAt

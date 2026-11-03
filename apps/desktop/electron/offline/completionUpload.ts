@@ -63,6 +63,8 @@ export function uploadKind(
   const hasUncertain = entries.some((entry) => entry.state === 'sent')
   if (hasUncertain && !completion.cancelled) return null
   if ((completion.remote?.revision ?? 0) >= completion.revision) return null
+  // Cancellation is terminal on the dashboard: once it holds a tombstone, another cancel changes nothing.
+  if (completion.cancelled && completion.remote?.cancelled) return null
   // Cancelled before anything was offered to the dashboard: nothing to cancel there.
   if (completion.cancelled && !completion.remote && !hasUncertain) return null
   if (completion.cancelled) return 'cancel'

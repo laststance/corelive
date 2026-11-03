@@ -392,6 +392,66 @@ describeIfDb('offline completion synchronization', () => {
     })
   })
 
+  // Regression: /ship exception review (Codex adversarial) 2026-11-03 — accepting a stale move behind
+  // a newer dashboard revision handed back a projection that hid an Undo made while the move was sent.
+  test('a stale move that matches the dashboard but is behind a newer dashboard edit still requires a decision', async () => {
+    // Arrange
+    const account = await createAccount()
+    const category = await call(
+      createCategory,
+      { name: 'Temporary' },
+      account.context,
+    )
+    const operation = createOperation(category.id)
+    await call(syncApply, { operations: [operation] }, account.context)
+    await call(
+      deleteCategory,
+      { id: category.id, targetCategoryId: account.categoryId },
+      account.context,
+    )
+    await call(
+      syncApply,
+      {
+        operations: [
+          {
+            ...operation,
+            operationId: randomUUID(),
+            kind: 'correctTime',
+            revision: 3,
+            expectedRemoteRevision: 2,
+            categoryId: account.categoryId,
+          },
+        ],
+      },
+      account.context,
+    )
+
+    // Act
+    const result = await call(
+      syncApply,
+      {
+        operations: [
+          {
+            ...operation,
+            operationId: randomUUID(),
+            kind: 'relocate',
+            revision: 2,
+            expectedRemoteRevision: 1,
+            categoryId: account.categoryId,
+          },
+        ],
+      },
+      account.context,
+    )
+
+    // Assert
+    expect(result.receipts[0]).toMatchObject({
+      status: 'rejected',
+      reason: 'conflict',
+      projection: { revision: 3, categoryId: account.categoryId },
+    })
+  })
+
   test('deleting a category advances the remote revision so a stale move elsewhere still requires a decision', async () => {
     // Arrange
     const account = await createAccount()

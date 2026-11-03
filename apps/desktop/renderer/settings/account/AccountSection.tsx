@@ -1,7 +1,7 @@
 import type { SignOutResult } from '@corelive/desktop-contract/offline-account'
 import { useCycleEffect } from '@corelive/live-editor/hooks/use-cycle-effect'
 import { Button } from '@corelive/live-editor/ui/button'
-import { useRef, useState, type RefObject } from 'react'
+import { useRef, useState, type ReactNode, type RefObject } from 'react'
 
 import { useSettings } from '../SettingsProvider'
 import { SettingsSection } from '../SettingsSection'
@@ -26,6 +26,13 @@ type FocusTarget = 'heading' | 'sign-in' | 'sign-out' | 'cancel'
 
 /** Refreshes the CHECKED line every half minute without a re-fetch. */
 const CLOCK_TICK_MS = 30_000
+
+/** Notes about a finished sign-out; an attached account never carries them. */
+const SIGN_OUT_NOTES: ReadonlySet<Ui['kind']> = new Set([
+  'signed-out',
+  'residual',
+  'clearing',
+])
 
 /** Props of {@link AccountSection}. */
 export interface AccountSectionProps {
@@ -67,6 +74,10 @@ export function AccountSection({
 
   if (account.firstUpload?.state === 'done' && uploadDone === null)
     setUploadDone(account.firstUpload.count)
+
+  // A sign-in that re-attached this Mac retires the sign-out notes for good; main pushes the state.
+  if (account.state === 'attached' && SIGN_OUT_NOTES.has(ui.kind))
+    setUi({ kind: 'idle' })
 
   useCycleEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS)
@@ -363,33 +374,10 @@ export function AccountSection({
   }
 
   const lookCount = account.needsALookCount
-  // A sign-in that re-attached this Mac since the sign-out makes its notes stale; main pushes the state.
-  const showsSignOutNotes = account.state !== 'attached'
   return (
     <SettingsSection label="Account" headingRef={headingRef}>
       <div className="space-y-3">
-        {showsSignOutNotes && ui.kind === 'signed-out' && (
-          <p role="status" className="type-small text-muted-foreground">
-            Signed out. Your writing is still here.
-          </p>
-        )}
-        {showsSignOutNotes &&
-          (ui.kind === 'residual' || ui.kind === 'clearing') && (
-            <div role="status" className="space-y-2">
-              <p className="type-small text-muted-foreground">
-                Signed out. Some sign-in data couldn&apos;t be cleared from this
-                Mac.
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={ui.kind === 'clearing'}
-                onClick={() => void clearAgain()}
-              >
-                {ui.kind === 'clearing' ? 'Clearing…' : 'Clear again'}
-              </Button>
-            </div>
-          )}
+        <SignOutNotes ui={ui} onClearAgain={() => void clearAgain()} />
         {ui.kind === 'flush-failed' && (
           <p role="alert" className="type-small text-destructive">
             Not saved — retry or copy your writing
@@ -418,5 +406,47 @@ export function AccountSection({
         </Button>
       </div>
     </SettingsSection>
+  )
+}
+
+/**
+ * The notes a finished sign-out leaves above the account state (DA5, DX6).
+ *
+ * Rendered by {@link AccountSection}; it retires them (back to idle) once the Mac is attached again.
+ *
+ * @param ui - The section's current action state; only the sign-out note kinds render anything.
+ * @param onClearAgain - Reruns the session end after a residual result.
+ * @returns The plain success line, the cleanup note with Clear again, or null.
+ * @example <SignOutNotes ui={{ kind: 'residual' }} onClearAgain={clearAgain} />
+ */
+function SignOutNotes({
+  ui,
+  onClearAgain,
+}: {
+  ui: Ui
+  onClearAgain: () => void
+}): ReactNode {
+  if (ui.kind === 'signed-out')
+    return (
+      <p role="status" className="type-small text-muted-foreground">
+        Signed out. Your writing is still here.
+      </p>
+    )
+  if (ui.kind !== 'residual' && ui.kind !== 'clearing') return null
+  const clearing = ui.kind === 'clearing'
+  return (
+    <div role="status" className="space-y-2">
+      <p className="type-small text-muted-foreground">
+        Signed out. Some sign-in data couldn&apos;t be cleared from this Mac.
+      </p>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={clearing}
+        onClick={onClearAgain}
+      >
+        {clearing ? 'Clearing…' : 'Clear again'}
+      </Button>
+    </div>
   )
 }
