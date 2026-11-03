@@ -21,6 +21,7 @@ import type { z } from 'zod'
 import { AtomicWorkspaceFile } from './AtomicWorkspaceFile'
 import { migrateWorkspaceV1, type MigrationStage } from './migrateWorkspaceV1'
 import { REGISTRY_OWNER_ID, registrySchema } from './OfflineAccountRegistry'
+import { workspaceView } from './workspace-worker-protocol'
 
 const directories: string[] = []
 const NOW = 1_800_000_000_000
@@ -319,6 +320,56 @@ describe('v1 to v2 workspace migration', () => {
     expect(
       Object.keys(result.workspace.binding!.deletionReceipts),
     ).toHaveLength(1)
+  })
+
+  // Regression: /ship CodeRabbit review on PR #222 2026-11-03 — a v1 selection on a category that no longer exists, with no draft, migrated without a draft and the editor could not open
+  test('a v1 selection on a category that no longer exists still opens the editor on an empty draft', async () => {
+    // Arrange
+    const directory = await installV1([
+      {
+        id: 'user_a',
+        workspace: v1Workspace('user_a', { selectedCategoryId: 99 }),
+      },
+    ])
+
+    // Act
+    const result = await migrateWorkspaceV1({ directory, now: () => NOW })
+
+    // Assert
+    if (!result.ok) throw new Error('migration failed')
+    const selected = result.workspace.categories.find(
+      (category) => category.id === result.workspace.selectedCategoryId,
+    )
+    expect(selected?.historical).toBe(true)
+    expect(workspaceView(result.workspace).draft.rows).toEqual([
+      { id: expect.any(String), text: '' },
+    ])
+  })
+
+  // Regression: /ship CodeRabbit review on PR #222 2026-11-03 — a v1 selection on a removed category without a draft left the editor unable to open
+  test('a v1 selection on a removed category without a draft still opens the editor on an empty draft', async () => {
+    // Arrange
+    const base = v1Workspace('user_a')
+    const { '14': _removedDraft, ...draftsWithoutRemoved } = base.drafts
+    const directory = await installV1([
+      {
+        id: 'user_a',
+        workspace: {
+          ...base,
+          selectedCategoryId: 14,
+          drafts: draftsWithoutRemoved,
+        },
+      },
+    ])
+
+    // Act
+    const result = await migrateWorkspaceV1({ directory, now: () => NOW })
+
+    // Assert
+    if (!result.ok) throw new Error('migration failed')
+    expect(workspaceView(result.workspace).draft.rows).toEqual([
+      { id: expect.any(String), text: '' },
+    ])
   })
 
   test('writes only the two new v2 files and leaves every v1 byte untouched (C32)', async () => {

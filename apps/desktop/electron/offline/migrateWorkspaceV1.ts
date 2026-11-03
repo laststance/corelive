@@ -601,7 +601,10 @@ function convertCategories(
 }
 
 /**
- * Converts the v1 drafts and gives every live category an empty one.
+ * Converts the v1 drafts and gives every live category, and the selected one, an empty one.
+ *
+ * The editor reads the selected category's draft, so a v1 selection on a category that no longer
+ * exists (now a historical placeholder) or was removed still gets an empty draft to open on.
  *
  * @example const drafts = convertDrafts(conversion, categories)
  */
@@ -611,10 +614,15 @@ function convertDrafts(
 ): OfflineWorkspace['drafts'] {
   const { v1, seed, local } = conversion
   const drafts: OfflineWorkspace['drafts'] = {}
+  const selectedId = v1 ? local(v1.selectedCategoryId) : undefined
   for (const [key, draft] of Object.entries(v1?.drafts ?? {}))
     drafts[local(Number(key))] = draft
   for (const category of categories)
-    if (!category.removed && !category.historical)
+    // Live categories always get a draft; the selection gets one whatever its state.
+    if (
+      (!category.removed && !category.historical) ||
+      category.id === selectedId
+    )
       drafts[category.id] ??= {
         revision: 0,
         rows: [{ id: uuidFrom(`${seed}:row:${category.id}`), text: '' }],
