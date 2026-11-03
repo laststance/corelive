@@ -459,6 +459,7 @@ test('History lists the migration summary with Open recovery copies, preserved b
           preservedBackups: 1,
         },
         preservedBackups: [{ fileName: 'old-workspace.json', accountId: null }],
+        recoveryCopyCount: 2,
         history: [
           {
             id: 'h-1',
@@ -546,8 +547,8 @@ test('Sync details without a migration summary shows "Nothing here yet" in Histo
   ).toBeNull()
 })
 
-// Regression: native VM QA of v0.30.0 on 2026-11-03 — Open recovery copies showed even when the import made no recovery copy
-test('an import without recovery copies keeps its summary but offers no Open recovery copies', async () => {
+// Regression: native VM QA of v0.30.0 on 2026-11-03 — Open recovery copies showed even when there was no recovery copy to open
+test('an import with no recovery copies waiting keeps its summary but offers no Open recovery copies', async () => {
   // Arrange
   const syncDetails = withRows([], {
     migrationSummary: {
@@ -558,6 +559,7 @@ test('an import without recovery copies keeps its summary but offers no Open rec
       v1FilesKept: 1,
       preservedBackups: 0,
     },
+    recoveryCopyCount: 0,
   })
 
   // Act
@@ -575,6 +577,72 @@ test('an import without recovery copies keeps its summary but offers no Open rec
   expect(
     within(history).queryByRole('button', { name: 'Open recovery copies' }),
   ).toBeNull()
+})
+
+// Regression: /ship adversarial review (Codex) on 2026-11-03 — the button followed the migration's newly created copies, so copies carried over from the earlier version lost it
+test('History offers Open recovery copies for copies carried over from the earlier version', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  const { fake } = await renderWithSettings(
+    <SyncDetailsPage onBack={vi.fn()} />,
+    {
+      syncDetails: withRows([], {
+        migrationSummary: {
+          sourceAccountId: 'acct-1',
+          importedDrafts: 3,
+          importedCompletions: 0,
+          recoveryCopies: 0,
+          v1FilesKept: 1,
+          preservedBackups: 0,
+        },
+        recoveryCopyCount: 1,
+      }),
+    },
+  )
+
+  // Act
+  const history = (
+    await screen.findByRole('heading', { name: 'History' })
+  ).closest('section')!
+  const openButton = within(history).getByRole('button', {
+    name: 'Open recovery copies',
+  })
+  await user.click(openButton)
+
+  // Assert
+  expect(openButton).toBeVisible()
+  expect(fake.api.liveEditor.show).toHaveBeenCalledOnce()
+})
+
+// Regression: /ship adversarial review (Codex) on 2026-11-03 — copies an older build added after a fresh install were hidden behind "Nothing here yet."
+test('a fresh install that later gets recovery copies offers them instead of "Nothing here yet"', async () => {
+  // Arrange
+  const syncDetails = withRows([], {
+    migrationSummary: {
+      sourceAccountId: null,
+      importedDrafts: 0,
+      importedCompletions: 0,
+      recoveryCopies: 0,
+      v1FilesKept: 0,
+      preservedBackups: 0,
+    },
+    recoveryCopyCount: 2,
+  })
+
+  // Act
+  await renderWithSettings(<SyncDetailsPage onBack={vi.fn()} />, {
+    syncDetails,
+  })
+
+  // Assert
+  const history = (
+    await screen.findByRole('heading', { name: 'History' })
+  ).closest('section')!
+  expect(
+    within(history).getByRole('button', { name: 'Open recovery copies' }),
+  ).toBeVisible()
+  expect(within(history).queryByText('Nothing here yet.')).toBeNull()
+  expect(history).not.toHaveTextContent('Brought your earlier writing')
 })
 
 // Added by /ship Step 7 coverage pass on 2026-11-03

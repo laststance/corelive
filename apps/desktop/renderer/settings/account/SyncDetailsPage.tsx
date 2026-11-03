@@ -66,8 +66,8 @@ function hasImportedWriting(
  *
  * Reached from Account and always headed by a sticky "Back to Settings". "Needs a look" lists
  * actionable rows (or "No sync issues. Everything on this Mac is saved."); "History" lists the
- * latest resolved or informational entries, the migration summary when it reports anything
- * (with "Open recovery copies" only when copies exist) and preserved v1 backups.
+ * latest resolved or informational entries, the migration summary when it reports anything,
+ * "Open recovery copies" while any recovery copy is still waiting, and preserved v1 backups.
  * Each action is a `syncDetailAction` category command; focus then
  * moves to the next row, or to the "Needs a look" heading when none remain.
  * Rendered by {@link ElectronSettingsPage} while the Sync details view is active.
@@ -142,6 +142,8 @@ export function SyncDetailsPage({ onBack }: { onBack: () => void }) {
   const summary = hasImportedWriting(migrationSummary) ? migrationSummary : null
   const backups = details?.preservedBackups ?? []
   const dashboardOnlyCount = details?.dashboardOnlyCount ?? 0
+  // Live count: the summary only knows the copies the migration itself created.
+  const recoveryCopyCount = details?.recoveryCopyCount ?? 0
 
   return (
     <div ref={containerRef} className="space-y-8">
@@ -179,16 +181,18 @@ export function SyncDetailsPage({ onBack }: { onBack: () => void }) {
         <h2 id="sync-history" className="type-h3 leading-7">
           History
         </h2>
-        {summary && (
+        {(summary || recoveryCopyCount > 0) && (
           <div className="space-y-2 border-b pb-3">
-            <p className="type-small leading-5">
-              Brought your earlier writing into this Mac&apos;s workspace:{' '}
-              {summary.importedDrafts} drafts, {summary.importedCompletions}{' '}
-              keeps, {summary.recoveryCopies} recovery copies.{' '}
-              {summary.v1FilesKept} earlier files kept as backups.
-            </p>
-            {/* Only offered when the import actually left recovery copies to open. */}
-            {summary.recoveryCopies > 0 && (
+            {summary && (
+              <p className="type-small leading-5">
+                Brought your earlier writing into this Mac&apos;s workspace:{' '}
+                {summary.importedDrafts} drafts, {summary.importedCompletions}{' '}
+                keeps, {summary.recoveryCopies} recovery copies.{' '}
+                {summary.v1FilesKept} earlier files kept as backups.
+              </p>
+            )}
+            {/* Offered while any recovery copy is still waiting, however it was created. */}
+            {recoveryCopyCount > 0 && (
               <Button
                 variant="outline"
                 size="sm"
@@ -212,9 +216,10 @@ export function SyncDetailsPage({ onBack }: { onBack: () => void }) {
             Kept on the dashboard only: {dashboardOnlyCount}
           </p>
         )}
-        {/* Empty only when no entry, summary, backup or dashboard-only line is shown. */}
+        {/* Empty only when no entry, summary, recovery copy, backup or dashboard-only line is shown. */}
         {history.length === 0 &&
           !summary &&
+          recoveryCopyCount === 0 &&
           backups.length === 0 &&
           dashboardOnlyCount === 0 && (
             <p className="type-small text-muted-foreground">

@@ -109,6 +109,7 @@ function mountEditor(
       migrationSummary: null,
       preservedBackups: [],
       dashboardOnlyCount: 0,
+      recoveryCopyCount: 0,
     }),
     copyWriting: async () => true,
     export: async () => true,

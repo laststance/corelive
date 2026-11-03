@@ -113,7 +113,7 @@ if (!spec) {
       acknowledgeFirstUpload: async () => {},
       openDashboard: async () => true,
     },
-    syncDetails: async () => ({ rows: spec.rows ?? [], history: [], migrationSummary: null, preservedBackups: [], dashboardOnlyCount: 0 }),
+    syncDetails: async () => ({ rows: spec.rows ?? [], history: [], migrationSummary: null, preservedBackups: [], dashboardOnlyCount: 0, recoveryCopyCount: 0 }),
     config: { get: async (_path, fallback) => fallback, set: async () => true, open: async () => true },
     app: { getVersion: async () => '0.0.0' },
     updater: {

@@ -36,6 +36,7 @@ export const EMPTY_SYNC_DETAILS: OfflineSyncDetails = {
   migrationSummary: null,
   preservedBackups: [],
   dashboardOnlyCount: 0,
+  recoveryCopyCount: 0,
 }
 
 /** The device workspace's default General category. */
