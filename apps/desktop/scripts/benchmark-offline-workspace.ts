@@ -34,6 +34,8 @@ const MEASURED_SAMPLES = 40
 const COLD_PARSE_SAMPLES = 5
 const BYTES_PER_GIGABYTE = 1024 ** 3
 const BYTES_PER_MEGABYTE = 1024 ** 2
+/** Placeholder bearer the fake broker hands out; the benchmark transport never sends it anywhere. */
+const BENCHMARK_FAKE_TOKEN = 'benchmark-token'
 
 type Operation = 'keep' | 'autosave' | 'cold-parse'
 
@@ -299,7 +301,7 @@ async function measureDrain(root: string, completions: number): Promise<Drain> {
           expectedAccountId,
           generation,
           accountId: BENCHMARK_ACCOUNT_ID,
-          token: 'benchmark-token',
+          token: BENCHMARK_FAKE_TOKEN,
         },
       }),
     },

@@ -38,6 +38,8 @@ export function OfflineCategoryManagement() {
       .filter((child) => child.parentId === root.id)
       .map((child) => ({ category: child, depth: 1 })),
   ])
+  // One key per edited category (and one for create) remounts the form, so switching rows never keeps a stale draft.
+  const panelKey = mode?.kind === 'edit' ? mode.categoryId : 'create'
   return (
     <div className="space-y-3">
       <ul className="divide-y">
@@ -66,7 +68,7 @@ export function OfflineCategoryManagement() {
       </ul>
       {mode ? (
         <CategoryManagementPanel
-          key={mode.kind === 'edit' ? mode.categoryId : 'create'}
+          key={panelKey}
           mode={mode}
           categories={live}
           onCommand={sendCategoryCommand}

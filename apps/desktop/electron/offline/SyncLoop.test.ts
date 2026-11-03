@@ -300,8 +300,8 @@ test('a receipt that arrives after the account detached retires its own operatio
 })
 
 test('stop returns as soon as an in-flight request settles after aborting it', async () => {
-  // Arrange
-  const fixture = await createFixture()
+  // Arrange: a settle bound far past the test timeout, so only the abort can let stop return
+  const fixture = await createFixture({ settleTimeoutMs: 60_000 })
   fixture.transport.apply.mockImplementationOnce(
     async (_input, signal) =>
       new Promise((_resolve, reject) => {
@@ -310,13 +310,12 @@ test('stop returns as soon as an in-flight request settles after aborting it', a
   )
   fixture.loop.wake()
   await vi.waitFor(() => expect(fixture.transport.apply).toHaveBeenCalledOnce())
-  const startedAt = Date.now()
 
   // Act
   await fixture.loop.stop()
 
-  // Assert: the aborted request settled well inside the bound
-  expect(Date.now() - startedAt).toBeLessThan(2000)
+  // Assert
+  expect(fixture.transport.apply.mock.calls[0]?.[1]?.aborted).toBe(true)
   expect(
     (await fixture.worker.call('pending', { limit: 16 })).uncertain[0]?.state,
   ).toBe('sent')
