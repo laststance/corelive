@@ -9,7 +9,6 @@ import { db } from '@/db'
 import {
   categoryTable,
   completedTable,
-  electronSettingsTable,
   skillNodeTable,
   skillTreeTable,
   todoTable,
@@ -23,7 +22,6 @@ import {
   updateCategory,
 } from './category'
 import { describeIfDb } from './describeIfDb'
-import { upsertElectronSettings } from './electronSettings'
 import { getMyTree } from './skillTree'
 
 /**
@@ -109,9 +107,6 @@ afterEach(async () => {
       .where(eq(userTable.clerkId, clerkId))
     if (!user) continue
     await db.delete(skillTreeTable).where(eq(skillTreeTable.userId, user.id))
-    await db
-      .delete(electronSettingsTable)
-      .where(eq(electronSettingsTable.userId, user.id))
     await db.delete(completedTable).where(eq(completedTable.userId, user.id))
     await db.delete(todoTable).where(eq(todoTable.userId, user.id))
     await db.delete(categoryTable).where(eq(categoryTable.userId, user.id))
@@ -143,33 +138,6 @@ describeIfDb('updatedAt columns advance on write (real PostgreSQL)', () => {
 
     // Assert
     expect(updated.name).toBe('Deep Focus')
-    expectStampedJustNow(updated.updatedAt)
-  })
-
-  test('stamps ElectronSettings.updatedAt on the insert path and advances it on the conflict-update path', async () => {
-    // Arrange
-    const clerkId = freshClerkId()
-    const inserted = await call(
-      upsertElectronSettings,
-      { hideAppIcon: false },
-      authContext(clerkId),
-    )
-    await db
-      .update(electronSettingsTable)
-      .set({ updatedAt: STALE_UPDATED_AT })
-      .where(eq(electronSettingsTable.id, inserted.id))
-
-    // Act
-    const updated = await call(
-      upsertElectronSettings,
-      { hideAppIcon: true },
-      authContext(clerkId),
-    )
-
-    // Assert
-    expectStampedJustNow(inserted.updatedAt)
-    expect(updated.id).toBe(inserted.id)
-    expect(updated.hideAppIcon).toBe(true)
     expectStampedJustNow(updated.updatedAt)
   })
 

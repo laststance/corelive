@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, test } from 'vitest'
 import { useNextThemesPersistence } from '@/hooks/useThemeAxis'
 import { ThemeProvider } from '@/providers/ThemeProvider'
 
-/** Mounts the shared picker on the web's next-themes adapter, as ElectronSettingsPage does. */
+/** Mounts the shared picker on the web's next-themes adapter. */
 const WebThemeSelector = function WebThemeSelector() {
   return <ThemeSelector persistence={useNextThemesPersistence()} />
 }

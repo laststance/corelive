@@ -16,10 +16,6 @@ import {
   syncCheckpoint,
   syncReceipts,
 } from './procedures/completionSync'
-import {
-  getElectronSettings,
-  upsertElectronSettings,
-} from './procedures/electronSettings'
 import { bootstrapHome } from './procedures/home'
 import {
   assignTask,
@@ -51,10 +47,6 @@ export const router = {
     heatmap: getHeatmap,
     dayDetail: getDayDetail,
     journal: getJournal,
-  },
-  electronSettings: {
-    get: getElectronSettings,
-    upsert: upsertElectronSettings,
   },
   skillTree: {
     getMyTree,

@@ -267,29 +267,6 @@ export const syncReceiptTable = pgTable(
   (table) => [primaryKey({ columns: [table.userId, table.operationId] })],
 )
 
-export const electronSettingsTable = pgTable(
-  'ElectronSettings',
-  {
-    id: serial('id').primaryKey(),
-    userId: integer('userId').notNull(),
-    hideAppIcon: boolean('hideAppIcon').default(false).notNull(),
-    showInMenuBar: boolean('showInMenuBar').default(true).notNull(),
-    startAtLogin: boolean('startAtLogin').default(false).notNull(),
-    createdAt: createdAtColumn(),
-    updatedAt: updatedAtColumn(),
-  },
-  (table) => [
-    uniqueIndex('ElectronSettings_userId_key').on(table.userId),
-    foreignKey({
-      columns: [table.userId],
-      foreignColumns: [userTable.id],
-      name: 'ElectronSettings_userId_fkey',
-    })
-      .onUpdate('cascade')
-      .onDelete('restrict'),
-  ],
-)
-
 export const skillTreeTable = pgTable(
   'SkillTree',
   {
