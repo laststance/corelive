@@ -91,6 +91,8 @@ export class OfflineEditorController {
   private clearRun: Promise<SignOutResult> | null = null
   /** Set while a sign-out or Clear again runs; resolves to whether it actually ended the session. */
   private sessionEnding: Promise<boolean> | null = null
+  /** Settles {@link sessionEnding} early, once the sweep is done; logins after it are new sessions. */
+  private releaseSessionEnd: ((ended: boolean) => void) | null = null
   private sessionTail: Promise<void> = Promise.resolve()
   /** Serializes every registry write that attaches or ends the session, so they never interleave. */
   private sessionLock: Promise<unknown> = Promise.resolve()
@@ -258,16 +260,12 @@ export class OfflineEditorController {
     if (epoch !== this.signOutEpoch) return
     const attached = this.registryState?.attachedAccountId
     this.signedIn = who
-    if (!bound) {
+    // A Connect that attached before the first sync pass wrote its binding still counts as bound.
+    const boundTo = bound?.accountId ?? attached ?? null
+    if (!boundTo) {
       // DA4/EA2b: an unbound Mac waits for Connect; nothing is sent to the sync endpoints.
-      this.registryState = await this.registry.update({
-        pendingConnect: {
-          accountId: who.clerkId,
-          displayEmail: who.email ?? '',
-        },
-        signOutPending: false,
-      })
-    } else if (bound.accountId === who.clerkId) {
+      await this.offerConnect(who)
+    } else if (boundTo === who.clerkId) {
       this.pendingEmail = who.email
       this.registryState = await this.registry.update({
         attachedAccountId: who.clerkId,
@@ -281,7 +279,24 @@ export class OfflineEditorController {
       this.registryState = await this.registry.update({
         attachedAccountId: null,
       })
+      // With no binding written yet the Mac is still unbound, so the new account may Connect.
+      if (!bound) await this.offerConnect(who)
     }
+  }
+
+  /**
+   * Shows the Connect prompt for a verified account on an unbound Mac (DA4, EA2b); clears the journal.
+   * @param who - The verified identity from {@link handleSession}.
+   * @example await this.offerConnect(who)
+   */
+  private async offerConnect(who: {
+    clerkId: string
+    email: string | null
+  }): Promise<void> {
+    this.registryState = await this.registry.update({
+      pendingConnect: { accountId: who.clerkId, displayEmail: who.email ?? '' },
+      signOutPending: false,
+    })
   }
 
   /**
@@ -311,15 +326,21 @@ export class OfflineEditorController {
     const ending = new Promise<boolean>((resolve) => {
       settle = resolve
     })
+    const release = (ended: boolean): void => {
+      if (this.sessionEnding === ending) this.sessionEnding = null
+      if (this.releaseSessionEnd === release) this.releaseSessionEnd = null
+      settle(ended)
+    }
     this.sessionEnding = ending
+    this.releaseSessionEnd = release
     let ended = false
     try {
       const outcome = await work()
       ended = outcome.ended
       return outcome.result
     } finally {
-      if (this.sessionEnding === ending) this.sessionEnding = null
-      settle(ended)
+      // A run released at its sweep already settled; settling again changes nothing.
+      release(ended)
     }
   }
 
@@ -483,8 +504,6 @@ export class OfflineEditorController {
       .requestFlush(generation)
       .catch(() => false)
     if (!flushed || generation !== this.generation) return this.flushFailed()
-    // Only a sign-out that goes ahead invalidates logins decided before it; a cancelled one keeps them.
-    this.signOutEpoch += 1
     // Sign-out keeps the editor open, so its flush must not leave editing blocked.
     this.options.releaseEditorBarrier?.()
     return this.withSessionLock(async () => this.endSession(generation))
@@ -505,6 +524,9 @@ export class OfflineEditorController {
     } catch {
       return this.flushFailed()
     }
+    // Only a sign-out that goes ahead (its journal is on disk) invalidates logins decided before it;
+    // under the lock, an attach that committed first is then ended by the steps below.
+    this.signOutEpoch += 1
     await this.loop.stop()
     try {
       this.registryState = await this.registry.update({
@@ -559,6 +581,9 @@ export class OfflineEditorController {
           domains: [],
         }
       })
+    // The sweep is done: a login reported from here on created a new session, so it is not dropped
+    // (it queues behind the lock and commits after the detach below).
+    this.releaseSessionEnd?.(true)
     // A journaled sign-out always ends detached, even when the earlier detach write failed.
     if (result.status === 'signed-out') {
       try {
@@ -585,8 +610,13 @@ export class OfflineEditorController {
    * @example await controller.clearAgain() // => { status: 'signed-out' }
    */
   async clearAgain(): Promise<SignOutResult> {
-    // A sign-out in flight ends the session anyway; a Clear again in flight is this same request.
-    if (this.signOutRun) return this.signOutRun
+    // A sign-out in flight ends the session anyway, unless it is cancelled (then clear as asked);
+    // a Clear again in flight is this same request.
+    const signingOut = this.signOutRun
+    if (signingOut) {
+      const shared = await signingOut
+      if (shared.status !== 'flush-failed') return shared
+    }
     if (this.clearRun) return this.clearRun
     // A sign-in that completed since the residual result already cleared the journal; leave it alone.
     if (!this.registryState?.signOutPending) return { status: 'signed-out' }
@@ -831,6 +861,10 @@ export class OfflineEditorController {
    * @example if (await controller.shutdown()) app.quit()
    */
   async shutdown(): Promise<boolean> {
+    // A sign-out or Clear again in flight finishes first, so quitting never strands it before its
+    // journal (or detach) reaches disk.
+    await this.signOutRun?.catch(() => undefined)
+    await this.clearRun?.catch(() => undefined)
     const generation = this.generation
     if (
       !(await this.options.requestFlush(generation)) ||

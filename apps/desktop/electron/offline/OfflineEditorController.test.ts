@@ -1414,6 +1414,183 @@ test('Connect attaches nothing when a newer sign-in replaced the prompt while it
   })
 })
 
+// Regression: /ship exception review round 4 (Codex adversarial) 2026-11-03 — a sign-in made after
+// the sweep, while the final detach was being saved, was dropped as part of the ended session.
+test('a sign-in made after the sign-out sweep is kept while the final detach is being saved', async () => {
+  // Arrange
+  const fixture = await createFixture({ bound: 'account-a', attached: true })
+  await fixture.controller.initialize()
+  const detachSaved = deferred()
+  const realUpdate = fixture.registry.update.bind(fixture.registry)
+  const finalWrite = vi.fn()
+  vi.spyOn(fixture.registry, 'update').mockImplementation(async (patch) => {
+    if (patch.signOutPending === false && patch.attachedAccountId === null) {
+      finalWrite()
+      await detachSaved.promise
+    }
+    return realUpdate(patch)
+  })
+  const signingOut = fixture.controller.signOut()
+  await vi.waitFor(() => expect(finalWrite).toHaveBeenCalledOnce())
+
+  // Act
+  const signingIn = fixture.controller.authenticated('account-a')
+  detachSaved.resolve()
+  const [result] = await Promise.all([signingOut, signingIn])
+
+  // Assert
+  expect(result).toEqual({ status: 'signed-out' })
+  expect(await fixture.registry.read()).toMatchObject({
+    attachedAccountId: 'account-a',
+    signOutPending: false,
+  })
+})
+
+// Regression: /ship exception review round 4 (Codex adversarial) 2026-11-03 — quitting did not wait for
+// a sign-out in flight, so the app could exit before its journal reached disk.
+test('quitting during a sign-out waits until that sign-out has finished', async () => {
+  // Arrange
+  const fixture = await createFixture({ bound: 'account-a', attached: true })
+  await fixture.controller.initialize()
+  const journalSaved = deferred()
+  const realUpdate = fixture.registry.update.bind(fixture.registry)
+  const journalWrite = vi.fn()
+  vi.spyOn(fixture.registry, 'update').mockImplementation(async (patch) => {
+    if (patch.signOutPending === true) {
+      journalWrite()
+      await journalSaved.promise
+    }
+    return realUpdate(patch)
+  })
+  const signingOut = fixture.controller.signOut()
+  await vi.waitFor(() => expect(journalWrite).toHaveBeenCalledOnce())
+  const quitFinished = vi.fn()
+
+  // Act
+  const quitting = fixture.controller.shutdown().then(quitFinished)
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  const quitBeforeJournal = quitFinished.mock.calls.length
+  journalSaved.resolve()
+  await Promise.all([signingOut, quitting])
+
+  // Assert
+  expect(quitBeforeJournal).toBe(0)
+  expect(quitFinished).toHaveBeenCalledWith(true)
+  expect(await fixture.registry.read()).toMatchObject({
+    attachedAccountId: null,
+    signOutPending: false,
+  })
+})
+
+// Regression: /ship exception review round 4 (Codex + Claude adversarial) 2026-11-03 — a sign-out
+// cancelled by a failed journal write still invalidated a sign-in that had arrived before it.
+test('a sign-in queued before a sign-out whose journal write fails still attaches', async () => {
+  // Arrange
+  const fixture = await createFixture({ bound: 'account-a' })
+  await fixture.controller.initialize()
+  const identityReply = deferred()
+  fixture.transport.whoami.mockImplementationOnce(async () => {
+    await identityReply.promise
+    return { clerkId: 'account-a', email: null }
+  })
+  const signingIn = fixture.controller.authenticated('account-a')
+  await vi.waitFor(() =>
+    expect(fixture.transport.whoami).toHaveBeenCalledOnce(),
+  )
+  const realUpdate = fixture.registry.update.bind(fixture.registry)
+  vi.spyOn(fixture.registry, 'update').mockImplementation(async (patch) => {
+    if (patch.signOutPending === true) throw new Error('disk full')
+    return realUpdate(patch)
+  })
+
+  // Act
+  const result = await fixture.controller.signOut()
+  identityReply.resolve()
+  await signingIn
+
+  // Assert
+  expect(result).toMatchObject({ status: 'flush-failed' })
+  expect(await fixture.registry.read()).toMatchObject({
+    attachedAccountId: 'account-a',
+    signOutPending: false,
+  })
+})
+
+// Regression: /ship exception review round 4 (Claude adversarial) 2026-11-03 — a sign-in for another
+// account right after Connect, before the binding existed, left one account attached and the other
+// account's Connect prompt showing.
+test('another account signing in right after Connect, before the binding exists, detaches and offers it Connect', async () => {
+  // Arrange
+  const fixture = await createFixture()
+  await fixture.controller.initialize()
+  fixture.transport.bootstrap.mockImplementation(
+    async () => new Promise<never>(() => undefined),
+  )
+  await fixture.controller.authenticated('account-a')
+  await fixture.controller.connect()
+  // The identity check asks with no expected account; a woken sync loop asks for account-a.
+  fixture.broker.acquire.mockImplementation(
+    async (expectedAccountId, generation) => ({
+      status: 'ready',
+      credential: {
+        status: 'ready',
+        requestId: randomUUID(),
+        expectedAccountId,
+        generation,
+        accountId: expectedAccountId ?? 'account-b',
+        token: 'test-token',
+      },
+    }),
+  )
+  fixture.transport.whoami.mockImplementation(async () => ({
+    clerkId: 'account-b',
+    email: 'b@example.com',
+  }))
+
+  // Act
+  await fixture.controller.authenticated('account-b')
+
+  // Assert
+  expect(await fixture.registry.read()).toMatchObject({
+    attachedAccountId: null,
+    pendingConnect: { accountId: 'account-b' },
+  })
+  expect(fixture.controller.accountStatus().pendingConnect).toEqual({
+    displayEmail: 'b@example.com',
+  })
+})
+
+// Regression: /ship exception review round 4 (Claude adversarial) 2026-11-03 — Clear again during a
+// sign-out cancelled by a failed save returned that flush-failed and swept nothing.
+test('Clear again during a sign-out that fails to save still clears the leftover sign-in data', async () => {
+  // Arrange
+  const fixture = await createFixture({ bound: 'account-a', attached: true })
+  await fixture.controller.initialize()
+  fixture.endLocalSession.mockResolvedValueOnce({
+    status: 'signed-out-residual',
+    code: 'SIGNOUT_RESIDUAL_COOKIE',
+    cookieNames: ['__session'],
+    domains: ['corelive.app'],
+  })
+  await fixture.controller.signOut()
+  const flushed = deferred()
+  fixture.requestFlush.mockImplementationOnce(async () => {
+    await flushed.promise
+    return false
+  })
+  const signingOut = fixture.controller.signOut()
+
+  // Act
+  const clearing = fixture.controller.clearAgain()
+  flushed.resolve()
+  const [, cleared] = await Promise.all([signingOut, clearing])
+
+  // Assert
+  expect(cleared).toEqual({ status: 'signed-out' })
+  expect(fixture.endLocalSession).toHaveBeenCalledTimes(2)
+  expect((await fixture.registry.read()).signOutPending).toBe(false)
+})
+
 // Regression: /ship Step 11 (Codex adversarial) 2026-11-03 — a sweep that threw rejected the
 // sign-out, so Settings showed neither the cleanup note nor Clear again.
 test('a session sweep that throws ends in the residual result with the journal kept for Clear again', async () => {
