@@ -131,6 +131,11 @@ interface BehaviorConfig {
    * when the remote renderer (and its ElectronStartupSync) may never load (#112).
    */
   hideAppIcon: boolean
+  /**
+   * macOS: show the tray (menu-bar) icon. Persisted here so the choice survives a restart
+   * (the bundled Settings window has no renderer-side store to re-push it, #216 D5). Default `true`.
+   */
+  showInMenuBar: boolean
   checkForUpdates: boolean
   autoSave: boolean
   autoSaveInterval: number
@@ -369,6 +374,7 @@ export class ConfigManager {
         // Default OFF (icon shown) — matches the renderer default
         // (DEFAULT_ELECTRON_SETTINGS.hideAppIcon) so a fresh install never flashes.
         hideAppIcon: false,
+        showInMenuBar: true,
         checkForUpdates: true,
         autoSave: true,
         autoSaveInterval: 30000,

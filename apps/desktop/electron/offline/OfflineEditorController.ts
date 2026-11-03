@@ -1,26 +1,25 @@
-import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 
+import type {
+  AccountState,
+  AccountStatus,
+  SignOutResult,
+} from '@corelive/desktop-contract/offline-account'
 import type { OfflineRecoveryPreview } from '@corelive/desktop-contract/offline-editor-api'
 import type { CompletionSyncTransport } from '@corelive/desktop-contract/offline-sync'
 import {
-  OfflinePreferencesSchema,
+  DEVICE_OWNER_ID,
   WorkspaceCommandSchema,
+  type DeviceRegistry,
   type OfflineCommandResult,
   type OfflineEditorSnapshot,
-  type OfflinePreferences,
+  type OfflineSyncStatus,
   type WorkspaceCommand,
-} from '@corelive/desktop-contract/offline-workspace'
+} from '@corelive/desktop-contract/offline-workspace-v2'
 
-import {
-  CompletionSyncLoop,
-  type SyncAccountContext,
-} from './CompletionSyncLoop'
-import { isSyncAuthenticationError } from './createSyncTransport'
-import {
-  OfflineAccountRegistry,
-  type OfflineAccountRegistryState,
-} from './OfflineAccountRegistry'
+import { migrateWorkspaceV1 } from './migrateWorkspaceV1'
+import { OfflineAccountRegistry } from './OfflineAccountRegistry'
+import { SyncLoop, type SyncAccountContext } from './SyncLoop'
 import type { TokenBroker } from './TokenBroker'
 import type { WorkspaceView } from './workspace-worker-protocol'
 import {
@@ -30,62 +29,75 @@ import {
 
 type Actor = Pick<WorkspaceWorkerClient, 'call' | 'close'>
 type AccountContext = Omit<SyncAccountContext, 'worker'> & { worker: Actor }
-type SettingsWaiter = {
-  ownerId: string
-  generation: number
-  resolve: (preferences: OfflinePreferences) => void
-  reject: () => void
-  timer: ReturnType<typeof setTimeout>
-}
+type LoopStatus = 'idle' | 'syncing' | 'offline' | 'sign-in-required'
+type SessionEnd = Exclude<SignOutResult, { status: 'flush-failed' }>
 type ControllerOptions = {
   directory: string
   workerScript: string | URL
-  broker: Pick<TokenBroker, 'acquire' | 'reset'>
+  broker: Pick<TokenBroker, 'acquire' | 'reset' | 'revoke'>
   transport: (token: string) => CompletionSyncTransport
+  /** Pre-offline plaintext notes, imported once by the v1 migration (D7). */
   legacyNotes: () => Record<string, string>
   requestFlush: (generation: number) => Promise<boolean>
-  onPreparationCancelled: (generation: number) => void
-  openSettingsForPreparation: () => void
+  /** Releases the editor's exit barrier after a flush that does not close the window (sign-out). */
+  releaseEditorBarrier?: () => void
   onSnapshot: (snapshot: OfflineEditorSnapshot) => void
-  onSettingsContext: (
-    accountId: string,
-    generation: number,
-    preferences: OfflinePreferences | null,
-  ) => void
+  /** D3 step 4 against the default session (wraps `endLocalSession`). */
+  endLocalSession: () => Promise<SessionEnd>
   registry?: OfflineAccountRegistry
-  actor?: (ownerId: string) => Actor
+  actor?: () => Actor
+  /** Redacted log sink: codes, ids and counts only (DX7). */
+  log?: (line: string) => void
+  /** Bound on the best-effort remote revoke (D3 step 3). */
+  revokeTimeoutMs?: number
+  /** Bound on awaiting an in-flight sync request at sign-out (C9). */
+  settleTimeoutMs?: number
 }
 
+/** Sign-out's remote revoke bound (D3 step 3). */
+const REMOTE_REVOKE_TIMEOUT_MS = 5000
+
 /**
- * Owns local startup authority, account isolation and background synchronization.
- * Main creates one controller before opening the bundled panel. UI IPC must validate
- * its window/frame before calling these generation-bound methods. Remembered account
- * IDs never authenticate an API request; only the broker plus verified bootstrap do.
+ * Owns the device workspace, the optional account attachment and background synchronization.
+ *
+ * Main creates one controller before opening the bundled panel. The editor is always
+ * `ready` from local disk (or `recovery`); an account only adds sync (#216 D2). UI IPC must
+ * validate its window/frame before calling these generation-bound methods. A remembered or
+ * payload-supplied account id never authenticates a request: `auth-set-user` is a trigger, and
+ * the identity comes from an authenticated `account.whoami` call (EA2).
  * @example const controller = new OfflineEditorController(options); await controller.initialize()
  */
 export class OfflineEditorController {
   private readonly registry: OfflineAccountRegistry
-  private readonly actors = new Map<string, Actor>()
+  private actorInstance: Actor | null = null
   private readonly failedDrafts = new Map<
     string,
     Extract<WorkspaceCommand, { type: 'save' }>
   >()
-  private readonly loop: CompletionSyncLoop
-  private registryState: OfflineAccountRegistryState | null = null
+  private readonly loop: SyncLoop
+  private registryState: DeviceRegistry | null = null
   private context: AccountContext | null = null
   private recovery: AccountContext | null = null
-  private verifiedOwner: string | null = null
-  private preparingOwner: string | null | undefined
-  private preparationAttempt = 0
   private pendingCommands = 0
   private readonly snapshotWaiters = new Set<() => void>()
   private generation = 0
-  private logoutBarrier: Promise<void> | null = null
-  private settingsWaiter: SettingsWaiter | null = null
-  private retryTimer: ReturnType<typeof setTimeout> | null = null
   private clearTimer: ReturnType<typeof setTimeout> | null = null
-  private preparationFailures = 0
   private snapshotSequence = 0
+  private loopStatus: LoopStatus = 'syncing'
+  /** The verified identity of the session seen in this process run (EA1, state D). */
+  private signedIn: { clerkId: string; email: string | null } | null = null
+  private firstUpload: AccountStatus['firstUpload'] = null
+  private signOutRun: Promise<SignOutResult> | null = null
+  private clearRun: Promise<SignOutResult> | null = null
+  /** Set while a sign-out or Clear again runs; resolves to whether it actually ended the session. */
+  private sessionEnding: Promise<boolean> | null = null
+  /** Settles {@link sessionEnding} early, once the sweep is done; logins after it are new sessions. */
+  private releaseSessionEnd: ((ended: boolean) => void) | null = null
+  private sessionTail: Promise<void> = Promise.resolve()
+  /** Serializes every registry write that attaches or ends the session, so they never interleave. */
+  private sessionLock: Promise<unknown> = Promise.resolve()
+  /** Bumped just before a session is ended; an attach decided earlier is dropped. */
+  private signOutEpoch = 0
   private snapshot: OfflineEditorSnapshot = {
     phase: 'opening',
     generation: 0,
@@ -95,59 +107,72 @@ export class OfflineEditorController {
   constructor(private readonly options: ControllerOptions) {
     this.registry =
       options.registry ?? new OfflineAccountRegistry(options.directory)
-    this.loop = new CompletionSyncLoop({
-      context: () => this.context,
+    this.loop = new SyncLoop({
+      context: () => this.syncContext(),
       broker: options.broker,
       transport: options.transport,
-      legacyNotes: options.legacyNotes,
+      displayEmail: () => this.signedIn?.email ?? this.pendingEmail,
+      settleTimeoutMs: options.settleTimeoutMs,
+      log: options.log,
       onView: (view, generation) => this.publishView(view, generation),
-      onStatus: (sync, generation) => {
-        if (generation === this.generation && this.snapshot.phase === 'ready')
-          this.publish({ ...this.snapshot, sync })
-      },
-      onCategories: (_deletions, generation) => {
-        if (
-          generation !== this.generation ||
-          !this.context ||
-          this.snapshot.phase !== 'ready'
-        )
-          return
-        this.verifiedOwner = this.context.ownerId
-        this.options.onSettingsContext(
-          this.context.ownerId,
-          generation,
-          this.snapshot.workspace.preferences,
-        )
+      onStatus: (status, generation) => {
+        if (generation !== this.generation) return
+        this.loopStatus = status
+        this.publishSync()
       },
     })
   }
 
-  /** Opens a prepared account entirely from disk, then starts optional network work.
+  /** The email stored at Connect time, used until the binding carries it. */
+  private pendingEmail: string | null = null
+
+  /**
+   * The context the sync loop may use: only an attached account, never a bare session (EA1).
+   * @example const syncContext = this.syncContext()
+   */
+  private syncContext(): SyncAccountContext | null {
+    const accountId = this.registryState?.attachedAccountId
+    if (!accountId || !this.context || this.registryState?.signOutPending)
+      return null
+    return {
+      ownerId: accountId,
+      generation: this.context.generation,
+      worker: this.context.worker,
+    }
+  }
+
+  /**
+   * Runs the v1 migration once, opens the device workspace from disk and, if an account is
+   * attached, starts optional sync. Never waits for the network (D1, D7, EA14).
    * @example await controller.initialize()
    */
   async initialize(): Promise<void> {
     try {
+      const migrated = await migrateWorkspaceV1({
+        directory: this.options.directory,
+        legacyNotes: this.options.legacyNotes(),
+        log: this.options.log,
+      })
       this.registryState = await this.registry.read()
-      const ownerId = this.registryState.activeAccountId
-      if (!ownerId) {
-        this.publish({
-          phase: this.registryState.lastAccountId
-            ? 'locked'
-            : 'needs-preparation',
-          generation: this.generation,
-        })
-        // Explicit logout remains locked; only the first upgraded preparation discovers an existing session.
-        if (!this.registryState.lastAccountId) this.retryPreparation()
+      const worker = this.actor()
+      const context = {
+        ownerId: DEVICE_OWNER_ID,
+        generation: this.generation,
+        worker,
+      }
+      this.recovery = context
+      if (!migrated.ok && !migrated.fileName.startsWith('device')) {
+        // The v1 source is unreadable: never a fresh workspace; the files stay as they are (EA9).
+        await this.publishRecovery(migrated.code)
         return
       }
-      const worker = this.actor(ownerId)
-      const context = { ownerId, generation: this.generation, worker }
-      this.recovery = context
+      // EA1: a sign-out that crashed between detach and the session clear finishes first.
+      if (this.registryState.signOutPending) await this.finishPendingSignOut()
       const view = await worker.call('open', null)
       this.context = context
       this.recovery = null
       this.publishView(view, this.generation)
-      this.loop.wake()
+      if (this.syncContext()) this.loop.wake()
     } catch {
       await this.publishRecovery()
     }
@@ -174,47 +199,485 @@ export class OfflineEditorController {
     return this.snapshot
   }
 
-  /** Handles a trusted login/settings session notification; canonical ownership is verified separately.
-   * @example controller.authenticated('user_123')
+  /**
+   * Handles a trusted `auth-set-user` notification. The payload is only a trigger (EA2): main
+   * confirms the account through an authenticated call with the TokenBroker token, then decides
+   * between the Connect prompt (unbound Mac), attach (the bound account) and staying detached
+   * (a different account, C10). Calls are serialized.
+   * @param clerkId - The id the login window reported; never trusted on its own.
+   * @example await controller.authenticated('user_123')
    */
-  authenticated(ownerId: string, fromLogin = false): void {
-    // A stale Settings session report after explicit logout cannot silently unlock the account.
-    if (this.snapshot.phase === 'locked' && !fromLogin) return
-    if (this.context?.ownerId === ownerId) {
-      // Returning to the still-active account cancels its pending departure.
-      if (this.preparingOwner !== undefined) {
-        this.preparationAttempt++
-        this.preparingOwner = undefined
-      }
+  async authenticated(clerkId: string): Promise<void> {
+    // One arriving while a sign-out or Clear again runs waits for it outside the queue; it is dropped
+    // only when that run actually ended the session (not when cancelled or when nothing was cleared).
+    const ending = this.sessionEnding
+    if (ending && (await ending)) return
+    // A notification queued before a session end belongs to the session that ended.
+    const epoch = this.signOutEpoch
+    this.sessionTail = this.sessionTail
+      .then(async () => this.handleSession(clerkId, epoch))
+      .catch(() => undefined)
+    await this.sessionTail
+  }
+
+  /** Verifies the identity and routes it; see {@link authenticated}. */
+  private async handleSession(clerkId: string, epoch: number): Promise<void> {
+    if (!this.context || epoch !== this.signOutEpoch) return
+    // Already attached to this account: only a wake, no identity round trip. A journaled sign-out
+    // is not attached, so it takes the full path below and is cleared by the verified sign-in.
+    if (
+      this.registryState?.attachedAccountId === clerkId &&
+      !this.registryState.signOutPending
+    ) {
       this.loop.wake()
       return
     }
-    if (this.preparingOwner === ownerId) return
-    void this.prepare(ownerId)
+    const who = await this.verifyIdentity(clerkId)
+    // A session end during the identity round trip wins, even one that already finished.
+    const context = this.context
+    if (!who || !context || epoch !== this.signOutEpoch) return
+    const bound = await context.worker.call('binding', null)
+    // The decision commits under the session lock, so it lands wholly before or is dropped by a
+    // session end that began meanwhile; network waits never hold the lock.
+    await this.withSessionLock(async () =>
+      this.commitSession(who, bound, epoch),
+    )
+    this.publishSync()
   }
 
-  /** Session expiry pauses synchronization while preserving the active local workspace.
+  /**
+   * Writes {@link handleSession}'s routing decision unless a session end began since it was queued.
+   * @param who - The verified identity.
+   * @param bound - The workspace binding read before taking the lock.
+   * @param epoch - {@link signOutEpoch} when the notification arrived.
+   * @example await this.withSessionLock(async () => this.commitSession(who, bound, epoch))
+   */
+  private async commitSession(
+    who: { clerkId: string; email: string | null },
+    bound: { accountId: string } | null,
+    epoch: number,
+  ): Promise<void> {
+    if (epoch !== this.signOutEpoch) return
+    const attached = this.registryState?.attachedAccountId
+    this.signedIn = who
+    // A Connect that attached before the first sync pass wrote its binding still counts as bound.
+    const boundTo = bound?.accountId ?? attached ?? null
+    if (!boundTo) {
+      // DA4/EA2b: an unbound Mac waits for Connect; nothing is sent to the sync endpoints.
+      await this.offerConnect(who)
+    } else if (boundTo === who.clerkId) {
+      this.pendingEmail = who.email
+      this.registryState = await this.registry.update({
+        attachedAccountId: who.clerkId,
+        pendingConnect: null,
+        signOutPending: false,
+      })
+      this.loop.wake()
+    } else if (attached) {
+      // C10: another account signed in over the bound one; detach and stay detached.
+      await this.loop.stop()
+      this.registryState = await this.registry.update({
+        attachedAccountId: null,
+      })
+      // With no binding written yet the Mac is still unbound, so the new account may Connect.
+      if (!bound) await this.offerConnect(who)
+    }
+  }
+
+  /**
+   * Shows the Connect prompt for a verified account on an unbound Mac (DA4, EA2b); clears the journal.
+   * @param who - The verified identity from {@link handleSession}.
+   * @example await this.offerConnect(who)
+   */
+  private async offerConnect(who: {
+    clerkId: string
+    email: string | null
+  }): Promise<void> {
+    this.registryState = await this.registry.update({
+      pendingConnect: { accountId: who.clerkId, displayEmail: who.email ?? '' },
+      signOutPending: false,
+    })
+  }
+
+  /**
+   * Runs `task` after every earlier attach or session end finished ({@link sessionLock}).
+   * Tasks never take the lock again, so it cannot deadlock.
+   * @param task - Registry writes that must not interleave with another session change.
+   * @returns The task's result.
+   * @example await this.withSessionLock(async () => this.clearPendingSession())
+   */
+  private async withSessionLock<T>(task: () => Promise<T>): Promise<T> {
+    const run = this.sessionLock.then(task)
+    this.sessionLock = run.catch(() => undefined)
+    return run
+  }
+
+  /**
+   * Publishes `work` as the session end in flight, so {@link authenticated} can wait for its outcome.
+   * The marker clears before the run resolves, so a login after it is never mistaken for one during it.
+   * @param work - The sign-out or Clear again; `ended` says whether it actually ended the session.
+   * @returns The run's result.
+   * @example this.signOutRun = this.beginSessionEnd(async () => ({ result, ended: true }))
+   */
+  private async beginSessionEnd(
+    work: () => Promise<{ result: SignOutResult; ended: boolean }>,
+  ): Promise<SignOutResult> {
+    let settle: (ended: boolean) => void = () => undefined
+    const ending = new Promise<boolean>((resolve) => {
+      settle = resolve
+    })
+    const release = (ended: boolean): void => {
+      if (this.sessionEnding === ending) this.sessionEnding = null
+      if (this.releaseSessionEnd === release) this.releaseSessionEnd = null
+      settle(ended)
+    }
+    this.sessionEnding = ending
+    this.releaseSessionEnd = release
+    let ended = false
+    try {
+      const outcome = await work()
+      ended = outcome.ended
+      return outcome.result
+    } finally {
+      // A run released at its sweep already settled; settling again changes nothing.
+      release(ended)
+    }
+  }
+
+  /**
+   * Confirms the signed-in account with an authenticated server call (EA2).
+   * @returns The server's `{ clerkId, email }`, or null when unverifiable or mismatched
+   * (`AUTH_IDENTITY_MISMATCH` is logged without any identity).
+   * @example const who = await this.verifyIdentity(payload.clerkId)
+   */
+  private async verifyIdentity(
+    claimedClerkId: string,
+  ): Promise<{ clerkId: string; email: string | null } | null> {
+    const token = await this.options.broker.acquire(null, this.generation)
+    if (token.status !== 'ready') return null
+    let who: Awaited<ReturnType<CompletionSyncTransport['whoami']>>
+    try {
+      who = await this.options.transport(token.credential.token).whoami()
+    } catch {
+      return null
+    }
+    if (
+      who.clerkId !== claimedClerkId ||
+      who.clerkId !== token.credential.accountId
+    ) {
+      this.options.log?.('AUTH_IDENTITY_MISMATCH')
+      return null
+    }
+    return who
+  }
+
+  /**
+   * Attaches the pending account after the user pressed Connect this Mac (DA4, EA2b). The binding
+   * is written by the first sync pass; nothing was sent before this.
+   * @returns Whether a pending Connect existed and was accepted.
+   * @example if (await controller.connect()) showUploading()
+   */
+  async connect(): Promise<boolean> {
+    const pending = this.registryState?.pendingConnect
+    const context = this.context
+    if (!pending || !context || this.sessionEnding) return false
+    const epoch = this.signOutEpoch
+    const bound = await context.worker.call('binding', null)
+    if (bound && bound.accountId !== pending.accountId) return false
+    // DA4: the progress count is every unsent keep, archived history included.
+    const total = await context.worker.call('pendingTotal', null)
+    // Commits under the session lock: a session end that began meanwhile wins, and a newer sign-in
+    // that replaced the prompt is never attached under the old account.
+    const accepted = await this.withSessionLock(async () => {
+      if (
+        epoch !== this.signOutEpoch ||
+        !this.context ||
+        this.registryState?.pendingConnect?.accountId !== pending.accountId
+      )
+        return false
+      this.firstUpload = { state: 'uploading', count: total }
+      this.pendingEmail = pending.displayEmail || null
+      this.registryState = await this.registry.update({
+        attachedAccountId: pending.accountId,
+        pendingConnect: null,
+        signOutPending: false,
+      })
+      return true
+    })
+    if (!accepted) return false
+    this.loop.wake()
+    this.publishSync()
+    return true
+  }
+
+  /**
+   * Declines the pending Connect (DA4): the prompt is dropped and the session ends locally.
+   * @returns The sign-out result; offline, the remote revoke is simply skipped.
+   * @example await controller.notNow()
+   */
+  async notNow(): Promise<SignOutResult> {
+    this.registryState = await this.registry.update({ pendingConnect: null })
+    return this.signOut()
+  }
+
+  /**
+   * Whether this Mac is attached to its account; used by {@link accountState} and {@link signOut}.
+   * A journaled sign-out is never attached, even if its detach write was deferred.
+   * @returns True when an account is attached and no sign-out is journaled.
+   * @example if (!this.isAttached()) return shared
+   */
+  private isAttached(): boolean {
+    return Boolean(
+      this.registryState?.attachedAccountId &&
+      !this.registryState.signOutPending,
+    )
+  }
+
+  /**
+   * Classifies the account relationship: attached, signed out with a binding, or another account.
+   * @param binding - The workspace binding, or null before the first attach.
+   * @returns The {@link AccountState} shown by Settings ▸ Account.
+   * @example const state = this.accountState(view?.binding ?? null)
+   */
+  private accountState(binding: { accountId: string } | null): AccountState {
+    if (this.isAttached()) return 'attached'
+    if (!binding) return 'never-attached'
+    const isOtherAccount =
+      this.signedIn !== null && this.signedIn.clerkId !== binding.accountId
+    return isOtherAccount ? 'other-account' : 'signed-out'
+  }
+
+  /**
+   * What Settings ▸ Account renders (DA3, X1): derived from the registry, the binding and the
+   * session verified in this run.
+   * @example const status = controller.accountStatus()
+   */
+  accountStatus(): Omit<AccountStatus, 'signIn'> {
+    const view =
+      this.snapshot.phase === 'ready' ? this.snapshot.workspace : null
+    const binding = view?.binding ?? null
+    const pending = this.registryState?.pendingConnect ?? null
+    const state = this.accountState(binding)
+    return {
+      state,
+      boundEmail: binding?.displayEmail ?? null,
+      signedInEmail:
+        state === 'other-account' ? (this.signedIn?.email ?? null) : null,
+      waitingCount: view?.pendingCount ?? 0,
+      needsALookCount: view?.needsALookCount ?? 0,
+      lastSyncedAt: binding?.lastSyncedAt ?? null,
+      pendingConnect: pending ? { displayEmail: pending.displayEmail } : null,
+      firstUpload: this.firstUpload,
+    }
+  }
+
+  /**
+   * One implementation behind `account.signOut` and `auth-logout` (C23, D3 steps 1-4).
+   * 1. flush the editor to disk (a failure cancels with no side effect, SIGNOUT_FLUSH_FAILED);
+   * 2. journal `signOutPending` (EA1), stop the loop (<= 5 s, C9) and persist the detach;
+   * 3. best-effort remote revoke (<= 5 s; skipped offline, SIGNOUT_REMOTE_REVOKE_SKIPPED);
+   * 4. end the local session (origin-scoped storage + cookie sweep + read-back, DX6).
+   * The editor stays `ready` with identical content; the binding, outbox and `lastSyncedAt`
+   * are untouched (P3), also when a different account was signed in (state D).
+   * @returns `signed-out`, `signed-out-residual` (names/domains only) or `flush-failed`.
+   * @example const result = await controller.signOut()
+   */
+  async signOut(): Promise<SignOutResult> {
+    // A Clear again in flight answers a different request (it may find nothing to clear); let it
+    // finish, then sign out. Concurrent sign-outs share one run.
+    const clearing = this.clearRun
+    if (clearing) await clearing.catch(() => undefined)
+    this.signOutRun ??= this.beginSessionEnd(async () => {
+      try {
+        const result = await this.runSignOut()
+        return { result, ended: result.status !== 'flush-failed' }
+      } finally {
+        this.signOutRun = null
+      }
+    })
+    return this.signOutRun
+  }
+
+  private async runSignOut(): Promise<SignOutResult> {
+    const generation = this.generation
+    const flushed = await this.options
+      .requestFlush(generation)
+      .catch(() => false)
+    if (!flushed || generation !== this.generation) return this.flushFailed()
+    // Sign-out keeps the editor open, so its flush must not leave editing blocked.
+    this.options.releaseEditorBarrier?.()
+    return this.withSessionLock(async () => this.endSession(generation))
+  }
+
+  /**
+   * D3 steps 2-4 of {@link signOut}, under the session lock so no attach lands in between.
+   * @param generation - The controller generation the flush succeeded for.
+   * @returns The session-end result, or `flush-failed` when the journal could not be written.
+   * @example return this.withSessionLock(async () => this.endSession(generation))
+   */
+  private async endSession(generation: number): Promise<SignOutResult> {
+    try {
+      this.registryState = await this.registry.update({
+        signOutPending: true,
+        pendingConnect: null,
+      })
+    } catch {
+      return this.flushFailed()
+    }
+    // Only a sign-out that goes ahead (its journal is on disk) invalidates logins decided before it;
+    // under the lock, an attach that committed first is then ended by the steps below.
+    this.signOutEpoch += 1
+    await this.loop.stop()
+    try {
+      this.registryState = await this.registry.update({
+        attachedAccountId: null,
+      })
+    } catch {
+      // The journaled `signOutPending` still forces the detach in finishPendingSignOut (or on restart).
+      this.options.log?.('SIGNOUT_DETACH_DEFERRED')
+    }
+    this.signedIn = null
+    this.firstUpload = null
+    this.pendingEmail = null
+    this.loopStatus = 'idle'
+    this.publishSync()
+    const revoked = await this.options.broker
+      .revoke(
+        generation,
+        this.options.revokeTimeoutMs ?? REMOTE_REVOKE_TIMEOUT_MS,
+      )
+      .catch(() => 'skipped' as const)
+    if (revoked === 'skipped')
+      this.options.log?.('SIGNOUT_REMOTE_REVOKE_SKIPPED')
+    // Destroy the hidden document first so it cannot refresh the session during the sweep.
+    this.options.broker.reset()
+    return this.finishPendingSignOut()
+  }
+
+  /** Logs the cancelled sign-out; no state was changed (DX7). */
+  private flushFailed(): SignOutResult {
+    this.options.log?.('SIGNOUT_FLUSH_FAILED')
+    return { status: 'flush-failed', code: 'SIGNOUT_FLUSH_FAILED' }
+  }
+
+  /**
+   * Runs D3 step 4 and clears the journal only when nothing survived (EA1, DX6). Called by
+   * {@link signOut}, by {@link initialize} for a marker left by a crash, and by
+   * {@link clearAgain}.
+   * @returns The session-end result.
+   * @example await this.finishPendingSignOut()
+   */
+  private async finishPendingSignOut(): Promise<SessionEnd> {
+    this.options.broker.reset()
+    // A sweep that throws may have left sign-in data; keep the journal and offer Clear again.
+    const result: SessionEnd = await this.options
+      .endLocalSession()
+      .catch((): SessionEnd => {
+        this.options.log?.('SIGNOUT_SWEEP_FAILED')
+        return {
+          status: 'signed-out-residual',
+          code: 'SIGNOUT_RESIDUAL_COOKIE',
+          cookieNames: [],
+          domains: [],
+        }
+      })
+    // The sweep is done: a login reported from here on created a new session, so it is not dropped
+    // (it queues behind the lock and commits after the detach below).
+    this.releaseSessionEnd?.(true)
+    // A journaled sign-out always ends detached, even when the earlier detach write failed.
+    if (result.status === 'signed-out') {
+      try {
+        this.registryState = await this.registry.update({
+          signOutPending: false,
+          attachedAccountId: null,
+        })
+      } catch {
+        // The journal stays set, so the next launch (or Clear again) finishes the detach (EA1).
+        this.options.log?.('SIGNOUT_DETACH_DEFERRED')
+      }
+    }
+    this.publishSync()
+    return result
+  }
+
+  /**
+   * The "Clear again" action after a residual result: reruns only D3 step 4 and its read-back.
+   * Called by the Settings IPC; serialized with sign-ins and sign-outs by the session lock.
+   * @returns
+   * - The sweep's result while a sign-out is journaled
+   * - The running sign-out's result when one is already in flight
+   * - `signed-out` without sweeping when a later sign-in already cleared the journal
+   * @example await controller.clearAgain() // => { status: 'signed-out' }
+   */
+  async clearAgain(): Promise<SignOutResult> {
+    // A sign-out in flight ends the session anyway, unless it is cancelled (then clear as asked);
+    // a Clear again in flight is this same request.
+    const signingOut = this.signOutRun
+    if (signingOut) {
+      const shared = await signingOut
+      if (shared.status !== 'flush-failed') return shared
+    }
+    if (this.clearRun) return this.clearRun
+    // A sign-in that completed since the residual result already cleared the journal; leave it alone.
+    if (!this.registryState?.signOutPending) return { status: 'signed-out' }
+    this.clearRun = this.beginSessionEnd(async () => {
+      try {
+        return await this.withSessionLock(async () =>
+          this.clearPendingSession(),
+        )
+      } finally {
+        this.clearRun = null
+      }
+    })
+    return this.clearRun
+  }
+
+  /**
+   * The body of {@link clearAgain}, run under the session lock: an attach already committing lands
+   * first, and when it cleared the journal nothing is swept and no login is invalidated.
+   * @returns The sweep's result and `ended: true`, or `signed-out` with `ended: false`.
+   * @example await this.withSessionLock(async () => this.clearPendingSession())
+   */
+  private async clearPendingSession(): Promise<{
+    result: SignOutResult
+    ended: boolean
+  }> {
+    if (!this.registryState?.signOutPending)
+      return { result: { status: 'signed-out' }, ended: false }
+    // Only a sweep that goes ahead invalidates logins decided before it.
+    this.signOutEpoch += 1
+    return { result: await this.finishPendingSignOut(), ended: true }
+  }
+
+  /**
+   * Drops the finished first-upload progress once Settings has shown it, so the DA4 line
+   * "<N> keeps are on your dashboard" appears once.
+   * @example controller.acknowledgeFirstUpload()
+   */
+  acknowledgeFirstUpload(): void {
+    if (this.firstUpload?.state !== 'done') return
+    this.firstUpload = null
+    this.publishSync()
+  }
+
+  /** Session expiry pauses synchronization while preserving the local workspace.
    * @example controller.sessionUnavailable()
    */
   sessionUnavailable(): void {
     this.options.broker.reset()
-    if (this.snapshot.phase === 'ready')
-      this.publish({ ...this.snapshot, sync: 'sign-in-required' })
+    if (this.isAttached()) {
+      this.loopStatus = 'sign-in-required'
+      this.publishSync()
+    }
   }
 
-  /** Retries first preparation or synchronization; a prepared workspace never returns to onboarding.
-   * @example controller.retryPreparation()
+  /** Retries synchronization and due clearing; editing is never affected (D2).
+   * @example controller.retrySync()
    */
-  retryPreparation(): void {
-    if (this.context) {
-      void this.clearDue(this.context)
-      this.loop.wake()
-      return
-    }
-    if (this.preparingOwner !== undefined) return
-    if (this.retryTimer) clearTimeout(this.retryTimer)
-    this.retryTimer = null
-    void this.prepare(null)
+  retrySync(): void {
+    if (!this.context) return
+    void this.clearDue(this.context)
+    if (this.syncContext()) this.loop.wake()
   }
 
   /**
@@ -255,13 +718,15 @@ export class OfflineEditorController {
     } catch (error) {
       const reason =
         error instanceof WorkspaceWorkerError ? error.reason : 'storage-failed'
+      const detail =
+        error instanceof WorkspaceWorkerError ? error.detail : undefined
       if (command.type === 'save' && reason !== 'revision-conflict') {
         this.failedDrafts.set(context.ownerId, command)
         // A replacement renderer must receive rescued writing before any later refresh.
         if (this.snapshot.phase === 'ready')
           this.publishView(this.snapshot.workspace, generation)
       }
-      return { ok: false, reason }
+      return { ok: false, reason, ...(detail ? { detail } : {}) }
     } finally {
       this.finishCommand()
     }
@@ -295,94 +760,6 @@ export class OfflineEditorController {
     )
   }
 
-  /** Returns the verified account's settings authority; no other account receives its preferences.
-   * @example controller.settingsContext(accountId)
-   */
-  settingsContext(
-    ownerId: string,
-  ): { generation: number; preferences: OfflinePreferences | null } | null {
-    if (this.verifiedOwner !== ownerId) return null
-    return {
-      generation: this.generation,
-      preferences:
-        this.snapshot.phase === 'ready' && this.context?.ownerId === ownerId
-          ? this.snapshot.workspace.preferences
-          : null,
-    }
-  }
-
-  /** Accepts the fully hydrated Settings source only for its current preparation challenge.
-   * @example controller.provideSettings(accountId, generation, preferences)
-   */
-  provideSettings(
-    ownerId: string,
-    generation: number,
-    input: unknown,
-  ): boolean {
-    const pending = this.settingsWaiter
-    if (
-      !pending ||
-      pending.ownerId !== ownerId ||
-      pending.generation !== generation ||
-      generation !== this.generation ||
-      this.verifiedOwner !== ownerId
-    )
-      return false
-    const parsed = OfflinePreferencesSchema.safeParse(input)
-    if (!parsed.success) return false
-    clearTimeout(pending.timer)
-    this.settingsWaiter = null
-    pending.resolve(parsed.data)
-    return true
-  }
-
-  /** Applies an explicit field patch after Settings has hydrated from main's authoritative copy.
-   * @example await controller.patchSettings(accountId, generation, command)
-   */
-  async patchSettings(
-    ownerId: string,
-    generation: number,
-    command: Extract<WorkspaceCommand, { type: 'preferences' }>,
-  ): Promise<OfflineCommandResult> {
-    if (this.verifiedOwner !== ownerId || this.context?.ownerId !== ownerId)
-      return { ok: false, reason: 'account-changed' }
-    return this.command(generation, command)
-  }
-
-  /** Locks startup authority before remote sign-out; failed final saving cancels the explicit action.
-   * @example if (await controller.signOut()) await clerk.signOut()
-   */
-  async signOut(): Promise<boolean> {
-    if (this.logoutBarrier) return false
-    const generation = this.generation
-    if (!(await this.options.requestFlush(generation))) return false
-    if (generation !== this.generation) return false
-    if (this.logoutBarrier) return false
-    // Preparation/recovery must wait until the durable lock's outcome invalidates their generation.
-    let releaseBarrier!: () => void
-    this.logoutBarrier = new Promise<void>((resolve) => {
-      releaseBarrier = resolve
-    })
-    try {
-      this.registryState = await this.registry.lock()
-      this.generation++
-      this.context = null
-      this.recovery = null
-      this.verifiedOwner = null
-      this.preparingOwner = undefined
-      this.cancelPreparation()
-      this.loop.stop()
-      this.options.broker.reset()
-      this.publish({ phase: 'locked', generation: this.generation })
-      return true
-    } catch {
-      return false
-    } finally {
-      this.logoutBarrier = null
-      releaseBarrier()
-    }
-  }
-
   /** Provides bounded recovery/sync inspection only to the currently selected account generation.
    * @example await controller.details(generation, 0, 50)
    */
@@ -393,10 +770,19 @@ export class OfflineEditorController {
     })
   }
 
+  /**
+   * Sync details data for the page reached from Settings ▸ Account (DA7, C31): the only place
+   * conflict and refusal items appear. Actions run as `syncDetailAction` commands.
+   * @example const details = await controller.syncDetails(generation)
+   */
+  async syncDetails(generation: number) {
+    return this.requireContext(generation).worker.call('syncDetails', null)
+  }
+
   /** Reads a specific owned draft for revision-conflict repair without changing the visible category.
    * @example await controller.draft(generation, categoryId)
    */
-  async draft(generation: number, categoryId: number) {
+  async draft(generation: number, categoryId: string) {
     return this.requireContext(generation).worker.call('draft', { categoryId })
   }
 
@@ -460,20 +846,11 @@ export class OfflineEditorController {
       return false
     try {
       const view = await context.worker.call('recover', null)
-      // An absent barrier must not yield before activation can be enqueued.
-      while (this.logoutBarrier) await this.logoutBarrier
-      if (generation !== this.generation) return false
-      if (this.registryState?.activeAccountId !== context.ownerId) {
-        if (this.verifiedOwner !== context.ownerId) return false
-        this.registryState = await this.registry.activateVerified(
-          context.ownerId,
-        )
-      }
       if (generation !== this.generation) return false
       this.context = context
       this.recovery = null
       this.publishView(view, generation)
-      this.loop.wake()
+      if (this.syncContext()) this.loop.wake()
       return true
     } catch {
       return false
@@ -484,6 +861,10 @@ export class OfflineEditorController {
    * @example if (await controller.shutdown()) app.quit()
    */
   async shutdown(): Promise<boolean> {
+    // A sign-out or Clear again in flight finishes first, so quitting never strands it before its
+    // journal (or detach) reaches disk.
+    await this.signOutRun?.catch(() => undefined)
+    await this.clearRun?.catch(() => undefined)
     const generation = this.generation
     if (
       !(await this.options.requestFlush(generation)) ||
@@ -492,298 +873,31 @@ export class OfflineEditorController {
       return false
     this.generation++
     this.context = null
-    this.cancelPreparation()
-    this.loop.stop()
-    this.options.broker.reset()
-    await Promise.all(
-      [...this.actors.values()].map(async (actor) => {
-        await actor.call('open', null).catch(() => undefined)
-        await actor.close()
-      }),
-    )
-    this.actors.clear()
-    return true
-  }
-
-  /** Verifies the session, opens or prepares its partition, then publishes durable readiness.
-   * @example await this.prepare('user_123')
-   */
-  private async prepare(expectedOwner: string | null): Promise<void> {
-    const previous = this.context
-    const attempt = ++this.preparationAttempt
-    this.preparingOwner = expectedOwner
-    if (previous && !(await this.flushForPreparation(previous))) {
-      if (attempt === this.preparationAttempt) this.preparingOwner = undefined
-      return
-    }
-    const generation = this.beginPreparation(previous, attempt)
-    if (generation === null) {
-      this.resumeCancelledPreparation(previous)
-      return
-    }
-    try {
-      if (previous) {
-        const registryState = await this.registry.lock()
-        // A superseded lock reply must not reset a newer authentication request.
-        if (generation !== this.generation) return
-        this.registryState = registryState
-      }
-      const token = await this.options.broker.acquire(expectedOwner, generation)
-      if (generation !== this.generation) return
-      if (token.status !== 'ready')
-        throw new WorkspaceWorkerError(
-          token.status === 'signed-out' ? 'sign-in-required' : 'offline',
-        )
-      const bootstrap = await this.options
-        .transport(token.credential.token)
-        .bootstrap()
-      if (generation !== this.generation) return
-      this.assertPreparationAccount(
-        bootstrap.accountId,
-        token.credential.accountId,
-        expectedOwner,
-      )
-      const ownerId = bootstrap.accountId
-      this.verifiedOwner = ownerId
-      this.preparingOwner = ownerId
-      const worker = this.actor(ownerId)
-      const context = { ownerId, generation, worker }
-      this.recovery = context
-      let view: WorkspaceView
-      try {
-        view = await worker.call('open', null)
-        view = await worker.call('categories', {
-          categories: bootstrap.categories,
-          deletions: bootstrap.deletions,
-          legacyNotes: this.options.legacyNotes(),
-        })
-      } catch (error) {
-        this.assertFirstPreparation(ownerId, error)
-        const preferences = await this.waitForSettings(ownerId, generation)
-        if (generation !== this.generation) return
-        view = await worker.call('prepare', {
-          ownerId,
-          deviceId: this.registryState?.deviceId ?? randomUUID(),
-          categories: bootstrap.categories,
-          preferences,
-          legacyNotes: this.options.legacyNotes(),
-        })
-      }
-      // Recheck after a real wait; yielding on null would let logout overtake activation.
-      while (this.logoutBarrier) await this.logoutBarrier
-      if (generation !== this.generation) return
-      this.registryState = await this.registry.activateVerified(ownerId)
-      if (generation !== this.generation) return
-      this.context = context
-      this.recovery = null
-      this.preparingOwner = undefined
-      this.preparationFailures = 0
-      this.publishView(view, generation)
-      this.options.onSettingsContext(ownerId, generation, view.preferences)
-      this.loop.wake()
-    } catch (error) {
-      await this.preparationFailed(error, generation)
-    }
-  }
-
-  /**
-   * Keeps the departing editor available until its final save succeeds.
-   * {@link OfflineEditorController.prepare} calls this before changing any account
-   * authority; {@link OfflineEditorController.beginPreparation} rechecks ownership
-   * synchronously after this asynchronous wait.
-   * @param context - The active account captured before the flush challenge.
-   * @returns Whether the final save succeeded, without authorizing a transition.
-   * @example if (!(await this.flushForPreparation(context))) return
-   */
-  private async flushForPreparation(context: AccountContext): Promise<boolean> {
-    const flushed = await this.options
-      .requestFlush(context.generation)
-      .catch(() => false)
-    if (!flushed) return false
-    // Logout must finish its durable lock before preparation can inspect authority.
-    while (this.logoutBarrier) await this.logoutBarrier
-    return true
-  }
-
-  /**
-   * Claims the latest prepared-account transition without yielding after validation.
-   * {@link OfflineEditorController.prepare} calls this after the departing save;
-   * a newer login, logout or shutdown makes that completed flush obsolete.
-   * @param previous - The account whose live buffer was just flushed, if any.
-   * @param attempt - Distinguishes overlapping logins, including repeated owner IDs.
-   * @returns The claimed generation, or null when another transition took ownership.
-   * @example const generation = this.beginPreparation(previous, attempt)
-   */
-  private beginPreparation(
-    previous: AccountContext | null,
-    attempt: number,
-  ): number | null {
-    if (
-      attempt !== this.preparationAttempt ||
-      this.context !== previous ||
-      (previous && this.generation !== previous.generation)
-    )
-      return null
-    this.context = null
-    this.recovery = null
-    const generation = ++this.generation
-    this.cancelPreparation()
-    this.loop.stop()
-    this.options.broker.reset()
-    this.verifiedOwner = null
-    this.publish({ phase: 'preparing', generation })
-    return generation
-  }
-
-  /**
-   * Releases a completed departure's input barrier when its account stayed active.
-   * {@link OfflineEditorController.prepare} calls this after a superseded flush;
-   * another pending transition or a changed account must keep its own barrier.
-   * @example this.resumeCancelledPreparation(previous)
-   */
-  private resumeCancelledPreparation(previous: AccountContext | null): void {
-    if (
-      previous &&
-      this.context === previous &&
-      this.generation === previous.generation &&
-      this.preparingOwner === undefined
-    )
-      this.options.onPreparationCancelled(previous.generation)
-  }
-
-  /** Requires broker and API identity to match the requested account before opening its files.
-   * @example this.assertPreparationAccount(apiOwner, tokenOwner, expectedOwner)
-   */
-  private assertPreparationAccount(
-    owner: string,
-    tokenOwner: string,
-    expectedOwner: string | null,
-  ): void {
-    if (owner !== tokenOwner || (expectedOwner && owner !== expectedOwner))
-      throw new WorkspaceWorkerError('sign-in-required')
-  }
-
-  /**
-   * Allows first preparation only for a missing account that was never prepared.
-   * {@link OfflineEditorController.prepare} calls this after an open failure so
-   * damaged or previously prepared workspaces cannot be replaced with empty data.
-   * @throws The original open error when recovery is required instead.
-   * @example this.assertFirstPreparation(ownerId, error)
-   */
-  private assertFirstPreparation(ownerId: string, error: unknown): void {
-    if (
-      !(error instanceof WorkspaceWorkerError) ||
-      error.reason !== 'missing' ||
-      this.registryState?.preparedAccounts.includes(ownerId)
-    )
-      throw error
-  }
-
-  /** Chooses recovery or a bounded preparation retry without unlocking a stale account generation.
-   * @example await this.preparationFailed(error, generation)
-   */
-  private async preparationFailed(
-    error: unknown,
-    generation: number,
-  ): Promise<void> {
-    if (generation !== this.generation) return
-    this.preparingOwner = undefined
-    const reason =
-      error instanceof WorkspaceWorkerError
-        ? error.reason
-        : isSyncAuthenticationError(error)
-          ? 'sign-in-required'
-          : 'preparation-failed'
-    if (
-      [
-        'missing',
-        'invalid',
-        'exists',
-        'recovery-missing',
-        'storage-failed',
-      ].includes(reason)
-    )
-      await this.publishRecovery(reason)
-    else {
-      this.recovery = null
-      this.publish({
-        phase: this.registryState?.lastAccountId
-          ? 'locked'
-          : 'needs-preparation',
-        generation,
-        reason,
-      })
-      // Resume the interrupted connected preparation automatically; explicit logout never enters this path.
-      this.preparationFailures++
-      this.retryTimer = setTimeout(
-        () => {
-          this.retryTimer = null
-          this.retryPreparation()
-        },
-        Math.min(60000, 1000 * 2 ** Math.min(this.preparationFailures, 6)),
-      )
-      this.retryTimer.unref?.()
-    }
-  }
-
-  /** Starts a bounded handshake with the existing remote Settings document, never with the auth broker.
-   * @example const preferences = await this.waitForSettings(ownerId, generation)
-   */
-  private async waitForSettings(
-    ownerId: string,
-    generation: number,
-  ): Promise<OfflinePreferences> {
-    return new Promise<OfflinePreferences>((resolve, reject) => {
-      const fail = (): void => {
-        if (this.settingsWaiter?.generation === generation)
-          this.settingsWaiter = null
-        reject(new WorkspaceWorkerError('preparation-failed'))
-      }
-      const timer = setTimeout(fail, 15000)
-      timer.unref?.()
-      this.settingsWaiter = {
-        ownerId,
-        generation,
-        resolve,
-        reject: fail,
-        timer,
-      }
-      this.options.openSettingsForPreparation()
-      this.options.onSettingsContext(ownerId, generation, null)
-    })
-  }
-
-  /** Cancels stale preparation callbacks before an account transition or quit.
-   * @example this.cancelPreparation()
-   */
-  private cancelPreparation(): void {
     if (this.clearTimer) clearTimeout(this.clearTimer)
     this.clearTimer = null
-    if (this.retryTimer) clearTimeout(this.retryTimer)
-    this.retryTimer = null
-    if (this.settingsWaiter) {
-      clearTimeout(this.settingsWaiter.timer)
-      this.settingsWaiter.reject()
-      this.settingsWaiter = null
+    await this.loop.stop()
+    this.options.broker.reset()
+    const actor = this.actorInstance
+    this.actorInstance = null
+    if (actor) {
+      await actor.call('open', null).catch(() => undefined)
+      await actor.close()
     }
+    return true
   }
 
-  /** Creates exactly one storage writer per account in this process.
-   * @example const actor = this.actor(ownerId)
+  /** Creates exactly one storage writer for the device workspace in this process.
+   * @example const actor = this.actor()
    */
-  private actor(ownerId: string): Actor {
-    let actor = this.actors.get(ownerId)
-    if (!actor) {
-      actor =
-        this.options.actor?.(ownerId) ??
-        new WorkspaceWorkerClient({
-          directory: join(this.options.directory, 'workspaces'),
-          ownerId,
-          script: this.options.workerScript,
-        })
-      this.actors.set(ownerId, actor)
-    }
-    return actor
+  private actor(): Actor {
+    this.actorInstance ??=
+      this.options.actor?.() ??
+      new WorkspaceWorkerClient({
+        directory: join(this.options.directory, 'workspaces'),
+        ownerId: DEVICE_OWNER_ID,
+        script: this.options.workerScript,
+      })
+    return this.actorInstance
   }
 
   /** Rejects stale UI requests before any account-specific information is read.
@@ -814,13 +928,11 @@ export class OfflineEditorController {
       phase: 'ready',
       generation,
       workspace: view,
-      sync: this.snapshot.phase === 'ready' ? this.snapshot.sync : 'offline',
+      sync: this.syncStatus(view),
       ...(this.failedDrafts.has(view.ownerId)
         ? { unsavedDraft: this.failedDrafts.get(view.ownerId)! }
         : {}),
     })
-    if (this.verifiedOwner === view.ownerId)
-      this.options.onSettingsContext(view.ownerId, generation, view.preferences)
     if (this.clearTimer) clearTimeout(this.clearTimer)
     this.clearTimer = null
     const now = Date.now()
@@ -834,6 +946,47 @@ export class OfflineEditorController {
       view.nextUndoAt === null ? Infinity : view.nextUndoAt + 1,
     )
     this.scheduleClear(this.context, Math.max(0, next - now))
+  }
+
+  /**
+   * Derives the D2/X1 sync status. Detached (never attached, signed out, another account) is
+   * always `local-only`, so the editor shows only its save line (DA2); "sign in to sync" is
+   * reserved for an attached account whose session expired.
+   * @example const sync = this.syncStatus(view)
+   */
+  private syncStatus(view: WorkspaceView): OfflineSyncStatus {
+    const base = {
+      waitingCount: view.pendingCount,
+      lastSyncedAt: view.binding?.lastSyncedAt ?? null,
+      boundEmail: view.binding?.displayEmail ?? null,
+    }
+    if (!this.isAttached()) return { state: 'local-only', ...base }
+    switch (this.loopStatus) {
+      case 'syncing':
+        return { state: 'syncing', ...base }
+      case 'offline':
+        return { state: 'waiting', ...base }
+      case 'sign-in-required':
+        return { state: 'sign-in-to-sync', ...base }
+      case 'idle':
+        return { state: view.pendingCount > 0 ? 'waiting' : 'synced', ...base }
+    }
+  }
+
+  /** Re-publishes the current ready snapshot with a recomputed sync status and first-upload progress.
+   * @example this.publishSync()
+   */
+  private publishSync(): void {
+    if (this.snapshot.phase !== 'ready') return
+    const { workspace } = this.snapshot
+    const sync = this.syncStatus(workspace)
+    if (
+      this.firstUpload?.state === 'uploading' &&
+      this.loopStatus === 'idle' &&
+      workspace.pendingCount === 0
+    )
+      this.firstUpload = { state: 'done', count: this.firstUpload.count }
+    this.publish({ ...this.snapshot, sync })
   }
 
   /** Clears acknowledged completed lines on schedule even if the renderer is hidden or restarted.

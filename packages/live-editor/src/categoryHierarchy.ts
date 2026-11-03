@@ -1,8 +1,19 @@
 import type { Category } from '@corelive/desktop-contract/category'
 
-type HierarchyCategory = Pick<Category, 'id' | 'name'> & {
-  parentId?: number | null
+/** Category identity: numeric server ids (web) or local uuid strings (desktop device workspace). */
+type CategoryIdentity = Category['id'] | string
+
+type HierarchyCategory = Pick<Category, 'name'> & {
+  id: CategoryIdentity
+  parentId?: CategoryIdentity | null
   createdAt?: Date | string
+}
+
+/** Orders ids deterministically for both numeric and string identities. */
+function compareIdentity(left: CategoryIdentity, right: CategoryIdentity) {
+  return typeof left === 'number' && typeof right === 'number'
+    ? left - right
+    : String(left).localeCompare(String(right))
 }
 
 /**
@@ -29,11 +40,12 @@ export function createCategoryHierarchy<T extends HierarchyCategory>(
         ? (originalPositions.get(left) ?? 0) -
           (originalPositions.get(right) ?? 0)
         : new Date(left.createdAt).getTime() -
-          new Date(right.createdAt).getTime()) || left.id - right.id,
+          new Date(right.createdAt).getTime()) ||
+      compareIdentity(left.id, right.id),
   )
-  const children = new Map<number, T[]>()
+  const children = new Map<T['id'], T[]>()
   const roots: T[] = []
-  const paths = new Map<number, string>()
+  const paths = new Map<T['id'], string>()
   // Orphans stay reachable while category queries reconcile an external mutation.
   for (const category of sorted) {
     const parent = category.parentId ? byId.get(category.parentId) : undefined

@@ -1,19 +1,32 @@
 import { z } from 'zod'
 
+import type { SyncDetailRow } from './category-sync'
+import type {
+  ElectronConfigAPI,
+  ElectronPanelsAPI,
+  ElectronSettingsAPI,
+  ElectronUpdaterAPI,
+  LiveEditorSettingsAPI,
+} from './electron-api'
+import type {
+  AccountStatus,
+  SignInStartResult,
+  SignOutResult,
+} from './offline-account'
+import type { OfflinePreferences } from './offline-workspace'
 import {
-  OfflinePreferencesSchema,
   WorkspaceCommandSchema,
   type OfflineCommandResult,
   type OfflineCompletion,
-  type OfflineEditorSnapshot,
-  type OfflinePreferences,
-  type OfflineWorkspaceView,
-  type OfflineWorkspace,
   type OfflineDraftRecord,
+  type OfflineEditorSnapshot,
+  type OfflineWorkspace,
+  type LocalCategory,
+  type OfflineWorkspaceView,
   type OutboxEntry,
+  type SyncHistoryItem,
   type WorkspaceCommand,
-} from './offline-workspace'
-import type { UserSettingsState } from './settings'
+} from './offline-workspace-v2'
 
 export interface OfflineDetailsPage {
   total: number
@@ -31,17 +44,13 @@ export interface OfflineRecoveryPreview {
   workspace: OfflineWorkspaceView
   savedAt: number
 }
-export const OfflineCategoryActionSchema = z.object({
-  action: z.enum(['create', 'manage']),
-  initialName: z.string().max(255).optional(),
-})
-export type OfflineCategoryAction = z.infer<typeof OfflineCategoryActionSchema>
-export type OfflineCategoryRequest = OfflineCategoryAction & {
-  generation: number
-}
-export interface OfflineSettingsContext {
-  generation: number
-  preferences: OfflinePreferences | null
+/** Everything the Sync details page renders (DA7, C34). */
+export interface OfflineSyncDetails {
+  rows: SyncDetailRow[]
+  history: SyncHistoryItem[]
+  migrationSummary: OfflineWorkspace['migration']['summary']
+  preservedBackups: { fileName: string; accountId: string | null }[]
+  dashboardOnlyCount: number
 }
 export type OfflineSettingsResult =
   | { ok: true; generation: number; preferences: OfflinePreferences }
@@ -55,7 +64,7 @@ export interface OfflineFlushRequest {
 export interface OfflineEditorAPI {
   version: 1
   snapshot: () => Promise<OfflineEditorSnapshot>
-  draft: (generation: number, categoryId: number) => Promise<OfflineDraftRecord>
+  draft: (generation: number, categoryId: string) => Promise<OfflineDraftRecord>
   command: (
     generation: number,
     command: WorkspaceCommand,
@@ -77,7 +86,8 @@ export interface OfflineEditorAPI {
     limit: number,
   ) => Promise<OfflineRecoveryPage>
   signIn: () => Promise<void>
-  manageCategories: (request?: OfflineCategoryAction) => Promise<void>
+  /** Sync details page data (rows, History, C34 summary); read-only. */
+  syncDetails: (generation: number) => Promise<OfflineSyncDetails>
   copyWriting: (generation: number, text: string) => Promise<boolean>
   export: (generation: number) => Promise<boolean>
   previewRecovery: (generation: number) => Promise<OfflineRecoveryPreview>
@@ -85,41 +95,79 @@ export interface OfflineEditorAPI {
   subscribe: (listener: (snapshot: OfflineEditorSnapshot) => void) => () => void
   onFlush: (listener: (request: OfflineFlushRequest) => void) => () => void
   onShown: (listener: () => void) => () => void
-  onCategoryCreated: (
-    listener: (selection: { generation: number; categoryId: number }) => void,
-  ) => () => void
   replyFlush: (request: OfflineFlushRequest, saved: boolean) => Promise<boolean>
 }
 
-/** Remote Settings transfers hydrated preferences only for its verified account challenge. */
-export interface OfflineSettingsAPI {
+/** What the bundled Settings window renders; the draft text never crosses this boundary. */
+export type SettingsSnapshot =
+  | {
+      phase: 'ready'
+      generation: number
+      preferences: OfflinePreferences
+      categories: LocalCategory[]
+      account: AccountStatus
+    }
+  | {
+      phase: 'opening' | 'recovery'
+      generation: number
+      account: AccountStatus
+    }
+
+/**
+ * Named capabilities of the bundled Settings window (#216 D5), exposed as `window.settingsAPI`
+ * by the sandboxed `preload-settings`. It carries no token, no filesystem path and no remote
+ * URL; main owns every network call and the dashboard address (EA16).
+ */
+export interface SettingsWindowAPI {
   version: 1
-  supportedKeys?: readonly (keyof UserSettingsState)[]
-  read: (accountId: string) => Promise<OfflineSettingsContext | null>
-  prepare: (
-    accountId: string,
-    generation: number,
-    preferences: OfflinePreferences,
-  ) => Promise<boolean>
-  patch: (
-    accountId: string,
-    generation: number,
-    command: Extract<WorkspaceCommand, { type: 'preferences' }>,
-  ) => Promise<OfflineSettingsResult>
+  platform: string
+  /** Current device-workspace projection plus account status. */
+  snapshot: () => Promise<SettingsSnapshot>
+  /** Fires after any workspace, preference or account change; re-read with {@link snapshot}. */
   onChanged: (listener: () => void) => () => void
-  onManageCategories: (listener: () => void) => () => void
-  consumeCategoryRequest: () => Promise<OfflineCategoryRequest | null>
-  categoryCreated: (
-    accountId: string,
-    generation: number,
-    categoryId: number,
-  ) => Promise<boolean>
-  refreshCategories: () => Promise<void>
+  preferences: {
+    /** Applies one revisioned preferences command to the device workspace. */
+    patch: (
+      generation: number,
+      command: Extract<WorkspaceCommand, { type: 'preferences' }>,
+    ) => Promise<OfflineSettingsResult>
+  }
+  categories: {
+    /** Sends one category command (step-4b worker commands); works offline. */
+    command: (
+      generation: number,
+      command: WorkspaceCommand,
+    ) => Promise<OfflineCommandResult>
+  }
+  account: {
+    status: () => Promise<AccountStatus>
+    connect: () => Promise<boolean>
+    notNow: () => Promise<SignOutResult>
+    /** Opens the login window unless the Mac is offline (DA6). */
+    signIn: () => Promise<SignInStartResult>
+    /** Closes the login window opened by {@link signIn} (DA6 Cancel). */
+    cancelSignIn: () => Promise<void>
+    signOut: () => Promise<SignOutResult>
+    /** Reruns only the local session end and its read-back after a residual result (DX6). */
+    clearAgain: () => Promise<SignOutResult>
+    /** Tells main the "keeps are on your dashboard" line was shown, so it appears once (DA4). */
+    acknowledgeFirstUpload: () => Promise<void>
+    /** Opens the dashboard at the configured server URL; the renderer supplies no address. */
+    openDashboard: () => Promise<boolean>
+  }
+  /** Sync details page data (rows, History, C34 summary); read-only. */
+  syncDetails: (generation: number) => Promise<OfflineSyncDetails>
+  config: Pick<ElectronConfigAPI, 'get' | 'set' | 'open'>
+  app: { getVersion: () => Promise<string> }
+  updater: ElectronUpdaterAPI
+  settings: ElectronSettingsAPI
+  floatingPanels: ElectronPanelsAPI
+  liveEditor: LiveEditorSettingsAPI
 }
 
 export interface OfflineIPCChannels {
   'offline-editor-draft': {
-    request: [number, number]
+    request: [number, string]
     response: OfflineDraftRecord
   }
   'offline-editor-snapshot': { request: void; response: OfflineEditorSnapshot }
@@ -141,9 +189,9 @@ export interface OfflineIPCChannels {
     response: OfflineRecoveryPage
   }
   'offline-editor-sign-in': { request: void; response: void }
-  'offline-editor-manage-categories': {
-    request: OfflineCategoryAction
-    response: void
+  'offline-editor-sync-details': {
+    request: number
+    response: OfflineSyncDetails
   }
   'offline-editor-copy': { request: [number, string]; response: boolean }
   'offline-editor-export': { request: number; response: boolean }
@@ -156,33 +204,55 @@ export interface OfflineIPCChannels {
     request: [OfflineFlushRequest, boolean]
     response: boolean
   }
-  'offline-settings-read': {
-    request: string
-    response: OfflineSettingsContext | null
-  }
-  'offline-settings-prepare': {
-    request: [string, number, OfflinePreferences]
-    response: boolean
-  }
-  'offline-settings-patch': {
-    request: [
-      string,
-      number,
-      Extract<WorkspaceCommand, { type: 'preferences' }>,
-    ]
+  'auth-session-unavailable': { request: void; response: void }
+  'settings-window-snapshot': { request: void; response: SettingsSnapshot }
+  'settings-window-preferences-patch': {
+    request: [number, Extract<WorkspaceCommand, { type: 'preferences' }>]
     response: OfflineSettingsResult
   }
-  'auth-session-unavailable': { request: void; response: void }
-  'offline-settings-category-request': {
-    request: void
-    response: OfflineCategoryRequest | null
+  'settings-window-category-command': {
+    request: [number, WorkspaceCommand]
+    response: OfflineCommandResult
   }
-  'offline-settings-category-created': {
-    request: [string, number, number]
+  'settings-window-sync-details': {
+    request: number
+    response: OfflineSyncDetails
+  }
+  'settings-window-account-status': { request: void; response: AccountStatus }
+  'settings-window-account-connect': { request: void; response: boolean }
+  'settings-window-account-not-now': { request: void; response: SignOutResult }
+  'settings-window-account-sign-in': {
+    request: void
+    response: SignInStartResult
+  }
+  'settings-window-account-cancel-sign-in': { request: void; response: void }
+  'settings-window-account-clear-again': {
+    request: void
+    response: SignOutResult
+  }
+  'settings-window-account-ack-first-upload': {
+    request: void
+    response: void
+  }
+  'settings-window-account-sign-out': {
+    request: void
+    response: SignOutResult
+  }
+  'settings-window-account-open-dashboard': {
+    request: void
     response: boolean
   }
-  'offline-settings-refresh-categories': { request: void; response: void }
 }
+
+/** Command types the Settings window may send through its category capability (D4, step 4b). */
+const SETTINGS_CATEGORY_COMMAND_TYPES: ReadonlySet<string> = new Set([
+  'categoryCreate',
+  'categoryRename',
+  'categoryRecolor',
+  'categoryReparent',
+  'categoryDelete',
+  'syncDetailAction',
+])
 
 const generation = z.number().int().nonnegative()
 const pagination = z.tuple([
@@ -192,7 +262,7 @@ const pagination = z.tuple([
 ])
 /** Validates every offline invoke tuple before the exact window/frame authorization check. */
 export const OFFLINE_IPC_ARGUMENT_SCHEMAS = {
-  'offline-editor-draft': z.tuple([generation, z.number().int().positive()]),
+  'offline-editor-draft': z.tuple([generation, z.uuid()]),
   'offline-editor-snapshot': z.tuple([]),
   'offline-editor-command': z.tuple([generation, WorkspaceCommandSchema]),
   'offline-editor-retry': z.tuple([]),
@@ -200,7 +270,7 @@ export const OFFLINE_IPC_ARGUMENT_SCHEMAS = {
   'offline-editor-undo-history': pagination,
   'offline-editor-recovery-copies': pagination,
   'offline-editor-sign-in': z.tuple([]),
-  'offline-editor-manage-categories': z.tuple([OfflineCategoryActionSchema]),
+  'offline-editor-sync-details': z.tuple([generation]),
   'offline-editor-copy': z.tuple([generation, z.string()]),
   'offline-editor-export': z.tuple([generation]),
   'offline-editor-preview-recovery': z.tuple([generation]),
@@ -209,23 +279,26 @@ export const OFFLINE_IPC_ARGUMENT_SCHEMAS = {
     z.object({ requestId: z.uuid(), generation }),
     z.boolean(),
   ]),
-  'offline-settings-read': z.tuple([z.string().min(1)]),
-  'offline-settings-prepare': z.tuple([
-    z.string().min(1),
-    generation,
-    OfflinePreferencesSchema,
-  ]),
-  'offline-settings-patch': z.tuple([
-    z.string().min(1),
+  'auth-session-unavailable': z.tuple([]),
+  'settings-window-snapshot': z.tuple([]),
+  'settings-window-preferences-patch': z.tuple([
     generation,
     WorkspaceCommandSchema.refine((command) => command.type === 'preferences'),
   ]),
-  'auth-session-unavailable': z.tuple([]),
-  'offline-settings-category-request': z.tuple([]),
-  'offline-settings-category-created': z.tuple([
-    z.string().min(1),
+  'settings-window-category-command': z.tuple([
     generation,
-    z.number().int().positive(),
+    WorkspaceCommandSchema.refine((command) =>
+      SETTINGS_CATEGORY_COMMAND_TYPES.has(command.type),
+    ),
   ]),
-  'offline-settings-refresh-categories': z.tuple([]),
+  'settings-window-sync-details': z.tuple([generation]),
+  'settings-window-account-status': z.tuple([]),
+  'settings-window-account-connect': z.tuple([]),
+  'settings-window-account-not-now': z.tuple([]),
+  'settings-window-account-sign-in': z.tuple([]),
+  'settings-window-account-cancel-sign-in': z.tuple([]),
+  'settings-window-account-clear-again': z.tuple([]),
+  'settings-window-account-ack-first-upload': z.tuple([]),
+  'settings-window-account-sign-out': z.tuple([]),
+  'settings-window-account-open-dashboard': z.tuple([]),
 } satisfies Record<keyof OfflineIPCChannels, z.ZodType>

@@ -35,6 +35,27 @@ test('the actual oRPC client sends a memory-only bearer to the canonical API and
   expect(init?.signal?.aborted).toBe(true)
 })
 
+test('whoami asks the account.whoami procedure with the bearer and returns the verified identity', async () => {
+  // Arrange
+  const fetcher = vi.fn<typeof fetch>(async () =>
+    Response.json({ json: { clerkId: 'user_abc', email: 'me@example.com' } }),
+  )
+  const transport = createSyncTransport(
+    'https://corelive.app',
+    'test-token',
+    fetcher,
+  )
+
+  // Act
+  const identity = await transport.whoami()
+
+  // Assert
+  expect(identity).toEqual({ clerkId: 'user_abc', email: 'me@example.com' })
+  expect(fetcher.mock.calls[0]![0]).toBe(
+    'https://www.corelive.app/api/orpc/account/whoami',
+  )
+})
+
 test.each(['rpc', 'plain'] as const)(
   'a real %s HTTP 401 becomes sign-in-required without relying on the retired oRPC status property',
   async (format) => {

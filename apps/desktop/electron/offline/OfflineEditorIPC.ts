@@ -2,11 +2,15 @@ import { randomUUID } from 'node:crypto'
 import { writeFile } from 'node:fs/promises'
 
 import type {
+  AccountStatus,
+  SignOutResult,
+} from '@corelive/desktop-contract/offline-account'
+import type {
   OfflineFlushRequest,
   OfflineSettingsResult,
-  OfflineCategoryRequest,
+  SettingsSnapshot,
 } from '@corelive/desktop-contract/offline-editor-api'
-import type { OfflineEditorSnapshot } from '@corelive/desktop-contract/offline-workspace'
+import type { OfflineEditorSnapshot } from '@corelive/desktop-contract/offline-workspace-v2'
 import {
   clipboard,
   dialog,
@@ -16,11 +20,18 @@ import {
 
 import { typedHandle } from '../ipc/typedHandle'
 import { typedSend } from '../ipc/typedSend'
+import { log } from '../logger'
 import { isTrustedAppNavigation } from '../utils/isTrustedAppNavigation'
+import { openWebAppInBrowser } from '../utils/openWebAppInBrowser'
 import type { WindowManager } from '../WindowManager'
 
-import { isLocalEditorDocument, LOCAL_EDITOR_ORIGIN } from './localEditorOrigin'
+import {
+  isLocalEditorDocument,
+  isLocalSettingsDocument,
+  LOCAL_EDITOR_ORIGIN,
+} from './localEditorOrigin'
 import type { OfflineEditorController } from './OfflineEditorController'
+import { SignInCoordinator } from './SignInCoordinator'
 
 type PendingFlush = {
   request: OfflineFlushRequest
@@ -48,7 +59,8 @@ function isCurrentWindowFrame(
   )
 }
 
-/** Verifies current remote Settings/login main-frame notifications before changing native authentication state.
+/** Verifies that an authentication notification comes from the login window's main frame.
+ * Only the login window hosts Clerk (D5); the bundled Settings window is no longer an auth surface.
  * Main uses this predicate for the existing login and expiry IPC handlers.
  * @example if (!isTrustedAuthSender(event, windows)) throw new Error('Unauthorized sender')
  */
@@ -57,18 +69,17 @@ export function isTrustedAuthSender(
   windows: WindowManager,
 ): boolean {
   const origin = windows.getWebAppOrigin()
-  return [windows.getSettingsWindow(), windows.getLoginWindow()].some(
-    (window) =>
-      isCurrentWindowFrame(event, window, (url) =>
-        isTrustedAppNavigation(url, origin),
-      ) &&
-      event.senderFrame !== null &&
-      isTrustedAppNavigation(event.senderFrame.origin, origin),
+  return (
+    isCurrentWindowFrame(event, windows.getLoginWindow(), (url) =>
+      isTrustedAppNavigation(url, origin),
+    ) &&
+    event.senderFrame !== null &&
+    isTrustedAppNavigation(event.senderFrame.origin, origin)
   )
 }
 
 /**
- * Binds the local editor and remote Settings to their narrow main-process capabilities.
+ * Binds the bundled editor and bundled Settings window to their narrow main-process capabilities.
  * Main constructs this once, before loading either renderer. Reads recheck generation
  * after worker/dialog awaits so an account switch cannot disclose an earlier result.
  * @example const ipc = new OfflineEditorIPC(windowManager, controller)
@@ -76,17 +87,27 @@ export function isTrustedAuthSender(
 export class OfflineEditorIPC {
   private pending: PendingFlush | null = null
   private snapshotReaders = 0
-  private categoryRequest: OfflineCategoryRequest | null = null
-  private createdCategory: {
-    generation: number
-    categoryId: number
-    ownerId: string
-  } | null = null
+  private readonly signIn: SignInCoordinator
 
   constructor(
     private readonly windows: WindowManager,
     private readonly controller: OfflineEditorController,
-  ) {}
+    private readonly deps: {
+      /** Runs one sign-out implementation (C23) so `account.signOut` and `auth-logout` share steps 1-4. */
+      signOutDevice: (
+        run: () => Promise<SignOutResult>,
+      ) => Promise<SignOutResult>
+      /** `net.isOnline()`; gates the Settings sign-in (DA6). */
+      isOnline: () => boolean
+    },
+  ) {
+    this.signIn = new SignInCoordinator({
+      windows,
+      isOnline: deps.isOnline,
+      onChange: () => this.settingsChanged(),
+      log: (line) => log.info(line),
+    })
+  }
 
   /** Registers every capability; runtime argument validation is supplied by {@link typedHandle}.
    * @example ipc.register()
@@ -113,7 +134,7 @@ export class OfflineEditorIPC {
     )
     typedHandle('offline-editor-retry', (event) => {
       this.assertEditor(event)
-      this.controller.retryPreparation()
+      this.controller.retrySync()
     })
     typedHandle(
       'offline-editor-details',
@@ -154,26 +175,11 @@ export class OfflineEditorIPC {
       this.assertEditor(event)
       this.windows.showLoginWindow()
     })
-    typedHandle('offline-editor-manage-categories', (event, request) => {
-      this.assertEditor(event)
-      const snapshot = this.controller.getSnapshot()
-      if (
-        snapshot.phase !== 'ready' ||
-        snapshot.sync === 'offline' ||
-        snapshot.sync === 'sign-in-required'
-      )
-        return
-      this.categoryRequest = { ...request, generation: snapshot.generation }
-      this.windows.openSettings()
-      const settings = this.windows.getSettingsWindow()
-      if (!settings) return
-      const open = (): void => {
-        if (!settings.isDestroyed())
-          typedSend(settings.webContents, 'offline-settings-manage-categories')
-      }
-      if (settings.webContents.isLoadingMainFrame())
-        settings.webContents.once('did-finish-load', open)
-      else open()
+    typedHandle('offline-editor-sync-details', async (event, generation) => {
+      this.assertEditor(event, generation)
+      const details = await this.controller.syncDetails(generation)
+      this.assertEditor(event, generation)
+      return details
     })
     typedHandle('offline-editor-copy', (event, generation, text) => {
       this.assertEditor(event, generation)
@@ -255,6 +261,8 @@ export class OfflineEditorIPC {
    * @example ipc.publish(snapshot)
    */
   publish(snapshot: OfflineEditorSnapshot): void {
+    // Settings re-reads its own projection; the editor's startup barrier does not apply to it.
+    this.settingsChanged()
     if (this.snapshotReaders > 0) return
     const editor = this.windows.getLiveEditorWindow()
     if (
@@ -263,25 +271,6 @@ export class OfflineEditorIPC {
       isLocalEditorDocument(editor.webContents.getURL())
     ) {
       typedSend(editor.webContents, 'offline-editor-changed', snapshot)
-      const selection = this.createdCategory
-      if (selection && selection.generation !== snapshot.generation)
-        this.createdCategory = null
-      if (
-        selection &&
-        snapshot.phase === 'ready' &&
-        selection.generation === snapshot.generation &&
-        selection.ownerId === snapshot.workspace.ownerId &&
-        snapshot.workspace.categories.some(
-          (category) =>
-            category.id === selection.categoryId && !category.removed,
-        )
-      ) {
-        this.createdCategory = null
-        typedSend(editor.webContents, 'offline-editor-category-created', {
-          generation: selection.generation,
-          categoryId: selection.categoryId,
-        })
-      }
     }
   }
 
@@ -301,25 +290,17 @@ export class OfflineEditorIPC {
       typedSend(editor.webContents, 'offline-editor-shown')
   }
 
-  /**
-   * Resumes editing after the controller cancels a flushed account departure.
-   * A newer flush or account generation retains its own input barrier; this check
-   * and notification are synchronous so no newer challenge can slip between them.
-   * @example ipc.resumeAfterCancelledTransition(generation)
-   */
-  resumeAfterCancelledTransition(generation: number): void {
-    if (this.pending || generation !== this.controller.getSnapshot().generation)
-      return
-    this.shown()
-  }
-
-  /** Sends no account data in the notification; Settings re-reads through its verified capability.
+  /** Sends no data in the notification; Settings re-reads through its verified capability.
    * @example ipc.settingsChanged()
    */
   settingsChanged(): void {
     const settings = this.windows.getSettingsWindow()
-    if (settings && !settings.isDestroyed())
-      typedSend(settings.webContents, 'offline-settings-changed')
+    if (
+      settings &&
+      !settings.isDestroyed() &&
+      isLocalSettingsDocument(settings.webContents.getURL())
+    )
+      typedSend(settings.webContents, 'settings-window-changed')
   }
 
   /** Challenges the renderer's current live buffer before hide, account transition or quit.
@@ -365,76 +346,107 @@ export class OfflineEditorIPC {
     return promise
   }
 
-  /** Transfers only the verified account's preferences and acknowledges explicit field patches.
+  /** Registers the bundled Settings capabilities; each handler verifies the exact window and document first.
    * @example this.registerSettings()
    */
   private registerSettings(): void {
-    typedHandle('offline-settings-category-request', (event) => {
+    typedHandle('settings-window-snapshot', (event) => {
       this.assertSettings(event)
-      const requested = this.categoryRequest
-      this.categoryRequest = null
-      return requested?.generation === this.controller.getSnapshot().generation
-        ? requested
-        : null
+      return this.settingsSnapshot()
     })
     typedHandle(
-      'offline-settings-category-created',
-      (event, ownerId, generation, categoryId) => {
-        this.assertSettings(event)
-        const context = this.controller.settingsContext(ownerId)
-        const snapshot = this.controller.getSnapshot()
-        if (
-          context?.generation !== generation ||
-          snapshot.phase !== 'ready' ||
-          snapshot.workspace.ownerId !== ownerId
-        )
-          return false
-        this.createdCategory = { ownerId, generation, categoryId }
-        // The remote dialog's ID is advisory until a verified category refresh proves ownership.
-        this.controller.retryPreparation()
-        return true
-      },
-    )
-    typedHandle('offline-settings-refresh-categories', (event) => {
-      this.assertSettings(event)
-      if (this.controller.getSnapshot().phase === 'ready')
-        this.controller.retryPreparation()
-    })
-    typedHandle('offline-settings-read', (event, owner) => {
-      this.assertSettings(event)
-      return this.controller.settingsContext(owner)
-    })
-    typedHandle(
-      'offline-settings-prepare',
-      (event, owner, generation, preferences) => {
-        this.assertSettings(event)
-        return this.controller.provideSettings(owner, generation, preferences)
-      },
-    )
-    typedHandle(
-      'offline-settings-patch',
-      async (
-        event,
-        owner,
-        generation,
-        command,
-      ): Promise<OfflineSettingsResult> => {
-        this.assertSettings(event)
-        const result = await this.controller.patchSettings(
-          owner,
-          generation,
-          command,
-        )
-        this.settingsChanged()
-        // A remote Settings document receives preferences only, never the workspace/draft projection.
+      'settings-window-preferences-patch',
+      async (event, generation, command): Promise<OfflineSettingsResult> => {
+        this.assertSettings(event, generation)
+        const result = await this.controller.command(generation, command)
+        this.assertSettings(event, generation)
         if (!result.ok) return result
-        this.assertSettings(event)
-        const current = this.controller.settingsContext(owner)
-        if (current?.generation !== generation || !current.preferences)
+        const current = this.controller.getSnapshot()
+        if (current.phase !== 'ready' || current.generation !== generation)
           return { ok: false, reason: 'account-changed' }
-        return { ok: true, generation, preferences: current.preferences }
+        return {
+          ok: true,
+          generation,
+          preferences: current.workspace.preferences,
+        }
       },
     )
+    typedHandle(
+      'settings-window-category-command',
+      async (event, generation, command) => {
+        this.assertSettings(event, generation)
+        return this.controller.command(generation, command)
+      },
+    )
+    typedHandle('settings-window-sync-details', async (event, generation) => {
+      this.assertSettings(event, generation)
+      const details = await this.controller.syncDetails(generation)
+      this.assertSettings(event, generation)
+      return details
+    })
+    typedHandle('settings-window-account-status', (event) => {
+      this.assertSettings(event)
+      return this.accountStatus()
+    })
+    typedHandle('settings-window-account-connect', async (event) => {
+      this.assertSettings(event)
+      return this.controller.connect()
+    })
+    typedHandle('settings-window-account-not-now', async (event) => {
+      this.assertSettings(event)
+      return this.deps.signOutDevice(async () => this.controller.notNow())
+    })
+    typedHandle('settings-window-account-sign-in', (event) => {
+      this.assertSettings(event)
+      // Offline answers without opening the login window (DA6).
+      return this.signIn.start()
+    })
+    typedHandle('settings-window-account-cancel-sign-in', (event) => {
+      this.assertSettings(event)
+      this.signIn.cancel()
+    })
+    typedHandle('settings-window-account-clear-again', async (event) => {
+      this.assertSettings(event)
+      return this.controller.clearAgain()
+    })
+    typedHandle('settings-window-account-ack-first-upload', (event) => {
+      this.assertSettings(event)
+      this.controller.acknowledgeFirstUpload()
+    })
+    typedHandle('settings-window-account-sign-out', async (event) => {
+      this.assertSettings(event)
+      return this.deps.signOutDevice(async () => this.controller.signOut())
+    })
+    typedHandle('settings-window-account-open-dashboard', (event) => {
+      this.assertSettings(event)
+      // The address comes from the configured server URL only, never from the renderer (EA16).
+      openWebAppInBrowser(this.windows.getWebAppOrigin(), '/home')
+      return true
+    })
+  }
+
+  /** The controller's account status plus the login window's progress (DA6).
+   * @example const account = this.accountStatus()
+   */
+  private accountStatus(): AccountStatus {
+    return { ...this.controller.accountStatus(), signIn: this.signIn.state }
+  }
+
+  /** Projects the controller state to what Settings renders, without the draft text.
+   * @example const snapshot = this.settingsSnapshot()
+   */
+  private settingsSnapshot(): SettingsSnapshot {
+    const snapshot = this.controller.getSnapshot()
+    const account = this.accountStatus()
+    if (snapshot.phase !== 'ready')
+      return { phase: snapshot.phase, generation: snapshot.generation, account }
+    return {
+      phase: 'ready',
+      generation: snapshot.generation,
+      preferences: snapshot.workspace.preferences,
+      categories: snapshot.workspace.categories,
+      account,
+    }
   }
 
   /** Rejects a former document, child frame, or generation before native data access.
@@ -457,23 +469,24 @@ export class OfflineEditorIPC {
       throw new Error('Account changed')
   }
 
-  /** Keeps preference transfer off login/handshake documents even within the same origin.
-   * @example this.assertSettings(event)
+  /** Accepts only the Settings window's own main frame at its exact bundled document (D5, EA16).
+   * @example this.assertSettings(event, generation)
    */
-  private assertSettings(event: IpcMainInvokeEvent): void {
-    const origin = this.windows.getWebAppOrigin()
+  private assertSettings(event: IpcMainInvokeEvent, generation?: number): void {
     if (
       !isCurrentWindowFrame(
         event,
         this.windows.getSettingsWindow(),
-        (url) =>
-          isTrustedAppNavigation(url, origin) &&
-          new URL(url).pathname === '/settings',
+        isLocalSettingsDocument,
       ) ||
-      !event.senderFrame ||
-      !isTrustedAppNavigation(event.senderFrame.origin, origin)
+      event.senderFrame?.origin !== LOCAL_EDITOR_ORIGIN
     )
       throw new Error('Unauthorized settings')
+    if (
+      generation !== undefined &&
+      generation !== this.controller.getSnapshot().generation
+    )
+      throw new Error('Account changed')
   }
 
   /** Completes one coalesced flush challenge and cancels its deadline.

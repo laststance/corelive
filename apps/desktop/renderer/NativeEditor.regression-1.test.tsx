@@ -5,10 +5,11 @@
 import '@testing-library/jest-dom/vitest'
 import type { LiveEditorAPI } from '@corelive/desktop-contract/electron-api'
 import type { OfflineEditorAPI } from '@corelive/desktop-contract/offline-editor-api'
-import type { OfflineEditorSnapshot } from '@corelive/desktop-contract/offline-workspace'
+import type {
+  OfflineEditorSnapshot,
+  OfflineSyncStatus,
+} from '@corelive/desktop-contract/offline-workspace-v2'
 import { UserSettingsStateSchema } from '@corelive/desktop-contract/settings'
-import { DurableEditorStore } from '@corelive/live-editor/store'
-import { SharedEditorSurface } from '@corelive/live-editor/surface'
 import {
   act,
   cleanup,
@@ -16,13 +17,22 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, expect, test, vi } from 'vitest'
 
+import { DurableEditorStore } from './editor/DurableEditorStore'
+import { SharedEditorSurface } from './editor/SharedEditorSurface'
 import { NativeEditor } from './NativeEditor'
 
 const stores: DurableEditorStore[] = []
+const LOCAL_ONLY_SYNC: OfflineSyncStatus = {
+  state: 'local-only',
+  waitingCount: 0,
+  lastSyncedAt: null,
+  boundEmail: null,
+}
 const originalMatchMedia = window.matchMedia
 afterEach(() => {
   window.matchMedia = originalMatchMedia
@@ -36,30 +46,53 @@ afterEach(() => {
  * @example const fixture = mountEditor()
  */
 function mountEditor(
-  phase: 'ready' | 'preparing' = 'ready',
+  phase: 'ready' | 'opening' = 'ready',
   paginated = false,
   removed = false,
   showStatus = true,
   theme = 'light',
+  syncStatus: OfflineSyncStatus = LOCAL_ONLY_SYNC,
+  placeholderName?: string,
+  selectPlaceholder = false,
 ) {
   const shown = new Set<() => void>()
   const snapshot: OfflineEditorSnapshot = {
     phase: 'ready',
     generation: 1,
-    sync: 'offline',
+    sync: syncStatus,
     workspace: {
       ownerId: 'synthetic-focus-account',
       revision: 0,
-      selectedCategoryId: 1,
+      // A migration can leave the selection on a placeholder whose category no longer exists.
+      selectedCategoryId: selectPlaceholder
+        ? '00000000-0000-4000-8000-0000000000a2'
+        : '00000000-0000-4000-8000-0000000000a1',
       categories: [
         {
-          id: 1,
+          id: '00000000-0000-4000-8000-0000000000a1',
           name: 'General',
           color: 'blue',
           parentId: null,
           isDefault: true,
           removed,
+          historical: false,
+          fieldRevisions: { name: 0, color: 0, parentLocalId: 0 },
         },
+        // A migration-created placeholder that Settings > Categories also hides.
+        ...(placeholderName
+          ? [
+              {
+                id: '00000000-0000-4000-8000-0000000000a2',
+                name: placeholderName,
+                color: 'blue' as const,
+                parentId: null,
+                isDefault: false,
+                removed: false,
+                historical: true,
+                fieldRevisions: { name: 0, color: 0, parentLocalId: 0 },
+              },
+            ]
+          : []),
       ],
       preferences: {
         revision: 0,
@@ -91,22 +124,33 @@ function mountEditor(
       },
       nextClearAt: null,
       nextUndoAt: null,
-      categoryDeletions: {},
+      categoryMoves: {},
+      binding: null,
       recoveryCopyCount: 0,
+      needsALookCount: 0,
     },
   }
   const host: OfflineEditorAPI = {
     version: 1,
     snapshot: async () =>
-      phase === 'preparing' ? { phase, generation: 1 } : snapshot,
-    draft: async () => ({ categoryId: 1, draft: snapshot.workspace.draft }),
+      phase === 'opening' ? { phase, generation: 1 } : snapshot,
+    draft: async () => ({
+      categoryId: '00000000-0000-4000-8000-0000000000a1',
+      draft: snapshot.workspace.draft,
+    }),
     command: async () => ({ ok: false, reason: 'unused-in-focus-test' }),
     retry: async () => undefined,
     details: async () => ({ total: paginated ? 21 : 0, records: [] }),
     undoHistory: async () => ({ total: 0, completions: [] }),
     recoveryCopies: async () => ({ total: 0, copies: [] }),
     signIn: async () => undefined,
-    manageCategories: async () => undefined,
+    syncDetails: async () => ({
+      rows: [],
+      history: [],
+      migrationSummary: null,
+      preservedBackups: [],
+      dashboardOnlyCount: 0,
+    }),
     copyWriting: async () => true,
     export: async () => true,
     previewRecovery: async () => ({
@@ -121,7 +165,6 @@ function mountEditor(
       shown.add(listener)
       return () => shown.delete(listener)
     },
-    onCategoryCreated: () => () => undefined,
   }
   const api: LiveEditorAPI = {
     workspace: host,
@@ -295,21 +338,6 @@ test('revealing an open Details panel keeps its focus instead of moving to the h
   expect(heading).toHaveFocus()
 })
 
-// Regression: ISSUE-002 — preparation must remain discoverable through heading navigation.
-// Found by /qa on 2026-10-22; previous scene probe lost its heading because role=status replaced it.
-test('preparation progress remains a level-one heading with a polite announcement', async () => {
-  // Arrange / Act
-  mountEditor('preparing')
-  const heading = await screen.findByRole('heading', {
-    name: 'Preparing offline access…',
-    level: 1,
-  })
-
-  // Assert
-  expect(heading).toBeVisible()
-  expect(heading).toHaveAttribute('aria-live', 'polite')
-})
-
 // Regression: ISSUE-004 — disabling a pagination button must not strand focus outside Details.
 // Found by /qa on 2026-10-22; Escape failed after returning to the first page.
 test('changing a Details page keeps keyboard focus in the panel so Escape returns to writing', async () => {
@@ -407,7 +435,7 @@ test('the LiveEditor header leaves its empty control-row space available for win
       isCategoryListError={false}
       isMounted
       isLiveEditorConfigReady
-      activeCategoryId={1}
+      activeCategoryId="00000000-0000-4000-8000-0000000000a1"
       isNoteFieldDisabled={false}
       handleKeepLineClick={vi.fn()}
       closeWindow={vi.fn()}
@@ -456,7 +484,7 @@ test('before the workspace is ready the editor follows a dark OS instead of pain
   stubOsAppearance(true)
 
   // Act
-  mountEditor('preparing')
+  mountEditor('opening')
 
   // Assert
   expect(document.documentElement.dataset.theme).toBe('dark')
@@ -467,7 +495,7 @@ test('before the workspace is ready the editor follows a light OS', () => {
   stubOsAppearance(false)
 
   // Act
-  mountEditor('preparing')
+  mountEditor('opening')
 
   // Assert
   expect(document.documentElement.dataset.theme).toBe('light')
@@ -496,3 +524,165 @@ test.each([
     expect(document.documentElement.dataset.theme).toBe(expected)
   },
 )
+
+test('a local-only Mac shows only the save line and no sync line', async () => {
+  // Arrange / Act
+  mountEditor()
+  await screen.findByRole('textbox', { name: 'Write one thing' })
+
+  // Assert
+  const status = screen.getByLabelText('Writing status')
+  expect(screen.getAllByText('Saved on this Mac')[0]).toBeVisible()
+  expect(status.querySelectorAll('p')).toHaveLength(1)
+  expect(screen.queryByText(/Sign in to sync completions/)).toBeNull()
+  expect(screen.queryByText(/completion update/)).toBeNull()
+})
+
+test('Sign in to sync completions appears only for the sign-in-to-sync state', async () => {
+  // Arrange / Act
+  mountEditor('ready', false, false, true, 'light', {
+    state: 'sign-in-to-sync',
+    waitingCount: 0,
+    lastSyncedAt: null,
+    boundEmail: 'owner@example.com',
+  })
+  await screen.findByRole('textbox', { name: 'Write one thing' })
+
+  // Assert
+  expect(screen.getByLabelText('Writing status')).toHaveTextContent(
+    'Sign in to sync completions',
+  )
+})
+
+test('the footer status line is a polite status live region', async () => {
+  // Arrange / Act
+  mountEditor()
+  await screen.findByRole('textbox', { name: 'Write one thing' })
+
+  // Assert
+  const status = screen.getByLabelText('Writing status')
+  expect(status).toHaveAttribute('role', 'status')
+  expect(status).toHaveAttribute('aria-live', 'polite')
+})
+
+test('an attached Mac that is waiting reports its pending completion updates', async () => {
+  // Arrange / Act
+  mountEditor('ready', false, false, true, 'light', {
+    state: 'waiting',
+    waitingCount: 2,
+    lastSyncedAt: null,
+    boundEmail: 'owner@example.com',
+  })
+  await screen.findByRole('textbox', { name: 'Write one thing' })
+
+  // Assert
+  expect(screen.getByLabelText('Writing status')).toHaveTextContent(
+    'Offline · 2 completion updates pending',
+  )
+})
+
+// Regression: /ship CodeRabbit review on PR #222 2026-11-03 — migration "historical" placeholder categories were selectable and editable in the editor picker
+test('the category picker and Manage categories leave out migration placeholder categories', async () => {
+  // Arrange
+  mountEditor(
+    'ready',
+    false,
+    false,
+    true,
+    'light',
+    LOCAL_ONLY_SYNC,
+    'Old import',
+  )
+  fireEvent.click(
+    await screen.findByRole('combobox', { name: 'Writing category: General' }),
+  )
+
+  // Assert (selectable list)
+  expect(await screen.findByText('Manage categories…')).toBeVisible()
+  expect(screen.queryByText('Old import')).toBeNull()
+
+  // Act
+  fireEvent.click(screen.getByText('Manage categories…'))
+
+  // Assert (manage list)
+  expect(await screen.findByRole('button', { name: 'General' })).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Old import' })).toBeNull()
+})
+
+// Regression: /ship CodeRabbit review on PR #222 2026-11-03 — a selected migration placeholder was still offered in Manage categories, where every edit is refused
+test('a selected migration placeholder names the picker but is left out of Manage categories', async () => {
+  // Arrange
+  mountEditor(
+    'ready',
+    false,
+    false,
+    true,
+    'light',
+    LOCAL_ONLY_SYNC,
+    'Old import',
+    true,
+  )
+
+  // Act
+  fireEvent.click(
+    await screen.findByRole('combobox', {
+      name: 'Writing category: Old import',
+    }),
+  )
+  fireEvent.click(await screen.findByText('Manage categories…'))
+
+  // Assert
+  expect(await screen.findByRole('button', { name: 'General' })).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Old import' })).toBeNull()
+})
+
+// Regression: /ship CodeRabbit review on PR #222 2026-11-03 — Move writing offered a hidden migration placeholder as its destination, so the moved writing vanished from the editor
+test('Move writing never offers a migration placeholder as the destination', async () => {
+  // Arrange
+  mountEditor(
+    'ready',
+    false,
+    true,
+    true,
+    'light',
+    LOCAL_ONLY_SYNC,
+    'Old import',
+  )
+  fireEvent.click(await screen.findByRole('button', { name: 'Details' }))
+
+  // Act
+  fireEvent.click(await screen.findByRole('button', { name: 'Move writing' }))
+
+  // Assert
+  const destination = await screen.findByRole('combobox', {
+    name: /Destination category/,
+  })
+  expect(destination).toBeVisible()
+  expect(
+    within(destination).queryByRole('option', { name: 'Old import' }),
+  ).toBeNull()
+  expect(
+    screen.getByText(
+      'Create another category first, in Settings > Categories.',
+    ),
+  ).toBeVisible()
+})
+
+// Regression: /ship CodeRabbit review on PR #222 2026-11-03 — Details told an offline Mac to "Connect to manage categories" although categories work offline
+test('Details for a waiting Mac points to offline category management instead of asking to connect', async () => {
+  // Arrange
+  mountEditor('ready', false, false, true, 'light', {
+    state: 'waiting',
+    waitingCount: 2,
+    lastSyncedAt: null,
+    boundEmail: 'owner@example.com',
+  })
+  await screen.findByRole('textbox', { name: 'Write one thing' })
+
+  // Act
+  fireEvent.click(screen.getByRole('button', { name: 'Details' }))
+
+  // Assert
+  expect(await screen.findByText(/Categories work offline\./)).toBeVisible()
+  expect(screen.queryByText(/Connect to manage categories/)).toBeNull()
+})

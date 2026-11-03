@@ -129,26 +129,36 @@ const conflictingArguments = [
   '--endpoint',
   '-s',
 ]
-if (
-  !allowedCommands.has(command) ||
+/**
+ * Finds the first argument the wrapper must refuse, or undefined when all are allowed.
+ * Called once at startup so the rejection line (DX12) can name the offender.
+ * @example firstRejectedArgument(['open', '--headed']) // '--headed'
+ */
+function firstRejectedArgument(forwarded) {
+  if (!allowedCommands.has(command)) return command
   // Help/version must be terminal: negated booleans can expose a later upstream command.
-  (informationalCommands.has(command) && argumentsToForward.length !== 1) ||
+  if (informationalCommands.has(command) && forwarded.length !== 1)
+    return forwarded[1]
   // Opening accepts only a URL; launch options belong to the checked-in configuration.
-  (command === 'open' &&
-    (argumentsToForward.length > 2 ||
-      argumentsToForward[1]?.startsWith('-'))) ||
-  argumentsToForward.some(
+  if (command === 'open') {
+    if (forwarded.length > 2) return forwarded[2]
+    if (forwarded[1]?.startsWith('-')) return forwarded[1]
+  }
+  return forwarded.find(
     (argument) =>
       argument.startsWith('-s') ||
       conflictingArguments.some(
         (option) => argument === option || argument.startsWith(`${option}=`),
       ),
   )
-) {
+}
+
+const rejectedArgument = firstRejectedArgument(argumentsToForward)
+if (rejectedArgument !== undefined) {
   console.error(
-    'qa:browser owns one isolated headless session. Use its default configuration.',
+    `qa:browser: "${rejectedArgument}" is not supported (QA_BROWSER_ARG_REJECTED). qa:browser owns one isolated headless session; use its commands: open [url], snapshot, screenshot, click, run-code, resize, video-start, video-stop, close.`,
   )
-  process.exit(1)
+  process.exit(2)
 }
 
 const cliArguments = argumentsToForward.length ? argumentsToForward : ['open']

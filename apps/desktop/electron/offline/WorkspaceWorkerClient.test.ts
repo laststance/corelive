@@ -1,11 +1,21 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { UserSettingsStateSchema } from '@corelive/desktop-contract/settings'
+import {
+  DEVICE_OWNER_ID,
+  DEVICE_WORKSPACE_FILE_NAME,
+  OfflineWorkspaceSchema,
+} from '@corelive/desktop-contract/offline-workspace-v2'
 import { expect, test } from 'vitest'
 
+import { AtomicWorkspaceFile } from './AtomicWorkspaceFile'
+import {
+  buildDeviceWorkspace,
+  categoryUuid,
+  initializeDeviceWorkspace,
+} from './deviceWorkspaceFixture'
 import { WorkspaceWorkerClient } from './WorkspaceWorkerClient'
 
 test.each(['before-commit', 'after-commit'] as const)(
@@ -38,38 +48,22 @@ parentPort.postMessage = reply => {
 await import(${JSON.stringify(workerURL)});
 `,
     )
+    await initializeDeviceWorkspace(directory, {
+      notes: { 1: 'Retained completion' },
+    })
     const client = new WorkspaceWorkerClient({
       directory,
-      ownerId: 'account-a',
+      ownerId: 'device',
       script,
       execArgv: ['--import', 'tsx'],
     })
     try {
-      const ready = await client.call('prepare', {
-        ownerId: 'account-a',
-        deviceId: randomUUID(),
-        legacyNotes: { '1': 'Retained completion' },
-        categories: [
-          {
-            id: 1,
-            name: 'General',
-            color: 'blue',
-            isDefault: true,
-            parentId: null,
-            removed: false,
-          },
-        ],
-        preferences: {
-          revision: 0,
-          theme: 'light',
-          settings: UserSettingsStateSchema.parse({}),
-        },
-      })
+      const ready = await client.call('open', null)
       const completion = {
         type: 'complete' as const,
         commandId: randomUUID(),
         completionId: randomUUID(),
-        categoryId: 1,
+        categoryId: categoryUuid(1),
         baseRevision: ready.draft.revision,
         rowId: ready.draft.rows[0]!.id,
         completedAt: Date.now(),
@@ -98,8 +92,11 @@ await import(${JSON.stringify(workerURL)});
       await expect(replaying).resolves.toHaveLength(8)
       const retried = await replaying
       for (const result of retried) expect(result.pendingCount).toBe(1)
-      expect(await client.call('pending', { limit: 16 })).toMatchObject([
-        { operation: { completionId: completion.completionId } },
+      // An unattached device queues the completion locally; `pending` only lists sendable work.
+      expect(
+        (await client.call('details', { offset: 0, limit: 16 })).records,
+      ).toMatchObject([
+        { entry: { operation: { completionId: completion.completionId } } },
       ])
       const reopened = await client.call('open', null)
       expect(reopened.draft.rows.map((row) => row.text)).toEqual([
@@ -108,7 +105,7 @@ await import(${JSON.stringify(workerURL)});
       await client.call('command', {
         type: 'save',
         commandId: randomUUID(),
-        categoryId: 1,
+        categoryId: categoryUuid(1),
         baseRevision: reopened.draft.revision,
         rows: [
           ...reopened.draft.rows,
@@ -135,34 +132,16 @@ await import(${JSON.stringify(workerURL)});
 test('the actual storage worker persists commands and returns a bounded projection across restart', async () => {
   // Arrange
   const directory = await mkdtemp(join(tmpdir(), 'corelive-worker-'))
+  await initializeDeviceWorkspace(directory, { notes: { 1: 'Original' } })
   const options = {
     directory,
-    ownerId: 'account-a',
+    ownerId: 'device' as const,
     script: new URL('./workspace-worker.ts', import.meta.url),
     execArgv: ['--import', 'tsx'],
   }
   let client = new WorkspaceWorkerClient(options)
   try {
-    const ready = await client.call('prepare', {
-      ownerId: 'account-a',
-      deviceId: randomUUID(),
-      legacyNotes: { '1': 'Original' },
-      categories: [
-        {
-          id: 1,
-          name: 'General',
-          color: 'blue',
-          isDefault: true,
-          parentId: null,
-          removed: false,
-        },
-      ],
-      preferences: {
-        revision: 0,
-        theme: 'cathedral-light',
-        settings: UserSettingsStateSchema.parse({}),
-      },
-    })
+    const ready = await client.call('open', null)
     const commandId = randomUUID()
     const completionId = randomUUID()
 
@@ -171,7 +150,7 @@ test('the actual storage worker persists commands and returns a bounded projecti
       type: 'complete',
       commandId,
       completionId,
-      categoryId: 1,
+      categoryId: categoryUuid(1),
       baseRevision: 0,
       rowId: ready.draft.rows[0]!.id,
       completedAt: Date.now(),
@@ -190,17 +169,9 @@ test('the actual storage worker persists commands and returns a bounded projecti
     expect(reopened).not.toHaveProperty('commandReceipts')
     expect(reopened).not.toHaveProperty('completions')
     expect(
-      (await client.call('pending', { limit: 16 }))[0]?.operation.completionId,
+      (await client.call('details', { offset: 0, limit: 16 })).records[0]?.entry
+        .operation.completionId,
     ).toBe(completionId)
-    await expect(
-      client.call('prepare', {
-        ownerId: 'account-b',
-        deviceId: randomUUID(),
-        legacyNotes: {},
-        categories: [],
-        preferences: ready.preferences,
-      }),
-    ).rejects.toMatchObject({ reason: 'invalid' })
   } finally {
     await client.close()
     await rm(directory, { recursive: true })
@@ -209,47 +180,30 @@ test('the actual storage worker persists commands and returns a bounded projecti
 
 // Regression: ISSUE-003 — export must preserve broken source bytes instead of requiring a valid primary.
 // Found by /qa on 2026-10-22; recovery scene advertises Export files even when primary parsing fails.
-test('a corrupt account workspace can export its exact damaged file and validated recovery copy without rewriting either', async () => {
+test('a corrupt device workspace can export its exact damaged file and validated recovery copy without rewriting either', async () => {
   // Arrange
   const directory = await mkdtemp(join(tmpdir(), 'corelive-recovery-export-'))
+  await initializeDeviceWorkspace(directory, {
+    notes: { 1: 'Original writing' },
+  })
   const options = {
     directory,
-    ownerId: 'account-a',
+    ownerId: 'device' as const,
     script: new URL('./workspace-worker.ts', import.meta.url),
     execArgv: ['--import', 'tsx'],
   }
   let client = new WorkspaceWorkerClient(options)
-  const path = join(
+  const path = join(directory, `${DEVICE_WORKSPACE_FILE_NAME}.json`)
+  const recoveryPath = join(
     directory,
-    createHash('sha256').update('account-a').digest('hex') + '.json',
+    `${DEVICE_WORKSPACE_FILE_NAME}.recovery.json`,
   )
-  const recoveryPath = path.replace('.json', '.recovery.json')
   const damaged = Buffer.from([0x7b, 0x00, 0xff])
   try {
-    await client.call('prepare', {
-      ownerId: 'account-a',
-      deviceId: randomUUID(),
-      legacyNotes: { '1': 'Original writing' },
-      categories: [
-        {
-          id: 1,
-          name: 'General',
-          color: 'blue',
-          isDefault: true,
-          parentId: null,
-          removed: false,
-        },
-      ],
-      preferences: {
-        revision: 0,
-        theme: 'light',
-        settings: UserSettingsStateSchema.parse({}),
-      },
-    })
     await client.call('command', {
       type: 'save',
       commandId: randomUUID(),
-      categoryId: 1,
+      categoryId: categoryUuid(1),
       baseRevision: 0,
       rows: [{ id: randomUUID(), text: 'Newer writing' }],
     })
@@ -265,7 +219,7 @@ test('a corrupt account workspace can export its exact damaged file and validate
     expect(JSON.parse(exported) as unknown).toMatchObject({
       format: 'corelive-recovery-files',
       version: 1,
-      ownerId: 'account-a',
+      ownerId: 'device',
       files: [
         { name: 'workspace.json', contentBase64: 'ewD/', integrity: 'invalid' },
         {
@@ -300,6 +254,67 @@ test('a corrupt account workspace can export its exact damaged file and validate
     })
   } finally {
     await client.close()
+    await rm(directory, { recursive: true })
+  }
+})
+
+test('an archived completion survives a restart and travels with the export', async () => {
+  // Arrange: a five-year-old completion that the idle roll moves out of the keep-path file.
+  const directory = await mkdtemp(join(tmpdir(), 'corelive-worker-archive-'))
+  const id = randomUUID()
+  const old = Date.now() - 5 * 365 * 24 * 60 * 60 * 1000
+  const workspace = buildDeviceWorkspace({ categoryCount: 1 })
+  workspace.completions[id] = {
+    id,
+    categoryId: categoryUuid(1),
+    originalCategoryId: categoryUuid(1),
+    title: 'Five years ago',
+    rawText: 'Five years ago',
+    lineId: randomUUID(),
+    lineIndex: 0,
+    completedAt: old,
+    originalCompletedAt: old,
+    timezone: 'Asia/Tokyo',
+    revision: 1,
+    undoUntil: old,
+    cancelled: false,
+    restored: false,
+    remote: null,
+    clearAfter: null,
+    cleared: false,
+  }
+  await new AtomicWorkspaceFile({
+    directory,
+    ownerId: DEVICE_OWNER_ID,
+    fileName: DEVICE_WORKSPACE_FILE_NAME,
+    parse: OfflineWorkspaceSchema.parse,
+  }).initialize(workspace)
+  const options = {
+    directory,
+    ownerId: 'device' as const,
+    script: new URL('./workspace-worker.ts', import.meta.url),
+    execArgv: ['--import', 'tsx'],
+  }
+  const first = new WorkspaceWorkerClient(options)
+  try {
+    await first.call('open', null)
+
+    // Act
+    const { archived } = await first.call('archive', null)
+    await first.close()
+    const second = new WorkspaceWorkerClient(options)
+    const exported = JSON.parse(await second.call('export', null)) as {
+      completions: Record<string, unknown>
+      archive: { completions: Record<string, { title: string }> }
+    }
+    await second.close()
+
+    // Assert
+    expect(archived).toBe(1)
+    expect(exported.completions[id]).toBeUndefined()
+    expect(exported.archive.completions[id]?.title).toBe('Five years ago')
+  } finally {
+    await first.close()
     await rm(directory, { recursive: true })
   }
 })

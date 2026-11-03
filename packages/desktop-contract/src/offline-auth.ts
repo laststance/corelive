@@ -3,6 +3,8 @@ export interface OfflineAuthRequest {
   requestId: string
   generation: number
   expectedAccountId: string | null
+  /** `sign-out` asks the hidden document to run `Clerk.signOut()` (D3 step 3); absent means a token challenge. */
+  action?: 'sign-out'
 }
 
 /** Credentials travel only through the broker IPC response and main-process memory. */

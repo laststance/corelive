@@ -12,7 +12,6 @@ import { db } from '@/db'
 import {
   categoryTable,
   completedTable,
-  electronSettingsTable,
   todoTable,
   userTable,
 } from '@/db/schema'
@@ -65,9 +64,6 @@ afterEach(async () => {
     if (!user) continue
     await db.delete(completedTable).where(eq(completedTable.userId, user.id))
     await db.delete(todoTable).where(eq(todoTable.userId, user.id))
-    await db
-      .delete(electronSettingsTable)
-      .where(eq(electronSettingsTable.userId, user.id))
     await db.delete(categoryTable).where(eq(categoryTable.userId, user.id))
     // Skill trees and assignments cascade from this isolated user.
     await db.delete(userTable).where(eq(userTable.id, user.id))
@@ -129,10 +125,6 @@ describeIfDb('v2 RPC transport with real PostgreSQL', () => {
       heatmap: { days: 365, timezone: 'UTC' },
       journal: { limit: 10, offset: 0 },
     })
-    const settings = await client.electronSettings.get()
-    const savedSettings = await client.electronSettings.upsert({
-      hideAppIcon: true,
-    })
     const tree = await client.skillTree.getMyTree()
     const [todo] = await db
       .insert(todoTable)
@@ -176,8 +168,6 @@ describeIfDb('v2 RPC transport with real PostgreSQL', () => {
         (entry) => entry.completedAt instanceof Date,
       ),
     ).toBe(true)
-    expect(settings.createdAt).toBeInstanceOf(Date)
-    expect(savedSettings.hideAppIcon).toBe(true)
     expect(tree.createdAt).toBeInstanceOf(Date)
     expect(pool.map((entry) => entry.text)).toEqual(['Completed skill task'])
     expect(assignment.createdAt).toBeInstanceOf(Date)

@@ -10,7 +10,7 @@ import { db } from '@/db'
 import {
   categoryTable,
   completedTable,
-  completionSyncReceiptTable,
+  syncReceiptTable,
   completionSyncStateTable,
   userTable,
 } from '@/db/schema'
@@ -349,7 +349,9 @@ describeIfDb('offline completion synchronization', () => {
     ).toHaveLength(1)
   })
 
-  test('deleting a category advances the remote revision so stale offline moves require a decision', async () => {
+  // Regression: /ship Step 11 rerun (Codex adversarial) 2026-11-03 — a Mac that deleted a category
+  // relocated its records to the same destination the server's delete chose, and every one conflicted.
+  test('a stale move to where a category delete already put the record is accepted instead of conflicting', async () => {
     // Arrange
     const account = await createAccount()
     const category = await call(
@@ -377,6 +379,112 @@ describeIfDb('offline completion synchronization', () => {
             revision: 2,
             expectedRemoteRevision: 1,
             categoryId: account.categoryId,
+          },
+        ],
+      },
+      account.context,
+    )
+
+    // Assert
+    expect(result.receipts[0]).toMatchObject({
+      status: 'applied',
+      projection: { revision: 2, categoryId: account.categoryId },
+    })
+  })
+
+  // Regression: /ship exception review (Codex adversarial) 2026-11-03 — accepting a stale move behind
+  // a newer dashboard revision handed back a projection that hid an Undo made while the move was sent.
+  test('a stale move that matches the dashboard but is behind a newer dashboard edit still requires a decision', async () => {
+    // Arrange
+    const account = await createAccount()
+    const category = await call(
+      createCategory,
+      { name: 'Temporary' },
+      account.context,
+    )
+    const operation = createOperation(category.id)
+    await call(syncApply, { operations: [operation] }, account.context)
+    await call(
+      deleteCategory,
+      { id: category.id, targetCategoryId: account.categoryId },
+      account.context,
+    )
+    await call(
+      syncApply,
+      {
+        operations: [
+          {
+            ...operation,
+            operationId: randomUUID(),
+            kind: 'correctTime',
+            revision: 3,
+            expectedRemoteRevision: 2,
+            categoryId: account.categoryId,
+          },
+        ],
+      },
+      account.context,
+    )
+
+    // Act
+    const result = await call(
+      syncApply,
+      {
+        operations: [
+          {
+            ...operation,
+            operationId: randomUUID(),
+            kind: 'relocate',
+            revision: 2,
+            expectedRemoteRevision: 1,
+            categoryId: account.categoryId,
+          },
+        ],
+      },
+      account.context,
+    )
+
+    // Assert
+    expect(result.receipts[0]).toMatchObject({
+      status: 'rejected',
+      reason: 'conflict',
+      projection: { revision: 3, categoryId: account.categoryId },
+    })
+  })
+
+  test('deleting a category advances the remote revision so a stale move elsewhere still requires a decision', async () => {
+    // Arrange
+    const account = await createAccount()
+    const category = await call(
+      createCategory,
+      { name: 'Temporary' },
+      account.context,
+    )
+    const elsewhere = await call(
+      createCategory,
+      { name: 'Elsewhere' },
+      account.context,
+    )
+    const operation = createOperation(category.id)
+    await call(syncApply, { operations: [operation] }, account.context)
+    await call(
+      deleteCategory,
+      { id: category.id, targetCategoryId: account.categoryId },
+      account.context,
+    )
+
+    // Act
+    const result = await call(
+      syncApply,
+      {
+        operations: [
+          {
+            ...operation,
+            operationId: randomUUID(),
+            kind: 'relocate',
+            revision: 2,
+            expectedRemoteRevision: 1,
+            categoryId: elsewhere.id,
           },
         ],
       },
@@ -496,11 +604,11 @@ describeIfDb('offline completion synchronization', () => {
     expect(
       await db
         .select()
-        .from(completionSyncReceiptTable)
+        .from(syncReceiptTable)
         .where(
           and(
-            eq(completionSyncReceiptTable.userId, account.userId),
-            eq(completionSyncReceiptTable.operationId, operation.operationId),
+            eq(syncReceiptTable.userId, account.userId),
+            eq(syncReceiptTable.operationId, operation.operationId),
           ),
         ),
     ).toEqual([])

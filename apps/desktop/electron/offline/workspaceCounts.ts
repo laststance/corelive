@@ -1,8 +1,8 @@
-import type {
-  OfflineTodayCount,
-  OfflineWorkspace,
-} from '@corelive/desktop-contract/offline-workspace'
+import type { OfflineTodayCount } from '@corelive/desktop-contract/offline-workspace'
+import type { OfflineWorkspace } from '@corelive/desktop-contract/offline-workspace-v2'
 import { toLocalDayKey } from '@corelive/live-editor/day'
+
+const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000
 
 /** Projects one day from durable identities, overlaying each pending identity exactly once.
  * Worker views use this after commits. Receipt lookup/queued-operation counts alone cannot
@@ -20,6 +20,9 @@ export function workspaceToday(
   ): number =>
     record &&
     !record.cancelled &&
+    // A record from the same local day is within two days of now in every timezone; skipping
+    // the rest avoids a formatter call per historical record (#216 perf gate).
+    Math.abs(record.completedAt - now) <= TWO_DAYS_MS &&
     toLocalDayKey(new Date(record.completedAt), timezone) === day
       ? 1
       : 0
@@ -34,12 +37,11 @@ export function workspaceToday(
       : null
   let complete = checkpoint !== null
   let delta = 0
-  const hasOperations = new Set<string>()
+  // Only entries that reached (or may have reached) the dashboard make a record uncertain;
+  // an unsent keep has no entry at all (uploads are derived, #216 D1).
   const uncertain = new Set<string>()
-  for (const entry of Object.values(state.outbox)) {
-    hasOperations.add(entry.operation.completionId)
-    if (entry.state !== 'queued') uncertain.add(entry.operation.completionId)
-  }
+  for (const entry of Object.values(state.outbox))
+    uncertain.add(entry.operation.completionId)
   for (const record of records) {
     if (checkpoint && Object.hasOwn(checkpoint.identities, record.id)) {
       delta +=
@@ -47,10 +49,7 @@ export function workspaceToday(
         contribution(checkpoint.identities[record.id] ?? null)
       continue
     }
-    const neverSent =
-      !record.remote &&
-      hasOperations.has(record.id) &&
-      !uncertain.has(record.id)
+    const neverSent = !record.remote && !uncertain.has(record.id)
     if (!neverSent) complete = false
     delta += contribution(record)
   }

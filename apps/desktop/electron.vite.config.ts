@@ -106,7 +106,6 @@ export default defineConfig({
       rollupOptions: {
         external: externalDependencies,
         input: {
-          preload: resolve(import.meta.dirname, 'electron/preload.ts'),
           'preload-login': resolve(
             import.meta.dirname,
             'electron/preload-login.ts',
@@ -133,7 +132,11 @@ export default defineConfig({
       minify: true,
       sourcemap: true,
       rollupOptions: {
-        input: resolve(import.meta.dirname, 'renderer/index.html'),
+        // Two bundled documents (D5): the editor and the Settings window.
+        input: {
+          index: resolve(import.meta.dirname, 'renderer/index.html'),
+          settings: resolve(import.meta.dirname, 'renderer/settings.html'),
+        },
       },
     },
   },

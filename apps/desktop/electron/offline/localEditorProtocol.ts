@@ -1,7 +1,7 @@
 import { readFile, realpath } from 'node:fs/promises'
 import { extname, resolve, sep } from 'node:path'
 
-import { isLocalEditorURL } from './localEditorOrigin'
+import { isLocalEditorURL, LOCAL_DOCUMENT_PATHS } from './localEditorOrigin'
 export const LOCAL_EDITOR_CSP =
   "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; media-src 'self'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
 
@@ -20,7 +20,8 @@ const contentTypes: Record<string, string> = {
 }
 
 /**
- * Serves only packaged renderer assets under a dedicated origin; never proxies requests.
+ * Serves exactly the bundled `index.html` and `settings.html` documents plus their built assets
+ * under a dedicated origin; never proxies requests.
  * Main registers this handler after app readiness. Path and symlink checks prevent
  * encoded traversal into user data or the rest of the installed application.
  * @example const response = await serveLocalEditor(request, rendererDirectory)
@@ -35,6 +36,15 @@ export async function serveLocalEditor(
   try {
     const root = await realpath(directory)
     const pathname = decodeURIComponent(new URL(request.url).pathname)
+    // Traversal segments, NUL and backslashes never reach the filesystem (EA16).
+    if (/(^|\/)\.\.?(\/|$)|\0|\\/.test(pathname))
+      return new Response(null, { status: 404 })
+    // HTML is served only for the two bundled documents; every other path is a built asset.
+    if (
+      extname(pathname) === '.html' &&
+      !(LOCAL_DOCUMENT_PATHS as readonly string[]).includes(pathname)
+    )
+      return new Response(null, { status: 404 })
     const target = resolve(
       root,
       pathname === '/' ? 'index.html' : pathname.slice(1),

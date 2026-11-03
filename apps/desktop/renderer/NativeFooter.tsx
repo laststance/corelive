@@ -1,18 +1,20 @@
 import type {
   OfflineCompletion,
   OfflineEditorSnapshot,
-} from '@corelive/desktop-contract/offline-workspace'
-import type {
-  DurableEditorSnapshot,
-  DurableEditorStore,
-} from '@corelive/live-editor/store'
+  OfflineSyncStatus,
+} from '@corelive/desktop-contract/offline-workspace-v2'
 import { Button } from '@corelive/live-editor/ui/button'
 import { AlertCircle, Undo2 } from 'lucide-react'
 import { useEffect, useRef, type RefObject } from 'react'
 
+import type {
+  DurableEditorSnapshot,
+  DurableEditorStore,
+} from './editor/DurableEditorStore'
+
 export type ActionFeedback = {
   text: string
-  categoryId?: number
+  categoryId?: string
   expiresAt?: number
 }
 export type ActionOutcome = {
@@ -31,7 +33,7 @@ type FooterProps = {
   onDetails: () => void
   feedback: ActionFeedback | null
   onDismiss: () => void
-  onSelect: (id: number) => Promise<void>
+  onSelect: (id: string) => Promise<void>
   onUndo: (completion: OfflineCompletion) => Promise<void>
   run: (
     operation: () => Promise<unknown>,
@@ -48,12 +50,16 @@ export function NativeFooter(props: FooterProps) {
     <footer
       className="offline-status-footer h-12 shrink-0 overflow-hidden py-1 font-sans text-xs"
       aria-label="Writing status"
+      role="status"
       aria-live="polite"
     >
       <p className="truncate leading-5">{saveCopy(props.state)}</p>
-      <p className="truncate leading-5 text-muted-foreground">
-        {syncCopy(props.main)}
-      </p>
+      {/* A device that was never attached (or deliberately signed out) shows only the save line. */}
+      {syncCopy(props.main.sync) && (
+        <p className="truncate leading-5 text-muted-foreground">
+          {syncCopy(props.main.sync)}
+        </p>
+      )}
     </footer>
   )
 }
@@ -69,7 +75,7 @@ export function NativeHeaderActions(props: FooterProps) {
     : undefined
   const failed = state.save === 'failed'
   const attention =
-    main.sync === 'sign-in-required' ||
+    main.sync.state === 'sign-in-to-sync' ||
     Boolean(state.error) ||
     main.workspace.blockedCount > 0
   const label = props.retrying
@@ -171,20 +177,24 @@ function saveCopy(state: DurableEditorSnapshot): string {
 }
 
 /** Separates completion synchronization from local writing safety.
- * @example syncCopy(main)
+ * Returns an empty string for a local-only Mac so no sync line is rendered.
+ * @param sync - Attachment and sync state published by main.
+ * @returns The sync line copy, or '' when nothing should be shown.
+ * @example syncCopy({ state: 'synced', waitingCount: 0, lastSyncedAt: null, boundEmail: null })
  */
-function syncCopy(main: FooterProps['main']): string {
-  const count = main.workspace.pendingCount
+function syncCopy(sync: OfflineSyncStatus): string {
+  const count = sync.waitingCount
   const pending =
     count === 0
       ? 'No completion updates pending'
       : `${count} completion ${count === 1 ? 'update' : 'updates'} pending`
   return {
-    offline: `Offline · ${pending}`,
+    'local-only': '',
+    waiting: `Offline · ${pending}`,
     syncing: 'Syncing completion updates…',
-    'sign-in-required': 'Sign in to sync completions',
-    idle: pending,
-  }[main.sync]
+    'sign-in-to-sync': 'Sign in to sync completions',
+    synced: pending,
+  }[sync.state]
 }
 
 /** Keeps failed-save recovery beside its label; sync prompts never compete with unsafe local writing.
@@ -252,8 +262,8 @@ function SaveStatus({ state, store, run, retrying, onRetry }: FooterProps) {
 function SyncStatus({ main, store, run }: FooterProps) {
   return (
     <div className="flex flex-wrap items-center gap-x-2 text-muted-foreground">
-      <p>{syncCopy(main)}</p>
-      {main.sync === 'sign-in-required' && (
+      {syncCopy(main.sync) && <p>{syncCopy(main.sync)}</p>}
+      {main.sync.state === 'sign-in-to-sync' && (
         <Button
           className="offline-action"
           variant="ghost"

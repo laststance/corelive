@@ -10,6 +10,14 @@ This document preserves the historical plan and implementation checkpoints. The
 2026-10-22 status-visibility change supersedes its original footer/action placement;
 see the [current controls and recovery guide](../offline-liveeditor.md#understand-the-status).
 
+> **Partly superseded by #216** ([offline-first desktop editor](offline-first-desktop-editor.md), 2026-11-03). Three decisions below no longer hold:
+>
+> 1. **Account-preparation gate.** "Connect once to prepare this Mac" is gone; the editor always opens on the device workspace, with no account.
+> 2. **Sign-out lock.** Sign-out no longer locks the workspace or hides its text; it detaches the account and the editor stays writable.
+> 3. **Online-only category management.** Categories are created, renamed, moved and deleted offline and sync on attach.
+>
+> Its durability, receipt, Undo and recovery-entry invariants stay in force unless #216 names a change.
+
 ## Problem and agreed scope
 
 The owner encountered a full-window category-loading error that prevented access to LiveEditor. The screenshot establishes an editing interruption; it does not establish that the connection was offline. The requested improvement is explicit: start the app without a network, write, complete a line, and synchronize after reconnection.

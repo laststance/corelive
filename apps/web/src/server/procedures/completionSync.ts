@@ -1,5 +1,4 @@
-import { createHash } from 'node:crypto'
-
+import { SyncOutcomeSchema } from '@corelive/desktop-contract/category-sync'
 import {
   SyncApplyInputSchema,
   SyncBootstrapOutputSchema,
@@ -16,14 +15,14 @@ import {
   type CompletionSyncReceipt,
 } from '@corelive/desktop-contract/offline-workspace'
 import { call, ORPCError } from '@orpc/server'
-import { and, eq, inArray, sql } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 
 import { db } from '@/db'
 import { requireRow } from '@/db/requireRow'
 import {
   categoryDeletionTable,
   completedTable,
-  completionSyncReceiptTable,
+  syncReceiptTable,
   completionSyncStateTable,
 } from '@/db/schema'
 import { runTransaction } from '@/db/transaction'
@@ -34,6 +33,11 @@ import {
   listCategories,
   lockCategoryOwner,
 } from './category'
+import {
+  digestOperation,
+  findStoredReceipt,
+  readStoredReceipts,
+} from './syncReceiptStore'
 
 type Transaction = Parameters<Parameters<typeof runTransaction>[0]>[0]
 type SyncState = typeof completionSyncStateTable.$inferSelect
@@ -51,6 +55,23 @@ function projection(state: SyncState): CompletionProjection {
     title: state.title,
     completedAt: state.completedAt.getTime(),
   }
+}
+
+/**
+ * Reads a stored receipt row as a completion receipt, tolerating the shared table (EA6).
+ *
+ * Rows written before `kind` existed are completions forever; category rows (written by
+ * `category.syncApply`) return null so completion procedures never surface them.
+ *
+ * @param outcome - The raw `outcome` JSON of a `CompletionSyncReceipt` row.
+ * @returns The completion receipt, or null for a category row.
+ * @example readCompletionOutcome(row.outcome)
+ */
+function readCompletionOutcome(outcome: unknown): CompletionSyncReceipt | null {
+  const parsed = SyncOutcomeSchema.parse(outcome)
+  return parsed.kind === 'completion'
+    ? CompletionSyncReceiptSchema.parse(parsed)
+    : null
 }
 
 /** Builds a typed rejection without losing the observed server version needed for repair.
@@ -92,19 +113,8 @@ async function applySyncOperation(
 ): Promise<CompletionSyncReceipt> {
   return runTransaction(async (tx) => {
     await lockCategoryOwner(tx, userId)
-    const digest = createHash('sha256')
-      .update(JSON.stringify(operation))
-      .digest('hex')
-    const [receipt] = await tx
-      .select()
-      .from(completionSyncReceiptTable)
-      .where(
-        and(
-          eq(completionSyncReceiptTable.userId, userId),
-          eq(completionSyncReceiptTable.operationId, operation.operationId),
-        ),
-      )
-      .limit(1)
+    const digest = digestOperation(operation)
+    const receipt = await findStoredReceipt(tx, userId, operation.operationId)
     const [current] = await tx
       .select()
       .from(completionSyncStateTable)
@@ -117,12 +127,14 @@ async function applySyncOperation(
       .limit(1)
     if (receipt) {
       // Reusing an ID with other bytes is a conflict; the original evidence is immutable.
-      return receipt.payloadDigest === digest
-        ? CompletionSyncReceiptSchema.parse(receipt.outcome)
-        : rejected(operation, 'conflict', current)
+      const stored =
+        receipt.payloadDigest === digest
+          ? readCompletionOutcome(receipt.outcome)
+          : null
+      return stored ?? rejected(operation, 'conflict', current)
     }
     const outcome = await mutateSyncIdentity(tx, userId, operation, current)
-    await tx.insert(completionSyncReceiptTable).values({
+    await tx.insert(syncReceiptTable).values({
       userId,
       operationId: operation.operationId,
       payloadDigest: digest,
@@ -152,6 +164,14 @@ async function mutateSyncIdentity(
   if (operation.kind === 'cancel')
     return applied(await cancelSyncIdentity(tx, userId, operation, current))
   const rejection = rejectedRevision(operation, current)
+  // A stale edit asking for exactly the state the dashboard already holds (a category delete moved
+  // the record there too) has one possible outcome, so it converges instead of asking for a decision.
+  if (
+    rejection === 'conflict' &&
+    current &&
+    requestsCurrentState(operation, current)
+  )
+    return applied(current)
   if (rejection) return rejected(operation, rejection, current)
   if (
     operation.completedAt > Date.now() + FUTURE_TOLERANCE_MS ||
@@ -233,6 +253,35 @@ function rejectedRevision(
   if (!current && operation.kind !== 'create') return 'dependency'
   if (current && operation.kind === 'create') return 'conflict'
   return null
+}
+
+/**
+ * Whether a relocate or time correction asks for the record's current dashboard state.
+ *
+ * Called by {@link mutateSyncIdentity} for a revision conflict only. A Mac that deleted a category
+ * moves its records locally while the server's delete moves them too; the Mac's later relocate
+ * then carries a stale revision but the same target, and accepting it loses nothing.
+ *
+ * @param operation - The incoming edit; creates and cancels never qualify.
+ * @param current - The live sync state the conflict was judged against.
+ * @returns
+ * - true when category, title and time all equal the dashboard's and its revision is not past the edit's
+ * - false otherwise, so a different target or a newer dashboard edit still asks for a decision
+ * @example requestsCurrentState({ ...move, categoryId: 4 }, { ...state, categoryId: 4 }) // => true
+ */
+function requestsCurrentState(
+  operation: CompletionSyncOperation,
+  current: SyncState,
+): boolean {
+  return (
+    (operation.kind === 'relocate' || operation.kind === 'correctTime') &&
+    // A dashboard revision past the edit's own means other edits landed; the returned projection
+    // would then cover local changes made after this edit was sent, so those still need a decision.
+    current.revision <= operation.revision &&
+    current.categoryId === operation.categoryId &&
+    current.title === operation.title &&
+    current.completedAt.getTime() === operation.completedAt
+  )
 }
 
 /** Creates or updates the visible owned record without adopting another import's identity.
@@ -359,18 +408,11 @@ export const syncReceipts = authMiddleware
   .input(SyncReceiptsInputSchema)
   .output(SyncReceiptsOutputSchema)
   .handler(async ({ input, context }) => {
-    const rows = await db
-      .select({ outcome: completionSyncReceiptTable.outcome })
-      .from(completionSyncReceiptTable)
-      .where(
-        and(
-          eq(completionSyncReceiptTable.userId, context.user.id),
-          inArray(completionSyncReceiptTable.operationId, input.operationIds),
-        ),
-      )
     return {
-      receipts: rows.map((row) =>
-        CompletionSyncReceiptSchema.parse(row.outcome),
+      receipts: await readStoredReceipts(
+        context.user.id,
+        input.operationIds,
+        readCompletionOutcome,
       ),
     }
   })

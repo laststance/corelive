@@ -9,7 +9,6 @@ import { db } from '@/db'
 import {
   categoryTable,
   completedTable,
-  electronSettingsTable,
   nodeAssignmentTable,
   skillTreeTable,
   todoTable,
@@ -21,7 +20,6 @@ import { DEFAULT_CATEGORY_SEED } from '../schemas/category'
 
 import { createCategory, listCategories, updateCategory } from './category'
 import { describeIfDb } from './describeIfDb'
-import { getElectronSettings } from './electronSettings'
 import { assignTask, getMyTree, unassignTask } from './skillTree'
 
 /**
@@ -112,9 +110,6 @@ afterEach(async () => {
     // FK-safe teardown: children before the user. SkillTree deletion cascades to
     // nodes, edges and assignments.
     await db.delete(skillTreeTable).where(eq(skillTreeTable.userId, user.id))
-    await db
-      .delete(electronSettingsTable)
-      .where(eq(electronSettingsTable.userId, user.id))
     await db.delete(completedTable).where(eq(completedTable.userId, user.id))
     await db.delete(todoTable).where(eq(todoTable.userId, user.id))
     await db.delete(categoryTable).where(eq(categoryTable.userId, user.id))
@@ -231,30 +226,6 @@ describeIfDb('constraint-violation catch sites (real PostgreSQL)', () => {
         settled.value.categories.map((category) => category.name),
     ).toEqual(['General'])
     expect(await countCategories(user!.id)).toBe(1)
-  })
-
-  test('returns the row another request created first when the first Electron settings read races an insert', async () => {
-    // Arrange — a second transaction has inserted this user's settings but not committed.
-    const clerkId = freshClerkId()
-    await call(listCategories, undefined, authContext(clerkId))
-    const user = await readUser(clerkId)
-
-    // Act — the read finds nothing, then the default-settings insert parks on the userId unique index.
-    const settled = await settleBehindHeldTransaction({
-      holdLocks: async (tx) => {
-        await tx.insert(electronSettingsTable).values({ userId: user.id })
-      },
-      startCall: async () =>
-        call(getElectronSettings, undefined, authContext(clerkId)),
-    })
-
-    // Assert — one row exists and the caller received exactly that row.
-    const rows = await db
-      .select()
-      .from(electronSettingsTable)
-      .where(eq(electronSettingsTable.userId, user.id))
-    expect(rows).toHaveLength(1)
-    expect(settled).toMatchObject({ value: { id: rows[0]!.id } })
   })
 
   test('returns the tree another request created first when the first skill tree load races an import', async () => {

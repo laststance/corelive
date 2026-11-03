@@ -36,6 +36,13 @@
       "when": 1793648962156,
       "tag": "0004_drop_import_batch",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793671114459,
+      "tag": "0005_drop_electron_settings",
+      "breakpoints": true
     }
   ]
 }

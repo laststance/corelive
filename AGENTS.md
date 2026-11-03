@@ -23,6 +23,14 @@ If native GUI QA is separately requested, use an isolated test Mac or guest and
 explicitly target its automation channel. Hammerspoon, accessory activation policy, hidden
 windows, and separate browser profiles do not isolate the host desktop.
 
+Owner instruction, 2026-11-03: while the owner works, QA an isolated dev instance
+only through agent-desktop's semantic accessibility actions, with no `--headed`
+mode, no physical input and no focus changes. After every such run, restore the
+`corelive://` handler to `com.corelive.app`, verify it with `NSWorkspace
+URLForApplicationToOpenURL`, and record that in the QA report. Render the
+desktop editor and Settings states headlessly with `pnpm qa:offline-editor` and
+`pnpm qa:settings`.
+
 Record dynamic interactions, extract video frames, and inspect them. Complete
 automated validation and the authorized Headless QA before merging or deploying. Call this
 QA, not a smoke test. See `docs/headless-development.md` for the QA environment.

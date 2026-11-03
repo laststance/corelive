@@ -11,7 +11,11 @@ const state = vi.hoisted(() => ({
     getToken: (options: { skipCache: boolean }) => Promise<string | null>
   },
 }))
-vi.mock('@clerk/nextjs', () => ({ useSession: () => state }))
+const signOut = vi.hoisted(() => vi.fn(async () => undefined))
+vi.mock('@clerk/nextjs', () => ({
+  useSession: () => state,
+  useClerk: () => ({ signOut }),
+}))
 
 const challenge: OfflineAuthRequest = {
   requestId: '6a7a0053-a065-430c-9d5e-e426c874d004',
@@ -26,6 +30,103 @@ afterEach(() => {
 })
 
 describe('credential-only desktop auth route', () => {
+  test('signs out of Clerk and reports signed-out when main asks for a remote revoke', async () => {
+    // Arrange
+    state.session = {
+      user: { id: 'account-a' },
+      getToken: async () => 'unused',
+    }
+    const respond = vi.fn(async () => true)
+    const revoke: OfflineAuthRequest = { ...challenge, action: 'sign-out' }
+    window.coreliveOfflineAuth = {
+      ready: async () => revoke,
+      respond,
+      onRequest: () => () => undefined,
+    }
+
+    // Act
+    render(<DesktopAuthPage />)
+
+    // Assert
+    await waitFor(() =>
+      expect(respond).toHaveBeenCalledWith({ ...revoke, status: 'signed-out' }),
+    )
+    expect(signOut).toHaveBeenCalledTimes(1)
+  })
+
+  // Regression: /ship pre-landing review 2026-11-03 — clerk.signOut() clears the session, which
+  // disposed the effect before the reply, so main waited out its 5 s revoke timeout.
+  test('still reports signed-out to main when the session ends before the remote sign-out resolves', async () => {
+    // Arrange
+    signOut.mockClear()
+    state.session = {
+      user: { id: 'account-a' },
+      getToken: async () => 'unused',
+    }
+    let finishSignOut: () => void = () => undefined
+    signOut.mockImplementationOnce(
+      async () =>
+        new Promise<undefined>((done) => {
+          finishSignOut = (): void => done(undefined)
+        }),
+    )
+    const respond = vi.fn(async () => true)
+    const revoke: OfflineAuthRequest = { ...challenge, action: 'sign-out' }
+    window.coreliveOfflineAuth = {
+      ready: async () => revoke,
+      respond,
+      onRequest: () => () => undefined,
+    }
+    const view = render(<DesktopAuthPage />)
+    await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1))
+
+    // Act: the cleared session disposes the effect before signOut resolves
+    view.unmount()
+    await act(async () => {
+      finishSignOut()
+    })
+
+    // Assert
+    expect(respond).toHaveBeenCalledWith({ ...revoke, status: 'signed-out' })
+  })
+
+  // Regression: /ship pre-landing review 2026-11-03 (pass 2) — a failed remote sign-out after
+  // the effect was disposed sent no reply at all.
+  test('reports unavailable to main when the remote sign-out fails after the session effect was disposed', async () => {
+    // Arrange
+    signOut.mockClear()
+    state.session = {
+      user: { id: 'account-a' },
+      getToken: async () => 'unused',
+    }
+    let failSignOut: () => void = () => undefined
+    signOut.mockImplementationOnce(
+      async () =>
+        new Promise<undefined>((_done, reject) => {
+          failSignOut = (): void => reject(new Error('network down'))
+        }),
+    )
+    const respond = vi.fn(async () => true)
+    const revoke: OfflineAuthRequest = { ...challenge, action: 'sign-out' }
+    window.coreliveOfflineAuth = {
+      ready: async () => revoke,
+      respond,
+      onRequest: () => () => undefined,
+    }
+    const view = render(<DesktopAuthPage />)
+    await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1))
+
+    // Act
+    view.unmount()
+    await act(async () => {
+      failSignOut()
+    })
+
+    // Assert
+    expect(respond).toHaveBeenCalledTimes(1)
+    expect(respond).toHaveBeenCalledWith({ ...revoke, status: 'unavailable' })
+  })
+
   test('refreshes the existing Clerk session only when main has supplied a challenge', async () => {
     // Arrange
     const getToken = vi.fn(async () => 'opaque-test-token')

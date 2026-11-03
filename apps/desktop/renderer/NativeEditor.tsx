@@ -2,22 +2,8 @@ import type { LiveEditorAPI } from '@corelive/desktop-contract/electron-api'
 import type {
   OfflineCompletion,
   OfflineEditorSnapshot,
-} from '@corelive/desktop-contract/offline-workspace'
-import { SharedCategoryPicker } from '@corelive/live-editor/category-picker'
-import { getDraftInputLimit } from '@corelive/live-editor/draft-input-limit'
-import { TodayEmber } from '@corelive/live-editor/ember'
-import { useEditorInput } from '@corelive/live-editor/input'
-import type {
-  DurableEditorStore,
-  DurableEditorSnapshot,
-} from '@corelive/live-editor/store'
-import { SharedEditorSurface } from '@corelive/live-editor/surface'
-import { applyThemeAttribute } from '@corelive/live-editor/theme-transition'
-import {
-  DEFAULT_THEME_PREFERENCE,
-  normalizeThemePreference,
-} from '@corelive/live-editor/themes'
-import { useEditorWindowSettings } from '@corelive/live-editor/window-settings'
+} from '@corelive/desktop-contract/offline-workspace-v2'
+import { DEFAULT_THEME_PREFERENCE } from '@corelive/live-editor/themes'
 import {
   useCallback,
   useEffect,
@@ -29,6 +15,17 @@ import {
   useSyncExternalStore,
 } from 'react'
 
+import { getDraftInputLimit } from './editor/draftInputLimit'
+import type {
+  DurableEditorStore,
+  DurableEditorSnapshot,
+} from './editor/DurableEditorStore'
+import { useEditorInput } from './editor/editorInput'
+import { SharedCategoryPicker } from './editor/SharedCategoryPicker'
+import { SharedEditorSurface } from './editor/SharedEditorSurface'
+import { TodayEmber } from './editor/TodayEmber'
+import { useEditorTheme } from './editor/useEditorTheme'
+import { useEditorWindowSettings } from './editor/useEditorWindowSettings'
 import { NativeDetails } from './NativeDetails'
 import {
   NativeFooter,
@@ -40,34 +37,6 @@ import {
 import { NativeStateScene } from './NativeStateScene'
 
 type ReadySnapshot = Extract<OfflineEditorSnapshot, { phase: 'ready' }>
-
-/**
- * Applies the cached theme preference locally. The raw workspace value is mapped
- * through {@link normalizeThemePreference} (legacy `default-*` aliases and unknown
- * values included) and `system` follows the OS without a network request.
- * Mounted once by {@link NativeEditor}; re-runs when the stored theme changes.
- * @param theme - Raw workspace theme preference, or {@link DEFAULT_THEME_PREFERENCE} before the workspace is ready.
- * @example useEditorTheme(preferences.theme)
- */
-function useEditorTheme(theme: string): void {
-  useLayoutEffect(() => {
-    const preference = normalizeThemePreference(theme)
-    const media = window.matchMedia('(prefers-color-scheme: dark)')
-    const apply = (): void => {
-      // `system` resolves to the Default pair, the only family that owns light/dark.
-      applyThemeAttribute(
-        preference === 'system'
-          ? media.matches
-            ? 'dark'
-            : 'light'
-          : preference,
-      )
-    }
-    apply()
-    media.addEventListener('change', apply)
-    return (): void => media.removeEventListener('change', apply)
-  }, [theme])
-}
 
 /** Mounts one durable store for the local document, with account transitions replacing the visible session.
  * @example <NativeEditor api={window.liveEditorAPI} store={store} />
@@ -170,7 +139,8 @@ function PreparedEditor({
   }, [])
   const { workspace } = main
   const { settings } = workspace.preferences
-  const online = main.sync === 'idle' || main.sync === 'syncing'
+  const online =
+    main.sync.state !== 'waiting' && main.sync.state !== 'sign-in-to-sync'
   const input = useEditorInput({
     ref: textarea,
     value: state.text,
@@ -198,7 +168,7 @@ function PreparedEditor({
   }, [state.notice, store])
 
   const select = useCallback(
-    async (categoryId: number): Promise<void> => {
+    async (categoryId: string): Promise<void> => {
       if (
         await store.command({
           type: 'select',
@@ -213,15 +183,6 @@ function PreparedEditor({
     [store],
   )
 
-  useEffect(
-    () =>
-      // eslint-disable-next-line react-you-might-not-need-an-effect/no-pass-data-to-parent -- subscribe to main's verified category event
-      store.host.onCategoryCreated((selection) => {
-        if (selection.generation === main.generation)
-          void select(selection.categoryId)
-      }),
-    [store, main.generation, select],
-  )
   const undo = async (completion: OfflineCompletion): Promise<void> => {
     if (
       await store.command({
@@ -299,6 +260,16 @@ function PreparedEditor({
         ? 'Account total · last confirmed'
         : undefined
 
+  // Migration placeholders are never selectable or editable (Settings > Categories hides them too).
+  const pickerCategories = workspace.categories.filter(
+    (category) => !category.historical,
+  )
+  // A selected placeholder is named on the trigger only, so Manage categories never offers it.
+  const selectedPlaceholderName = workspace.categories.find(
+    (category) =>
+      category.historical && category.id === workspace.selectedCategoryId,
+  )?.name
+
   return (
     <SharedEditorSurface
       noteMaxLength={getDraftInputLimit(workspace.draft)}
@@ -310,16 +281,11 @@ function PreparedEditor({
       categoryCount={workspace.categories.length}
       categoryPicker={
         <SharedCategoryPicker
-          categories={workspace.categories}
+          categories={pickerCategories}
           activeCategoryId={workspace.selectedCategoryId}
-          onCategoryValueChange={(value) => void select(Number(value))}
-          actionsDisabled={!online}
-          onManage={() => void run(async () => store.host.manageCategories())}
-          onCreate={(initialName) =>
-            void run(async () =>
-              store.host.manageCategories({ action: 'create', initialName }),
-            )
-          }
+          unlistedActiveCategoryName={selectedPlaceholderName}
+          onCategoryValueChange={(value) => void select(value)}
+          onCategoryCommand={async (command) => store.categoryCommand(command)}
         />
       }
       ember={

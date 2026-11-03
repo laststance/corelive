@@ -4,18 +4,15 @@ import { usePathname } from 'next/navigation'
 import type { ReactNode } from 'react'
 
 import { CodeInspectorClient } from '@/components/code-inspector/CodeInspectorClient'
-import { ElectronStartupSync } from '@/components/electron/ElectronStartupSync'
-import { OfflineSettingsSync } from '@/components/electron/OfflineSettingsSync'
 import { Toaster } from '@/components/ui/sonner'
 import { ElectronAuthProvider } from '@/lib/orpc/electron-auth-provider'
-import { ReduxProvider } from '@/lib/redux/providers'
 import { QueryClientProvider } from '@/providers/QueryClientProvider'
 import { ThemeProvider } from '@/providers/ThemeProvider'
 
 /**
  * Mounts normal application state outside the credential-only broker route.
- * The root layout keeps Clerk available to both. Hidden refreshes must never
- * hydrate editor preferences or publish category events.
+ * The root layout keeps Clerk available to both. The desktop Settings window is bundled
+ * (#216 D5), so the web app owns no native preference state.
  * @example <ApplicationProviders>{children}</ApplicationProviders>
  */
 export function ApplicationProviders({ children }: { children: ReactNode }) {
@@ -25,13 +22,8 @@ export function ApplicationProviders({ children }: { children: ReactNode }) {
     <ThemeProvider>
       <CodeInspectorClient />
       <QueryClientProvider>
-        <ReduxProvider>
-          <ElectronStartupSync />
-          <OfflineSettingsSync>
-            <ElectronAuthProvider>{children}</ElectronAuthProvider>
-            <Toaster />
-          </OfflineSettingsSync>
-        </ReduxProvider>
+        <ElectronAuthProvider>{children}</ElectronAuthProvider>
+        <Toaster />
       </QueryClientProvider>
     </ThemeProvider>
   )

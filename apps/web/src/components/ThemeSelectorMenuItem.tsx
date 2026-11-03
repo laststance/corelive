@@ -1,9 +1,9 @@
 'use client'
 
+import { MODE_META } from '@corelive/live-editor/ui/ThemeSelector'
 import { Palette } from 'lucide-react'
 
 import { ThemePreviewSwatch } from '@/components/ThemePreviewSwatch'
-import { MODE_META } from '@/components/ThemeSelector'
 import {
   DropdownMenuLabel,
   DropdownMenuSeparator,

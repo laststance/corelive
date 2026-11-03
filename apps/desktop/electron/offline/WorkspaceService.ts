@@ -1,57 +1,169 @@
 import { createHash, randomUUID } from 'node:crypto'
 
+import type { SyncOutcome } from '@corelive/desktop-contract/category-sync'
 import {
-  CountCheckpointSchema,
+  validateCategoryAction,
+  type CategoryAction,
+} from '@corelive/desktop-contract/category-validator'
+import {
   CompletionSyncReceiptSchema,
-  OfflineWorkspaceSchema,
-  WorkspaceCommandSchema,
+  CountCheckpointSchema,
+  type CompletionProjection,
+  type CompletionSyncReceipt,
   type DraftRow,
-  type EditorCategory,
-  type OfflineCompletion,
   type OfflineDraft,
-  type OfflinePreferences,
-  type OfflineWorkspace,
-  type WorkspaceCommand,
 } from '@corelive/desktop-contract/offline-workspace'
-import { diffDraftRows } from '@corelive/live-editor/draft-edits'
-import { getDraftInputLimit } from '@corelive/live-editor/draft-input-limit'
+import {
+  WorkspaceCommandSchema,
+  type LocalCompletionProjection,
+  type OfflineCompletion,
+  type OfflineWorkspace,
+  type OutboxEntry,
+  type RetiredCompletion,
+  type WorkspaceArchive,
+  type WorkspaceCommand,
+} from '@corelive/desktop-contract/offline-workspace-v2'
+
+import { diffDraftRows } from '../../renderer/editor/draftEdits'
+import { getDraftInputLimit } from '../../renderer/editor/draftInputLimit'
 import {
   markPlainLineCompleted,
   normalizeCompletedTitle,
   parseCheckboxLine,
   setCheckboxStateAtLine,
-} from '@corelive/live-editor/utils'
+} from '../../renderer/editor/liveEditorUtils'
 
-import type { AtomicWorkspaceFile } from './AtomicWorkspaceFile'
+import {
+  WorkspaceFileError,
+  type AtomicWorkspaceFile,
+} from './AtomicWorkspaceFile'
+import { mergeCategories, type CategoryMergeInput } from './categoryMerge'
+import {
+  applyCategoryReceipts,
+  categoryWork,
+  freezeCategoryBatch,
+  hasSendableWork,
+  noteReceiptQuery,
+  parkOperations,
+} from './categoryReceipts'
+import { clearMarker, type CategoryContext } from './categoryState'
+import {
+  buildOperation,
+  selectUploads,
+  uploadKind,
+  waitingCompletionCount,
+} from './completionUpload'
+import { effectiveCategory } from './effectiveCategory'
+import { applySyncDetailAction, buildSyncDetails } from './syncDetails'
+import { WorkspaceCommandError } from './WorkspaceCommandError'
 
-export class WorkspaceCommandError extends Error {
-  constructor(
-    readonly reason:
-      | 'revision-conflict'
-      | 'command-conflict'
-      | 'category-unavailable'
-      | 'undo-expired'
-      | 'invalid-row'
-      | 'finished-line'
-      | 'record-unavailable'
-      | 'conflict-unavailable',
-  ) {
-    super(`Workspace command: ${reason}`)
-    this.name = 'WorkspaceCommandError'
+export { WorkspaceCommandError, effectiveCategory }
+
+/**
+ * Commands whose receipts are kept. A receipt only answers a replay of the same command id
+ * (a lost reply, a retried IPC), which can only span a handful of commits; an unbounded map
+ * grew by about 160 bytes per command forever (#216 perf gate).
+ */
+export const COMMAND_RECEIPT_WINDOW = 2000
+
+/** Records moved back from the archive for upload before the roll moves settled ones out again. */
+const ARCHIVE_DRAIN_ROLL_THRESHOLD = 1000
+
+const EMPTY_ARCHIVE: ReadonlyMap<string, OfflineCompletion> = new Map()
+
+/** Settled records must be older than this before they leave the keep-path snapshot. */
+export const ARCHIVE_MIN_AGE_MS = 48 * 60 * 60 * 1000
+
+/**
+ * Copies a workspace for a reducer that only adds or replaces whole records.
+ *
+ * Small fields are deep-cloned. The growing records get new containers but share their
+ * entry objects with `current`, so a reducer must replace an entry (`state.x[id] = {...}`)
+ * and never mutate one in place. Sharing is also what lets
+ * the file's change validator skip the untouched entries. Used by the hot save and
+ * keep commands.
+ *
+ * @param current - The committed state; never mutated.
+ * @returns A state safe to hand to {@link WorkspaceService.apply} for save and complete.
+ * @example const state = forkWorkspace(current)
+ */
+function forkWorkspace(current: OfflineWorkspace): OfflineWorkspace {
+  const {
+    completions,
+    retiredCompletions,
+    outbox,
+    categoryOutbox,
+    commandReceipts,
+    ...small
+  } = current
+  return {
+    ...structuredClone(small),
+    completions: { ...completions },
+    retiredCompletions: { ...retiredCompletions },
+    outbox: { ...outbox },
+    categoryOutbox: { ...categoryOutbox },
+    commandReceipts: { ...commandReceipts },
   }
 }
 
-type Preparation = {
-  ownerId: string
-  categories: EditorCategory[]
-  preferences: OfflinePreferences
-  legacyNotes: Record<string, string>
-  deviceId: string
+/**
+ * Drops receipts older than {@link COMMAND_RECEIPT_WINDOW} commits (by workspace revision).
+ *
+ * @param state - The candidate state, already at its new revision; mutated in place.
+ * @example pruneCommandReceipts(state)
+ */
+function pruneCommandReceipts(state: OfflineWorkspace): void {
+  const receipts = Object.keys(state.commandReceipts)
+  if (receipts.length <= COMMAND_RECEIPT_WINDOW) return
+  const oldest = state.revision - COMMAND_RECEIPT_WINDOW
+  for (const id of receipts)
+    if (state.commandReceipts[id]!.revision <= oldest)
+      delete state.commandReceipts[id]
+}
+
+/**
+ * Whether a live completion can no longer be touched by Undo, a delayed clear, a sync
+ * operation or a conflict flow, so it may move to the archive.
+ *
+ * @param completion - A record from `completions`.
+ * @param pending - Completion ids that still have an outbox entry.
+ * @param now - Epoch ms.
+ * @returns True when nothing in the product reads or writes it any more.
+ * @example if (isSettledCompletion(c, pending, Date.now())) archive(c)
+ */
+function isSettledCompletion(
+  completion: OfflineCompletion,
+  pending: ReadonlySet<string>,
+  now: number,
+): boolean {
+  const cutoff = now - ARCHIVE_MIN_AGE_MS
+  return (
+    !pending.has(completion.id) &&
+    completion.completedAt < cutoff &&
+    completion.originalCompletedAt < cutoff &&
+    (completion.restored || completion.undoUntil < now) &&
+    (completion.cancelled ||
+      completion.cleared ||
+      completion.clearAfter === null)
+  )
+}
+
+/**
+ * Whether a retired record is old enough to leave the keep-path snapshot.
+ *
+ * @param retired - A record from `retiredCompletions`.
+ * @param now - Epoch ms.
+ * @returns True when it can no longer count toward today.
+ * @example if (isSettledRetired(r, Date.now())) archive(r)
+ */
+function isSettledRetired(retired: RetiredCompletion, now: number): boolean {
+  const cutoff = now - ARCHIVE_MIN_AGE_MS
+  return retired.completedAt < cutoff && retired.originalCompletedAt < cutoff
 }
 
 /**
  * Commits editor commands, captured Undo and outgoing completion identities together.
- * The main-process controller owns this service per verified account. Renderer commands
+ * The storage worker owns one instance for the device workspace. Renderer commands
  * never receive success until {@link AtomicWorkspaceFile} has flushed the transaction.
  * No credentials, network calls or UI callbacks enter the reducer.
  *
@@ -64,55 +176,18 @@ export class WorkspaceService {
     readonly file: AtomicWorkspaceFile<OfflineWorkspace>,
     private readonly now: () => number = Date.now,
     private readonly nextId: () => string = randomUUID,
+    private readonly archive: AtomicWorkspaceFile<WorkspaceArchive> | null = null,
   ) {}
 
   /**
-   * Prepares only API-verified owned categories; unmapped legacy notes stay in recovery.
-   * Originals remain in legacy config and are never dual-written after migration.
-   * @example await service.prepare({ ownerId, categories, preferences, legacyNotes, deviceId })
+   * Archived completions that were never uploaded, keyed by id; null until first needed.
+   * Local-only history is archivable after two days yet stays derivable for upload (#216 D1),
+   * so the sync paths read the archive file once into this map instead of once per batch.
    */
-  async prepare(input: Preparation): Promise<OfflineWorkspace> {
-    const defaultCategory = input.categories.find(
-      (category) => category.isDefault && !category.removed,
-    )
-    if (!defaultCategory)
-      throw new WorkspaceCommandError('category-unavailable')
-    const drafts: OfflineWorkspace['drafts'] = {}
-    const sourceHashes: Record<string, string> = {}
-    const unmappedCategoryIds: string[] = []
-    for (const [key, text] of Object.entries(input.legacyNotes)) {
-      if (input.categories.some((category) => String(category.id) === key)) {
-        sourceHashes[key] = digest(text)
-        drafts[key] = { revision: 0, rows: this.rows(text) }
-      } else {
-        // Unverified plaintext stays only in preserved legacy config, never in this account's export.
-        unmappedCategoryIds.push(key)
-      }
-    }
-    for (const category of input.categories) {
-      drafts[String(category.id)] ??= { revision: 0, rows: this.rows('') }
-    }
-    return this.file.initialize(
-      OfflineWorkspaceSchema.parse({
-        version: 1,
-        ownerId: input.ownerId,
-        deviceId: input.deviceId,
-        revision: 0,
-        preparedAt: this.now(),
-        selectedCategoryId: defaultCategory.id,
-        categories: input.categories,
-        preferences: input.preferences,
-        drafts,
-        completions: {},
-        outbox: {},
-        commandReceipts: {},
-        categoryMoves: {},
-        migration: { version: 1, sourceHashes, unmappedCategoryIds },
-        checkpoint: null,
-        recoveryCopies: [],
-      }),
-    )
-  }
+  private archivedUnsent: Map<string, OfflineCompletion> | null = null
+
+  /** Records moved back from the archive since the last roll; bounds the drain's hot growth. */
+  private unarchivedSinceRoll = 0
 
   /**
    * Validates/idempotently applies one user intent. Same command ID with different bytes
@@ -122,86 +197,378 @@ export class WorkspaceService {
   async execute(input: unknown): Promise<OfflineWorkspace> {
     const command = WorkspaceCommandSchema.parse(input)
     const commandDigest = digest(JSON.stringify(command))
-    return this.file.update((current) => {
-      const receipt = current.commandReceipts[command.commandId]
-      if (receipt) {
-        if (receipt.digest !== commandDigest)
-          throw new WorkspaceCommandError('command-conflict')
-        return current
-      }
-      const state = structuredClone(current)
-      this.apply(state, command)
-      // Trusted reducers can preserve larger documents; normal saves cannot grant themselves capacity.
-      for (const [id, draft] of Object.entries(state.drafts)) {
-        if (draft.revision !== current.drafts[id]?.revision)
-          draft.inputLimit = getDraftInputLimit(draft)
-      }
-      state.revision++
-      state.commandReceipts[command.commandId] = {
-        digest: commandDigest,
-        revision: state.revision,
-        ...('completionId' in command
-          ? { completionId: command.completionId }
-          : {}),
-      }
-      return state
-    })
+    return this.file.update(
+      (current) => {
+        const receipt = current.commandReceipts[command.commandId]
+        if (receipt) {
+          if (receipt.digest !== commandDigest)
+            throw new WorkspaceCommandError('command-conflict')
+          return current
+        }
+        // Typing and keeping only touch drafts and add records, so they fork cheaply; every
+        // other command deep-clones.
+        const state =
+          command.type === 'save' || command.type === 'complete'
+            ? forkWorkspace(current)
+            : structuredClone(current)
+        this.apply(state, command)
+        // Trusted reducers can preserve larger documents; normal saves cannot grant themselves capacity.
+        for (const [id, draft] of Object.entries(state.drafts)) {
+          if (draft.revision !== current.drafts[id]?.revision)
+            draft.inputLimit = getDraftInputLimit(draft)
+        }
+        state.revision++
+        state.commandReceipts[command.commandId] = {
+          digest: commandDigest,
+          revision: state.revision,
+          ...('completionId' in command
+            ? { completionId: command.completionId }
+            : {}),
+        }
+        pruneCommandReceipts(state)
+        return state
+        // The worker only projects the result, so it skips the defensive clone.
+      },
+      { shared: true },
+    )
   }
 
   /**
-   * Marks delivery uncertain before the network request; replay keeps exactly these bytes.
-   * @example const state = await service.markSent(operationId)
+   * Moves settled history out of the keep-path snapshot into the archive file.
+   *
+   * Order is the safety argument: the records are made durable in the archive first, and only
+   * then removed from the workspace, re-checked against the then-current state. A crash in
+   * between leaves a record in both files (the workspace wins on read, the next pass rewrites
+   * the archive copy); nothing can be in neither. Runs off the keep path (startup, day roll).
+   * @returns How many records left the workspace.
+   * @example const moved = await service.archiveSettled()
    */
-  async markSent(operationId: string): Promise<OfflineWorkspace> {
-    return this.markSentBatch([operationId])
-  }
-
-  /** Persists a bounded dispatch batch before any request leaves the process.
-   * @example await service.markSentBatch(operationIds)
-   */
-  async markSentBatch(operationIds: string[]): Promise<OfflineWorkspace> {
-    return this.file.update((current) => {
-      const ids = operationIds.filter(
-        (id) => current.outbox[id]?.state === 'queued',
+  async archiveSettled(): Promise<number> {
+    const archive = this.archive
+    if (!archive) return 0
+    const now = this.now()
+    const chosen: {
+      completions: Record<string, OfflineCompletion>
+      retired: Record<string, RetiredCompletion>
+    } = { completions: {}, retired: {} }
+    // A shared no-op update scans the cached state without cloning it (the callback only reads).
+    await this.file.update(
+      (state) => {
+        const pending = new Set(
+          Object.values(state.outbox).map(
+            (entry) => entry.operation.completionId,
+          ),
+        )
+        for (const [id, completion] of Object.entries(state.completions))
+          if (isSettledCompletion(completion, pending, now))
+            chosen.completions[id] = completion
+        for (const [id, record] of Object.entries(state.retiredCompletions))
+          if (isSettledRetired(record, now)) chosen.retired[id] = record
+        return state
+      },
+      { shared: true },
+    )
+    if (
+      !Object.keys(chosen.completions).length &&
+      !Object.keys(chosen.retired).length
+    )
+      return 0
+    await archive.updateOrInitialize(
+      {
+        version: 1,
+        ownerId: 'device',
+        completions: {},
+        retiredCompletions: {},
+      },
+      (current) => {
+        const completions = { ...current.completions, ...chosen.completions }
+        // A retired record supersedes any stale never-uploaded copy left by an earlier upload.
+        for (const id of Object.keys(chosen.retired)) delete completions[id]
+        return {
+          ...current,
+          // The newest copy wins if a record was archived before and has changed since.
+          completions,
+          retiredCompletions: {
+            ...current.retiredCompletions,
+            ...chosen.retired,
+          },
+        }
+      },
+    )
+    let moved = 0
+    await this.file.update((current) => {
+      const pending = new Set(
+        Object.values(current.outbox).map(
+          (entry) => entry.operation.completionId,
+        ),
       )
-      if (!ids.length) return current
-      const state = structuredClone(current)
-      for (const id of ids) state.outbox[id]!.state = 'sent'
-      state.revision++
-      return state
+      const completions = { ...current.completions }
+      const retiredCompletions = { ...current.retiredCompletions }
+      for (const [id, archived] of Object.entries(chosen.completions)) {
+        const live = completions[id]
+        // Skip anything that changed or became active since it was archived.
+        if (
+          live &&
+          live.revision === archived.revision &&
+          isSettledCompletion(live, pending, now)
+        ) {
+          delete completions[id]
+          moved++
+          // Never-uploaded history stays derivable for the next attach (#216 D1).
+          if (this.archivedUnsent && uploadKind(archived, []))
+            this.archivedUnsent.set(id, archived)
+        }
+      }
+      for (const [id, archived] of Object.entries(chosen.retired)) {
+        const live = retiredCompletions[id]
+        if (live && live.revision === archived.revision) {
+          delete retiredCompletions[id]
+          moved++
+        }
+      }
+      if (!moved) return current
+      return {
+        ...current,
+        revision: current.revision + 1,
+        completions,
+        retiredCompletions,
+      }
     })
+    this.unarchivedSinceRoll = 0
+    return moved
   }
 
-  /** Persists one exact receipt; batch delivery uses the same transaction reducer.
-   * @example await service.acceptReceipt(ownerId, receipt)
+  /**
+   * Drops outbox entries that were queued but never offered to the dashboard.
+   *
+   * Uploads are derived from completion state now, so such an entry (written by an earlier build
+   * of this workspace version) is re-derivable; `sent` (uncertain) and `blocked` entries stay
+   * for their receipts and for the user's decision (P3). Runs once per open.
+   * @returns How many entries were dropped.
+   * @example await service.dropDerivableEntries()
    */
-  async acceptReceipt(
-    ownerId: string,
-    input: unknown,
-  ): Promise<OfflineWorkspace> {
-    return this.acceptReceipts(ownerId, [input])
+  async dropDerivableEntries(): Promise<number> {
+    let dropped = 0
+    await this.file.update((current) => {
+      const queued = Object.keys(current.outbox).filter(
+        (id) => current.outbox[id]!.state === 'queued',
+      )
+      if (!queued.length) return current
+      const next = forkWorkspace(current)
+      for (const id of queued) delete next.outbox[id]
+      dropped = queued.length
+      next.revision++
+      return next
+    })
+    return dropped
   }
 
-  /** Stores all returned receipts with one durable acknowledgement before retiring their work.
-   * @example await service.acceptReceipts(ownerId, response.receipts)
+  /**
+   * Reads the never-uploaded archived records once (see {@link archivedUnsent}).
+   *
+   * Ids that also live in the workspace or in either retired map are skipped: a stale archive
+   * copy is left behind when an upload moved the record back (crash or pending roll), and the
+   * workspace always wins on read.
+   * @returns The shared map; callers must not mutate its records.
+   * @throws {@link WorkspaceFileError} when the archive exists but cannot be read.
+   * @example const unsent = await this.loadArchivedUnsent()
+   */
+  private async loadArchivedUnsent(): Promise<Map<string, OfflineCompletion>> {
+    if (this.archivedUnsent) return this.archivedUnsent
+    const unsent = new Map<string, OfflineCompletion>()
+    if (this.archive) {
+      let stored: WorkspaceArchive | null = null
+      try {
+        // A shared no-op read avoids cloning a multi-year archive.
+        stored = await this.archive.update((current) => current, {
+          shared: true,
+        })
+      } catch (error) {
+        if (
+          !(error instanceof WorkspaceFileError) ||
+          error.reason !== 'missing'
+        )
+          throw error
+      }
+      if (stored) {
+        const hot = await this.file.update((current) => current, {
+          shared: true,
+        })
+        for (const [id, completion] of Object.entries(stored.completions))
+          if (
+            !hot.completions[id] &&
+            !hot.retiredCompletions[id] &&
+            !stored.retiredCompletions[id] &&
+            uploadKind(completion, [])
+          )
+            unsent.set(id, completion)
+      }
+    }
+    // An archive roll that finished while reading may already have filled the map.
+    this.archivedUnsent ??= unsent
+    return this.archivedUnsent
+  }
+
+  /**
+   * How many archived completions still wait for their first upload (0 until the archive was read).
+   * Added to the view's waiting count so the footer and the attach progress include archive.
+   * @example view.pendingCount + service.archivedPendingCount()
+   */
+  archivedPendingCount(): number {
+    return this.archivedUnsent?.size ?? 0
+  }
+
+  /**
+   * Whether enough records came back from the archive that a roll should move them out again.
+   * @example if (service.needsArchiveRoll()) scheduleArchive()
+   */
+  needsArchiveRoll(): boolean {
+    return this.unarchivedSinceRoll >= ARCHIVE_DRAIN_ROLL_THRESHOLD
+  }
+
+  /**
+   * Counts every completion still waiting to be sent, archive included (D2/DA4 progress).
+   * Read when the user presses Connect so "Sending N keeps…" is the true total.
+   * @returns Hot completions needing upload or holding an entry, plus archived unsent ones.
+   * @example const total = await service.pendingTotal()
+   */
+  async pendingTotal(): Promise<number> {
+    const archivedUnsent = await this.loadArchivedUnsent()
+    const state = await this.file.update((current) => current, { shared: true })
+    return waitingCompletionCount(state) + archivedUnsent.size
+  }
+
+  /**
+   * Lists the work the sync loop can do now: uncertain entries to recover plus how many
+   * completions could be frozen and sent (capped at `limit`). Nothing is written (EA3).
+   * @param limit - Upper bound for both numbers.
+   * @example const { uncertain, sendable } = await service.pendingWork(16)
+   */
+  async pendingWork(
+    limit: number,
+  ): Promise<{ uncertain: OutboxEntry[]; sendable: number }> {
+    const state = await this.file.update((current) => current, { shared: true })
+    const uncertain = Object.values(state.outbox)
+      .filter((entry) => entry.state === 'sent')
+      .slice(0, limit)
+    if (!state.binding) return { uncertain, sendable: 0 }
+    const archivedUnsent = await this.loadArchivedUnsent()
+    return {
+      uncertain,
+      sendable: selectUploads(state, archivedUnsent, limit).length,
+    }
+  }
+
+  /**
+   * Derives the next sendable operations from completion state and freezes each wire payload
+   * into the outbox in the same transaction that marks it in flight, before any request leaves
+   * the process (D1, EA3). Only the bound account can send; a completion whose category has no
+   * server id yet is skipped (D4 last bullet). Uncertain entries are returned unchanged so the
+   * loop replays their stored bytes.
+   * @param accountId - The attached account; anything but the binding's account sends nothing.
+   * @param limit - Maximum number of operations in the batch, replays included.
+   * @returns Uncertain entries first, then the newly frozen ones, each with its `wire` payload.
+   * @example const sent = await service.markSentBatch(accountId, 16)
+   */
+  async markSentBatch(
+    accountId: string,
+    limit: number,
+  ): Promise<OutboxEntry[]> {
+    const probe = await this.file.update((current) => current, { shared: true })
+    if (probe.binding?.accountId !== accountId) return []
+    const archivedUnsent = await this.loadArchivedUnsent()
+    let replay: OutboxEntry[] = []
+    const frozen: string[] = []
+    const fromArchive: string[] = []
+    const state = await this.file.update((current) => {
+      const binding = current.binding
+      if (binding?.accountId !== accountId) return current
+      replay = Object.values(current.outbox)
+        .filter((entry) => entry.state === 'sent')
+        .slice(0, limit)
+      const candidates = selectUploads(
+        current,
+        archivedUnsent,
+        limit - replay.length,
+      )
+      if (!candidates.length) return current
+      // Replace entries, never mutate: the fork shares them with the committed state.
+      const next = forkWorkspace(current)
+      for (const { completion, kind, archived } of candidates) {
+        // A proven-unsent or rejected entry is superseded by the operation frozen now.
+        for (const [id, entry] of Object.entries(next.outbox))
+          if (
+            entry.operation.completionId === completion.id &&
+            entry.state !== 'sent'
+          )
+            delete next.outbox[id]
+        const operationId = this.nextId()
+        const operation = buildOperation(
+          next.deviceId,
+          completion,
+          kind,
+          operationId,
+        )
+        // Server ids are mapped exactly once here; every retry sends these stored bytes.
+        next.outbox[operationId] = {
+          state: 'sent',
+          operation,
+          wire: {
+            ...operation,
+            categoryId: binding.serverCategoryIds[operation.categoryId]!,
+          },
+        }
+        if (archived) {
+          next.completions[completion.id] = completion
+          fromArchive.push(completion.id)
+        }
+        frozen.push(operationId)
+      }
+      next.revision++
+      return next
+    })
+    // The workspace now owns these records; any archive copy is stale and loses on read.
+    for (const id of fromArchive) archivedUnsent.delete(id)
+    this.unarchivedSinceRoll += fromArchive.length
+    return [...replay, ...frozen.flatMap((id) => state.outbox[id] ?? [])]
+  }
+
+  /**
+   * Stores all returned receipts with one durable acknowledgement before retiring their work.
+   * A late receipt after detach still applies, but only to its own `operationId` (EA16).
+   * @param accountId - Must equal the binding's account (C10, P3).
+   * @param inputs - Wire receipts with server category ids.
+   * @example await service.acceptReceipts(accountId, response.receipts)
    */
   async acceptReceipts(
-    ownerId: string,
+    accountId: string,
     inputs: unknown[],
   ): Promise<OfflineWorkspace> {
     const receipts = inputs.map((input) =>
       CompletionSyncReceiptSchema.parse(input),
     )
     return this.file.update((current) => {
-      if (current.ownerId !== ownerId)
+      if (current.binding?.accountId !== accountId)
         throw new WorkspaceCommandError('command-conflict')
       if (!receipts.some((receipt) => current.outbox[receipt.operationId]))
         return current
-      const state = structuredClone(current)
+      // A fork is enough: applyReceipt replaces the entries it changes.
+      const state = forkWorkspace(current)
       for (const receipt of receipts) this.applyReceipt(state, receipt)
+      // C22: written with the receipt that leaves nothing sendable.
+      if (!this.hasSendableWork(state)) state.binding!.lastSyncedAt = this.now()
       state.revision++
       return state
     })
+  }
+
+  /**
+   * Whether anything could still be sent: category work, uncertain entries, or derivable keeps
+   * (archive included).
+   * @example if (!this.hasSendableWork(state)) binding.lastSyncedAt = now
+   */
+  private hasSendableWork(state: OfflineWorkspace): boolean {
+    return hasSendableWork(state, this.archivedUnsent ?? EMPTY_ARCHIVE)
   }
 
   /** Reduces one receipt without changing an uncertain operation's original payload.
@@ -209,21 +576,31 @@ export class WorkspaceService {
    */
   private applyReceipt(
     state: OfflineWorkspace,
-    receipt: ReturnType<typeof CompletionSyncReceiptSchema.parse>,
+    wireReceipt: CompletionSyncReceipt,
   ): void {
-    const pending = state.outbox[receipt.operationId]
+    const pending = state.outbox[wireReceipt.operationId]
     if (!pending) return
     if (
-      pending.operation.completionId !== receipt.completionId ||
-      pending.operation.revision !== receipt.revision
+      pending.operation.completionId !== wireReceipt.completionId ||
+      pending.operation.revision !== wireReceipt.revision
     )
       throw new WorkspaceCommandError('command-conflict')
-    const completion = this.completion(state, receipt.completionId)
+    let completion = this.completion(state, wireReceipt.completionId)
+    const toLocal = localProjectionMapper(state, completion.categoryId)
+    const receipt = {
+      ...wireReceipt,
+      projection: wireReceipt.projection
+        ? toLocal(wireReceipt.projection)
+        : null,
+    }
     if (
       receipt.projection &&
       receipt.projection.revision >= (completion.remote?.revision ?? 0)
-    )
-      completion.remote = receipt.projection
+    ) {
+      // Replace, never mutate: the receipt commit forks the workspace and shares entries.
+      completion = { ...completion, remote: receipt.projection }
+      state.completions[completion.id] = completion
+    }
     if (receipt.projection?.cancelled && !completion.cancelled) {
       state.outbox[receipt.operationId] = {
         ...pending,
@@ -233,7 +610,7 @@ export class WorkspaceService {
       }
     } else if (receipt.status === 'applied') {
       delete state.outbox[receipt.operationId]
-      this.queueDesired(state, completion)
+      this.supersedeUnsent(state, completion)
     } else {
       state.outbox[receipt.operationId] = {
         ...pending,
@@ -246,43 +623,158 @@ export class WorkspaceService {
         completion.revision > receipt.revision &&
         receipt.reason !== 'conflict'
       )
-        this.queueDesired(state, completion)
+        this.supersedeUnsent(state, completion)
     }
   }
 
   /**
-   * Refreshes names/hierarchy without deleting any missing category's writing or Undo.
-   * Confirmed moves are a separate user command, including when a server receipt suggests one.
-   * @example await service.refreshCategories(ownedCategories)
+   * Runs the D4 three-way category merge against the attached account's server list.
+   * The first call binds the account (name-path match, local default pairs with the server
+   * default); every call re-derives the not-yet-sent operations (C19). It defers, changing
+   * nothing, while a category operation is still uncertain.
+   * @param input - The verified account id/email and the server category list with deletions.
+   * @throws {@link WorkspaceCommandError} `command-conflict` when another account is bound (C10).
+   * @example await service.reconcileCategories({ accountId, displayEmail, categories, deletions })
    */
-  async refreshCategories(
-    categories: EditorCategory[],
-    deletions: { sourceId: number; destinationId: number }[] = [],
-    legacyNotes?: Record<string, string>,
+  async reconcileCategories(
+    input: CategoryMergeInput,
   ): Promise<OfflineWorkspace> {
     return this.file.update((current) => {
+      if (current.binding && current.binding.accountId !== input.accountId)
+        throw new WorkspaceCommandError('command-conflict')
       const state = structuredClone(current)
-      const freshIds = new Set(categories.map((category) => category.id))
-      state.categories = [
-        ...categories.map((category) => ({ ...category, removed: false })),
-        ...state.categories
-          .filter(
-            (category) =>
-              !freshIds.has(category.id) &&
-              !state.categoryMoves[String(category.id)],
-          )
-          .map((category) => ({ ...category, removed: true })),
-      ]
-      for (const deletion of deletions)
-        state.categoryDeletions[String(deletion.sourceId)] =
-          deletion.destinationId
-      for (const category of categories)
-        state.drafts[String(category.id)] ??= {
-          revision: 0,
-          rows: this.rows(''),
-        }
-      if (legacyNotes)
-        this.preserveLegacyChanges(state, categories, legacyNotes)
+      if (!mergeCategories(state, input, this.categoryContext())) return current
+      state.revision++
+      return state
+    })
+  }
+
+  /** Clock and id source handed to the pure category modules. */
+  private categoryContext(): CategoryContext {
+    return {
+      now: this.now(),
+      nextId: this.nextId,
+      archivedUnsent: this.archivedUnsent ?? EMPTY_ARCHIVE,
+    }
+  }
+
+  /**
+   * Lists category work for the sync loop: uncertain entries to recover and sendable queued ones.
+   * @example const { uncertain, sendable } = await service.categoryPending(16)
+   */
+  async categoryPending(limit: number) {
+    // A shared no-op read avoids cloning the whole workspace; callers only serialize the entries.
+    const state = await this.file.update((current) => current, { shared: true })
+    return categoryWork(state, limit)
+  }
+
+  /**
+   * Freezes and marks category operations in flight in one transaction (EA3, D1).
+   * @param accountId - Must be the binding's account.
+   * @param operationIds - Candidates from {@link categoryPending}.
+   * @returns The entries now in flight, each with its frozen wire payload.
+   * @example const sent = await service.markCategorySent(accountId, ids)
+   */
+  async markCategorySent(accountId: string, operationIds: string[]) {
+    const state = await this.file.update((current) => {
+      if (current.binding?.accountId !== accountId) return current
+      const next = structuredClone(current)
+      if (!freezeCategoryBatch(next, operationIds).length) return current
+      next.revision++
+      return next
+    })
+    return operationIds.flatMap((id) =>
+      state.categoryOutbox[id]?.state === 'sent'
+        ? [state.categoryOutbox[id]]
+        : [],
+    )
+  }
+
+  /**
+   * Stores category receipts durably, applying each only to its own `operationId` (EA16).
+   * @example await service.acceptCategoryReceipts(accountId, response.receipts)
+   */
+  async acceptCategoryReceipts(
+    accountId: string,
+    receipts: SyncOutcome[],
+  ): Promise<OfflineWorkspace> {
+    return this.file.update((current) => {
+      if (current.binding?.accountId !== accountId)
+        throw new WorkspaceCommandError('command-conflict')
+      const categoryReceipts = receipts.flatMap((receipt) =>
+        receipt.kind === 'category' &&
+        current.categoryOutbox[receipt.operationId]
+          ? [receipt]
+          : [],
+      )
+      if (!categoryReceipts.length) return current
+      const state = structuredClone(current)
+      applyCategoryReceipts(state, categoryReceipts, this.categoryContext())
+      state.revision++
+      return state
+    })
+  }
+
+  /**
+   * Durably applies a category-outbox edit only while the workspace is still bound to the account.
+   * A stale account (signed out or switched meanwhile) leaves the file untouched.
+   * @example await this.updateBoundAccount(accountId, (state) => parkOperations(state, ids))
+   */
+  private async updateBoundAccount(
+    accountId: string,
+    edit: (state: OfflineWorkspace) => void,
+  ): Promise<OfflineWorkspace> {
+    return this.file.update((current) => {
+      if (current.binding?.accountId !== accountId) return current
+      const state = structuredClone(current)
+      edit(state)
+      state.revision++
+      return state
+    })
+  }
+
+  /** Counts an unanswered receipt lookup for uncertain operations (EA4).
+   * @example await service.noteCategoryQuery(accountId, ids)
+   */
+  async noteCategoryQuery(
+    accountId: string,
+    operationIds: string[],
+  ): Promise<OfflineWorkspace> {
+    return this.updateBoundAccount(accountId, (state) =>
+      noteReceiptQuery(state, operationIds),
+    )
+  }
+
+  /** Parks operations a 4xx rejected on their own (E3).
+   * @example await service.parkCategory(accountId, ids)
+   */
+  async parkCategory(
+    accountId: string,
+    operationIds: string[],
+  ): Promise<OfflineWorkspace> {
+    return this.updateBoundAccount(accountId, (state) =>
+      parkOperations(state, operationIds),
+    )
+  }
+
+  /** Reads the Sync details page data (rows, History, C34 summary, v1 backups).
+   * @example const details = await service.syncDetails()
+   */
+  async syncDetails() {
+    // A shared no-op read avoids cloning the whole workspace; the view is serialized across the worker boundary.
+    const state = await this.file.update((current) => current, { shared: true })
+    return buildSyncDetails(state)
+  }
+
+  /**
+   * Records the end of a sync pass with nothing sendable left (C22).
+   * @example await service.markSynced(accountId, Date.now())
+   */
+  async markSynced(accountId: string, at: number): Promise<OfflineWorkspace> {
+    return this.file.update((current) => {
+      if (current.binding?.accountId !== accountId) return current
+      const state = structuredClone(current)
+      state.binding!.lastSyncedAt = at
       state.revision++
       return state
     })
@@ -290,17 +782,30 @@ export class WorkspaceService {
 
   /** Persists a coherent count checkpoint and retires only fully resolved payloads.
    * Undo, delayed clear and uncertain delivery keep their original recovery text alive.
-   * @example await service.checkpoint(expectedRevision, checkpoint)
+   * Retirement keeps each completion's text on the Mac (C28).
+   * @example await service.checkpoint(accountId, expectedRevision, checkpoint)
    */
   async checkpoint(
+    accountId: string,
     expectedRevision: number,
     input: unknown,
   ): Promise<OfflineWorkspace> {
-    const checkpoint = CountCheckpointSchema.parse(input)
+    const wire = CountCheckpointSchema.parse(input)
     return this.file.update((current) => {
-      if (current.revision !== expectedRevision) return current
+      if (
+        current.revision !== expectedRevision ||
+        current.binding?.accountId !== accountId
+      )
+        return current
       const state = structuredClone(current)
-      state.checkpoint = checkpoint
+      const toLocal = localProjectionMapper(state, null)
+      const identities: NonNullable<
+        OfflineWorkspace['checkpoint']
+      >['identities'] = {}
+      for (const [id, projection] of Object.entries(wire.identities))
+        identities[id] = projection ? toLocal(projection) : null
+      state.checkpoint = { ...wire, identities }
+      const checkpoint = state.checkpoint
       const pending = new Set(
         Object.values(state.outbox).map(
           (entry) => entry.operation.completionId,
@@ -315,6 +820,9 @@ export class WorkspaceService {
             !completion.cleared &&
             completion.clearAfter !== null) ||
           !completion.remote ||
+          // A local change the dashboard has not received yet (an Undo, a move) must outlive the
+          // checkpoint; retiring now would replace it with the dashboard's older state.
+          uploadKind(completion, []) !== null ||
           !remote ||
           remote.revision < completion.remote.revision
         )
@@ -327,6 +835,8 @@ export class WorkspaceService {
           cancelled: remote.cancelled,
           revision: completion.revision,
           remoteRevision: remote.revision,
+          title: completion.title,
+          rawText: completion.rawText,
         }
         delete state.completions[completion.id]
       }
@@ -385,6 +895,23 @@ export class WorkspaceService {
         return this.resolveConflict(state, command)
       case 'retrySync':
         return this.retrySync(state, command)
+      case 'categoryCreate':
+        return this.categoryCreate(state, command)
+      case 'categoryRename':
+        return this.categoryEdit(state, command.categoryId, 'name', command)
+      case 'categoryRecolor':
+        return this.categoryEdit(state, command.categoryId, 'color', command)
+      case 'categoryReparent':
+        return this.categoryEdit(
+          state,
+          command.categoryId,
+          'parentLocalId',
+          command,
+        )
+      case 'categoryDelete':
+        return this.categoryDelete(state, command)
+      case 'syncDetailAction':
+        return applySyncDetailAction(state, command, this.categoryContext())
       case 'preferences':
         return this.patchPreferences(state, command)
       case 'restoreRecovery':
@@ -420,7 +947,7 @@ export class WorkspaceService {
 
     for (const [key, other] of Object.entries(state.drafts)) {
       if (
-        key !== String(command.categoryId) &&
+        key !== command.categoryId &&
         other.rows.some((row) => unique.has(row.id))
       )
         throw new WorkspaceCommandError('invalid-row')
@@ -434,18 +961,26 @@ export class WorkspaceService {
           : [],
       ),
     )
-    for (const completion of Object.values(state.completions)) {
+    for (const [id, completion] of Object.entries(state.completions)) {
       if (completion.categoryId !== command.categoryId || completion.restored)
         continue
       // A single rewritten occurrence remains a placement anchor, never the captured completion itself.
       const replacement = replacements.get(completion.lineId)
-      if (replacement) completion.nextRowId = replacement
-      else if (completion.nextRowId)
-        completion.nextRowId =
-          replacements.get(completion.nextRowId) ?? completion.nextRowId
-      if (completion.previousRowId)
-        completion.previousRowId =
-          replacements.get(completion.previousRowId) ?? completion.previousRowId
+      const nextRowId = replacement
+        ? replacement
+        : completion.nextRowId
+          ? (replacements.get(completion.nextRowId) ?? completion.nextRowId)
+          : completion.nextRowId
+      const previousRowId = completion.previousRowId
+        ? (replacements.get(completion.previousRowId) ??
+          completion.previousRowId)
+        : completion.previousRowId
+      // Replace the entry rather than mutate it: forked states share unchanged records.
+      if (
+        nextRowId !== completion.nextRowId ||
+        previousRowId !== completion.previousRowId
+      )
+        state.completions[id] = { ...completion, nextRowId, previousRowId }
     }
 
     draft.rows = command.rows.map((row) => {
@@ -549,7 +1084,7 @@ export class WorkspaceService {
 
     draft.revision++
 
-    this.queueDesired(state, completion)
+    this.supersedeUnsent(state, completion)
 
     return
   }
@@ -567,11 +1102,17 @@ export class WorkspaceService {
     const removed = draft.rows[index]!
     const previous = draft.rows[index - 1]?.id
     const next = draft.rows[index + 1]?.id
-    for (const completion of Object.values(state.completions)) {
+    for (const [id, completion] of Object.entries(state.completions)) {
       // Retarget references before deleting the row so a later completion cannot erase an earlier Undo anchor.
-      if (completion.previousRowId === removed.id)
-        completion.previousRowId = previous
-      if (completion.nextRowId === removed.id) completion.nextRowId = next
+      const retargetPrevious = completion.previousRowId === removed.id
+      const retargetNext = completion.nextRowId === removed.id
+      // Replace the entry rather than mutate it: forked states share unchanged records.
+      if (retargetPrevious || retargetNext)
+        state.completions[id] = {
+          ...completion,
+          ...(retargetPrevious ? { previousRowId: previous } : {}),
+          ...(retargetNext ? { nextRowId: next } : {}),
+        }
     }
     draft.rows.splice(index, 1)
   }
@@ -651,7 +1192,7 @@ export class WorkspaceService {
 
     draft.revision++
 
-    this.queueDesired(state, completion)
+    this.supersedeUnsent(state, completion)
 
     return
   }
@@ -722,12 +1263,29 @@ export class WorkspaceService {
 
     if (source === destination) return
 
+    // A migration placeholder is hidden from the editor, so writing moved there would vanish.
     const targetCategory = state.categories.find(
-      (category) => category.id === destination && !category.removed,
+      (category) =>
+        category.id === destination &&
+        !category.removed &&
+        !category.historical,
     )
 
     if (!targetCategory) throw new WorkspaceCommandError('category-unavailable')
 
+    this.retireCategory(state, source, destination)
+  }
+
+  /**
+   * Moves a category's writing and records into its destination and removes it from the list.
+   * Shared by the confirmed move of a removed category and the local delete (D4).
+   * @example this.retireCategory(state, sourceId, destinationId)
+   */
+  private retireCategory(
+    state: OfflineWorkspace,
+    source: string,
+    destination: string,
+  ): void {
     const from = this.draft(state, source)
 
     const to = this.draft(state, destination)
@@ -744,9 +1302,9 @@ export class WorkspaceService {
       to.revision++
     }
 
-    state.categoryMoves[String(source)] = destination
+    state.categoryMoves[source] = destination
 
-    delete state.drafts[String(source)]
+    delete state.drafts[source]
 
     state.categories = state.categories.filter(
       (category) => category.id !== source,
@@ -760,10 +1318,115 @@ export class WorkspaceService {
       completion.categoryId = destination
       completion.revision =
         Math.max(completion.revision, completion.remote?.revision ?? 0) + 1
-      this.queueDesired(state, completion)
+      this.supersedeUnsent(state, completion)
     }
 
     return
+  }
+
+  /** Judges a local category edit with the shared validator; refusals are definite, never storage errors (C5).
+   * @returns The normalized name for create/rename.
+   * @example const name = this.judgeCategory(state, { type: 'create', name, parentId })
+   */
+  private judgeCategory(
+    state: OfflineWorkspace,
+    action: CategoryAction<string>,
+  ): string | undefined {
+    const verdict = validateCategoryAction(state.categories, action)
+    if (!verdict.ok)
+      throw new WorkspaceCommandError(verdict.reason, verdict.childName)
+    return verdict.name
+  }
+
+  /** Creates a local category offline and selects it (D4, DA8; restores the step 3 auto-select).
+   * @example this.categoryCreate(state, command)
+   */
+  private categoryCreate(
+    state: OfflineWorkspace,
+    command: Extract<WorkspaceCommand, { type: 'categoryCreate' }>,
+  ): void {
+    if (state.categories.some((category) => category.id === command.categoryId))
+      throw new WorkspaceCommandError('command-conflict')
+    const name = this.judgeCategory(state, {
+      type: 'create',
+      name: command.name,
+      parentId: command.parentId,
+    })
+    state.categories.push({
+      id: command.categoryId,
+      name: name ?? command.name,
+      color: command.color,
+      isDefault: false,
+      parentId: command.parentId,
+      removed: false,
+      historical: false,
+      fieldRevisions: { name: 1, color: 1, parentLocalId: 1 },
+    })
+    state.drafts[command.categoryId] = { revision: 0, rows: this.rows('') }
+    state.selectedCategoryId = command.categoryId
+  }
+
+  /** Renames, recolors or reparents a local category; a new edit clears that field's declined marker (C18).
+   * @example this.categoryEdit(state, id, 'name', command)
+   */
+  private categoryEdit(
+    state: OfflineWorkspace,
+    categoryId: string,
+    field: 'name' | 'color' | 'parentLocalId',
+    command: Extract<
+      WorkspaceCommand,
+      { type: 'categoryRename' | 'categoryRecolor' | 'categoryReparent' }
+    >,
+  ): void {
+    const category = state.categories.find(
+      (entry) => entry.id === categoryId && !entry.removed,
+    )
+    if (!category) throw new WorkspaceCommandError('not-found')
+    if (command.type === 'categoryRename') {
+      const name = this.judgeCategory(state, {
+        type: 'rename',
+        id: categoryId,
+        name: command.name,
+      })
+      if (name === category.name) return
+      category.name = name ?? command.name
+    } else if (command.type === 'categoryRecolor') {
+      this.judgeCategory(state, { type: 'recolor', id: categoryId })
+      if (command.color === category.color) return
+      category.color = command.color
+    } else {
+      this.judgeCategory(state, {
+        type: 'reparent',
+        id: categoryId,
+        parentId: command.parentId,
+      })
+      if (command.parentId === category.parentId) return
+      category.parentId = command.parentId
+    }
+    category.fieldRevisions[field]++
+    if (state.binding) {
+      clearMarker(state.binding, categoryId, field)
+      clearMarker(state.binding, categoryId, 'create')
+    }
+  }
+
+  /** Deletes a local category offline: children become roots, writing and records move to the destination (D4, EA8).
+   * @example this.categoryDelete(state, command)
+   */
+  private categoryDelete(
+    state: OfflineWorkspace,
+    command: Extract<WorkspaceCommand, { type: 'categoryDelete' }>,
+  ): void {
+    const destination = effectiveCategory(state, command.destinationId)
+    this.judgeCategory(state, {
+      type: 'delete',
+      id: command.categoryId,
+      destinationId: destination,
+    })
+    for (const child of state.categories)
+      if (child.parentId === command.categoryId) child.parentId = null
+    if (state.binding) delete state.binding.declined[command.categoryId]
+    this.retireCategory(state, command.categoryId, destination)
   }
 
   /** Applies the correctTime command inside the account's durable transaction.
@@ -780,7 +1443,7 @@ export class WorkspaceService {
     completion.revision =
       Math.max(completion.revision, completion.remote?.revision ?? 0) + 1
 
-    this.queueDesired(state, completion)
+    this.supersedeUnsent(state, completion)
 
     return
   }
@@ -844,7 +1507,7 @@ export class WorkspaceService {
           delete state.outbox[id]
     } else {
       completion.revision = Math.max(completion.revision, remote.revision) + 1
-      this.queueDesired(state, completion)
+      this.supersedeUnsent(state, completion)
     }
 
     return
@@ -876,36 +1539,7 @@ export class WorkspaceService {
     completion.remote = rejected.receipt!.projection
     completion.revision =
       Math.max(completion.revision, completion.remote?.revision ?? 0) + 1
-    this.queueDesired(state, completion)
-  }
-
-  /** Preserves later changes from an older binary without replacing the upgraded workspace.
-   * Category ownership comes from the verified bootstrap; unknown plaintext stays outside this account.
-   * @example this.preserveLegacyChanges(state, ownedCategories, legacyNotes)
-   */
-  private preserveLegacyChanges(
-    state: OfflineWorkspace,
-    categories: EditorCategory[],
-    notes: Record<string, string>,
-  ): void {
-    const owned = new Set(categories.map((category) => String(category.id)))
-    for (const [key, text] of Object.entries(notes)) {
-      if (!owned.has(key)) continue
-      const hash = digest(text)
-      if (
-        hash === state.migration.sourceHashes[key] ||
-        hash === state.migration.observedHashes[key]
-      )
-        continue
-      state.recoveryCopies.push({
-        id: this.nextId(),
-        categoryId: Number(key),
-        text,
-        reason: 'legacy-changed',
-        createdAt: this.now(),
-      })
-      state.migration.observedHashes[key] = hash
-    }
+    this.supersedeUnsent(state, completion)
   }
 
   /** Appends an explicitly selected recovery copy once, preserving newer destination writing.
@@ -921,9 +1555,13 @@ export class WorkspaceService {
     if (!copy) throw new WorkspaceCommandError('record-unavailable')
     if (copy.restoredTo !== undefined) return
     const destination = effectiveCategory(state, command.destinationId)
+    // Restoring into a hidden migration placeholder would lose the writing from view again.
     if (
       !state.categories.some(
-        (category) => category.id === destination && !category.removed,
+        (category) =>
+          category.id === destination &&
+          !category.removed &&
+          !category.historical,
       )
     )
       throw new WorkspaceCommandError('category-unavailable')
@@ -955,10 +1593,16 @@ export class WorkspaceService {
     return
   }
 
-  /** Queues the latest desired projection without ever changing an uncertain sent payload.
-   * @example this.queueDesired(state, completion)
+  /**
+   * Drops proven-unsent or rejected entries that a newer revision of the completion supersedes.
+   *
+   * It no longer creates an operation: upload work is derived from completion state and frozen
+   * only when first marked in flight ({@link markSentBatch}), so keeping or editing while
+   * detached leaves the outbox untouched (#216 D1 local-only gate). Sent bytes stay for
+   * receipt lookup and are never changed (EA3).
+   * @example this.supersedeUnsent(state, completion)
    */
-  private queueDesired(
+  private supersedeUnsent(
     state: OfflineWorkspace,
     completion: OfflineCompletion,
   ): void {
@@ -968,49 +1612,22 @@ export class WorkspaceService {
     if (
       entries.some(
         ([, entry]) => entry.operation.revision === completion.revision,
-      )
+      ) ||
+      (entries.some(([, entry]) => entry.state === 'sent') &&
+        !completion.cancelled) ||
+      (completion.remote?.revision ?? 0) >= completion.revision
     )
       return
-    if (
-      entries.some(([, entry]) => entry.state === 'sent') &&
-      !completion.cancelled
-    )
-      return
-    if ((completion.remote?.revision ?? 0) >= completion.revision) return
     for (const [id, entry] of entries) {
-      // Proven unsent/rejected operations can be superseded; sent bytes stay for receipt lookup.
       if (entry.state !== 'sent') delete state.outbox[id]
-    }
-    const operationId = this.nextId()
-    state.outbox[operationId] = {
-      state: 'queued',
-      operation: {
-        operationId,
-        completionId: completion.id,
-        deviceId: state.deviceId,
-        revision: completion.revision,
-        expectedRemoteRevision: completion.remote?.revision ?? 0,
-        kind: completion.cancelled
-          ? 'cancel'
-          : !completion.remote
-            ? 'create'
-            : completion.remote.categoryId !== completion.categoryId
-              ? 'relocate'
-              : 'correctTime',
-        categoryId: completion.categoryId,
-        title: completion.title,
-        completedAt: completion.completedAt,
-        originalCompletedAt: completion.originalCompletedAt,
-        timezone: completion.timezone,
-      },
     }
   }
 
   /** Resolves an accessible draft; retired sources require the caller's explicit rebase.
    * @example const draft = this.draft(state, categoryId)
    */
-  private draft(state: OfflineWorkspace, categoryId: number): OfflineDraft {
-    const draft = state.drafts[String(categoryId)]
+  private draft(state: OfflineWorkspace, categoryId: string): OfflineDraft {
+    const draft = state.drafts[categoryId]
     if (
       !draft ||
       !state.categories.some((category) => category.id === categoryId)
@@ -1041,22 +1658,26 @@ export class WorkspaceService {
   }
 }
 
-/** Resolves chained category moves without restoring into a retired source.
- * @example effectiveCategory(workspace, 3)
+/**
+ * Builds the server -> local projection mapper from the binding's reverse id map.
+ * An id the binding does not know keeps `fallbackCategoryId`, or the first local id, so a
+ * receipt never fails to apply just because a category was unbound meanwhile.
+ * @example const toLocal = localProjectionMapper(state, completion.categoryId)
  */
-export function effectiveCategory(
+function localProjectionMapper(
   state: OfflineWorkspace,
-  categoryId: number,
-): number {
-  const visited = new Set<number>()
-  let current = categoryId
-  while (state.categoryMoves[String(current)]) {
-    if (visited.has(current))
-      throw new WorkspaceCommandError('category-unavailable')
-    visited.add(current)
-    current = state.categoryMoves[String(current)]!
-  }
-  return current
+  fallbackCategoryId: string | null,
+): (projection: CompletionProjection) => LocalCompletionProjection {
+  const reverse = new Map(
+    Object.entries(state.binding?.serverCategoryIds ?? {}).map(
+      ([localId, serverId]) => [serverId, localId] as const,
+    ),
+  )
+  const fallback = fallbackCategoryId ?? state.selectedCategoryId
+  return (projection) => ({
+    ...projection,
+    categoryId: reverse.get(projection.categoryId) ?? fallback,
+  })
 }
 
 /** Reuses the editor's established checkbox grammar for durable completion/Undo.

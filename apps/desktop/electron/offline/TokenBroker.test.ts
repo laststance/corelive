@@ -71,6 +71,80 @@ function brokerFixture() {
 afterEach(() => vi.useRealTimers())
 
 describe('Clerk session token broker boundary', () => {
+  test('revoke asks the hidden document to sign out and reports revoked only when Clerk confirmed', async () => {
+    // Arrange
+    const fixture = brokerFixture()
+
+    // Act
+    const pending = fixture.broker.revoke(3, 1000)
+    const challenge = fixture.request()
+    fixture.reply({ ...challenge, status: 'signed-out' })
+
+    // Assert
+    expect(challenge.action).toBe('sign-out')
+    expect(await pending).toBe('revoked')
+  })
+
+  test('revoke is skipped, never thrown, when the document does not answer within the bound', async () => {
+    // Arrange
+    vi.useFakeTimers()
+    const fixture = brokerFixture()
+
+    // Act
+    const pending = fixture.broker.revoke(3, 5000)
+    await vi.advanceTimersByTimeAsync(5000)
+
+    // Assert
+    expect(await pending).toBe('skipped')
+    expect(fixture.window.destroy).toHaveBeenCalled()
+  })
+
+  test('a token reply cannot answer a sign-out challenge', async () => {
+    // Arrange
+    const fixture = brokerFixture()
+    const pending = fixture.broker.revoke(3, 1000)
+    const challenge = fixture.request()
+
+    // Act
+    const accepted = fixture.reply({
+      requestId: challenge.requestId,
+      generation: challenge.generation,
+      expectedAccountId: null,
+      status: 'ready',
+      accountId: 'account-a',
+      token: 'opaque-test-token',
+    })
+
+    // Assert
+    expect(accepted).toBe(false)
+    fixture.reply({ ...challenge, status: 'signed-out' })
+    expect(await pending).toBe('revoked')
+  })
+
+  // Regression: /ship CodeRabbit review on PR #222 2026-11-03 — an identity check during sign-out joined the revoke promise and received a sign-out result
+  test('an identity check during sign-out starts its own token challenge instead of joining the revoke', async () => {
+    // Arrange
+    const fixture = brokerFixture()
+    const revoking = fixture.broker.revoke(3, 1000)
+
+    // Act
+    const identity = fixture.broker.acquire(null, 3)
+    const challenge = fixture.request()
+    fixture.reply({
+      requestId: challenge.requestId,
+      generation: 3,
+      expectedAccountId: null,
+      status: 'ready',
+      accountId: 'account-a',
+      token: 'opaque-test-token',
+    })
+
+    // Assert
+    expect(challenge.action).toBeUndefined()
+    expect(await identity).toMatchObject({ status: 'ready' })
+    expect(await revoking).toBe('skipped')
+  })
+
   test('uses the existing session in a hidden sandboxed window with a credential-only preload', async () => {
     // Arrange
     const fixture = brokerFixture()

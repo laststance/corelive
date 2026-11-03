@@ -1,5 +1,12 @@
 import { spawnSync } from 'node:child_process'
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import {
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -345,5 +352,190 @@ describe('durable account workspace', () => {
     await expect(file.read()).rejects.toMatchObject({ reason: 'invalid' })
     await writeFile(file.path, original.replace('"format":1', '"format":2'))
     await expect(file.read()).rejects.toMatchObject({ reason: 'invalid' })
+  })
+})
+
+describe('v2 fixed file names', () => {
+  test('a v2 file lands at the fixed name while the v1 owner-hash path stays unchanged', async () => {
+    // Arrange
+    const { directory, options } = await createFixture()
+    const initial = { revision: 0, text: 'a', completions: [], receipts: [] }
+    const v2File = new AtomicWorkspaceFile({
+      ...options,
+      ownerId: 'device',
+      fileName: 'device',
+    })
+    const v1File = new AtomicWorkspaceFile(options)
+
+    // Act
+    await v2File.initialize(initial)
+    await v1File.initialize(initial)
+    const names = (await readdir(directory)).sort()
+
+    // Assert
+    expect(v2File.path).toBe(join(directory, 'device.json'))
+    expect(v2File.recoveryPath).toBe(join(directory, 'device.recovery.json'))
+    expect(names).toContain('device.json')
+    expect(v1File.path).toMatch(/\/[a-f0-9]{64}\.json$/)
+    expect(names).toHaveLength(2)
+  })
+
+  test('a file name that could escape the directory is refused', () => {
+    // Arrange
+    const options = {
+      directory: '/tmp/x',
+      ownerId: 'device',
+      parse: schema.parse,
+      fileName: '../evil',
+    }
+
+    // Act
+    const create = () => new AtomicWorkspaceFile(options)
+
+    // Assert
+    expect(create).toThrow('invalid')
+  })
+})
+
+describe('commit cost on a large file (#216 perf gate)', () => {
+  const initial: Fixture = {
+    revision: 0,
+    text: 'a',
+    completions: [],
+    receipts: [],
+  }
+  const bump = (state: Fixture): Fixture => ({
+    ...state,
+    revision: state.revision + 1,
+  })
+
+  test('the recovery copy is exactly the previous generation, not the current one', async () => {
+    // Arrange
+    const { file } = await createFixture()
+    await file.initialize(initial)
+    await file.update(bump)
+    const generationOne = await readFile(file.path, 'utf8')
+
+    // Act
+    await file.update(bump)
+
+    // Assert
+    expect(await readFile(file.recoveryPath, 'utf8')).toBe(generationOne)
+    expect(await readFile(file.path, 'utf8')).not.toBe(generationOne)
+  })
+
+  test('replacing the primary leaves the recovery inode untouched', async () => {
+    // Arrange
+    const { file } = await createFixture()
+    await file.initialize(initial)
+    await file.update(bump)
+    await file.update(bump)
+    const recoveryInode = (await stat(file.recoveryPath)).ino
+    const recoveryBytes = await readFile(file.recoveryPath, 'utf8')
+
+    // Act: the primary is replaced by a new inode; the demoted one becomes the recovery copy.
+    await file.update(bump)
+
+    // Assert
+    expect((await stat(file.path)).ino).not.toBe(recoveryInode)
+    expect((await stat(file.recoveryPath)).ino).not.toBe(recoveryInode)
+    expect(await readFile(file.recoveryPath, 'utf8')).not.toBe(recoveryBytes)
+    expect(JSON.parse(recoveryBytes).payload).toContain('"revision":1')
+  })
+
+  test('a crash after the new bytes are flushed but before the rename leaves the previous generation as primary and recovery', async () => {
+    // Arrange
+    const fault: { at?: WorkspaceWriteStage } = {}
+    const { file, options } = await createFixture((stage) => {
+      if (stage === fault.at) throw new Error('Simulated power loss')
+    })
+    await file.initialize(initial)
+    await file.update(bump)
+    const primaryBefore = await readFile(file.path, 'utf8')
+    fault.at = 'file-flushed'
+
+    // Act
+    await expect(file.update(bump)).rejects.toThrow('Simulated power loss')
+
+    // Assert
+    expect(await readFile(file.path, 'utf8')).toBe(primaryBefore)
+    expect(await readFile(file.recoveryPath, 'utf8')).toBe(primaryBefore)
+    expect((await new AtomicWorkspaceFile(options).read()).revision).toBe(1)
+    expect(
+      (await readdir(options.directory)).filter((n) => n.endsWith('.tmp')),
+    ).toEqual([])
+  })
+
+  test('an unchanged file is not parsed again, but a changed one is', async () => {
+    // Arrange
+    let parses = 0
+    const { options } = await createFixture()
+    const file = new AtomicWorkspaceFile({
+      ...options,
+      parse: (value) => {
+        parses++
+        return schema.parse(value)
+      },
+    })
+    await file.initialize(initial)
+    await file.update(bump)
+    parses = 0
+
+    // Act
+    await file.read()
+    await file.update(bump)
+
+    // Assert: one parse for the candidate only, none for the two reads of our own bytes.
+    expect(parses).toBe(1)
+  })
+
+  test('a primary damaged behind the cache is detected, never served from memory', async () => {
+    // Arrange
+    const { file } = await createFixture()
+    await file.initialize(initial)
+    await file.update(bump)
+    await writeFile(file.path, '{"damaged":')
+
+    // Act
+    const update = file.update(bump)
+
+    // Assert
+    await expect(update).rejects.toMatchObject({ reason: 'invalid' })
+    expect((await file.previewRecoveryInfo()).workspace.revision).toBe(0)
+  })
+
+  test('a shared update returns the committed state without cloning it', async () => {
+    // Arrange
+    const { file } = await createFixture()
+    await file.initialize(initial)
+
+    // Act
+    const shared = await file.update(bump, { shared: true })
+    const cloned = await file.update((state) => state, { shared: false })
+
+    // Assert
+    expect(shared.revision).toBe(1)
+    expect(cloned).toEqual(shared)
+    expect(cloned).not.toBe(shared)
+  })
+
+  test('updateOrInitialize creates a missing file but refuses to start over a lone recovery copy', async () => {
+    // Arrange
+    const { file, options } = await createFixture()
+    const lonely = new AtomicWorkspaceFile({
+      ...options,
+      directory: join(options.directory, 'nested'),
+    })
+
+    // Act
+    const created = await file.updateOrInitialize(initial, bump)
+    await lonely.updateOrInitialize(initial, bump)
+    await lonely.update(bump)
+    await rm(lonely.path)
+    const refuse = lonely.updateOrInitialize(initial, bump)
+
+    // Assert
+    expect(created.revision).toBe(1)
+    await expect(refuse).rejects.toMatchObject({ reason: 'exists' })
   })
 })

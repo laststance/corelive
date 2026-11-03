@@ -1,1 +1,1 @@
-export * from '@corelive/live-editor/hooks/useMounted'
+export * from '@corelive/live-editor/hooks/use-mounted'

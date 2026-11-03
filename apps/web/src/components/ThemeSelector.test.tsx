@@ -4,12 +4,17 @@
  * Driven through the REAL ThemeProvider (no next-themes mock) so the stored
  * theme id decides which palette is active, exactly as in the app.
  */
+import { ThemeSelector } from '@corelive/live-editor/ui/ThemeSelector'
 import { render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, test } from 'vitest'
 
+import { useNextThemesPersistence } from '@/hooks/useThemeAxis'
 import { ThemeProvider } from '@/providers/ThemeProvider'
 
-import { ThemeSelector } from './ThemeSelector'
+/** Mounts the shared picker on the web's next-themes adapter. */
+const WebThemeSelector = function WebThemeSelector() {
+  return <ThemeSelector persistence={useNextThemesPersistence()} />
+}
 
 const STORAGE_KEY = 'corelive-theme'
 const HINT =
@@ -20,7 +25,7 @@ const renderWithStoredTheme = async (stored: string): Promise<void> => {
   window.localStorage.setItem(STORAGE_KEY, stored)
   render(
     <ThemeProvider>
-      <ThemeSelector />
+      <WebThemeSelector />
     </ThemeProvider>,
   )
   await waitFor(() =>

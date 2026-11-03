@@ -24,6 +24,7 @@ const requestSchema = z.object({
   requestId: z.uuid(),
   generation: z.number().int().nonnegative(),
   expectedAccountId: z.string().min(1).nullable(),
+  action: z.literal('sign-out').optional(),
 })
 const resultSchema = z.discriminatedUnion('status', [
   requestSchema.extend({
@@ -88,26 +89,57 @@ export class TokenBroker {
     expectedAccountId: string | null,
     generation: number,
   ): Promise<BrokerOutcome> {
+    // Never join a sign-out challenge: its outcome is `signed-out`, not an identity answer.
     if (
+      this.pending?.request.action !== 'sign-out' &&
       this.pending?.request.expectedAccountId === expectedAccountId &&
       this.pending.request.generation === generation
     ) {
       return this.pending.promise
     }
-    this.finish({ status: 'unavailable' })
-    const request: OfflineAuthRequest = {
+    return this.begin({
       requestId: randomUUID(),
       generation,
       expectedAccountId,
-    }
+    })
+  }
+
+  /**
+   * Asks the hidden document to sign out of Clerk (D3 step 3, best effort). It returns
+   * `skipped` on timeout, offline state or any failure and never throws, so a failed revoke
+   * can never block the local sign-out that follows.
+   * @param generation - The editor generation, only to correlate the reply.
+   * @param timeoutMs - Hard bound for the whole round trip (5 s in production).
+   * @returns `revoked` when Clerk confirmed, otherwise `skipped`.
+   * @example await broker.revoke(generation, 5000)
+   */
+  async revoke(
+    generation: number,
+    timeoutMs: number,
+  ): Promise<'revoked' | 'skipped'> {
+    const outcome = await this.begin(
+      {
+        requestId: randomUUID(),
+        generation,
+        expectedAccountId: null,
+        action: 'sign-out',
+      },
+      timeoutMs,
+    )
+    return outcome.status === 'signed-out' ? 'revoked' : 'skipped'
+  }
+
+  /** Starts one challenge and wires its deadline; {@link acquire} and {@link revoke} share it. */
+  private async begin(
+    request: OfflineAuthRequest,
+    timeoutMs = this.options.timeoutMs ?? 15000,
+  ): Promise<BrokerOutcome> {
+    this.finish({ status: 'unavailable' })
     let settle: Pending['resolve'] = () => undefined
     const promise = new Promise<BrokerOutcome>((resolve) => {
       settle = resolve
     })
-    const timeout = setTimeout(
-      () => this.reset(),
-      this.options.timeoutMs ?? 15000,
-    )
+    const timeout = setTimeout(() => this.reset(), timeoutMs)
     timeout.unref?.()
     this.pending = { request, promise, resolve: settle, timeout }
     try {
@@ -178,6 +210,7 @@ export class TokenBroker {
       if (
         result.requestId !== expected.requestId ||
         result.generation !== expected.generation ||
+        result.action !== expected.action ||
         result.expectedAccountId !== expected.expectedAccountId
       )
         return false

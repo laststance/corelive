@@ -24,23 +24,22 @@ import {
   type LiveEditorShortcutId,
 } from '@corelive/desktop-contract/constants'
 import type { AuthUserPayload } from '@corelive/desktop-contract/ipc'
+import type { SignOutResult } from '@corelive/desktop-contract/offline-account'
 import {
   app,
   BrowserWindow,
   dialog,
+  net,
   session,
   powerMonitor,
   protocol,
 } from 'electron'
-import type {
-  WebContents,
-  Event as ElectronEvent,
-  IpcMainInvokeEvent,
-} from 'electron'
+import type { WebContents, Event as ElectronEvent } from 'electron'
 
 import type { AutoUpdater as AutoUpdaterType } from './AutoUpdater'
 import { ConfigManager } from './ConfigManager'
 import type { DeepLinkManager as DeepLinkManagerType } from './DeepLinkManager'
+import { applyDevUserData } from './devUserData'
 import { isRendererReadableConfigPath } from './ipc/ipc-schemas'
 import { registerAuthHandlers } from './ipc/registerAuthHandlers'
 import { typedHandle } from './ipc/typedHandle'
@@ -54,6 +53,7 @@ import { createOfflineEditor } from './offline/createOfflineEditor'
 import {
   isLocalEditorDocument,
   isLocalEditorURL,
+  isLocalSettingsDocument,
   LOCAL_EDITOR_SCHEME,
 } from './offline/localEditorOrigin'
 import {
@@ -77,6 +77,8 @@ import { openConfigFile } from './utils/openConfigFile'
 import {
   HIDE_APP_ICON_CONFIG_PATH,
   resolveHideAppIcon,
+  resolveShowInMenuBar,
+  SHOW_IN_MENU_BAR_CONFIG_PATH,
 } from './utils/resolveHideAppIcon'
 import { WindowManager } from './WindowManager'
 import { WindowStateManager } from './WindowStateManager'
@@ -120,6 +122,9 @@ try {
 if (remoteDebuggingPort) {
   app.commandLine.appendSwitch('remote-debugging-port', remoteDebuggingPort)
 }
+
+// EA10: a dev or QA run uses its own userData folder. Must stay before `ready`.
+applyDevUserData(app)
 
 // ============================================================================
 // Environment Flags
@@ -342,16 +347,16 @@ function ensureDeepLinkManager(): DeepLinkManagerType | null {
 /**
  * Sets the currently authenticated user.
  *
- * In WebView architecture, authentication is handled by the web app (Clerk).
- * This function simply stores the user info for Electron-side features
- * (e.g., displaying in menu, notifications).
+ * The editor and Settings are bundled and need no account. Sign-in is handled
+ * by the remote login window (Clerk); this function only stores the user info
+ * for Electron-side features (e.g., displaying in menu, notifications). The
+ * attached account itself is decided by the verified identity, not this payload.
  *
  * @param userPayload - User data from Clerk authentication
  * @returns The active user object
  */
 async function setActiveUser(
   userPayload: AuthUserPayload,
-  event: IpcMainInvokeEvent,
 ): Promise<AuthUserPayload> {
   // Validate payload to prevent security issues
   if (!userPayload || typeof userPayload !== 'object' || !userPayload.clerkId) {
@@ -364,10 +369,8 @@ async function setActiveUser(
     emailAddresses: userPayload.emailAddresses || [],
     firstName: userPayload.firstName || null,
   }
-  offlineEditor?.controller.authenticated(
-    activeUser.clerkId,
-    event.sender === windowManager.getLoginWindow()?.webContents,
-  )
+  // The payload is only a trigger; the controller verifies the account itself (EA2).
+  void offlineEditor?.controller.authenticated(activeUser.clerkId)
   return activeUser
 }
 
@@ -606,6 +609,9 @@ async function loadSystemIntegrationStack(): Promise<void> {
   )
   await systemIntegrationErrorHandler.initializeSystemIntegration()
   log.info('✅ [DEFERRED] System integration initialized')
+  // Boot always builds the tray; a persisted "off" choice hides it right after (#216 D5).
+  if (configManager && !resolveShowInMenuBar(configManager))
+    await systemTrayManager?.setMenuBarVisible(false)
 }
 
 /**
@@ -632,6 +638,26 @@ async function loadDeepLinkStack(): Promise<void> {
       log.warn('⚠️ Failed to process pending deep link URL', error)
     }
   }, 1000)
+}
+
+/**
+ * The one sign-out implementation (C23): `auth-logout` (login window) and the Settings
+ * `account.signOut` / `account.notNow` capabilities all run D3 steps 1-4 through here.
+ * A failed disk flush cancels the sign-out and keeps the editor up for Retry/Copy (step 1).
+ * @param run - The controller operation to run (`signOut` or `notNow`).
+ * @returns The controller's result; `flush-failed` leaves the active user untouched.
+ * @example const result = await signOutDevice(() => controller.signOut())
+ */
+async function signOutDevice(
+  run: () => Promise<SignOutResult>,
+): Promise<SignOutResult> {
+  const result = await run()
+  if (result.status === 'flush-failed') {
+    windowManager.showLiveEditor()
+    return result
+  }
+  activeUser = null
+  return result
 }
 
 async function createWindow(): Promise<void> {
@@ -676,6 +702,7 @@ async function createWindow(): Promise<void> {
       windowManager,
       configManager,
       mainDirectory,
+      { signOutDevice, isOnline: () => net.isOnline() },
     )
     setupIPCHandlers()
     // Local readiness is read from disk; optional authentication/sync never blocks startup.
@@ -1132,12 +1159,10 @@ function setupIPCHandlers(): void {
     getActiveUser: () => activeUser,
     setActiveUser,
     clearActiveUser: async () => {
-      if (!offlineEditor || !(await offlineEditor.controller.signOut())) {
-        windowManager.showLiveEditor()
-        return false
-      }
-      activeUser = null
-      return true
+      const result = await signOutDevice(async () =>
+        offlineEditor!.controller.signOut(),
+      )
+      return result.status !== 'flush-failed'
     },
     authorize: (event) =>
       Boolean(offlineEditor && isTrustedAuthSender(event, windowManager)),
@@ -1186,12 +1211,9 @@ function setupIPCHandlers(): void {
     }
   })
 
-  // Show in Menu Bar IPC handler — shows/hides the tray (menu-bar) icon. Boot
-  // always (re)creates the tray (SystemIntegrationErrorHandler), but the
-  // renderer's ElectronStartupSync re-pushes the persisted Redux/localStorage
-  // value at every launch, so an "off" choice survives restarts: the tray
-  // appears at boot, then the startup sync hides it (the same correct-after-
-  // boot pattern as setHideAppIcon). See SystemTrayManager.setMenuBarVisible.
+  // Show in Menu Bar IPC handler — shows/hides the tray (menu-bar) icon and persists the
+  // choice in `behavior.showInMenuBar`; boot hides the freshly created tray again when the
+  // stored value is false (resolveShowInMenuBar). See SystemTrayManager.setMenuBarVisible.
   typedHandle('settings:setShowInMenuBar', async (_event, show) => {
     try {
       if (!systemTrayManager) {
@@ -1199,6 +1221,8 @@ function setupIPCHandlers(): void {
         return false
       }
       const didApply = await systemTrayManager.setMenuBarVisible(show)
+      // Persist only a choice that actually applied, so the toggle stays truthful after a restart.
+      if (didApply) configManager?.set(SHOW_IN_MENU_BAR_CONFIG_PATH, show)
       log.info(
         `settings:setShowInMenuBar - Menu bar ${show ? 'shown' : 'hidden'}: ${didApply}`,
       )
@@ -1582,6 +1606,43 @@ app.on('before-quit', (event) => {
 })
 
 /**
+ * Decides whether a window's web contents may navigate or redirect to a URL.
+ *
+ * Exists so the `will-navigate` / `will-redirect` guard in the
+ * `web-contents-created` handler stays flat: external documents must never
+ * inherit the native preload capabilities of the bundled or login windows.
+ *
+ * @param contents - The web contents attempting to navigate.
+ * @param navigationUrl - The destination URL.
+ * @param isMainFrame - `false` for iframe requests reported by redirect events.
+ * @returns `true` when the navigation may proceed, `false` when it must be blocked.
+ * @example
+ * isNavigationAllowed(editorContents, 'https://evil.example/') // => false
+ */
+function isNavigationAllowed(
+  contents: WebContents,
+  navigationUrl: string,
+  isMainFrame: boolean | undefined,
+): boolean {
+  // Each bundled window may only stay on its own document (D5, EA16): identity, then exact path.
+  if (contents === windowManager?.getLiveEditorWindow()?.webContents) {
+    return isLocalEditorDocument(navigationUrl)
+  }
+  if (contents === windowManager?.getSettingsWindow()?.webContents) {
+    return isLocalSettingsDocument(navigationUrl)
+  }
+  // Redirect events include iframe requests; Clerk's isolated frames do not receive preload APIs.
+  if (isMainFrame === false) return true
+  const appOrigin =
+    windowManager?.getWebAppOrigin() ??
+    (isDev ? 'http://localhost:4991' : 'https://corelive.app')
+  return (
+    isTrustedAppNavigation(navigationUrl, appOrigin) ||
+    isTrustedClerkHandshake(navigationUrl, appOrigin)
+  )
+}
+
+/**
  * Web content security handler.
  *
  * This is a critical security boundary. Every web page (renderer process)
@@ -1650,20 +1711,9 @@ app.on('web-contents-created', (_event, contents: WebContents) => {
     _isInPlace?: boolean,
     isMainFrame?: boolean,
   ): void => {
-    if (contents === windowManager?.getLiveEditorWindow()?.webContents) {
-      if (!isLocalEditorDocument(navigationUrl)) event.preventDefault()
-      return
-    }
-    // Redirect events include iframe requests; Clerk's isolated frames do not receive preload APIs.
-    if (isMainFrame === false) return
-    const appOrigin =
-      windowManager?.getWebAppOrigin() ??
-      (isDev ? 'http://localhost:4991' : 'https://corelive.app')
-    if (
-      !isTrustedAppNavigation(navigationUrl, appOrigin) &&
-      !isTrustedClerkHandshake(navigationUrl, appOrigin)
-    )
+    if (!isNavigationAllowed(contents, navigationUrl, isMainFrame)) {
       event.preventDefault()
+    }
   }
   contents.on('will-navigate', guardNavigation)
   contents.on('will-redirect', guardNavigation)

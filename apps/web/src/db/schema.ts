@@ -9,6 +9,7 @@
  *
  * @module db/schema
  */
+import type { SyncOutcome } from '@corelive/desktop-contract/category-sync'
 import type { CompletionSyncReceipt } from '@corelive/desktop-contract/offline-workspace'
 import { sql } from 'drizzle-orm'
 import {
@@ -243,8 +244,14 @@ export const completionSyncStateTable = pgTable(
   ],
 )
 
-/** Immutable operation evidence prevents replay after response loss or late cancellation. */
-export const completionSyncReceiptTable = pgTable(
+/**
+ * Immutable operation evidence prevents replay after response loss or late cancellation.
+ *
+ * One physical table (`CompletionSyncReceipt`, EA6: never renamed, no backfill) holds completion and
+ * category receipts. Completion rows predate `kind` and stay without it; the tolerant
+ * `SyncOutcomeSchema` reads a missing `kind` as `completion`.
+ */
+export const syncReceiptTable = pgTable(
   'CompletionSyncReceipt',
   {
     userId: integer('userId')
@@ -252,33 +259,12 @@ export const completionSyncReceiptTable = pgTable(
       .references(() => userTable.id, { onDelete: 'cascade' }),
     operationId: text('operationId').notNull(),
     payloadDigest: text('payloadDigest').notNull(),
-    outcome: jsonb('outcome').$type<CompletionSyncReceipt>().notNull(),
+    outcome: jsonb('outcome')
+      .$type<SyncOutcome | CompletionSyncReceipt>()
+      .notNull(),
     createdAt: createdAtColumn(),
   },
   (table) => [primaryKey({ columns: [table.userId, table.operationId] })],
-)
-
-export const electronSettingsTable = pgTable(
-  'ElectronSettings',
-  {
-    id: serial('id').primaryKey(),
-    userId: integer('userId').notNull(),
-    hideAppIcon: boolean('hideAppIcon').default(false).notNull(),
-    showInMenuBar: boolean('showInMenuBar').default(true).notNull(),
-    startAtLogin: boolean('startAtLogin').default(false).notNull(),
-    createdAt: createdAtColumn(),
-    updatedAt: updatedAtColumn(),
-  },
-  (table) => [
-    uniqueIndex('ElectronSettings_userId_key').on(table.userId),
-    foreignKey({
-      columns: [table.userId],
-      foreignColumns: [userTable.id],
-      name: 'ElectronSettings_userId_fkey',
-    })
-      .onUpdate('cascade')
-      .onDelete('restrict'),
-  ],
 )
 
 export const skillTreeTable = pgTable(

@@ -1,6 +1,6 @@
 'use client'
 
-import { useSession } from '@clerk/nextjs'
+import { useClerk, useSession } from '@clerk/nextjs'
 import type { OfflineAuthRequest } from '@corelive/desktop-contract/offline-auth'
 
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
@@ -14,6 +14,7 @@ import { useCycleEffect } from '@/hooks/use-cycle-effect'
  */
 export default function DesktopAuthPage(): null {
   const { isLoaded, session } = useSession()
+  const clerk = useClerk()
   useCycleEffect(() => {
     const bridge = window.coreliveOfflineAuth
     if (!isLoaded || !bridge) return
@@ -23,6 +24,24 @@ export default function DesktopAuthPage(): null {
       if (running.has(request.requestId)) return
       running.add(request.requestId)
       try {
+        // D3 step 3: the desktop asked for a best-effort remote sign-out.
+        if (request.action === 'sign-out') {
+          // Ending the session re-runs this effect and disposes it, but main still awaits one reply.
+          const signedOut = await clerk
+            .signOut({ redirectUrl: window.location.pathname })
+            .then(
+              () => true,
+              () => false,
+            )
+          await bridge
+            .respond(
+              signedOut
+                ? { ...request, status: 'signed-out' }
+                : { ...request, status: 'unavailable' },
+            )
+            .catch(() => undefined)
+          return
+        }
         if (
           !session ||
           (request.expectedAccountId &&
@@ -63,6 +82,6 @@ export default function DesktopAuthPage(): null {
       disposed = true
       unsubscribe()
     }
-  }, [isLoaded, session])
+  }, [clerk, isLoaded, session])
   return null
 }

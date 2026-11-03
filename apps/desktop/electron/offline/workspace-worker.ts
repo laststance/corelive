@@ -1,15 +1,28 @@
+import { randomUUID } from 'node:crypto'
 import { parentPort, workerData } from 'node:worker_threads'
 
 import {
+  DEVICE_ARCHIVE_FILE_NAME,
+  DEVICE_OWNER_ID,
+  DEVICE_WORKSPACE_FILE_NAME,
   OfflineWorkspaceSchema,
+  type OfflineWorkspace,
+  validateWorkspaceChange,
+  WorkspaceArchiveSchema,
   type WorkspaceCommand,
-} from '@corelive/desktop-contract/offline-workspace'
+} from '@corelive/desktop-contract/offline-workspace-v2'
 import { z } from 'zod'
 
 import { AtomicWorkspaceFile, WorkspaceFileError } from './AtomicWorkspaceFile'
 import {
+  buildOperation,
+  outboxByCompletion,
+  uploadKind,
+} from './completionUpload'
+import {
   eligibleUndo,
   workspaceView,
+  type WorkspaceView,
   type WorkspaceWorkerRequest,
   type WorkspaceWorkerCalls,
 } from './workspace-worker-protocol'
@@ -21,70 +34,246 @@ import {
 } from './WorkspaceService'
 
 const options = z
-  .object({ directory: z.string(), ownerId: z.string().min(1) })
+  .object({ directory: z.string(), ownerId: z.literal(DEVICE_OWNER_ID) })
   .parse(workerData as unknown)
 const file = new AtomicWorkspaceFile({
   directory: options.directory,
   ownerId: options.ownerId,
+  fileName: DEVICE_WORKSPACE_FILE_NAME,
   parse: (value) => {
     const state = OfflineWorkspaceSchema.parse(value)
-    if (state.ownerId !== options.ownerId)
+    // The worker accepts only the device workspace (D1).
+    if (state.ownerId !== DEVICE_OWNER_ID)
       throw new WorkspaceFileError('invalid')
     return state
   },
+  // Commands change a few entries; only those are re-validated (#216 perf gate).
+  validateChange: validateWorkspaceChange,
 })
-const service = new WorkspaceService(file)
+const archive = new AtomicWorkspaceFile({
+  directory: options.directory,
+  ownerId: options.ownerId,
+  fileName: DEVICE_ARCHIVE_FILE_NAME,
+  parse: WorkspaceArchiveSchema.parse,
+})
+const service = new WorkspaceService(file, Date.now, randomUUID, archive)
+/** Quiet period before the archive roll, so it never lands inside a keep. */
+const ARCHIVE_IDLE_MS = 1500
+let archivedDay: string | null = null
+let archiveTimer: ReturnType<typeof setTimeout> | undefined
+
+/**
+ * Schedules one archive roll per local day (and one at startup), after a quiet period.
+ * `force` adds a roll when an upload drain moved many records back out of the archive.
+ * Failures only delay the roll: the workspace keeps every record until it is archived.
+ *
+ * @example scheduleArchive()
+ */
+function scheduleArchive(force = false): void {
+  const day = new Date().toDateString()
+  if ((archivedDay === day && !force) || archiveTimer) return
+  archiveTimer = setTimeout(() => {
+    archiveTimer = undefined
+    service.archiveSettled().then(
+      () => {
+        archivedDay = day
+      },
+      () => undefined,
+    )
+  }, ARCHIVE_IDLE_MS)
+  archiveTimer.unref()
+}
+/**
+ * Projects a workspace for the renderer, counting never-uploaded archived keeps as waiting.
+ *
+ * @param state - A committed workspace.
+ * @returns The bounded view.
+ * @example return view(await service.clearDue())
+ */
+function view(state: OfflineWorkspace): WorkspaceView {
+  return workspaceView(state, service.archivedPendingCount())
+}
 const pageSchema = z.object({
   offset: z.number().int().nonnegative(),
   limit: z.number().int().min(1).max(100),
 })
 
+/** Narrows {@link WorkspaceWorkerRequest} to the requests of the given types. */
+type RequestOf<Type extends WorkspaceWorkerRequest['type']> = Extract<
+  WorkspaceWorkerRequest,
+  { type: Type }
+>
+
+type CategorySyncType =
+  | 'reconcile'
+  | 'categoryPending'
+  | 'markCategorySent'
+  | 'categoryReceipts'
+  | 'noteCategoryQuery'
+  | 'parkCategory'
+type ReadType =
+  | 'draft'
+  | 'pendingTotal'
+  | 'syncDetails'
+  | 'binding'
+  | 'localCategory'
+  | 'pending'
+  | 'details'
+  | 'tracked'
+type HistoryType =
+  'recoveryCopies' | 'undoHistory' | 'export' | 'previewRecovery' | 'recover'
+
 /** Executes trusted main-process requests in the same process's dedicated storage thread.
  * Domain commands and persisted inputs still cross runtime validation boundaries.
+ * Lifecycle, command and sync-receipt requests are handled here; the rest are delegated by
+ * family to keep each switch small.
  * @example const result = await dispatch(request)
  */
 async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
   switch (request.type) {
-    case 'open':
-      return workspaceView(await service.clearDue())
+    case 'open': {
+      // Files written before uploads were derived may hold never-sent entries (#216 D1).
+      await service.dropDerivableEntries()
+      const opened = view(await service.clearDue())
+      scheduleArchive()
+      return opened
+    }
+    case 'archive':
+      return { archived: await service.archiveSettled() }
     case 'clearDue':
-      return workspaceView(await service.clearDue())
-    case 'prepare':
-      return prepareWorkspace(request.input)
-    case 'command':
-      return executeCommand(request.input)
-    case 'draft':
-      return readDraft(request.input.categoryId)
-    case 'markSent':
-      return workspaceView(await service.markSent(request.input.operationId))
+      return view(await service.clearDue())
+    case 'command': {
+      const result = await executeCommand(request.input)
+      scheduleArchive()
+      return result
+    }
     case 'markSentBatch': {
-      const state = await service.markSentBatch(request.input.operationIds)
-      return request.input.operationIds.flatMap((id) =>
-        state.outbox[id]?.state === 'sent' ? [state.outbox[id]] : [],
+      const sent = await service.markSentBatch(
+        request.input.accountId,
+        request.input.limit,
       )
+      // Records moved back from the archive for upload leave the keep path again soon.
+      if (service.needsArchiveRoll()) scheduleArchive(true)
+      return sent
     }
     case 'receipts':
-      return workspaceView(
+      return view(
         await service.acceptReceipts(
-          request.input.ownerId,
+          request.input.accountId,
           request.input.receipts,
         ),
       )
-    case 'receipt':
-      return workspaceView(
-        await service.acceptReceipt(
-          request.input.ownerId,
-          request.input.receipt,
+    case 'markSynced':
+      return view(
+        await service.markSynced(request.input.accountId, request.input.at),
+      )
+    case 'checkpoint': {
+      const state = await service.checkpoint(
+        request.input.accountId,
+        request.input.expectedRevision,
+        request.input.checkpoint,
+      )
+      return view(state)
+    }
+    default:
+      return dispatchCategorySync(request)
+  }
+}
+
+/** Category reconcile and outbox requests used by the sync loop (EA4, C19).
+ * @example const result = await dispatchCategorySync(request)
+ */
+async function dispatchCategorySync(
+  request: RequestOf<CategorySyncType | ReadType | HistoryType>,
+): Promise<unknown> {
+  switch (request.type) {
+    case 'reconcile':
+      return view(await service.reconcileCategories(request.input))
+    case 'categoryPending':
+      return service.categoryPending(request.input.limit)
+    case 'markCategorySent':
+      return service.markCategorySent(
+        request.input.accountId,
+        request.input.operationIds,
+      )
+    case 'categoryReceipts':
+      return view(
+        await service.acceptCategoryReceipts(
+          request.input.accountId,
+          request.input.receipts,
         ),
       )
-    case 'categories':
-      return workspaceView(
-        await service.refreshCategories(
-          request.input.categories,
-          request.input.deletions,
-          request.input.legacyNotes,
+    case 'noteCategoryQuery':
+      return view(
+        await service.noteCategoryQuery(
+          request.input.accountId,
+          request.input.operationIds,
         ),
       )
+    case 'parkCategory':
+      return view(
+        await service.parkCategory(
+          request.input.accountId,
+          request.input.operationIds,
+        ),
+      )
+    default:
+      return dispatchRead(request)
+  }
+}
+
+/** Side-effect-free reads of drafts, bindings, pending work and details.
+ * @example const result = await dispatchRead(request)
+ */
+async function dispatchRead(
+  request: RequestOf<ReadType | HistoryType>,
+): Promise<unknown> {
+  switch (request.type) {
+    case 'draft':
+      return readDraft(request.input.categoryId)
+    case 'pendingTotal':
+      return service.pendingTotal()
+    case 'syncDetails':
+      return service.syncDetails()
+    case 'binding': {
+      const { binding } = await file.read()
+      return binding
+        ? {
+            accountId: binding.accountId,
+            displayEmail: binding.displayEmail,
+            lastSyncedAt: binding.lastSyncedAt,
+          }
+        : null
+    }
+    case 'localCategory': {
+      const { binding } = await file.read()
+      const entry = Object.entries(binding?.serverCategoryIds ?? {}).find(
+        ([, serverId]) => serverId === request.input.serverId,
+      )
+      return entry?.[0] ?? null
+    }
+    case 'pending':
+      return service.pendingWork(
+        z.number().int().min(1).max(100).parse(request.input.limit),
+      )
+    case 'details':
+      return readDetails(request.input)
+    case 'tracked': {
+      const state = await file.read()
+      return checkpointIdentities(state, Date.now())
+    }
+    default:
+      return dispatchHistory(request)
+  }
+}
+
+/** Paged history, export and recovery requests.
+ * @example const result = await dispatchHistory(request)
+ */
+async function dispatchHistory(
+  request: RequestOf<HistoryType>,
+): Promise<unknown> {
+  switch (request.type) {
     case 'recoveryCopies': {
       const { offset, limit } = pageSchema.parse(request.input)
       const state = await file.read()
@@ -96,18 +285,6 @@ async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
         copies: copies.slice(offset, offset + limit),
       }
     }
-    case 'pending': {
-      const state = await file.read()
-      const limit = z.number().int().min(1).max(100).parse(request.input.limit)
-      return Object.values(state.outbox)
-        .filter((entry) => entry.state !== 'blocked')
-        .sort(
-          (left, right) =>
-            Number(right.operation.kind === 'cancel') -
-            Number(left.operation.kind === 'cancel'),
-        )
-        .slice(0, limit)
-    }
     case 'undoHistory': {
       const { offset, limit } = pageSchema.parse(request.input)
       const completions = eligibleUndo(await file.read())
@@ -116,30 +293,17 @@ async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
         completions: completions.slice(offset, offset + limit),
       }
     }
-    case 'details':
-      return readDetails(request.input)
-    case 'tracked': {
-      const state = await file.read()
-      return checkpointIdentities(state, Date.now())
-    }
-    case 'checkpoint': {
-      const state = await service.checkpoint(
-        request.input.expectedRevision,
-        request.input.checkpoint,
-      )
-      return workspaceView(state)
-    }
     case 'export':
       return exportWriting()
     case 'previewRecovery': {
       const preview = await file.previewRecoveryInfo()
       return {
-        workspace: workspaceView(preview.workspace),
+        workspace: view(preview.workspace),
         savedAt: preview.savedAt,
       }
     }
     case 'recover':
-      return workspaceView(
+      return view(
         await file.restoreRecovery((current) => ({
           ...current,
           revision: current.revision + 1,
@@ -162,36 +326,51 @@ async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
  * @example const json = await exportWriting()
  */
 async function exportWriting(): Promise<string> {
+  let workspace
   try {
-    return JSON.stringify(await file.read(), null, 2)
+    workspace = await file.read()
   } catch (error) {
     if (!(error instanceof WorkspaceFileError)) throw error
     return file.exportRecoveryFiles()
   }
-}
-
-/** Validates main's account identity before first workspace initialization.
- * @example await prepareWorkspace(input)
- */
-async function prepareWorkspace(
-  input: WorkspaceWorkerCalls['prepare']['input'],
-): Promise<WorkspaceWorkerCalls['prepare']['output']> {
-  if (input.ownerId !== options.ownerId) throw new WorkspaceFileError('invalid')
-  return workspaceView(await service.prepare(input))
+  // C28/C29: settled history lives in the archive file and must travel with the export.
+  try {
+    const archived = await archive.read()
+    if (
+      Object.keys(archived.completions).length ||
+      Object.keys(archived.retiredCompletions).length
+    )
+      return JSON.stringify({ ...workspace, archive: archived }, null, 2)
+  } catch (error) {
+    if (!(error instanceof WorkspaceFileError)) throw error
+    // A missing archive is normal; an unreadable one is exported as raw files, never dropped.
+    if (error.reason === 'invalid')
+      return JSON.stringify(
+        {
+          ...workspace,
+          archiveRecoveryFiles: JSON.parse(
+            await archive.exportRecoveryFiles(),
+          ) as unknown,
+        },
+        null,
+        2,
+      )
+  }
+  return JSON.stringify(workspace, null, 2)
 }
 
 /** Reads the owned effective category draft without changing the selection.
  * @example await readDraft(categoryId)
  */
 async function readDraft(
-  requestedCategoryId: number,
+  requestedCategoryId: string,
 ): Promise<WorkspaceWorkerCalls['draft']['output']> {
   const state = await file.read()
   const categoryId = effectiveCategory(
     state,
-    z.number().int().positive().parse(requestedCategoryId),
+    z.uuid().parse(requestedCategoryId),
   )
-  const draft = state.drafts[String(categoryId)]
+  const draft = state.drafts[categoryId]
   if (!draft) throw new WorkspaceCommandError('category-unavailable')
   return { categoryId, draft }
 }
@@ -213,9 +392,9 @@ async function executeCommand(
           ? command.destinationId
           : state.selectedCategoryId
   const categoryId = effectiveCategory(state, affected)
-  const draft = state.drafts[String(categoryId)]
+  const draft = state.drafts[categoryId]
   if (!draft) throw new WorkspaceCommandError('category-unavailable')
-  return { ...workspaceView(state), writtenDraft: { categoryId, draft } }
+  return { ...view(state), writtenDraft: { categoryId, draft } }
 }
 
 /** Returns one page of distinct completion identities, prioritizing records that need repair.
@@ -231,6 +410,23 @@ async function readDetails(
     const previous = latest.get(entry.operation.completionId)
     if (!previous || previous.operation.revision < entry.operation.revision)
       latest.set(entry.operation.completionId, entry)
+  }
+  // Keeps that wait for the dashboard have no outbox entry (uploads are derived, #216 D1); they
+  // are listed as queued rows keyed by the completion id, which is not a real operation id.
+  const grouped = outboxByCompletion(state)
+  for (const completion of Object.values(state.completions)) {
+    if (latest.has(completion.id)) continue
+    const kind = uploadKind(completion, grouped.get(completion.id) ?? [])
+    if (kind)
+      latest.set(completion.id, {
+        state: 'queued',
+        operation: buildOperation(
+          state.deviceId,
+          completion,
+          kind,
+          completion.id,
+        ),
+      })
   }
   const entries = [...latest.values()].sort(
     (left, right) =>
@@ -265,6 +461,9 @@ parentPort?.on('message', (request: WorkspaceWorkerRequest) => {
         requestId: request.requestId,
         ok: false,
         reason,
+        ...(error instanceof WorkspaceCommandError && error.detail
+          ? { detail: error.detail }
+          : {}),
       })
     },
   )

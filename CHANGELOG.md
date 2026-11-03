@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.30.0] - 2026-11-03
+
+### Added
+
+- The desktop LiveEditor works without an account. Open the app and start writing, even offline; your writing and the lines you check off are saved on this Mac.
+- Settings is now part of the desktop app, so it opens without a connection. Its new Account section, at the end, is where you sign in, connect this Mac to your account and sign out.
+- After you connect a Mac, the lines you finished on it go to your dashboard, and Account tells you how many are there. Lines you check off while offline wait and go up when you are back online.
+- Category changes you make in the desktop app work offline and reach the dashboard after you connect this Mac. When the dashboard disagrees with a change, Sync details lists it under "Needs a look" so you can keep the Mac's version or the dashboard's.
+
+### Changed
+
+- Signing out of the desktop app keeps your writing on this Mac, and the editor stays open for writing. If some sign-in data can't be cleared, Account says so and offers Clear again.
+- The first time you open this version, your existing desktop writing moves into the new on-Mac workspace by itself. The old files stay as backups, and Sync details lists them.
+- Category names on corelive.app follow the same rules as the desktop app: names that differ only in how their characters are encoded count as the same name.
+- Settings on corelive.app now holds only Appearance. Desktop app preferences are in the desktop app's own Settings window.
+
 ## [0.29.0] - 2026-11-03
 
 ### Changed

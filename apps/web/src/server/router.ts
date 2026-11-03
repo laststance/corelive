@@ -1,9 +1,14 @@
+import { whoami } from './procedures/account'
 import {
   listCategories,
   createCategory,
   updateCategory,
   deleteCategory,
 } from './procedures/category'
+import {
+  syncCategoryApply,
+  syncCategoryReceipts,
+} from './procedures/categorySync'
 import { getDayDetail, getHeatmap, getJournal } from './procedures/completed'
 import {
   syncApply,
@@ -11,10 +16,6 @@ import {
   syncCheckpoint,
   syncReceipts,
 } from './procedures/completionSync'
-import {
-  getElectronSettings,
-  upsertElectronSettings,
-} from './procedures/electronSettings'
 import { bootstrapHome } from './procedures/home'
 import {
   assignTask,
@@ -24,6 +25,9 @@ import {
 } from './procedures/skillTree'
 
 export const router = {
+  account: {
+    whoami,
+  },
   home: {
     bootstrap: bootstrapHome,
   },
@@ -32,6 +36,8 @@ export const router = {
     create: createCategory,
     update: updateCategory,
     delete: deleteCategory,
+    syncApply: syncCategoryApply,
+    syncReceipts: syncCategoryReceipts,
   },
   completed: {
     syncApply,
@@ -41,10 +47,6 @@ export const router = {
     heatmap: getHeatmap,
     dayDetail: getDayDetail,
     journal: getJournal,
-  },
-  electronSettings: {
-    get: getElectronSettings,
-    upsert: upsertElectronSettings,
   },
   skillTree: {
     getMyTree,

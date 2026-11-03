@@ -35,7 +35,7 @@ function createCodeInspectorOptions(bundler) {
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Keep workspace TypeScript exports explicit for both supported dev/build bundlers.
-  transpilePackages: ['@corelive/desktop-contract'],
+  transpilePackages: ['@corelive/desktop-contract', '@corelive/live-editor'],
   images: { unoptimized: true },
   /**
    * Redirects retired URLs (the removed web LiveEditor routes and the pre-rename Electron routes) to their canonical replacement.

@@ -88,8 +88,9 @@ test.each([
     const result = runQaBrowser(args)
 
     // Assert
-    expect(result.status).toBe(1)
+    expect(result.status).toBe(2)
     expect(result.stdout).toBe('')
+    expect(result.stderr).toContain('(QA_BROWSER_ARG_REJECTED)')
     expect(result.stderr).toContain('one isolated headless session')
   },
 )
@@ -143,4 +144,15 @@ test('removes inherited inspector and remote-browser overrides before spawning t
   // Assert
   expect(result.status).toBe(0)
   expect(output.overrides).toEqual([])
+})
+
+test('names the rejected -s argument in the DX12 rejection line', () => {
+  // Arrange + Act
+  const result = runQaBrowser(['close', '-s=owner'])
+
+  // Assert
+  expect(result.status).toBe(2)
+  expect(result.stderr).toBe(
+    'qa:browser: "-s=owner" is not supported (QA_BROWSER_ARG_REJECTED). qa:browser owns one isolated headless session; use its commands: open [url], snapshot, screenshot, click, run-code, resize, video-start, video-stop, close.\n',
+  )
 })

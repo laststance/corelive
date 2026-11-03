@@ -343,47 +343,6 @@ function CategoryCreationForm({
 }
 
 /**
- * Gives the picker a focused creation dialog without changing the manager's writing selection.
- * @example
- * <CategoryCreateDialog open categories={categories} onOpenChange={setOpen} onCreated={selectCreated} />
- */
-export function CategoryCreateDialog({
-  open,
-  onOpenChange,
-  categories,
-  initialName,
-  onCreated,
-}: CategoryManageDialogProps & {
-  categories: CategoryWithCount[]
-  initialName: string
-  onCreated: (category: CategoryWithCount) => void
-}) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        onEscapeKeyDown={(event) => {
-          if (event.isComposing || event.keyCode === 229) event.preventDefault()
-        }}
-        className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md"
-      >
-        <DialogHeader>
-          <DialogTitle>New category</DialogTitle>
-          <DialogDescription>
-            Create a main category or add a subcategory.
-          </DialogDescription>
-        </DialogHeader>
-        <CategoryCreationForm
-          categories={categories}
-          initialName={initialName}
-          onCancel={() => onOpenChange(false)}
-          onCreated={onCreated}
-        />
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-/**
  * Keeps rename, recolor and reparent changes in one retained inline editor.
  * @example
  * <CategoryEditor category={work} categories={categories} onClose={cancelEditing} />

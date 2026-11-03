@@ -23,8 +23,10 @@ vi.mock('electron', () => ({
   ipcRenderer: mockIpcRenderer,
 }))
 
-vi.stubGlobal('window', { location: { href: 'https://corelive.app/settings' } })
-await import('../preload.ts')
+vi.stubGlobal('window', {
+  location: { href: 'corelive-editor://app/settings.html' },
+})
+await import('../preload-settings.ts')
 vi.unstubAllGlobals()
 
 describe('Preload Script Security Tests', () => {

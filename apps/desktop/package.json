@@ -1,6 +1,6 @@
 {
   "name": "@corelive/desktop",
-  "version": "0.29.0",
+  "version": "0.30.0",
   "description": "CoreLive macOS desktop wrapper",
   "author": "Ryota Murakami <dojce1048@gmail.com> (https://github.com/ryota-murakami)",
   "homepage": "./",
@@ -26,6 +26,7 @@
     "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.8",
     "@types/node": "catalog:",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

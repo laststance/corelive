@@ -10,7 +10,7 @@
  * // In Server Actions or API routes
  * import { logger, createModuleLogger } from '@/lib/logger'
  *
- * const log = createModuleLogger('electronSettings')
+ * const log = createModuleLogger('todoSync')
  * log.info({ userId: '123' }, 'Settings updated')
  * log.error({ error, userId }, 'Failed to update settings')
  * // `error`, `err` and `context` pass through {@link logSerializers}: a failed query logs its
@@ -131,10 +131,10 @@ const logger = createLogger()
  * @returns Child logger with module context
  *
  * @example
- * // In lib/actions/electronSettings.ts
- * const log = createModuleLogger('electronSettings')
+ * // In lib/actions/todoSync.ts
+ * const log = createModuleLogger('todoSync')
  * log.info({ userId }, 'Settings updated')
- * // Output: { "level": "info", "module": "electronSettings", "userId": "123", "msg": "Settings updated" }
+ * // Output: { "level": "info", "module": "todoSync", "userId": "123", "msg": "Settings updated" }
  */
 export const createModuleLogger = (module: string): pino.Logger => {
   return logger.child({ module })

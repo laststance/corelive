@@ -43,8 +43,11 @@ import {
 import { log } from './logger'
 import {
   isLocalEditorDocument,
+  isLocalSettingsDocument,
   LOCAL_EDITOR_URL,
+  LOCAL_SETTINGS_URL,
 } from './offline/localEditorOrigin'
+import type { LoginWindowObserver } from './offline/SignInCoordinator'
 import { clampDimension } from './utils/clampDimension'
 import { isDevToolsEnabled } from './utils/debugMode'
 import type { WindowStateManager, WindowOptions } from './WindowStateManager'
@@ -62,6 +65,8 @@ const __dirname = path.dirname(__filename)
 interface PanelLoadRecoveryOptions {
   /** Bundled asset failures need reinstall guidance, never a connectivity instruction. */
   localEditor?: boolean
+  /** Names the bundled window in the recovery dialog (defaults to LiveEditor). */
+  localName?: string
   /** Reloads the panel route; run by each backoff retry and by the dialog's Retry button. */
   retry: () => void
   /** Run when the user picks Close in the recovery dialog. */
@@ -87,7 +92,7 @@ interface PanelLoadRecoveryOptions {
  * - Handles platform-specific window behaviors
  */
 export class WindowManager {
-  /** Fixed-size sign-in window (`/login-shell`); the only signed-out surface. */
+  /** Fixed-size sign-in window (`/login-shell`), opened from Settings ▸ Account; the editor never depends on it. */
   private loginWindow: BrowserWindow | null
 
   /**
@@ -97,6 +102,8 @@ export class WindowManager {
    * never ping-pong back into another handoff.
    */
   private loginHandoffPending: boolean
+  /** Settings sign-in coordinator hook; null when no Settings sign-in is tracked (DA6). */
+  private loginObserver: LoginWindowObserver | null = null
 
   /**
    * Per-window load-failure retry bookkeeping for {@link recoverPanelFromLoadFailure}.
@@ -376,8 +383,9 @@ export class WindowManager {
 
   /**
    * Create the login window: a fixed-size shell ({@link LOGIN_WINDOW_WIDTH_PX} ×
-   * {@link LOGIN_WINDOW_HEIGHT_PX}) that loads `/login-shell`, the only
-   * signed-out surface. Nothing about it is persisted (no config, no
+   * {@link LOGIN_WINDOW_HEIGHT_PX}) that loads the remote `/login-shell`. It is
+   * the optional sign-in surface, never a gate: the bundled editor and Settings
+   * open without an account. Nothing about it is persisted (no config, no
    * window-state); it is created hidden so callers decide when it appears.
    *
    * @returns The (possibly already-existing) login BrowserWindow.
@@ -458,6 +466,7 @@ export class WindowManager {
     loginWindow.on('closed', () => {
       log.debug('Login window closed')
       if (this.loginWindow === loginWindow) this.loginWindow = null
+      this.loginObserver?.closed()
     })
 
     loginWindow.on('ready-to-show', () => {
@@ -474,6 +483,7 @@ export class WindowManager {
       }
       log.debug('Login window content loaded')
       hasLoadedOnce = true
+      this.loginObserver?.loaded()
       this.loadRecovery.delete(loginWindow)
     })
 
@@ -492,6 +502,8 @@ export class WindowManager {
         errorPagePendingFinish = httpResponseCode >= HTTP_ERROR_STATUS_MIN
         if (!errorPagePendingFinish) return
         if (hasLoadedOnce) return
+        // A Settings-initiated sign-in reports the failure itself and closes the window (DX7).
+        if (this.loginObserver?.loadFailed()) return
         this.recoverPanelFromLoadFailure(loginWindow, {
           ...recoveryOptions,
           httpStatus: httpResponseCode,
@@ -509,6 +521,7 @@ export class WindowManager {
         // Once loaded, the live renderer owns its error UI — main-process
         // retry is only for a never-loaded (dead) window.
         if (hasLoadedOnce) return
+        if (this.loginObserver?.loadFailed()) return
         this.recoverPanelFromLoadFailure(loginWindow, recoveryOptions)
       },
     )
@@ -521,9 +534,9 @@ export class WindowManager {
   }
 
   /**
-   * Surface the login window (creating it if needed). The signed-out fallback
-   * for every LiveEditor path — called directly, never via {@link restoreFromTray},
-   * so a signed-out LiveEditor bounce cannot loop back into LiveEditor.
+   * Surface the login window (creating it if needed) when the user chooses Sign in
+   * (Settings ▸ Account). Called directly, never via {@link restoreFromTray}, so
+   * the window cannot bounce back into LiveEditor while sign-in is pending.
    *
    * @returns Nothing.
    * @example
@@ -536,6 +549,28 @@ export class WindowManager {
         : this.createLoginWindow()
     loginWindow.show()
     loginWindow.focus()
+  }
+
+  /** Whether a login window currently exists (used to decide if a load timer is needed).
+   * @example if (!windowManager.hasLoginWindow()) armTimer()
+   */
+  hasLoginWindow(): boolean {
+    return Boolean(this.loginWindow && !this.loginWindow.isDestroyed())
+  }
+
+  /** Closes the login window if open; the Settings Cancel and the unreachable outcome use it.
+   * @example windowManager.closeLoginWindow()
+   */
+  closeLoginWindow(): void {
+    if (this.loginWindow && !this.loginWindow.isDestroyed())
+      this.loginWindow.close()
+  }
+
+  /** Registers the single observer of login-window load and close events (DA6, DX7).
+   * @example windowManager.setLoginWindowObserver(observer)
+   */
+  setLoginWindowObserver(observer: LoginWindowObserver | null): void {
+    this.loginObserver = observer
   }
 
   /** Reveals the local editor after its exact login window reports a signed-in user.
@@ -640,10 +675,10 @@ export class WindowManager {
     const messageBoxOptions: Electron.MessageBoxOptions = {
       type: 'warning',
       message: options.localEditor
-        ? "Couldn't open LiveEditor"
+        ? `Couldn't open ${options.localName ?? 'LiveEditor'}`
         : "Couldn't reach corelive.app",
       detail: options.localEditor
-        ? 'The bundled editor could not be loaded. Retry, or reinstall CoreLive if this continues. Saved writing remains on this Mac.'
+        ? `The bundled ${options.localName ? 'window' : 'editor'} could not be loaded. Retry, or reinstall CoreLive if this continues. Saved writing remains on this Mac.`
         : options.httpStatus === undefined
           ? 'Check your internet connection, then try again.'
           : `corelive.app returned HTTP ${options.httpStatus}. Try again in a moment.`,
@@ -999,8 +1034,8 @@ export class WindowManager {
     this.beforeEditorHide = flush
   }
 
-  /** Refreshes cached categories after a prepared editor becomes visible.
-   * @example manager.setOnEditorShown(() => controller.retryPreparation())
+  /** Runs a callback whenever the bundled editor becomes visible, for example to refresh synced categories.
+   * @example manager.setOnEditorShown(() => controller.retrySync())
    */
   setOnEditorShown(callback: () => void): void {
     this.onEditorShown = callback
@@ -1077,8 +1112,8 @@ export class WindowManager {
 
   /**
    * Surface the app from the tray / dock / notification click / deep link:
-   * opens LiveEditor, whose auth gate re-homes a signed-out user to the login
-   * window. Shared chokepoint for every native-chrome caller that "restores the
+   * opens the bundled LiveEditor, which is always writable (no auth gate).
+   * Shared chokepoint for every native-chrome caller that "restores the
    * app". Deliberately no `hasLoginWindow()` short-circuit — this is also the
    * retry path while a login handoff is pending.
    *
@@ -1202,7 +1237,12 @@ export class WindowManager {
     // Resolve preload script path (built by electron-vite). It is packaged
     // inside `app.asar`, so resolve it relative to `__dirname`;
     // `process.resourcesPath` would miss it in production.
-    const preloadPath = path.join(__dirname, '..', 'preload', 'preload.cjs')
+    const preloadPath = path.join(
+      __dirname,
+      '..',
+      'preload',
+      'preload-settings.cjs',
+    )
 
     this.settingsWindow = new BrowserWindow({
       width: windowWidth,
@@ -1227,15 +1267,13 @@ export class WindowManager {
       hasShadow: true,
       backgroundColor: '#00000000',
       webPreferences: {
-        additionalArguments: [
-          `--corelive-app-origin=${this.getWebAppOrigin()}`,
-        ],
         nodeIntegration: false,
         contextIsolation: true,
         preload: preloadPath,
         webSecurity: true,
         allowRunningInsecureContent: false,
-        sandbox: false,
+        // The bundled Settings document runs sandboxed like the editor (D5).
+        sandbox: true,
         devTools: isDevToolsEnabled(
           this.isDev,
           this.configManager?.get('advanced.enableDevTools', false) ?? false,
@@ -1245,11 +1283,7 @@ export class WindowManager {
       show: false,
     })
 
-    // Load settings page
-    const baseUrl = this.serverUrl || 'https://corelive.app'
-    const settingsUrl = `${baseUrl}/settings`
-
-    log.debug('🔧 Loading settings URL:', settingsUrl)
+    log.debug('🔧 Loading settings URL:', LOCAL_SETTINGS_URL)
     this.watchSettingsLoad(this.settingsWindow, background)
     this.reloadSettings(this.settingsWindow)
 
@@ -1349,13 +1383,13 @@ export class WindowManager {
     }
   }
 
-  /** Reloads only the configured Settings route after a preparation timeout or explicit retry.
+  /** Reloads the bundled Settings document after a load failure or explicit retry.
    * @example this.reloadSettings(settings)
    */
   private reloadSettings(settings: BrowserWindow): void {
-    void Promise.resolve(
-      settings.loadURL(`${this.serverUrl || 'https://corelive.app'}/settings`),
-    ).catch(() => undefined)
+    void Promise.resolve(settings.loadURL(LOCAL_SETTINGS_URL)).catch(
+      () => undefined,
+    )
   }
 
   /** Keeps hidden preparation failures quiet while giving a visible Settings window Retry/Close.
@@ -1371,6 +1405,8 @@ export class WindowManager {
       this.settingsNeedsReload = true
       if (background && !settings.isVisible()) return
       this.recoverPanelFromLoadFailure(settings, {
+        localEditor: true,
+        localName: 'Settings',
         retry: () => this.reloadSettings(settings),
         dismiss: () => settings.hide(),
         parent: settings,
@@ -1386,10 +1422,13 @@ export class WindowManager {
         if (mainFrame && code !== ERR_ABORTED) fail()
       },
     )
-    settings.webContents.on('did-navigate', (_event, _url, status) => {
-      if (status >= HTTP_ERROR_STATUS_MIN) fail(status)
+    settings.webContents.on('did-navigate', (_event, url, status) => {
+      if (!isLocalSettingsDocument(url) || status >= HTTP_ERROR_STATUS_MIN)
+        fail()
     })
     settings.webContents.on('did-finish-load', () => {
+      // A finished load of any other document must not clear the failure (EA16).
+      if (!isLocalSettingsDocument(settings.webContents.getURL())) fail()
       if (failed) return
       this.settingsNeedsReload = false
       this.loadRecovery.delete(settings)

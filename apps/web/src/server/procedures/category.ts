@@ -3,6 +3,11 @@
  * @module server/procedures/category
  * @example await orpcClient.category.create({ name: 'CoreLive', parentId: 1 })
  */
+import {
+  normalizeCategoryName,
+  validateCategoryAction,
+  type CategoryAction,
+} from '@corelive/desktop-contract/category-validator'
 import { ORPCError } from '@orpc/server'
 import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import { z } from 'zod'
@@ -206,6 +211,62 @@ function categoryNameConflictMessage(
     : `A subcategory named "${name}" already exists under this parent.`
 }
 
+/**
+ * Runs the shared C33 validator (the same rules the desktop applies offline) over the owner's
+ * current categories before create/update write, so server and desktop cannot drift apart.
+ *
+ * Existing structural errors (missing parent, depth) are thrown earlier with their own messages;
+ * this adds the NFC-aware sibling-name check. Database unique indexes remain the final guard.
+ *
+ * @param tx - Locked transaction.
+ * @param userId - Owner whose categories are judged.
+ * @param action - The edit about to be written.
+ * @param renamedTo - For a move that also renames: the new name, applied before the move is
+ *   judged so the final name + parent pair is what counts (never one field against the other's old value).
+ * @throws ORPCError CONFLICT with the sidebar's existing duplicate-name copy when the name path is taken.
+ * @example await assertSharedCategoryRules(tx, user.id, { type: 'create', name: 'Work', parentId: null })
+ */
+async function assertSharedCategoryRules(
+  tx: CategoryTransaction,
+  userId: number,
+  action: CategoryAction<number>,
+  renamedTo?: string,
+): Promise<void> {
+  const stored = await tx
+    .select({
+      id: categoryTable.id,
+      name: categoryTable.name,
+      isDefault: categoryTable.isDefault,
+      parentId: categoryTable.parentId,
+    })
+    .from(categoryTable)
+    .where(eq(categoryTable.userId, userId))
+  const rows =
+    renamedTo === undefined || action.type !== 'reparent'
+      ? stored
+      : stored.map((row) =>
+          row.id === action.id ? { ...row, name: renamedTo } : row,
+        )
+  const verdict = validateCategoryAction(rows, action)
+  if (!verdict.ok && verdict.reason === 'name-taken-local') {
+    const name =
+      action.type === 'create' || action.type === 'rename'
+        ? action.name
+        : (rows.find((row) => row.id === (action as { id: number }).id)?.name ??
+          '')
+    const parentId =
+      action.type === 'create' || action.type === 'reparent'
+        ? action.parentId
+        : (rows.find((row) => row.id === action.id)?.parentId ?? null)
+    throw new ORPCError('CONFLICT', {
+      message: categoryNameConflictMessage(
+        normalizeCategoryName(name),
+        parentId,
+      ),
+    })
+  }
+}
+
 /** Creates a root or child for picker/manager requests; inherits the parent's color only when the caller omits color.
  * @example await orpcClient.category.create({ name: 'CoreLive', parentId: 1 })
  */
@@ -222,11 +283,17 @@ export const createCategory = authMiddleware
           context.user.id,
           parentId,
         )
+        const name = normalizeCategoryName(input.name)
+        await assertSharedCategoryRules(tx, context.user.id, {
+          type: 'create',
+          name,
+          parentId,
+        })
         return requireRow(
           await tx
             .insert(categoryTable)
             .values({
-              name: input.name,
+              name,
               color: input.color ?? parent?.color ?? 'blue',
               parentId,
               userId: context.user.id,
@@ -265,7 +332,14 @@ export const updateCategory = authMiddleware
     let conflictCategory: { name: string; parentId: number | null } | undefined
     try {
       const category = await runTransaction(async (tx) => {
-        const { id, data } = input
+        const { id } = input
+        // NFC-normalize once so the compare/write path matches the desktop validator (EA11a).
+        const data = {
+          ...input.data,
+          ...(input.data.name === undefined
+            ? {}
+            : { name: normalizeCategoryName(input.data.name) }),
+        }
         await lockCategoryOwner(tx, context.user.id)
         const existing = await findOwnedCategory(context.user.id, id, tx)
         if (!existing)
@@ -294,6 +368,24 @@ export const updateCategory = authMiddleware
           })
         if (data.parentId !== undefined)
           await validateCategoryParent(tx, context.user.id, data.parentId, id)
+        // Judge only real changes so a no-op resubmit of the same name or parent never self-conflicts.
+        const renamed = data.name !== undefined && data.name !== existing.name
+        const moved =
+          data.parentId !== undefined && data.parentId !== existing.parentId
+        if (moved)
+          // A combined edit is judged once, as the move with the new name already applied.
+          await assertSharedCategoryRules(
+            tx,
+            context.user.id,
+            { type: 'reparent', id, parentId: data.parentId ?? null },
+            renamed ? data.name : undefined,
+          )
+        else if (renamed)
+          await assertSharedCategoryRules(tx, context.user.id, {
+            type: 'rename',
+            id,
+            name: data.name ?? existing.name,
+          })
         // Empty edits preserve updatedAt and avoid Drizzle's empty SET error.
         if (Object.values(data).every((value) => value === undefined))
           return existing
@@ -329,6 +421,147 @@ export const updateCategory = authMiddleware
     }
   })
 
+/**
+ * Deletes one owned category inside the caller's locked transaction: promotes children, moves direct
+ * records to the destination and commits the `CategoryDeletion` receipt.
+ *
+ * Shared by {@link deleteCategory} (web sidebar) and `category.syncApply` (desktop outbox) so both
+ * paths keep one rescue semantics. The caller must already hold {@link lockCategoryOwner}.
+ *
+ * @param tx - Transaction that owns the account lock.
+ * @param userId - Owner of the category.
+ * @param id - Category to remove.
+ * @param targetCategoryId - Destination; defaults to the parent, then the root default.
+ * @returns The destination and the promoted child ids.
+ * @throws ORPCError NOT_FOUND/FORBIDDEN/BAD_REQUEST/CONFLICT for the web error contract.
+ * @example await removeCategoryInTransaction(tx, user.id, 3, 1)
+ */
+export async function removeCategoryInTransaction(
+  tx: CategoryTransaction,
+  userId: number,
+  id: number,
+  targetCategoryId?: number,
+) {
+  const existing = await findOwnedCategory(userId, id, tx)
+  if (!existing)
+    throw new ORPCError('NOT_FOUND', {
+      message: 'Category not found',
+      data: { reason: CATEGORY_DELETE_NOT_FOUND_REASON.source },
+    })
+  if (existing.isDefault)
+    throw new ORPCError('FORBIDDEN', {
+      message: 'Cannot delete the default category',
+    })
+  const children = await tx
+    .select()
+    .from(categoryTable)
+    .where(
+      and(eq(categoryTable.userId, userId), eq(categoryTable.parentId, id)),
+    )
+    .orderBy(asc(categoryTable.id))
+  let targetId = targetCategoryId ?? existing.parentId
+  if (targetId === undefined || targetId === null) {
+    // Repair a missing default without mistaking a child named General for the root.
+    await tx
+      .insert(categoryTable)
+      .values({ ...DEFAULT_CATEGORY_SEED, userId })
+      .onConflictDoNothing()
+    const [general] = await tx
+      .select()
+      .from(categoryTable)
+      .where(
+        and(
+          eq(categoryTable.userId, userId),
+          eq(categoryTable.name, 'General'),
+          isNull(categoryTable.parentId),
+        ),
+      )
+      .limit(1)
+    targetId = general?.id ?? null
+  }
+  if (targetId === id)
+    throw new ORPCError('BAD_REQUEST', {
+      message: 'Choose a different destination category',
+    })
+  if (!targetId || !(await findOwnedCategory(userId, targetId, tx)))
+    throw new ORPCError('NOT_FOUND', {
+      message: 'Destination category not found',
+      data: { reason: CATEGORY_DELETE_NOT_FOUND_REASON.destination },
+    })
+  const roots = await tx
+    .select({ id: categoryTable.id, name: categoryTable.name })
+    .from(categoryTable)
+    .where(
+      and(eq(categoryTable.userId, userId), isNull(categoryTable.parentId)),
+    )
+  const conflicts = children.filter((child) =>
+    roots.some((root) => root.id !== id && root.name === child.name),
+  )
+  if (conflicts.length)
+    throw new ORPCError('CONFLICT', {
+      message: `Rename these subcategories before deleting their main category: ${conflicts.map((child) => child.name).join(', ')}`,
+    })
+  // Free the departing root's name before immediate uniqueness checks promote its same-named child.
+  if (children.some((child) => child.name === existing.name)) {
+    // The ID makes this name unique; its length exceeds the API's 30-character name limit.
+    await tx
+      .update(categoryTable)
+      .set({ name: `__corelive_internal_deleting_category_${id}__` })
+      .where(and(eq(categoryTable.id, id), eq(categoryTable.userId, userId)))
+  }
+  // Children retain their IDs; only the removed parent's direct records move.
+  if (children.length)
+    await tx
+      .update(categoryTable)
+      .set({ parentId: null })
+      .where(
+        and(eq(categoryTable.userId, userId), eq(categoryTable.parentId, id)),
+      )
+  await tx
+    .update(todoTable)
+    .set({ categoryId: targetId, updatedAt: sql`${todoTable.updatedAt}` })
+    .where(and(eq(todoTable.userId, userId), eq(todoTable.categoryId, id)))
+  await tx
+    .update(completedTable)
+    .set({
+      categoryId: targetId,
+      updatedAt: sql`${completedTable.updatedAt}`,
+    })
+    .where(
+      and(eq(completedTable.userId, userId), eq(completedTable.categoryId, id)),
+    )
+  // Changing a sync-owned projection invalidates offline expected revisions atomically.
+  await tx
+    .update(completionSyncStateTable)
+    .set({
+      categoryId: targetId,
+      revision: sql`${completionSyncStateTable.revision} + 1`,
+    })
+    .where(
+      and(
+        eq(completionSyncStateTable.userId, userId),
+        eq(completionSyncStateTable.categoryId, id),
+        eq(completionSyncStateTable.cancelled, false),
+      ),
+    )
+  // The receipt commits with deletion, preserving the chosen destination for other hosts.
+  await tx
+    .insert(categoryDeletionTable)
+    .values({ userId, sourceId: id, destinationId: targetId })
+  requireRow(
+    await tx
+      .delete(categoryTable)
+      .where(and(eq(categoryTable.id, id), eq(categoryTable.userId, userId)))
+      .returning({ id: categoryTable.id }),
+    'category.delete',
+  )
+  return {
+    success: true as const,
+    movedToCategoryId: targetId,
+    promotedCategoryIds: children.map((child) => child.id),
+  }
+}
+
 /** Deletes only classification: manager requests atomically promote children and transfer direct records without changing their timestamps.
  * @example await orpcClient.category.delete({ id: 3, targetCategoryId: 1 })
  */
@@ -349,145 +582,13 @@ export const deleteCategory = authMiddleware
   .handler(async ({ input, context }) => {
     try {
       return await runTransaction(async (tx) => {
-        const userId = context.user.id
-        const { id } = input
-        await lockCategoryOwner(tx, userId)
-        const existing = await findOwnedCategory(userId, id, tx)
-        if (!existing)
-          throw new ORPCError('NOT_FOUND', {
-            message: 'Category not found',
-            data: { reason: CATEGORY_DELETE_NOT_FOUND_REASON.source },
-          })
-        if (existing.isDefault)
-          throw new ORPCError('FORBIDDEN', {
-            message: 'Cannot delete the default category',
-          })
-        const children = await tx
-          .select()
-          .from(categoryTable)
-          .where(
-            and(
-              eq(categoryTable.userId, userId),
-              eq(categoryTable.parentId, id),
-            ),
-          )
-          .orderBy(asc(categoryTable.id))
-        let targetId = input.targetCategoryId ?? existing.parentId
-        if (targetId === undefined || targetId === null) {
-          // Repair a missing default without mistaking a child named General for the root.
-          await tx
-            .insert(categoryTable)
-            .values({ ...DEFAULT_CATEGORY_SEED, userId })
-            .onConflictDoNothing()
-          const [general] = await tx
-            .select()
-            .from(categoryTable)
-            .where(
-              and(
-                eq(categoryTable.userId, userId),
-                eq(categoryTable.name, 'General'),
-                isNull(categoryTable.parentId),
-              ),
-            )
-            .limit(1)
-          targetId = general?.id ?? null
-        }
-        if (targetId === id)
-          throw new ORPCError('BAD_REQUEST', {
-            message: 'Choose a different destination category',
-          })
-        if (!targetId || !(await findOwnedCategory(userId, targetId, tx)))
-          throw new ORPCError('NOT_FOUND', {
-            message: 'Destination category not found',
-            data: { reason: CATEGORY_DELETE_NOT_FOUND_REASON.destination },
-          })
-        const roots = await tx
-          .select({ id: categoryTable.id, name: categoryTable.name })
-          .from(categoryTable)
-          .where(
-            and(
-              eq(categoryTable.userId, userId),
-              isNull(categoryTable.parentId),
-            ),
-          )
-        const conflicts = children.filter((child) =>
-          roots.some((root) => root.id !== id && root.name === child.name),
+        await lockCategoryOwner(tx, context.user.id)
+        return removeCategoryInTransaction(
+          tx,
+          context.user.id,
+          input.id,
+          input.targetCategoryId,
         )
-        if (conflicts.length)
-          throw new ORPCError('CONFLICT', {
-            message: `Rename these subcategories before deleting their main category: ${conflicts.map((child) => child.name).join(', ')}`,
-          })
-        // Free the departing root's name before immediate uniqueness checks promote its same-named child.
-        if (children.some((child) => child.name === existing.name)) {
-          // The ID makes this name unique; its length exceeds the API's 30-character name limit.
-          await tx
-            .update(categoryTable)
-            .set({ name: `__corelive_internal_deleting_category_${id}__` })
-            .where(
-              and(eq(categoryTable.id, id), eq(categoryTable.userId, userId)),
-            )
-        }
-        // Children retain their IDs; only the removed parent's direct records move.
-        if (children.length)
-          await tx
-            .update(categoryTable)
-            .set({ parentId: null })
-            .where(
-              and(
-                eq(categoryTable.userId, userId),
-                eq(categoryTable.parentId, id),
-              ),
-            )
-        await tx
-          .update(todoTable)
-          .set({ categoryId: targetId, updatedAt: sql`${todoTable.updatedAt}` })
-          .where(
-            and(eq(todoTable.userId, userId), eq(todoTable.categoryId, id)),
-          )
-        await tx
-          .update(completedTable)
-          .set({
-            categoryId: targetId,
-            updatedAt: sql`${completedTable.updatedAt}`,
-          })
-          .where(
-            and(
-              eq(completedTable.userId, userId),
-              eq(completedTable.categoryId, id),
-            ),
-          )
-        // Changing a sync-owned projection invalidates offline expected revisions atomically.
-        await tx
-          .update(completionSyncStateTable)
-          .set({
-            categoryId: targetId,
-            revision: sql`${completionSyncStateTable.revision} + 1`,
-          })
-          .where(
-            and(
-              eq(completionSyncStateTable.userId, userId),
-              eq(completionSyncStateTable.categoryId, id),
-              eq(completionSyncStateTable.cancelled, false),
-            ),
-          )
-        // The receipt commits with deletion, preserving the chosen destination for other hosts.
-        await tx
-          .insert(categoryDeletionTable)
-          .values({ userId, sourceId: id, destinationId: targetId })
-        requireRow(
-          await tx
-            .delete(categoryTable)
-            .where(
-              and(eq(categoryTable.id, id), eq(categoryTable.userId, userId)),
-            )
-            .returning({ id: categoryTable.id }),
-          'category.delete',
-        )
-        return {
-          success: true as const,
-          movedToCategoryId: targetId,
-          promotedCategoryIds: children.map((child) => child.id),
-        }
       })
     } catch (error) {
       // A duplicate deletion receipt is distinct from a promoted category name collision.

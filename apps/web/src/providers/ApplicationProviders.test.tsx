@@ -4,31 +4,17 @@ import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import { ApplicationProviders } from './ApplicationProviders'
 
-const state = vi.hoisted(() => ({ path: '/desktop-auth', effects: vi.fn() }))
+const state = vi.hoisted(() => ({ path: '/desktop-auth', mounted: vi.fn() }))
 vi.mock('next/navigation', () => ({ usePathname: () => state.path }))
 vi.mock('@/components/code-inspector/CodeInspectorClient', () => ({
   CodeInspectorClient: () => null,
 }))
-vi.mock('@/components/electron/ElectronStartupSync', () => ({
-  ElectronStartupSync: () => {
-    state.effects('settings')
-    return null
-  },
-}))
-vi.mock('@/components/electron/OfflineSettingsSync', () => ({
-  OfflineSettingsSync: ({ children }: { children: ReactNode }) => {
-    state.effects('offline-settings')
-    return <>{children}</>
-  },
-}))
 vi.mock('@/components/ui/sonner', () => ({ Toaster: () => null }))
 vi.mock('@/lib/orpc/electron-auth-provider', () => ({
-  ElectronAuthProvider: ({ children }: { children: ReactNode }) => (
-    <>{children}</>
-  ),
-}))
-vi.mock('@/lib/redux/providers', () => ({
-  ReduxProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
+  ElectronAuthProvider: ({ children }: { children: ReactNode }) => {
+    state.mounted('auth')
+    return <>{children}</>
+  },
 }))
 vi.mock('@/providers/QueryClientProvider', () => ({
   QueryClientProvider: ({ children }: { children: ReactNode }) => (
@@ -41,11 +27,11 @@ vi.mock('@/providers/ThemeProvider', () => ({
 
 afterEach(() => {
   cleanup()
-  state.effects.mockClear()
+  state.mounted.mockClear()
 })
 
 describe('broker route isolation', () => {
-  test('hidden credential refresh never synchronizes application settings', () => {
+  test('hidden credential refresh mounts no application providers', () => {
     // Arrange
     state.path = '/desktop-auth'
 
@@ -58,10 +44,10 @@ describe('broker route isolation', () => {
 
     // Assert
     expect(screen.getByText('Credential page')).toBeVisible()
-    expect(state.effects).not.toHaveBeenCalled()
+    expect(state.mounted).not.toHaveBeenCalled()
   })
 
-  test('ordinary web routes keep their existing synchronization providers', () => {
+  test('ordinary web routes keep the desktop auth provider', () => {
     // Arrange
     state.path = '/home'
 
@@ -74,9 +60,6 @@ describe('broker route isolation', () => {
 
     // Assert
     expect(screen.getByText('Home page')).toBeVisible()
-    expect(state.effects.mock.calls).toEqual([
-      ['settings'],
-      ['offline-settings'],
-    ])
+    expect(state.mounted.mock.calls).toEqual([['auth']])
   })
 })

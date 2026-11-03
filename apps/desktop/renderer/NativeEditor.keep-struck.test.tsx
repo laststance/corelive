@@ -2,12 +2,15 @@
 import '@testing-library/jest-dom/vitest'
 import type { LiveEditorAPI } from '@corelive/desktop-contract/electron-api'
 import type { OfflineEditorAPI } from '@corelive/desktop-contract/offline-editor-api'
-import type { OfflineEditorSnapshot } from '@corelive/desktop-contract/offline-workspace'
+import type {
+  OfflineEditorSnapshot,
+  OfflineSyncStatus,
+} from '@corelive/desktop-contract/offline-workspace-v2'
 import { UserSettingsStateSchema } from '@corelive/desktop-contract/settings'
-import { DurableEditorStore } from '@corelive/live-editor/store'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
 
+import { DurableEditorStore } from './editor/DurableEditorStore'
 import { NativeEditor } from './NativeEditor'
 
 const stores: DurableEditorStore[] = []
@@ -20,24 +23,36 @@ afterEach(() => {
 /** Supplies only synthetic preload values; these checks cover the keep-mode wiring, not IPC or disk persistence.
  * @example const fixture = mountEditor()
  */
-function mountEditor(clearOnComplete: boolean, savedText: string) {
+function mountEditor(
+  clearOnComplete: boolean,
+  savedText: string,
+  needsALookCount = 0,
+) {
+  const syncStatus: OfflineSyncStatus = {
+    state: 'local-only',
+    waitingCount: 0,
+    lastSyncedAt: null,
+    boundEmail: null,
+  }
   const shown = new Set<() => void>()
   const snapshot: OfflineEditorSnapshot = {
     phase: 'ready',
     generation: 1,
-    sync: 'offline',
+    sync: syncStatus,
     workspace: {
       ownerId: 'synthetic-focus-account',
       revision: 0,
-      selectedCategoryId: 1,
+      selectedCategoryId: '00000000-0000-4000-8000-0000000000a1',
       categories: [
         {
-          id: 1,
+          id: '00000000-0000-4000-8000-0000000000a1',
           name: 'General',
           color: 'blue',
           parentId: null,
           isDefault: true,
           removed: false,
+          historical: false,
+          fieldRevisions: { name: 0, color: 0, parentLocalId: 0 },
         },
       ],
       preferences: {
@@ -69,21 +84,32 @@ function mountEditor(clearOnComplete: boolean, savedText: string) {
       },
       nextClearAt: null,
       nextUndoAt: null,
-      categoryDeletions: {},
+      categoryMoves: {},
+      binding: null,
       recoveryCopyCount: 0,
+      needsALookCount,
     },
   }
   const host: OfflineEditorAPI = {
     version: 1,
     snapshot: async () => snapshot,
-    draft: async () => ({ categoryId: 1, draft: snapshot.workspace.draft }),
+    draft: async () => ({
+      categoryId: '00000000-0000-4000-8000-0000000000a1',
+      draft: snapshot.workspace.draft,
+    }),
     command: async () => ({ ok: false, reason: 'unused-in-focus-test' }),
     retry: async () => undefined,
     details: async () => ({ total: 0, records: [] }),
     undoHistory: async () => ({ total: 0, completions: [] }),
     recoveryCopies: async () => ({ total: 0, copies: [] }),
     signIn: async () => undefined,
-    manageCategories: async () => undefined,
+    syncDetails: async () => ({
+      rows: [],
+      history: [],
+      migrationSummary: null,
+      preservedBackups: [],
+      dashboardOnlyCount: 0,
+    }),
     copyWriting: async () => true,
     export: async () => true,
     previewRecovery: async () => ({
@@ -98,7 +124,6 @@ function mountEditor(clearOnComplete: boolean, savedText: string) {
       shown.add(listener)
       return () => shown.delete(listener)
     },
-    onCategoryCreated: () => () => undefined,
   }
   const api: LiveEditorAPI = {
     workspace: host,
@@ -151,4 +176,19 @@ test('the desktop editor draws no strikes when Clear finished lines is on', asyn
     ).toHaveValue('- [x] 10月の請求書の提出'),
   )
   expect(document.querySelector('[data-finished-line-strikes]')).toBeNull()
+})
+
+test('the editor window renders no conflict or refusal copy even when the dashboard declined this Mac values', async () => {
+  // Arrange / Act
+  mountEditor(false, 'A calm line', 3)
+
+  // Assert
+  await waitFor(() =>
+    expect(
+      screen.getByRole('textbox', { name: 'Write one thing' }),
+    ).toHaveValue('A calm line'),
+  )
+  expect(
+    screen.queryByText(/conflict|needs a look|not applied|name already used/i),
+  ).toBeNull()
 })

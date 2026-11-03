@@ -195,6 +195,80 @@ describeIfDb(
       ).toMatchObject({ name: 'Design', parentId: work.id })
     })
 
+    // Regression: /ship Step 11 (Codex structured review) 2026-11-03 — a combined rename + move was
+    // judged field by field against the old state, refusing valid edits from the dashboard editor.
+    test('a rename plus move is judged by its final name and parent, so a name taken only at the old parent is allowed', async () => {
+      // Arrange
+      const { options, corelive } = await arrangeHierarchy()
+      const personal = await call(createCategory, { name: 'Personal' }, options)
+
+      // Act — "Client work" exists under Work (the old parent) but not under Personal.
+      const moved = await call(
+        updateCategory,
+        {
+          id: corelive.id,
+          data: { name: 'Client work', parentId: personal.id },
+        },
+        options,
+      )
+
+      // Assert
+      expect(moved).toMatchObject({
+        name: 'Client work',
+        parentId: personal.id,
+      })
+    })
+
+    test('a rename plus move away from a destination that holds only the old name is allowed', async () => {
+      // Arrange
+      const { options, corelive } = await arrangeHierarchy()
+      const personal = await call(createCategory, { name: 'Personal' }, options)
+      await call(
+        createCategory,
+        { name: 'CoreLive', parentId: personal.id },
+        options,
+      )
+
+      // Act — the destination already has "CoreLive", but the moved category arrives as "Platform".
+      const moved = await call(
+        updateCategory,
+        { id: corelive.id, data: { name: 'Platform', parentId: personal.id } },
+        options,
+      )
+
+      // Assert
+      expect(moved).toMatchObject({ name: 'Platform', parentId: personal.id })
+    })
+
+    test('a rename plus move onto a name the destination already holds is refused and changes nothing', async () => {
+      // Arrange
+      const { options, work, corelive } = await arrangeHierarchy()
+      const personal = await call(createCategory, { name: 'Personal' }, options)
+      await call(
+        createCategory,
+        { name: 'Design', parentId: personal.id },
+        options,
+      )
+
+      // Act
+      const move = call(
+        updateCategory,
+        { id: corelive.id, data: { name: 'Design', parentId: personal.id } },
+        options,
+      )
+
+      // Assert
+      await expect(move).rejects.toMatchObject({
+        code: 'CONFLICT',
+        message:
+          'A subcategory named "Design" already exists under this parent.',
+      })
+      const { categories } = await call(listCategories, undefined, options)
+      expect(
+        categories.find((category) => category.id === corelive.id),
+      ).toMatchObject({ name: 'CoreLive', parentId: work.id })
+    })
+
     test('blocks third levels, self-parenting, cycles and foreign-owned parents without changing the hierarchy', async () => {
       // Arrange
       const { options, work, corelive } = await arrangeHierarchy()

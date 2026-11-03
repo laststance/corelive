@@ -1,55 +1,105 @@
+import type { SyncOutcome } from '@corelive/desktop-contract/category-sync'
 import type { OfflineRecoveryPreview } from '@corelive/desktop-contract/offline-editor-api'
 import type {
   CountCheckpoint,
   EditorCategory,
+} from '@corelive/desktop-contract/offline-workspace'
+import type {
+  AccountBinding,
+  CategoryOutboxEntry,
   OfflineCompletion,
   OfflineDraftRecord,
   OfflineWorkspace,
+  OfflineWorkspaceView as WorkspaceView,
   OutboxEntry,
   WorkspaceCommand,
-  OfflineWorkspaceView as WorkspaceView,
-} from '@corelive/desktop-contract/offline-workspace'
+} from '@corelive/desktop-contract/offline-workspace-v2'
 
+import { waitingCompletionCount } from './completionUpload'
+import { needsALookCount, type SyncDetailsView } from './syncDetails'
 import { workspaceToday } from './workspaceCounts'
-import type { WorkspaceService } from './WorkspaceService'
 
-export type { OfflineWorkspaceView as WorkspaceView } from '@corelive/desktop-contract/offline-workspace'
+export type { OfflineWorkspaceView as WorkspaceView } from '@corelive/desktop-contract/offline-workspace-v2'
+
+/** The binding facts the controller needs for status and attach decisions. */
+export type BindingInfo = Pick<
+  AccountBinding,
+  'accountId' | 'displayEmail' | 'lastSyncedAt'
+>
 
 export interface WorkspaceWorkerCalls {
   open: { input: null; output: WorkspaceView }
-  prepare: {
-    input: Parameters<WorkspaceService['prepare']>[0]
-    output: WorkspaceView
-  }
   command: {
     input: WorkspaceCommand
     output: WorkspaceView & { writtenDraft: OfflineDraftRecord }
   }
-  draft: { input: { categoryId: number }; output: OfflineDraftRecord }
-  pending: { input: { limit: number }; output: OutboxEntry[] }
-  markSent: { input: { operationId: string }; output: WorkspaceView }
-  markSentBatch: { input: { operationIds: string[] }; output: OutboxEntry[] }
+  draft: { input: { categoryId: string }; output: OfflineDraftRecord }
+  /** Uncertain entries plus how many derived keeps could be frozen and sent now (capped at `limit`). */
+  pending: {
+    input: { limit: number }
+    output: { uncertain: OutboxEntry[]; sendable: number }
+  }
+  /** Every completion waiting for the dashboard, archive included (DA4 progress). */
+  pendingTotal: { input: null; output: number }
+  /** Derives, freezes and marks the next batch in flight; uncertain entries are replayed. */
+  markSentBatch: {
+    input: { accountId: string; limit: number }
+    output: OutboxEntry[]
+  }
   receipts: {
-    input: { ownerId: string; receipts: unknown[] }
+    input: { accountId: string; receipts: unknown[] }
     output: WorkspaceView
   }
-  receipt: {
-    input: { ownerId: string; receipt: unknown }
+  /** Uncertain category entries plus queued ones whose ids all have server ids (D4). */
+  categoryPending: {
+    input: { limit: number }
+    output: {
+      uncertain: CategoryOutboxEntry[]
+      sendable: CategoryOutboxEntry[]
+    }
+  }
+  /** Freezes the wire payload and marks category operations in flight (EA3). */
+  markCategorySent: {
+    input: { accountId: string; operationIds: string[] }
+    output: CategoryOutboxEntry[]
+  }
+  categoryReceipts: {
+    input: { accountId: string; receipts: SyncOutcome[] }
     output: WorkspaceView
   }
-  categories: {
+  /** Counts an unanswered receipt lookup (EA4). */
+  noteCategoryQuery: {
+    input: { accountId: string; operationIds: string[] }
+    output: WorkspaceView
+  }
+  /** Parks operations a 4xx rejected on their own (E3). */
+  parkCategory: {
+    input: { accountId: string; operationIds: string[] }
+    output: WorkspaceView
+  }
+  syncDetails: { input: null; output: SyncDetailsView }
+  reconcile: {
     input: {
+      accountId: string
+      displayEmail: string | null
       categories: EditorCategory[]
       deletions: { sourceId: number; destinationId: number }[]
-      legacyNotes?: Record<string, string>
     }
     output: WorkspaceView
   }
+  markSynced: {
+    input: { accountId: string; at: number }
+    output: WorkspaceView
+  }
+  binding: { input: null; output: BindingInfo | null }
+  localCategory: { input: { serverId: number }; output: string | null }
   recoveryCopies: {
     input: { offset: number; limit: number }
     output: { total: number; copies: OfflineWorkspace['recoveryCopies'] }
   }
   clearDue: { input: null; output: WorkspaceView }
+  /** Moves settled history to the archive file; idle work, never on the keep path. */
+  archive: { input: null; output: { archived: number } }
   details: {
     input: { offset: number; limit: number }
     output: {
@@ -58,7 +108,11 @@ export interface WorkspaceWorkerCalls {
     }
   }
   checkpoint: {
-    input: { expectedRevision: number; checkpoint: CountCheckpoint }
+    input: {
+      accountId: string
+      expectedRevision: number
+      checkpoint: CountCheckpoint
+    }
     output: WorkspaceView
   }
   tracked: {
@@ -88,10 +142,14 @@ export type WorkspaceWorkerRequest = {
 }[keyof WorkspaceWorkerCalls]
 
 /** Snapshot projection runs in the storage worker so even large queues never block main's shortcuts.
+ * @param archivedPending - Archived keeps that never uploaded; they wait for the dashboard too.
  * @example workspaceView(state)
  */
-export function workspaceView(state: OfflineWorkspace): WorkspaceView {
-  const draft = state.drafts[String(state.selectedCategoryId)]
+export function workspaceView(
+  state: OfflineWorkspace,
+  archivedPending = 0,
+): WorkspaceView {
+  const draft = state.drafts[state.selectedCategoryId]
   if (!draft) throw new Error('Invalid selected workspace category')
   const entries = Object.values(state.outbox)
   const eligible = eligibleUndo(state)
@@ -102,8 +160,7 @@ export function workspaceView(state: OfflineWorkspace): WorkspaceView {
     categories: state.categories,
     preferences: state.preferences,
     draft,
-    pendingCount: new Set(entries.map((entry) => entry.operation.completionId))
-      .size,
+    pendingCount: waitingCompletionCount(state) + archivedPending,
     blockedCount: new Set(
       entries
         .filter((entry) => entry.state === 'blocked')
@@ -119,7 +176,16 @@ export function workspaceView(state: OfflineWorkspace): WorkspaceView {
       null,
     ),
     checkpoint: state.checkpoint,
-    categoryDeletions: state.categoryDeletions,
+    // Server-recorded destination of each removed category (suggestion for the confirmed move).
+    categoryMoves: state.binding?.deletionReceipts ?? {},
+    binding: state.binding
+      ? {
+          accountId: state.binding.accountId,
+          displayEmail: state.binding.displayEmail,
+          lastSyncedAt: state.binding.lastSyncedAt,
+        }
+      : null,
+    needsALookCount: needsALookCount(state),
     recoveryCopyCount: state.recoveryCopies.filter(
       (copy) => copy.restoredTo === undefined,
     ).length,

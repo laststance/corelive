@@ -19,12 +19,14 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { PERSISTED_QUERY_STORAGE_KEY } from '@/lib/constants/query'
 import { createQueryClient } from '@/lib/query/createQueryClient'
-import { STORAGE_KEY as REDUX_STORAGE_KEY } from '@/lib/redux/store'
 
 const authState = vi.hoisted(() => ({ isLoaded: true, isSignedIn: true }))
 vi.mock('@clerk/nextjs', () => ({ useAuth: () => authState }))
 
 import { QueryClientProvider } from './QueryClientProvider'
+
+/** Key the retired Redux store wrote; stale copies may remain in a browser and must survive a cache reset. */
+const REDUX_STORAGE_KEY = 'corelive-redux-state'
 
 /** Browser-local keys the persisted-cache reset must leave untouched (no longer written by the app). */
 const LOCAL_NOTE_STORAGE_KEY = 'corelive.local-note.v1'
