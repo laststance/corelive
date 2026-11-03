@@ -459,6 +459,7 @@ test('History lists the migration summary with Open recovery copies, preserved b
           preservedBackups: 1,
         },
         preservedBackups: [{ fileName: 'old-workspace.json', accountId: null }],
+        recoveryCopyCount: 2,
         history: [
           {
             id: 'h-1',
@@ -487,6 +488,229 @@ test('History lists the migration summary with Open recovery copies, preserved b
   expect(history).toHaveTextContent('Kept as a backup: old-workspace.json')
   expect(history).toHaveTextContent('Changed back to match the dashboard.')
   expect(fake.api.liveEditor.show).toHaveBeenCalledOnce()
+})
+
+// Regression: native VM QA of v0.30.0 on 2026-11-03 — a fresh install's History claimed "Brought your earlier writing" with all-zero counts and offered Open recovery copies with none to open
+test('a fresh install shows "Nothing here yet" in History instead of an empty import summary', async () => {
+  // Arrange
+  const syncDetails = withRows([], {
+    migrationSummary: {
+      sourceAccountId: null,
+      importedDrafts: 0,
+      importedCompletions: 0,
+      recoveryCopies: 0,
+      v1FilesKept: 0,
+      preservedBackups: 0,
+    },
+  })
+
+  // Act
+  await renderWithSettings(<SyncDetailsPage onBack={vi.fn()} />, {
+    syncDetails,
+  })
+
+  // Assert
+  const history = (
+    await screen.findByRole('heading', { name: 'History' })
+  ).closest('section')!
+  expect(within(history).getByText('Nothing here yet.')).toBeVisible()
+  expect(history).not.toHaveTextContent('Brought your earlier writing')
+  expect(
+    within(history).queryByRole('button', { name: 'Open recovery copies' }),
+  ).toBeNull()
+})
+
+// Added by /ship Step 7 coverage pass on 2026-11-03
+// Value: protects=a Mac whose Sync details carry no migration summary shows
+// "Nothing here yet." and no import block; fails_when=hasImportedWriting stops
+// guarding a null summary or the empty condition stops treating a missing
+// summary as empty; why_new=every existing SyncDetailsPage test passes a
+// summary object, so the null branch is never rendered; seam=none;
+// no_claim=real workspace state on disk (renderer test with a stubbed settings API)
+test('Sync details without a migration summary shows "Nothing here yet" in History', async () => {
+  // Arrange
+  const syncDetails = withRows([], { migrationSummary: null })
+
+  // Act
+  await renderWithSettings(<SyncDetailsPage onBack={vi.fn()} />, {
+    syncDetails,
+  })
+
+  // Assert
+  const history = (
+    await screen.findByRole('heading', { name: 'History' })
+  ).closest('section')!
+  expect(within(history).getByText('Nothing here yet.')).toBeVisible()
+  expect(history).not.toHaveTextContent('Brought your earlier writing')
+  expect(
+    within(history).queryByRole('button', { name: 'Open recovery copies' }),
+  ).toBeNull()
+})
+
+// Regression: native VM QA of v0.30.0 on 2026-11-03 — Open recovery copies showed even when there was no recovery copy to open
+test('an import with no recovery copies waiting keeps its summary but offers no Open recovery copies', async () => {
+  // Arrange
+  const syncDetails = withRows([], {
+    migrationSummary: {
+      sourceAccountId: 'acct-1',
+      importedDrafts: 2,
+      importedCompletions: 5,
+      recoveryCopies: 0,
+      v1FilesKept: 1,
+      preservedBackups: 0,
+    },
+    recoveryCopyCount: 0,
+  })
+
+  // Act
+  await renderWithSettings(<SyncDetailsPage onBack={vi.fn()} />, {
+    syncDetails,
+  })
+
+  // Assert
+  const history = (
+    await screen.findByRole('heading', { name: 'History' })
+  ).closest('section')!
+  expect(history).toHaveTextContent(
+    "Brought your earlier writing into this Mac's workspace: 2 drafts, 5 keeps, 0 recovery copies. 1 earlier files kept as backups.",
+  )
+  expect(
+    within(history).queryByRole('button', { name: 'Open recovery copies' }),
+  ).toBeNull()
+})
+
+// Regression: /ship adversarial review (Codex) on 2026-11-03 — the button followed the migration's newly created copies, so copies carried over from the earlier version lost it
+test('History offers Open recovery copies for copies carried over from the earlier version', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  const { fake } = await renderWithSettings(
+    <SyncDetailsPage onBack={vi.fn()} />,
+    {
+      syncDetails: withRows([], {
+        migrationSummary: {
+          sourceAccountId: 'acct-1',
+          importedDrafts: 3,
+          importedCompletions: 0,
+          recoveryCopies: 0,
+          v1FilesKept: 1,
+          preservedBackups: 0,
+        },
+        recoveryCopyCount: 1,
+      }),
+    },
+  )
+
+  // Act
+  const history = (
+    await screen.findByRole('heading', { name: 'History' })
+  ).closest('section')!
+  const openButton = within(history).getByRole('button', {
+    name: 'Open recovery copies',
+  })
+  await user.click(openButton)
+
+  // Assert
+  expect(openButton).toBeVisible()
+  expect(fake.api.liveEditor.show).toHaveBeenCalledOnce()
+})
+
+// Regression: /ship adversarial review (Codex) on 2026-11-03 — copies an older build added after a fresh install were hidden behind "Nothing here yet."
+test('a fresh install that later gets recovery copies offers them instead of "Nothing here yet"', async () => {
+  // Arrange
+  const syncDetails = withRows([], {
+    migrationSummary: {
+      sourceAccountId: null,
+      importedDrafts: 0,
+      importedCompletions: 0,
+      recoveryCopies: 0,
+      v1FilesKept: 0,
+      preservedBackups: 0,
+    },
+    recoveryCopyCount: 2,
+  })
+
+  // Act
+  await renderWithSettings(<SyncDetailsPage onBack={vi.fn()} />, {
+    syncDetails,
+  })
+
+  // Assert
+  const history = (
+    await screen.findByRole('heading', { name: 'History' })
+  ).closest('section')!
+  expect(
+    within(history).getByRole('button', { name: 'Open recovery copies' }),
+  ).toBeVisible()
+  expect(within(history).queryByText('Nothing here yet.')).toBeNull()
+  expect(history).not.toHaveTextContent('Brought your earlier writing')
+})
+
+// Added by /ship Step 7 coverage pass on 2026-11-03
+// Value: protects=History lists preserved backups and hides "Nothing here yet."
+// when the fresh-install summary is all-zero; fails_when=the empty condition
+// ignores backups or the zero-summary gate also hides backups;
+// why_new=SyncDetailsPage.test.tsx:452 mixes summary, backups and history so it
+// never isolates the backups-only state; seam=none; no_claim=real migration
+// output on disk (renderer test with a stubbed settings API)
+test('a fresh install with preserved backups lists them in History without "Nothing here yet"', async () => {
+  // Arrange
+  const syncDetails = withRows([], {
+    migrationSummary: {
+      sourceAccountId: null,
+      importedDrafts: 0,
+      importedCompletions: 0,
+      recoveryCopies: 0,
+      v1FilesKept: 0,
+      preservedBackups: 0,
+    },
+    preservedBackups: [{ fileName: 'old-workspace.json', accountId: null }],
+  })
+
+  // Act
+  await renderWithSettings(<SyncDetailsPage onBack={vi.fn()} />, {
+    syncDetails,
+  })
+
+  // Assert
+  const history = (
+    await screen.findByRole('heading', { name: 'History' })
+  ).closest('section')!
+  expect(history).toHaveTextContent('Kept as a backup: old-workspace.json')
+  expect(within(history).queryByText('Nothing here yet.')).toBeNull()
+  expect(history).not.toHaveTextContent('Brought your earlier writing')
+  expect(
+    within(history).queryByRole('button', { name: 'Open recovery copies' }),
+  ).toBeNull()
+})
+
+// Regression: /ship pre-landing review on 2026-11-03 — after the zero-count summary was hidden, History said "Nothing here yet." right under "Kept on the dashboard only"
+test('History with dashboard-only writing does not also say "Nothing here yet"', async () => {
+  // Arrange
+  const syncDetails = withRows([], {
+    migrationSummary: {
+      sourceAccountId: null,
+      importedDrafts: 0,
+      importedCompletions: 0,
+      recoveryCopies: 0,
+      v1FilesKept: 0,
+      preservedBackups: 0,
+    },
+    dashboardOnlyCount: 3,
+  })
+
+  // Act
+  await renderWithSettings(<SyncDetailsPage onBack={vi.fn()} />, {
+    syncDetails,
+  })
+
+  // Assert
+  const history = (
+    await screen.findByRole('heading', { name: 'History' })
+  ).closest('section')!
+  expect(
+    within(history).getByText('Kept on the dashboard only: 3'),
+  ).toBeVisible()
+  expect(within(history).queryByText('Nothing here yet.')).toBeNull()
 })
 
 test('History shows only the latest 50 entries', async () => {

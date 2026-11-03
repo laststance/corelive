@@ -16,7 +16,11 @@ import type {
 } from '@corelive/desktop-contract/offline-workspace-v2'
 
 import { waitingCompletionCount } from './completionUpload'
-import { needsALookCount, type SyncDetailsView } from './syncDetails'
+import {
+  needsALookCount,
+  openRecoveryCopyCount,
+  type SyncDetailsView,
+} from './syncDetails'
 import { workspaceToday } from './workspaceCounts'
 
 export type { OfflineWorkspaceView as WorkspaceView } from '@corelive/desktop-contract/offline-workspace-v2'
@@ -186,9 +190,7 @@ export function workspaceView(
         }
       : null,
     needsALookCount: needsALookCount(state),
-    recoveryCopyCount: state.recoveryCopies.filter(
-      (copy) => copy.restoredTo === undefined,
-    ).length,
+    recoveryCopyCount: openRecoveryCopyCount(state),
     today: workspaceToday(
       state,
       Date.now(),

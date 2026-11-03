@@ -565,6 +565,7 @@ test('the Sync details read is served to the editor window of the current genera
     migrationSummary: null,
     preservedBackups: [],
     dashboardOnlyCount: 0,
+    recoveryCopyCount: 0,
   })
 
   // Act

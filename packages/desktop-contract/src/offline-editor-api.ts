@@ -51,6 +51,8 @@ export interface OfflineSyncDetails {
   migrationSummary: OfflineWorkspace['migration']['summary']
   preservedBackups: { fileName: string; accountId: string | null }[]
   dashboardOnlyCount: number
+  /** Recovery copies not yet restored, whatever created them; drives "Open recovery copies". */
+  recoveryCopyCount: number
 }
 export type OfflineSettingsResult =
   | { ok: true; generation: number; preferences: OfflinePreferences }

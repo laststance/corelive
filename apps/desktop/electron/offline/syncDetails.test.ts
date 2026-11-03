@@ -3,7 +3,7 @@ import type { OfflineWorkspace } from '@corelive/desktop-contract/offline-worksp
 import { describe, expect, test } from 'vitest'
 
 import { buildDeviceWorkspace, categoryUuid } from './deviceWorkspaceFixture'
-import { applySyncDetailAction } from './syncDetails'
+import { applySyncDetailAction, buildSyncDetails } from './syncDetails'
 import { WorkspaceCommandError } from './WorkspaceCommandError'
 
 const context = { now: 1_800_000_000_000, nextId: () => categoryUuid(900) }
@@ -182,5 +182,44 @@ describe('applySyncDetailAction use-mac-value', () => {
     expect(state.categories[1]!.name).toBe('Mine')
     expect(state.categories[1]!.fieldRevisions.name).toBe(1)
     expect(state.binding!.declined).toEqual({})
+  })
+})
+
+// Regression: /ship adversarial review (Codex) on 2026-11-03 — Sync details had no count of the recovery copies that exist now, so the page fell back to the migration summary's created-copy count
+describe('buildSyncDetails recovery copies', () => {
+  test('counts only the recovery copies still waiting to be restored', () => {
+    // Arrange
+    const state = buildDeviceWorkspace()
+    const general = state.categories[0]!.id
+    state.recoveryCopies.push(
+      {
+        id: categoryUuid(701),
+        categoryId: general,
+        text: 'Carried over from the earlier version',
+        reason: 'From an older CoreLive version',
+        createdAt: context.now,
+      },
+      {
+        id: categoryUuid(702),
+        categoryId: general,
+        text: 'Added by an older build after the upgrade',
+        reason: 'From an older CoreLive version',
+        createdAt: context.now,
+      },
+      {
+        id: categoryUuid(703),
+        categoryId: general,
+        text: 'Already restored',
+        reason: 'From an older CoreLive version',
+        createdAt: context.now,
+        restoredTo: categoryUuid(800),
+      },
+    )
+
+    // Act
+    const details = buildSyncDetails(state)
+
+    // Assert
+    expect(details.recoveryCopyCount).toBe(2)
   })
 })

@@ -131,6 +131,7 @@ async function createFixture(text = 'First\nSecond', clear = false) {
       migrationSummary: null,
       preservedBackups: [],
       dashboardOnlyCount: 0,
+      recoveryCopyCount: 0,
     }),
     copyWriting,
     export: async () => true,

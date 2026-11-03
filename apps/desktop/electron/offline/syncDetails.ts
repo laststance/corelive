@@ -51,6 +51,24 @@ export interface SyncDetailsView {
   migrationSummary: NonNullable<OfflineWorkspace['migration']['summary']> | null
   preservedBackups: { fileName: string; accountId: string | null }[]
   dashboardOnlyCount: number
+  /** Recovery copies not yet restored, whatever created them; drives "Open recovery copies". */
+  recoveryCopyCount: number
+}
+
+/**
+ * Counts the recovery copies that are still waiting to be restored.
+ *
+ * The migration summary only counts the copies the v1 to v2 migration itself created, so
+ * copies carried over from v1 or added later by an older build need this live count.
+ * Called by {@link buildSyncDetails} and by the worker's workspace view.
+ *
+ * @param state - Workspace snapshot.
+ * @returns How many recovery copies have no `restoredTo` destination yet (0 when none).
+ * @example openRecoveryCopyCount(state) // => 2 for three copies, one of them restored
+ */
+export function openRecoveryCopyCount(state: OfflineWorkspace): number {
+  return state.recoveryCopies.filter((copy) => copy.restoredTo === undefined)
+    .length
 }
 
 /** Actions each row type offers (DA7). */
@@ -79,7 +97,8 @@ function actionsFor(
  * Builds the Sync details page data from the workspace.
  *
  * @param state - Workspace snapshot.
- * @returns "Needs a look" rows, latest History, the C34 summary and preserved v1 backups.
+ * @returns "Needs a look" rows, latest History, the C34 summary, preserved v1 backups and the
+ * count of recovery copies still waiting to be restored.
  * @example const details = buildSyncDetails(state)
  */
 export function buildSyncDetails(state: OfflineWorkspace): SyncDetailsView {
@@ -142,6 +161,7 @@ export function buildSyncDetails(state: OfflineWorkspace): SyncDetailsView {
         accountId: receipt.accountId,
       })),
     dashboardOnlyCount: Object.keys(state.migration.dashboardOnly).length,
+    recoveryCopyCount: openRecoveryCopyCount(state),
   }
 }
 

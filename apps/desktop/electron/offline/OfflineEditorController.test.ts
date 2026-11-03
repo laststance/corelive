@@ -326,6 +326,7 @@ test.each(['after', 'before', 'queued'] as const)(
         migrationSummary: null,
         preservedBackups: [],
         dashboardOnlyCount: 0,
+        recoveryCopyCount: 0,
       }),
       copyWriting: async () => true,
       export: async () => true,
