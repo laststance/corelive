@@ -322,8 +322,8 @@ describe('v1 to v2 workspace migration', () => {
     ).toHaveLength(1)
   })
 
-  // Regression: /ship CodeRabbit review on PR #222 2026-11-03 — a v1 selection on a category that no longer exists, with no draft, migrated without a draft and the editor could not open
-  test('a v1 selection on a category that no longer exists still opens the editor on an empty draft', async () => {
+  // Regression: /ship CodeRabbit review on PR #222 2026-11-03 — a v1 selection on a category that no longer exists migrated onto a placeholder that the editor could not open and whose finished lines never sync
+  test('a v1 selection on a category that no longer exists opens the editor on General with its draft', async () => {
     // Arrange
     const directory = await installV1([
       {
@@ -340,25 +340,19 @@ describe('v1 to v2 workspace migration', () => {
     const selected = result.workspace.categories.find(
       (category) => category.id === result.workspace.selectedCategoryId,
     )
-    expect(selected?.historical).toBe(true)
+    expect(selected?.name).toBe('General')
     expect(workspaceView(result.workspace).draft.rows).toEqual([
-      { id: expect.any(String), text: '' },
+      { id: uid(201), text: 'general draft' },
     ])
   })
 
-  // Regression: /ship CodeRabbit review on PR #222 2026-11-03 — a v1 selection on a removed category without a draft left the editor unable to open
-  test('a v1 selection on a removed category without a draft still opens the editor on an empty draft', async () => {
+  // Regression: /ship CodeRabbit review on PR #222 2026-11-03 — a v1 selection on a removed category migrated onto that category, where finished lines never sync
+  test('a v1 selection on a removed category opens the editor on General and keeps the removed draft', async () => {
     // Arrange
-    const base = v1Workspace('user_a')
-    const { '14': _removedDraft, ...draftsWithoutRemoved } = base.drafts
     const directory = await installV1([
       {
         id: 'user_a',
-        workspace: {
-          ...base,
-          selectedCategoryId: 14,
-          drafts: draftsWithoutRemoved,
-        },
+        workspace: v1Workspace('user_a', { selectedCategoryId: 14 }),
       },
     ])
 
@@ -367,8 +361,14 @@ describe('v1 to v2 workspace migration', () => {
 
     // Assert
     if (!result.ok) throw new Error('migration failed')
+    const removed = result.workspace.categories.find(
+      (category) => category.name === 'Old',
+    )!
     expect(workspaceView(result.workspace).draft.rows).toEqual([
-      { id: expect.any(String), text: '' },
+      { id: uid(201), text: 'general draft' },
+    ])
+    expect(result.workspace.drafts[removed.id]?.rows).toEqual([
+      { id: uid(204), text: 'old draft' },
     ])
   })
 

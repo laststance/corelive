@@ -601,10 +601,7 @@ function convertCategories(
 }
 
 /**
- * Converts the v1 drafts and gives every live category, and the selected one, an empty one.
- *
- * The editor reads the selected category's draft, so a v1 selection on a category that no longer
- * exists (now a historical placeholder) or was removed still gets an empty draft to open on.
+ * Converts the v1 drafts and gives every live category an empty one.
  *
  * @example const drafts = convertDrafts(conversion, categories)
  */
@@ -614,15 +611,10 @@ function convertDrafts(
 ): OfflineWorkspace['drafts'] {
   const { v1, seed, local } = conversion
   const drafts: OfflineWorkspace['drafts'] = {}
-  const selectedId = v1 ? local(v1.selectedCategoryId) : undefined
   for (const [key, draft] of Object.entries(v1?.drafts ?? {}))
     drafts[local(Number(key))] = draft
   for (const category of categories)
-    // Live categories always get a draft; the selection gets one whatever its state.
-    if (
-      (!category.removed && !category.historical) ||
-      category.id === selectedId
-    )
+    if (!category.removed && !category.historical)
       drafts[category.id] ??= {
         revision: 0,
         rows: [{ id: uuidFrom(`${seed}:row:${category.id}`), text: '' }],
@@ -882,6 +874,8 @@ function buildSummary(
 /**
  * Carries the scalar workspace fields: revision, creation time, selection, preferences and
  * command receipts. A fresh start selects the default category and uses default preferences.
+ * A v1 selection on a removed or vanished category also falls back to the default category,
+ * because its placeholder has no dashboard id and writing finished there would never sync.
  *
  * @example const header = convertHeader(conversion, defaultCategoryId, Date.now())
  */
@@ -898,10 +892,17 @@ function convertHeader(
   | 'commandReceipts'
 > {
   const { v1, local } = conversion
+  // Only a category that still exists and is not removed keeps the v1 selection.
+  const isSelectionLive = Boolean(
+    v1?.categories.some(
+      (category) => category.id === v1.selectedCategoryId && !category.removed,
+    ),
+  )
   return {
     revision: v1?.revision ?? 0,
     createdAt: v1?.preparedAt ?? now,
-    selectedCategoryId: v1 ? local(v1.selectedCategoryId) : defaultCategoryId,
+    selectedCategoryId:
+      v1 && isSelectionLive ? local(v1.selectedCategoryId) : defaultCategoryId,
     preferences: v1?.preferences ?? {
       revision: 0,
       settings: UserSettingsStateSchema.parse({}),
