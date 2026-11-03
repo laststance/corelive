@@ -199,6 +199,10 @@ waiting records; closing Details returns to the same editing session.
   server** or **Apply my version**. Alternate writing remains recoverable. A
   terminally cancelled record offers **Restore writing**; completing it again is
   a new deliberate action with a new identity.
+  A move or time correction whose category, title and time already equal the
+  dashboard's current record (for example after a category delete moved the
+  records on both sides) is accepted without asking, unless the dashboard has a
+  newer edit of that record; a different target still asks.
 - Category creation, rename, recolor, move and delete work offline in the
   editor picker and in Settings. A change made on the dashboard side that
   collides with one made here becomes a row on the Sync details page
@@ -278,6 +282,12 @@ to revoke the session when online (5 s limit, skipped offline), and always end
 the local session by removing the Clerk and app-domain cookies and storage. After
 the last step this Mac holds no credential; a leftover cookie is reported rather
 than hidden ([SIGNOUT_RESIDUAL_COOKIE](#signout-residual-cookie)).
+
+Sign-in attach, sign-out and **Clear again** run one at a time behind a single session
+lock. A sign-in that finishes while a sign-out or Clear again is running is dropped if
+that run ended the session, and kept if the run was cancelled or found nothing to clear;
+a sign-out waits for a running Clear again first. Quitting waits for a running sign-out
+or Clear again, so quit never leaves one before its journal or detach reaches disk.
 
 Server operation receipts and cancellation tombstones have no time-based expiry
 while the account exists. This prevents an old offline retry from duplicating or
