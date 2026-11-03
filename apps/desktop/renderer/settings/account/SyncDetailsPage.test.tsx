@@ -615,6 +615,36 @@ test('a fresh install with preserved backups lists them in History without "Noth
   ).toBeNull()
 })
 
+// Regression: /ship pre-landing review on 2026-11-03 — after the zero-count summary was hidden, History said "Nothing here yet." right under "Kept on the dashboard only"
+test('History with dashboard-only writing does not also say "Nothing here yet"', async () => {
+  // Arrange
+  const syncDetails = withRows([], {
+    migrationSummary: {
+      sourceAccountId: null,
+      importedDrafts: 0,
+      importedCompletions: 0,
+      recoveryCopies: 0,
+      v1FilesKept: 0,
+      preservedBackups: 0,
+    },
+    dashboardOnlyCount: 3,
+  })
+
+  // Act
+  await renderWithSettings(<SyncDetailsPage onBack={vi.fn()} />, {
+    syncDetails,
+  })
+
+  // Assert
+  const history = (
+    await screen.findByRole('heading', { name: 'History' })
+  ).closest('section')!
+  expect(
+    within(history).getByText('Kept on the dashboard only: 3'),
+  ).toBeVisible()
+  expect(within(history).queryByText('Nothing here yet.')).toBeNull()
+})
+
 test('History shows only the latest 50 entries', async () => {
   // Arrange
   const history = Array.from({ length: 60 }, (_, index) => ({

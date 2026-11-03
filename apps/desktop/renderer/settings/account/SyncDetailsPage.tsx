@@ -141,6 +141,7 @@ export function SyncDetailsPage({ onBack }: { onBack: () => void }) {
   // A fresh install records an all-zero summary; it has nothing to report.
   const summary = hasImportedWriting(migrationSummary) ? migrationSummary : null
   const backups = details?.preservedBackups ?? []
+  const dashboardOnlyCount = details?.dashboardOnlyCount ?? 0
 
   return (
     <div ref={containerRef} className="space-y-8">
@@ -206,14 +207,20 @@ export function SyncDetailsPage({ onBack }: { onBack: () => void }) {
             Kept as a backup: <MiddleTruncate text={backup.fileName} max={36} />
           </p>
         ))}
-        {(details?.dashboardOnlyCount ?? 0) > 0 && (
+        {dashboardOnlyCount > 0 && (
           <p className="type-small border-b pb-3 text-muted-foreground">
-            Kept on the dashboard only: {details?.dashboardOnlyCount}
+            Kept on the dashboard only: {dashboardOnlyCount}
           </p>
         )}
-        {history.length === 0 && !summary && backups.length === 0 && (
-          <p className="type-small text-muted-foreground">Nothing here yet.</p>
-        )}
+        {/* Empty only when no entry, summary, backup or dashboard-only line is shown. */}
+        {history.length === 0 &&
+          !summary &&
+          backups.length === 0 &&
+          dashboardOnlyCount === 0 && (
+            <p className="type-small text-muted-foreground">
+              Nothing here yet.
+            </p>
+          )}
         <ul>
           {history.map((item) => (
             <li
