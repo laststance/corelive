@@ -52,6 +52,7 @@ function mountEditor(
   theme = 'light',
   syncStatus: OfflineSyncStatus = LOCAL_ONLY_SYNC,
   placeholderName?: string,
+  selectPlaceholder = false,
 ) {
   const shown = new Set<() => void>()
   const snapshot: OfflineEditorSnapshot = {
@@ -61,7 +62,10 @@ function mountEditor(
     workspace: {
       ownerId: 'synthetic-focus-account',
       revision: 0,
-      selectedCategoryId: '00000000-0000-4000-8000-0000000000a1',
+      // A migration can leave the selection on a placeholder whose category no longer exists.
+      selectedCategoryId: selectPlaceholder
+        ? '00000000-0000-4000-8000-0000000000a2'
+        : '00000000-0000-4000-8000-0000000000a1',
       categories: [
         {
           id: '00000000-0000-4000-8000-0000000000a1',
@@ -600,6 +604,33 @@ test('the category picker and Manage categories leave out migration placeholder 
   fireEvent.click(screen.getByText('Manage categories…'))
 
   // Assert (manage list)
+  expect(await screen.findByRole('button', { name: 'General' })).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Old import' })).toBeNull()
+})
+
+// Regression: /ship CodeRabbit review on PR #222 2026-11-03 — a selected migration placeholder was still offered in Manage categories, where every edit is refused
+test('a selected migration placeholder names the picker but is left out of Manage categories', async () => {
+  // Arrange
+  mountEditor(
+    'ready',
+    false,
+    false,
+    true,
+    'light',
+    LOCAL_ONLY_SYNC,
+    'Old import',
+    true,
+  )
+
+  // Act
+  fireEvent.click(
+    await screen.findByRole('combobox', {
+      name: 'Writing category: Old import',
+    }),
+  )
+  fireEvent.click(await screen.findByText('Manage categories…'))
+
+  // Assert
   expect(await screen.findByRole('button', { name: 'General' })).toBeVisible()
   expect(screen.queryByRole('button', { name: 'Old import' })).toBeNull()
 })

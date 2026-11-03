@@ -53,18 +53,25 @@ export interface SharedCategoryPickerProps {
     command: WorkspaceCommand,
   ) => Promise<CategoryCommandOutcome>
   triggerRef?: React.RefObject<HTMLButtonElement | null>
+  /**
+   * Trigger name for an active category that `categories` leaves out on purpose (a migration
+   * placeholder): it stays named on the trigger but is never offered for selection or editing.
+   */
+  unlistedActiveCategoryName?: string
 }
 
 /**
  * Lets writing surfaces search parent/child paths, create categories and open their shared manager.
  *
  * @param categories - Current category rows; pending IDs remain visible but unselectable.
+ * @param unlistedActiveCategoryName - Trigger name when the active category is deliberately absent from `categories`.
  * @example
  * <SharedCategoryPicker categories={categories} activeCategoryId="0b1f…" onCategoryValueChange={setCategory} />
  */
 export function SharedCategoryPicker({
   categories,
   activeCategoryId,
+  unlistedActiveCategoryName,
   onCategoryValueChange,
   isLoading = false,
   isError = false,
@@ -90,9 +97,10 @@ export function SharedCategoryPicker({
   )
   const active =
     activeCategoryId === null ? undefined : hierarchy.byId.get(activeCategoryId)
+  // An unlisted active category (a migration placeholder) keeps its name on the trigger only.
   const activePath = active
     ? (hierarchy.paths.get(active.id) ?? active.name)
-    : 'No categories'
+    : (unlistedActiveCategoryName ?? 'No categories')
   const activeParent = active?.parentId
     ? hierarchy.byId.get(active.parentId)
     : undefined
@@ -142,6 +150,7 @@ export function SharedCategoryPicker({
                 {active?.removed
                   ? `${active.name} (removed)`
                   : (active?.name ??
+                    unlistedActiveCategoryName ??
                     (isLoading ? 'Loading categories…' : 'No categories'))}
               </span>
             </span>
