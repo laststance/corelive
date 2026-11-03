@@ -12,7 +12,7 @@ import {
   type OfflineEditorSnapshot,
 } from '@corelive/desktop-contract/offline-workspace-v2'
 import { ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
-import { afterEach, expect, test, vi } from 'vitest'
+import { afterEach, expect, onTestFinished, test, vi } from 'vitest'
 
 import { DurableEditorStore } from '../../renderer/editor/DurableEditorStore'
 import type { WindowManager } from '../WindowManager'
@@ -1146,11 +1146,7 @@ test('a sign-in reported during a sign-out that fails to save is kept and attach
 // the whole sign-in queue, so a hung identity check left "Clearing…" forever.
 test('Clear again does not wait forever on a sign-in whose identity check hangs', async () => {
   // Arrange
-  const fixture = await createFixture({
-    bound: 'account-a',
-    attached: true,
-    override: { sessionWaitMs: 50 },
-  })
+  const fixture = await createFixture({ bound: 'account-a', attached: true })
   await fixture.controller.initialize()
   fixture.endLocalSession.mockResolvedValueOnce({
     status: 'signed-out-residual',
@@ -1179,6 +1175,242 @@ test('Clear again does not wait forever on a sign-in whose identity check hangs'
   expect(await fixture.registry.read()).toMatchObject({
     attachedAccountId: null,
     signOutPending: false,
+  })
+})
+
+// Regression: /ship exception review round 3 (Codex adversarial) 2026-11-03 — on an unbound Mac a
+// sign-out shared a Clear again that a Connect prompt had made a no-op, leaving the session alive.
+test('an explicit sign-out during a Clear again on an unbound Mac ends the session that reached Connect', async () => {
+  // Arrange
+  const fixture = await createFixture()
+  await fixture.controller.initialize()
+  fixture.endLocalSession.mockResolvedValueOnce({
+    status: 'signed-out-residual',
+    code: 'SIGNOUT_RESIDUAL_COOKIE',
+    cookieNames: ['__session'],
+    domains: ['corelive.app'],
+  })
+  await fixture.controller.signOut()
+  const promptSaved = deferred()
+  const realUpdate = fixture.registry.update.bind(fixture.registry)
+  const promptWrite = vi.fn()
+  vi.spyOn(fixture.registry, 'update').mockImplementation(async (patch) => {
+    if (patch.pendingConnect?.accountId === 'account-a') {
+      promptWrite()
+      await promptSaved.promise
+    }
+    return realUpdate(patch)
+  })
+  const signingIn = fixture.controller.authenticated('account-a')
+  await vi.waitFor(() => expect(promptWrite).toHaveBeenCalledOnce())
+  const clearing = fixture.controller.clearAgain()
+
+  // Act
+  const explicit = fixture.controller.signOut()
+  promptSaved.resolve()
+  const [, signedOut] = await Promise.all([clearing, explicit, signingIn])
+
+  // Assert
+  expect(signedOut).toEqual({ status: 'signed-out' })
+  expect(fixture.endLocalSession).toHaveBeenCalledTimes(2)
+  expect(fixture.controller.accountStatus().pendingConnect).toBeNull()
+  expect(await fixture.registry.read()).toMatchObject({
+    pendingConnect: null,
+    signOutPending: false,
+  })
+})
+
+// Regression: /ship exception review round 3 (Codex + Claude adversarial) 2026-11-03 — a sign-out
+// cancelled by a failed save still invalidated a sign-in that had arrived before it.
+test('a sign-in that arrived before a sign-out cancelled by a failed save still attaches', async () => {
+  // Arrange
+  const fixture = await createFixture({ bound: 'account-a' })
+  await fixture.controller.initialize()
+  const identityReply = deferred()
+  fixture.transport.whoami.mockImplementationOnce(async () => {
+    await identityReply.promise
+    return { clerkId: 'account-a', email: null }
+  })
+  const signingIn = fixture.controller.authenticated('account-a')
+  await vi.waitFor(() =>
+    expect(fixture.transport.whoami).toHaveBeenCalledOnce(),
+  )
+  fixture.requestFlush.mockResolvedValueOnce(false)
+
+  // Act
+  const result = await fixture.controller.signOut()
+  identityReply.resolve()
+  await signingIn
+
+  // Assert
+  expect(result).toMatchObject({ status: 'flush-failed' })
+  expect(await fixture.registry.read()).toMatchObject({
+    attachedAccountId: 'account-a',
+    signOutPending: false,
+  })
+})
+
+// Regression: /ship exception review round 3 (Codex adversarial) 2026-11-03 — a Clear again that
+// found nothing to clear still dropped the sign-in of the session that stayed alive.
+test('a sign-in reported during a Clear again that clears nothing is still handled', async () => {
+  // Arrange
+  const fixture = await createFixture({ bound: 'account-a', attached: true })
+  await fixture.controller.initialize()
+  fixture.endLocalSession.mockResolvedValueOnce({
+    status: 'signed-out-residual',
+    code: 'SIGNOUT_RESIDUAL_COOKIE',
+    cookieNames: ['__session'],
+    domains: ['corelive.app'],
+  })
+  await fixture.controller.signOut()
+  const attachSaved = deferred()
+  const realUpdate = fixture.registry.update.bind(fixture.registry)
+  const attachWrite = vi.fn()
+  vi.spyOn(fixture.registry, 'update').mockImplementation(async (patch) => {
+    if (patch.attachedAccountId === 'account-a') {
+      attachWrite()
+      await attachSaved.promise
+    }
+    return realUpdate(patch)
+  })
+  const signingInA = fixture.controller.authenticated('account-a')
+  await vi.waitFor(() => expect(attachWrite).toHaveBeenCalledOnce())
+  const clearing = fixture.controller.clearAgain()
+  // The identity check asks with no expected account; the woken sync loop asks for account-a.
+  fixture.broker.acquire.mockImplementation(
+    async (expectedAccountId, generation) => ({
+      status: 'ready',
+      credential: {
+        status: 'ready',
+        requestId: randomUUID(),
+        expectedAccountId,
+        generation,
+        accountId: expectedAccountId ?? 'account-b',
+        token: 'test-token',
+      },
+    }),
+  )
+  fixture.transport.whoami.mockImplementation(async () => ({
+    clerkId: 'account-b',
+    email: 'b@example.com',
+  }))
+
+  // Act
+  const signingInB = fixture.controller.authenticated('account-b')
+  attachSaved.resolve()
+  await Promise.all([clearing, signingInA, signingInB])
+
+  // Assert
+  expect(fixture.endLocalSession).toHaveBeenCalledOnce()
+  expect(fixture.controller.accountStatus().state).toBe('other-account')
+  expect((await fixture.registry.read()).attachedAccountId).toBeNull()
+})
+
+// Regression: /ship exception review round 3 (Claude adversarial) 2026-11-03 — a failing final detach
+// write rejected the sign-out after the session had already been swept.
+test('a sign-out whose final detach write fails still finishes and keeps the journal for next launch', async () => {
+  // Arrange
+  const fixture = await createFixture({ bound: 'account-a', attached: true })
+  await fixture.controller.initialize()
+  const realUpdate = fixture.registry.update.bind(fixture.registry)
+  vi.spyOn(fixture.registry, 'update').mockImplementation(async (patch) => {
+    if (patch.signOutPending === false && patch.attachedAccountId === null)
+      throw new Error('disk full')
+    return realUpdate(patch)
+  })
+
+  // Act
+  const result = await fixture.controller.signOut()
+
+  // Assert
+  expect(result).toEqual({ status: 'signed-out' })
+  expect(fixture.log).toHaveBeenCalledWith('SIGNOUT_DETACH_DEFERRED')
+  expect((await fixture.registry.read()).signOutPending).toBe(true)
+  expect(fixture.controller.accountStatus().state).toBe('signed-out')
+})
+
+// Regression: /ship exception review round 3 (Claude adversarial) 2026-11-03 — after a deferred detach
+// the editor kept showing a synced state while Settings said signed out.
+test('after a sign-out whose detach was deferred the editor shows local-only sync', async () => {
+  // Arrange
+  const fixture = await createFixture({ bound: 'account-a', attached: true })
+  await fixture.controller.initialize()
+  const realUpdate = fixture.registry.update.bind(fixture.registry)
+  vi.spyOn(fixture.registry, 'update').mockImplementation(async (patch) => {
+    if (Object.keys(patch).join() === 'attachedAccountId')
+      throw new Error('disk full')
+    return realUpdate(patch)
+  })
+  fixture.endLocalSession.mockResolvedValueOnce({
+    status: 'signed-out-residual',
+    code: 'SIGNOUT_RESIDUAL_COOKIE',
+    cookieNames: ['__session'],
+    domains: ['corelive.app'],
+  })
+
+  // Act
+  await fixture.controller.signOut()
+
+  // Assert
+  const snapshot = fixture.controller.getSnapshot()
+  if (snapshot.phase !== 'ready') throw new Error('Expected a ready editor')
+  expect(snapshot.sync.state).toBe('local-only')
+})
+
+// Regression: /ship exception review round 3 (Claude adversarial) 2026-11-03 — Connect used the prompt
+// it read before its worker calls and attached that account after a newer sign-in replaced it.
+test('Connect attaches nothing when a newer sign-in replaced the prompt while it was preparing', async () => {
+  // Arrange
+  const fixture = await createFixture()
+  await fixture.controller.initialize()
+  await fixture.controller.authenticated('account-a')
+  const realCall = WorkspaceWorkerClient.prototype.call
+  const totalAsked = vi.fn()
+  const totalGate = deferred()
+  const callSpy = vi
+    .spyOn(WorkspaceWorkerClient.prototype, 'call')
+    .mockImplementation(async function (
+      this: WorkspaceWorkerClient,
+      type,
+      input,
+    ) {
+      if (type === 'pendingTotal') {
+        totalAsked()
+        await totalGate.promise
+      }
+      return realCall.call(this, type, input)
+    })
+  onTestFinished(() => callSpy.mockRestore())
+  const connecting = fixture.controller.connect()
+  await vi.waitFor(() => expect(totalAsked).toHaveBeenCalledOnce())
+  fixture.broker.acquire.mockImplementation(
+    async (expectedAccountId, generation) => ({
+      status: 'ready',
+      credential: {
+        status: 'ready',
+        requestId: randomUUID(),
+        expectedAccountId,
+        generation,
+        accountId: 'account-b',
+        token: 'test-token',
+      },
+    }),
+  )
+  fixture.transport.whoami.mockImplementation(async () => ({
+    clerkId: 'account-b',
+    email: 'b@example.com',
+  }))
+  await fixture.controller.authenticated('account-b')
+
+  // Act
+  totalGate.resolve()
+  const connected = await connecting
+
+  // Assert
+  expect(connected).toBe(false)
+  expect(await fixture.registry.read()).toMatchObject({
+    attachedAccountId: null,
+    pendingConnect: { accountId: 'account-b' },
   })
 })
 

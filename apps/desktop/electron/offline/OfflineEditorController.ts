@@ -52,16 +52,10 @@ type ControllerOptions = {
   revokeTimeoutMs?: number
   /** Bound on awaiting an in-flight sync request at sign-out (C9). */
   settleTimeoutMs?: number
-  /** Bound on Clear again waiting for a sign-in that is still being handled. */
-  sessionWaitMs?: number
 }
 
 /** Sign-out's remote revoke bound (D3 step 3). */
 const REMOTE_REVOKE_TIMEOUT_MS = 5000
-
-/** Clear again's bound on waiting for a sign-in still being handled; one stuck in its identity
- * check fails its epoch check afterwards and never attaches. */
-const SESSION_WAIT_TIMEOUT_MS = 2000
 
 /**
  * Owns the device workspace, the optional account attachment and background synchronization.
@@ -94,8 +88,13 @@ export class OfflineEditorController {
   private signedIn: { clerkId: string; email: string | null } | null = null
   private firstUpload: AccountStatus['firstUpload'] = null
   private signOutRun: Promise<SignOutResult> | null = null
+  private clearRun: Promise<SignOutResult> | null = null
+  /** Set while a sign-out or Clear again runs; resolves to whether it actually ended the session. */
+  private sessionEnding: Promise<boolean> | null = null
   private sessionTail: Promise<void> = Promise.resolve()
-  /** Bumped by every sign-out; an attach decided before a newer sign-out began is dropped. */
+  /** Serializes every registry write that attaches or ends the session, so they never interleave. */
+  private sessionLock: Promise<unknown> = Promise.resolve()
+  /** Bumped just before a session is ended; an attach decided earlier is dropped. */
   private signOutEpoch = 0
   private snapshot: OfflineEditorSnapshot = {
     phase: 'opening',
@@ -207,11 +206,11 @@ export class OfflineEditorController {
    * @example await controller.authenticated('user_123')
    */
   async authenticated(clerkId: string): Promise<void> {
-    // One arriving while a sign-out or Clear again runs waits for it, outside the queue so Clear again
-    // never waits on it: a run that ended the session takes it along, a cancelled sign-out does not.
-    const ending = this.signOutRun
-    if (ending && (await ending).status !== 'flush-failed') return
-    // A notification queued before a sign-out belongs to the session that sign-out ended.
+    // One arriving while a sign-out or Clear again runs waits for it outside the queue; it is dropped
+    // only when that run actually ended the session (not when cancelled or when nothing was cleared).
+    const ending = this.sessionEnding
+    if (ending && (await ending)) return
+    // A notification queued before a session end belongs to the session that ended.
     const epoch = this.signOutEpoch
     this.sessionTail = this.sessionTail
       .then(async () => this.handleSession(clerkId, epoch))
@@ -221,19 +220,43 @@ export class OfflineEditorController {
 
   /** Verifies the identity and routes it; see {@link authenticated}. */
   private async handleSession(clerkId: string, epoch: number): Promise<void> {
-    if (!this.context || this.signOutRun || epoch !== this.signOutEpoch) return
-    const attached = this.registryState?.attachedAccountId
+    if (!this.context || epoch !== this.signOutEpoch) return
     // Already attached to this account: only a wake, no identity round trip. A journaled sign-out
     // is not attached, so it takes the full path below and is cleared by the verified sign-in.
-    if (attached === clerkId && !this.registryState?.signOutPending) {
+    if (
+      this.registryState?.attachedAccountId === clerkId &&
+      !this.registryState.signOutPending
+    ) {
       this.loop.wake()
       return
     }
     const who = await this.verifyIdentity(clerkId)
-    // A sign-out during the identity round trip wins, even one that already finished.
-    if (!who || epoch !== this.signOutEpoch) return
-    const bound = await this.context.worker.call('binding', null)
+    // A session end during the identity round trip wins, even one that already finished.
+    const context = this.context
+    if (!who || !context || epoch !== this.signOutEpoch) return
+    const bound = await context.worker.call('binding', null)
+    // The decision commits under the session lock, so it lands wholly before or is dropped by a
+    // session end that began meanwhile; network waits never hold the lock.
+    await this.withSessionLock(async () =>
+      this.commitSession(who, bound, epoch),
+    )
+    this.publishSync()
+  }
+
+  /**
+   * Writes {@link handleSession}'s routing decision unless a session end began since it was queued.
+   * @param who - The verified identity.
+   * @param bound - The workspace binding read before taking the lock.
+   * @param epoch - {@link signOutEpoch} when the notification arrived.
+   * @example await this.withSessionLock(async () => this.commitSession(who, bound, epoch))
+   */
+  private async commitSession(
+    who: { clerkId: string; email: string | null },
+    bound: { accountId: string } | null,
+    epoch: number,
+  ): Promise<void> {
     if (epoch !== this.signOutEpoch) return
+    const attached = this.registryState?.attachedAccountId
     this.signedIn = who
     if (!bound) {
       // DA4/EA2b: an unbound Mac waits for Connect; nothing is sent to the sync endpoints.
@@ -259,7 +282,45 @@ export class OfflineEditorController {
         attachedAccountId: null,
       })
     }
-    this.publishSync()
+  }
+
+  /**
+   * Runs `task` after every earlier attach or session end finished ({@link sessionLock}).
+   * Tasks never take the lock again, so it cannot deadlock.
+   * @param task - Registry writes that must not interleave with another session change.
+   * @returns The task's result.
+   * @example await this.withSessionLock(async () => this.clearPendingSession())
+   */
+  private async withSessionLock<T>(task: () => Promise<T>): Promise<T> {
+    const run = this.sessionLock.then(task)
+    this.sessionLock = run.catch(() => undefined)
+    return run
+  }
+
+  /**
+   * Publishes `work` as the session end in flight, so {@link authenticated} can wait for its outcome.
+   * The marker clears before the run resolves, so a login after it is never mistaken for one during it.
+   * @param work - The sign-out or Clear again; `ended` says whether it actually ended the session.
+   * @returns The run's result.
+   * @example this.signOutRun = this.beginSessionEnd(async () => ({ result, ended: true }))
+   */
+  private async beginSessionEnd(
+    work: () => Promise<{ result: SignOutResult; ended: boolean }>,
+  ): Promise<SignOutResult> {
+    let settle: (ended: boolean) => void = () => undefined
+    const ending = new Promise<boolean>((resolve) => {
+      settle = resolve
+    })
+    this.sessionEnding = ending
+    let ended = false
+    try {
+      const outcome = await work()
+      ended = outcome.ended
+      return outcome.result
+    } finally {
+      if (this.sessionEnding === ending) this.sessionEnding = null
+      settle(ended)
+    }
   }
 
   /**
@@ -297,21 +358,32 @@ export class OfflineEditorController {
    */
   async connect(): Promise<boolean> {
     const pending = this.registryState?.pendingConnect
-    if (!pending || !this.context || this.signOutRun) return false
+    const context = this.context
+    if (!pending || !context || this.sessionEnding) return false
     const epoch = this.signOutEpoch
-    const bound = await this.context.worker.call('binding', null)
+    const bound = await context.worker.call('binding', null)
     if (bound && bound.accountId !== pending.accountId) return false
     // DA4: the progress count is every unsent keep, archived history included.
-    const total = await this.context.worker.call('pendingTotal', null)
-    // A sign-out that started while the worker answered wins; never attach behind it.
-    if (epoch !== this.signOutEpoch) return false
-    this.firstUpload = { state: 'uploading', count: total }
-    this.pendingEmail = pending.displayEmail || null
-    this.registryState = await this.registry.update({
-      attachedAccountId: pending.accountId,
-      pendingConnect: null,
-      signOutPending: false,
+    const total = await context.worker.call('pendingTotal', null)
+    // Commits under the session lock: a session end that began meanwhile wins, and a newer sign-in
+    // that replaced the prompt is never attached under the old account.
+    const accepted = await this.withSessionLock(async () => {
+      if (
+        epoch !== this.signOutEpoch ||
+        !this.context ||
+        this.registryState?.pendingConnect?.accountId !== pending.accountId
+      )
+        return false
+      this.firstUpload = { state: 'uploading', count: total }
+      this.pendingEmail = pending.displayEmail || null
+      this.registryState = await this.registry.update({
+        attachedAccountId: pending.accountId,
+        pendingConnect: null,
+        signOutPending: false,
+      })
+      return true
     })
+    if (!accepted) return false
     this.loop.wake()
     this.publishSync()
     return true
@@ -390,16 +462,17 @@ export class OfflineEditorController {
    * @example const result = await controller.signOut()
    */
   async signOut(): Promise<SignOutResult> {
-    const running = this.signOutRun
-    if (running) {
-      const shared = await running
-      // Sharing a run is right unless it was a Clear again that found a racing sign-in attached and
-      // swept nothing; this request then still signs that sign-in out.
-      if (shared.status === 'flush-failed' || !this.isAttached()) return shared
-    }
-    if (!this.signOutRun) this.signOutEpoch += 1
-    this.signOutRun ??= this.runSignOut().finally(() => {
-      this.signOutRun = null
+    // A Clear again in flight answers a different request (it may find nothing to clear); let it
+    // finish, then sign out. Concurrent sign-outs share one run.
+    const clearing = this.clearRun
+    if (clearing) await clearing.catch(() => undefined)
+    this.signOutRun ??= this.beginSessionEnd(async () => {
+      try {
+        const result = await this.runSignOut()
+        return { result, ended: result.status !== 'flush-failed' }
+      } finally {
+        this.signOutRun = null
+      }
     })
     return this.signOutRun
   }
@@ -410,8 +483,20 @@ export class OfflineEditorController {
       .requestFlush(generation)
       .catch(() => false)
     if (!flushed || generation !== this.generation) return this.flushFailed()
+    // Only a sign-out that goes ahead invalidates logins decided before it; a cancelled one keeps them.
+    this.signOutEpoch += 1
     // Sign-out keeps the editor open, so its flush must not leave editing blocked.
     this.options.releaseEditorBarrier?.()
+    return this.withSessionLock(async () => this.endSession(generation))
+  }
+
+  /**
+   * D3 steps 2-4 of {@link signOut}, under the session lock so no attach lands in between.
+   * @param generation - The controller generation the flush succeeded for.
+   * @returns The session-end result, or `flush-failed` when the journal could not be written.
+   * @example return this.withSessionLock(async () => this.endSession(generation))
+   */
+  private async endSession(generation: number): Promise<SignOutResult> {
     try {
       this.registryState = await this.registry.update({
         signOutPending: true,
@@ -475,17 +560,24 @@ export class OfflineEditorController {
         }
       })
     // A journaled sign-out always ends detached, even when the earlier detach write failed.
-    if (result.status === 'signed-out')
-      this.registryState = await this.registry.update({
-        signOutPending: false,
-        attachedAccountId: null,
-      })
+    if (result.status === 'signed-out') {
+      try {
+        this.registryState = await this.registry.update({
+          signOutPending: false,
+          attachedAccountId: null,
+        })
+      } catch {
+        // The journal stays set, so the next launch (or Clear again) finishes the detach (EA1).
+        this.options.log?.('SIGNOUT_DETACH_DEFERRED')
+      }
+    }
+    this.publishSync()
     return result
   }
 
   /**
    * The "Clear again" action after a residual result: reruns only D3 step 4 and its read-back.
-   * Called by the Settings IPC; runs under the same in-flight guard as {@link signOut}.
+   * Called by the Settings IPC; serialized with sign-ins and sign-outs by the session lock.
    * @returns
    * - The sweep's result while a sign-out is journaled
    * - The running sign-out's result when one is already in flight
@@ -493,39 +585,38 @@ export class OfflineEditorController {
    * @example await controller.clearAgain() // => { status: 'signed-out' }
    */
   async clearAgain(): Promise<SignOutResult> {
-    // A sign-out or Clear again already sweeping owns the session end; share its result.
+    // A sign-out in flight ends the session anyway; a Clear again in flight is this same request.
     if (this.signOutRun) return this.signOutRun
+    if (this.clearRun) return this.clearRun
     // A sign-in that completed since the residual result already cleared the journal; leave it alone.
     if (!this.registryState?.signOutPending) return { status: 'signed-out' }
-    // Like a sign-out, clearing ends the session: the epoch drops logins queued before it, and the
-    // in-flight run drops logins arriving during it (authenticated, handleSession, connect).
-    this.signOutEpoch += 1
-    this.signOutRun = this.clearPendingSession().finally(() => {
-      this.signOutRun = null
+    this.clearRun = this.beginSessionEnd(async () => {
+      try {
+        return await this.withSessionLock(async () =>
+          this.clearPendingSession(),
+        )
+      } finally {
+        this.clearRun = null
+      }
     })
-    return this.signOutRun
+    return this.clearRun
   }
 
   /**
-   * The body of {@link clearAgain}: a sign-in already saving its attach finishes first, so the sweep
-   * and an attach never interleave; when that sign-in cleared the journal, nothing is swept.
-   * @returns The sweep's result, or `signed-out` when a sign-in that was saving cleared the journal.
-   * @example this.signOutRun = this.clearPendingSession()
+   * The body of {@link clearAgain}, run under the session lock: an attach already committing lands
+   * first, and when it cleared the journal nothing is swept and no login is invalidated.
+   * @returns The sweep's result and `ended: true`, or `signed-out` with `ended: false`.
+   * @example await this.withSessionLock(async () => this.clearPendingSession())
    */
-  private async clearPendingSession(): Promise<SignOutResult> {
-    let timer: ReturnType<typeof setTimeout> | undefined
-    await Promise.race([
-      this.sessionTail,
-      new Promise<void>((resolve) => {
-        timer = setTimeout(
-          resolve,
-          this.options.sessionWaitMs ?? SESSION_WAIT_TIMEOUT_MS,
-        )
-      }),
-    ])
-    clearTimeout(timer)
-    if (!this.registryState?.signOutPending) return { status: 'signed-out' }
-    return this.finishPendingSignOut()
+  private async clearPendingSession(): Promise<{
+    result: SignOutResult
+    ended: boolean
+  }> {
+    if (!this.registryState?.signOutPending)
+      return { result: { status: 'signed-out' }, ended: false }
+    // Only a sweep that goes ahead invalidates logins decided before it.
+    this.signOutEpoch += 1
+    return { result: await this.finishPendingSignOut(), ended: true }
   }
 
   /**
@@ -544,7 +635,7 @@ export class OfflineEditorController {
    */
   sessionUnavailable(): void {
     this.options.broker.reset()
-    if (this.registryState?.attachedAccountId) {
+    if (this.isAttached()) {
       this.loopStatus = 'sign-in-required'
       this.publishSync()
     }
@@ -835,8 +926,7 @@ export class OfflineEditorController {
       lastSyncedAt: view.binding?.lastSyncedAt ?? null,
       boundEmail: view.binding?.displayEmail ?? null,
     }
-    if (!this.registryState?.attachedAccountId)
-      return { state: 'local-only', ...base }
+    if (!this.isAttached()) return { state: 'local-only', ...base }
     switch (this.loopStatus) {
       case 'syncing':
         return { state: 'syncing', ...base }
