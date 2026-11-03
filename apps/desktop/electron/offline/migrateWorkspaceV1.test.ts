@@ -346,6 +346,59 @@ describe('v1 to v2 workspace migration', () => {
     ])
   })
 
+  // Regression: /ship CodeRabbit review on PR #222 2026-11-03 — a v1 draft on a category that no longer exists stayed on a hidden placeholder that neither the picker nor recovery could open
+  test('a v1 draft on a category that no longer exists is offered as a recovery copy for General', async () => {
+    // Arrange
+    const base = v1Workspace('user_a')
+    const directory = await installV1([
+      {
+        id: 'user_a',
+        workspace: {
+          ...base,
+          drafts: {
+            ...base.drafts,
+            '99': {
+              revision: 3,
+              rows: [
+                { id: uid(205), text: 'lost one' },
+                { id: uid(206), text: 'lost two' },
+              ],
+            },
+          },
+        },
+      },
+    ])
+
+    // Act
+    const result = await migrateWorkspaceV1({ directory, now: () => NOW })
+
+    // Assert
+    if (!result.ok) throw new Error('migration failed')
+    const general = result.workspace.categories.find(
+      (category) => category.name === 'General',
+    )!
+    expect(
+      result.workspace.recoveryCopies.map((copy) => ({
+        categoryId: copy.categoryId,
+        text: copy.text,
+        reason: copy.reason,
+      })),
+    ).toEqual([
+      // The v1 file's own recovery copy is carried over unchanged.
+      {
+        categoryId: '7833e693-928a-417e-a88e-fe0b84ff659a',
+        text: 'saved copy',
+        reason: 'earlier',
+      },
+      {
+        categoryId: general.id,
+        text: 'lost one\nlost two',
+        reason: 'earlier-category',
+      },
+    ])
+    expect(result.workspace.migration.summary?.recoveryCopies).toBe(1)
+  })
+
   // Regression: /ship CodeRabbit review on PR #222 2026-11-03 — a v1 selection on a removed category migrated onto that category, where finished lines never sync
   test('a v1 selection on a removed category opens the editor on General and keeps the removed draft', async () => {
     // Arrange

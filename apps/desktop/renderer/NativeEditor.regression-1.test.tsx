@@ -17,6 +17,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, expect, test, vi } from 'vitest'
@@ -633,6 +634,38 @@ test('a selected migration placeholder names the picker but is left out of Manag
   // Assert
   expect(await screen.findByRole('button', { name: 'General' })).toBeVisible()
   expect(screen.queryByRole('button', { name: 'Old import' })).toBeNull()
+})
+
+// Regression: /ship CodeRabbit review on PR #222 2026-11-03 — Move writing offered a hidden migration placeholder as its destination, so the moved writing vanished from the editor
+test('Move writing never offers a migration placeholder as the destination', async () => {
+  // Arrange
+  mountEditor(
+    'ready',
+    false,
+    true,
+    true,
+    'light',
+    LOCAL_ONLY_SYNC,
+    'Old import',
+  )
+  fireEvent.click(await screen.findByRole('button', { name: 'Details' }))
+
+  // Act
+  fireEvent.click(await screen.findByRole('button', { name: 'Move writing' }))
+
+  // Assert
+  const destination = await screen.findByRole('combobox', {
+    name: /Destination category/,
+  })
+  expect(destination).toBeVisible()
+  expect(
+    within(destination).queryByRole('option', { name: 'Old import' }),
+  ).toBeNull()
+  expect(
+    screen.getByText(
+      'Create another category first, in Settings > Categories.',
+    ),
+  ).toBeVisible()
 })
 
 // Regression: /ship CodeRabbit review on PR #222 2026-11-03 — Details told an offline Mac to "Connect to manage categories" although categories work offline

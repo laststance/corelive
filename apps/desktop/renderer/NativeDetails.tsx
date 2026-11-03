@@ -495,9 +495,11 @@ function RepairDialog({
   restoreFocus: () => void
   onFeedback: (text: string) => void
 }) {
+  // Migration placeholders are hidden from the editor, so they are never a destination.
   const destinations = main.workspace.categories.filter(
     (category) =>
       !category.removed &&
+      !category.historical &&
       (repair.kind !== 'category' || category.id !== repair.source.id),
   )
   const suggestion =

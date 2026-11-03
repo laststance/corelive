@@ -478,13 +478,14 @@ interface BuildInput {
  */
 type Conversion = ReturnType<typeof createConversion>['conversion']
 
-/** Fields of a recovery copy built during migration, before its deterministic id is assigned. */
+/**
+ * Fields of a recovery copy built during migration, before its deterministic id is assigned.
+ * The origin is left out only for the source account's own writing, which needs no label.
+ */
 type RecoveryCopyDraft = Pick<
   RecoveryCopy,
-  'categoryId' | 'text' | 'reason'
-> & {
-  origin: NonNullable<RecoveryCopy['origin']>
-}
+  'categoryId' | 'text' | 'reason' | 'origin'
+>
 
 /**
  * Builds the id mapping for one conversion run.
@@ -763,6 +764,39 @@ function importLegacyNotes(
 }
 
 /**
+ * Offers each v1 draft left on a category that no longer exists as a recovery copy in the default category.
+ *
+ * The draft stays on its placeholder (EA9), but neither the picker nor the editor opens a
+ * placeholder, so Details > Recovery copies is the only place the user can see and restore it.
+ * Removed categories are skipped: Details lists them with their own Move writing repair.
+ *
+ * @param addCopy - Appends a recovery copy; the caller owns the deterministic id counter.
+ * @example offerPlaceholderDrafts(conversion, categories, defaultCategoryId, addCopy)
+ */
+function offerPlaceholderDrafts(
+  conversion: Conversion,
+  categories: OfflineWorkspace['categories'],
+  defaultCategoryId: string,
+  addCopy: (copy: RecoveryCopyDraft) => void,
+): void {
+  const { v1, local } = conversion
+  if (!v1) return
+  const placeholderIds = new Set(
+    categories
+      .filter((category) => category.historical)
+      .map((category) => category.id),
+  )
+  // describeWriting already skips blank drafts, so only real writing becomes a copy.
+  for (const draft of describeWriting(v1).drafts)
+    if (placeholderIds.has(local(draft.serverCategoryId)))
+      addCopy({
+        categoryId: defaultCategoryId,
+        text: draft.text,
+        reason: 'earlier-category',
+      })
+}
+
+/**
  * Converts the v1 account binding: server ids, merge base, deletions and last sync time.
  *
  * @returns The binding, or null on a fresh start.
@@ -971,7 +1005,7 @@ function buildWorkspace(input: BuildInput): OfflineWorkspace {
     categories[0]!.id
   const drafts = convertDrafts(conversion, categories)
 
-  // Copy ids count up in creation order, so the file loop must run before the legacy notes.
+  // Copy ids count up in creation order: the file loop, then legacy notes, then placeholder drafts.
   const created: RecoveryCopy[] = []
   const addCopy = (copy: RecoveryCopyDraft): void => {
     created.push({
@@ -988,6 +1022,7 @@ function buildWorkspace(input: BuildInput): OfflineWorkspace {
     addCopy,
   )
   importLegacyNotes(conversion, input.legacyNotes, defaultCategoryId, addCopy)
+  offerPlaceholderDrafts(conversion, categories, defaultCategoryId, addCopy)
 
   const summary = buildSummary(
     conversion,

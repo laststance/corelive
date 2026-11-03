@@ -1263,8 +1263,12 @@ export class WorkspaceService {
 
     if (source === destination) return
 
+    // A migration placeholder is hidden from the editor, so writing moved there would vanish.
     const targetCategory = state.categories.find(
-      (category) => category.id === destination && !category.removed,
+      (category) =>
+        category.id === destination &&
+        !category.removed &&
+        !category.historical,
     )
 
     if (!targetCategory) throw new WorkspaceCommandError('category-unavailable')
@@ -1551,9 +1555,13 @@ export class WorkspaceService {
     if (!copy) throw new WorkspaceCommandError('record-unavailable')
     if (copy.restoredTo !== undefined) return
     const destination = effectiveCategory(state, command.destinationId)
+    // Restoring into a hidden migration placeholder would lose the writing from view again.
     if (
       !state.categories.some(
-        (category) => category.id === destination && !category.removed,
+        (category) =>
+          category.id === destination &&
+          !category.removed &&
+          !category.historical,
       )
     )
       throw new WorkspaceCommandError('category-unavailable')

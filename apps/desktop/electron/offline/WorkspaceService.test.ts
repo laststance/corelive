@@ -232,6 +232,52 @@ describe('offline writing and completion transactions', () => {
     },
   )
 
+  // Regression: /ship CodeRabbit review on PR #222 2026-11-03 — Move writing and Restore writing accepted a hidden migration placeholder, so the writing vanished from the editor again
+  test.each(['moveCategory', 'restoreRecovery'] as const)(
+    '%s into a migration placeholder is refused and leaves the writing where it was',
+    async (type) => {
+      // Arrange
+      const fixture = await createWorkspace()
+      const copyId = randomUUID()
+      const before = await fixture.file.update((current) => ({
+        ...current,
+        revision: current.revision + 1,
+        categories: current.categories.map((category) =>
+          category.id === category3
+            ? { ...category, name: 'Earlier category', historical: true }
+            : category,
+        ),
+        recoveryCopies: [
+          {
+            id: copyId,
+            categoryId: category1,
+            text: 'kept copy',
+            reason: 'earlier-category',
+            createdAt: instant,
+          },
+        ],
+      }))
+      const command: WorkspaceCommand =
+        type === 'moveCategory'
+          ? {
+              type,
+              commandId: randomUUID(),
+              sourceId: category2,
+              destinationId: category3,
+            }
+          : { type, commandId: randomUUID(), copyId, destinationId: category3 }
+
+      // Act
+      const attempt = fixture.service.execute(command)
+
+      // Assert
+      await expect(attempt).rejects.toThrow('category-unavailable')
+      expect(await new AtomicWorkspaceFile(fixture.options).read()).toEqual(
+        before,
+      )
+    },
+  )
+
   test.each(['move', 'recovery'] as const)(
     '%s preserves both large documents and permits shortening and retyping after restart',
     async (mode) => {
