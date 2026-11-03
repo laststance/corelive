@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 import '@testing-library/jest-dom/vitest'
 import { UserSettingsStateSchema } from '@corelive/desktop-contract/settings'
-import { SharedEditorSurface } from '@corelive/live-editor/surface'
-import { splitFinishedLine } from '@corelive/live-editor/utils'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, test, vi } from 'vitest'
+
+import { splitFinishedLine } from './liveEditorUtils'
+import { SharedEditorSurface } from './SharedEditorSurface'
 
 afterEach(() => {
   cleanup()

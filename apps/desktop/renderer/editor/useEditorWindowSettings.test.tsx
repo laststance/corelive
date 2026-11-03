@@ -7,9 +7,10 @@
  * slider showing a value the window never applied.
  */
 import type { LiveEditorAPI } from '@corelive/desktop-contract/electron-api'
-import { useEditorWindowSettings } from '@corelive/live-editor/window-settings'
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
+
+import { useEditorWindowSettings } from './useEditorWindowSettings'
 
 afterEach(cleanup)
 

@@ -1,8 +1,8 @@
 'use client'
+import { cn } from '@corelive/live-editor/cn'
 import * as React from 'react'
 import { useEffect, useLayoutEffect, useRef } from 'react'
 
-import { cn } from './cn'
 import { MAX_BOX_ROUNDING_ERROR_PX } from './constants'
 import { splitFinishedLine } from './liveEditorUtils'
 

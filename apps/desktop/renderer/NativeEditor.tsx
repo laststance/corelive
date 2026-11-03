@@ -3,21 +3,11 @@ import type {
   OfflineCompletion,
   OfflineEditorSnapshot,
 } from '@corelive/desktop-contract/offline-workspace'
-import { SharedCategoryPicker } from '@corelive/live-editor/category-picker'
-import { getDraftInputLimit } from '@corelive/live-editor/draft-input-limit'
-import { TodayEmber } from '@corelive/live-editor/ember'
-import { useEditorInput } from '@corelive/live-editor/input'
-import type {
-  DurableEditorStore,
-  DurableEditorSnapshot,
-} from '@corelive/live-editor/store'
-import { SharedEditorSurface } from '@corelive/live-editor/surface'
 import { applyThemeAttribute } from '@corelive/live-editor/theme-transition'
 import {
   DEFAULT_THEME_PREFERENCE,
   normalizeThemePreference,
 } from '@corelive/live-editor/themes'
-import { useEditorWindowSettings } from '@corelive/live-editor/window-settings'
 import {
   useCallback,
   useEffect,
@@ -29,6 +19,16 @@ import {
   useSyncExternalStore,
 } from 'react'
 
+import { getDraftInputLimit } from './editor/draftInputLimit'
+import type {
+  DurableEditorStore,
+  DurableEditorSnapshot,
+} from './editor/DurableEditorStore'
+import { useEditorInput } from './editor/editorInput'
+import { SharedCategoryPicker } from './editor/SharedCategoryPicker'
+import { SharedEditorSurface } from './editor/SharedEditorSurface'
+import { TodayEmber } from './editor/TodayEmber'
+import { useEditorWindowSettings } from './editor/useEditorWindowSettings'
 import { NativeDetails } from './NativeDetails'
 import {
   NativeFooter,

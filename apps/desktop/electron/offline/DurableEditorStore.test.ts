@@ -12,8 +12,9 @@ import type {
   WorkspaceCommand,
 } from '@corelive/desktop-contract/offline-workspace'
 import { UserSettingsStateSchema } from '@corelive/desktop-contract/settings'
-import { DurableEditorStore } from '@corelive/live-editor/store'
 import { afterEach, expect, test, vi } from 'vitest'
+
+import { DurableEditorStore } from '../../renderer/editor/DurableEditorStore'
 
 import {
   WorkspaceWorkerClient,

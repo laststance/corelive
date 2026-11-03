@@ -2,13 +2,14 @@ import type {
   OfflineCompletion,
   OfflineEditorSnapshot,
 } from '@corelive/desktop-contract/offline-workspace'
-import type {
-  DurableEditorSnapshot,
-  DurableEditorStore,
-} from '@corelive/live-editor/store'
 import { Button } from '@corelive/live-editor/ui/button'
 import { AlertCircle, Undo2 } from 'lucide-react'
 import { useEffect, useRef, type RefObject } from 'react'
+
+import type {
+  DurableEditorSnapshot,
+  DurableEditorStore,
+} from './editor/DurableEditorStore'
 
 export type ActionFeedback = {
   text: string

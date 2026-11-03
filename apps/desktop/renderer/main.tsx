@@ -1,7 +1,7 @@
-import { DurableEditorStore } from '@corelive/live-editor/store'
 import { ThemeTransition } from '@corelive/live-editor/theme-transition'
 import { createRoot } from 'react-dom/client'
 
+import { DurableEditorStore } from './editor/DurableEditorStore'
 import { NativeEditor } from './NativeEditor'
 import './styles.css'
 

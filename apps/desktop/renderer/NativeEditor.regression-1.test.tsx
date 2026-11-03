@@ -7,8 +7,6 @@ import type { LiveEditorAPI } from '@corelive/desktop-contract/electron-api'
 import type { OfflineEditorAPI } from '@corelive/desktop-contract/offline-editor-api'
 import type { OfflineEditorSnapshot } from '@corelive/desktop-contract/offline-workspace'
 import { UserSettingsStateSchema } from '@corelive/desktop-contract/settings'
-import { DurableEditorStore } from '@corelive/live-editor/store'
-import { SharedEditorSurface } from '@corelive/live-editor/surface'
 import {
   act,
   cleanup,
@@ -20,6 +18,8 @@ import {
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, expect, test, vi } from 'vitest'
 
+import { DurableEditorStore } from './editor/DurableEditorStore'
+import { SharedEditorSurface } from './editor/SharedEditorSurface'
 import { NativeEditor } from './NativeEditor'
 
 const stores: DurableEditorStore[] = []

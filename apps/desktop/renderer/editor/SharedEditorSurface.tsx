@@ -8,18 +8,18 @@ import {
   LIVE_EDITOR_OPACITY_STEP,
 } from '@corelive/desktop-contract/live-editor-constants'
 import type { UserSettingsState } from '@corelive/desktop-contract/settings'
+import { cn } from '@corelive/live-editor/cn'
+import { Button } from '@corelive/live-editor/ui/button'
+import { Label } from '@corelive/live-editor/ui/label'
+import { Slider } from '@corelive/live-editor/ui/slider'
+import { Switch } from '@corelive/live-editor/ui/switch'
 import * as React from 'react'
 import { useId } from 'react'
 
-import { cn } from './cn'
 import { FinishedLineStrikes } from './FinishedLineStrikes'
 import { useCoarsePointer } from './hooks/useCoarsePointer'
 import { isApplePlatform } from './isApplePlatform'
 import { COMPLETED_TITLE_MAX_LENGTH } from './liveEditorUtils'
-import { Button } from './ui/button'
-import { Label } from './ui/label'
-import { Slider } from './ui/slider'
-import { Switch } from './ui/switch'
 
 export interface EditorWindowSettings {
   opacity: number

@@ -9,10 +9,10 @@ import {
   type OfflineEditorSnapshot,
 } from '@corelive/desktop-contract/offline-workspace'
 import { UserSettingsStateSchema } from '@corelive/desktop-contract/settings'
-import { DurableEditorStore } from '@corelive/live-editor/store'
 import { ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 import { afterEach, expect, test, vi } from 'vitest'
 
+import { DurableEditorStore } from '../../renderer/editor/DurableEditorStore'
 import type { WindowManager } from '../WindowManager'
 
 import { AtomicWorkspaceFile } from './AtomicWorkspaceFile'

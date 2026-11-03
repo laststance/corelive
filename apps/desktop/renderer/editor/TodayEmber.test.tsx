@@ -6,9 +6,10 @@
  * announced to screen readers.
  */
 import '@testing-library/jest-dom/vitest'
-import { TodayEmber } from '@corelive/live-editor/ember'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, test } from 'vitest'
+
+import { TodayEmber } from './TodayEmber'
 
 afterEach(cleanup)
 

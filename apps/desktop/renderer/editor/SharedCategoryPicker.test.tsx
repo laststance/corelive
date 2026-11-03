@@ -7,10 +7,6 @@
  */
 import '@testing-library/jest-dom/vitest'
 import {
-  SharedCategoryPicker,
-  type PickerCategory,
-} from '@corelive/live-editor/category-picker'
-import {
   cleanup,
   fireEvent,
   render,
@@ -18,6 +14,11 @@ import {
   waitFor,
 } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest'
+
+import {
+  SharedCategoryPicker,
+  type PickerCategory,
+} from './SharedCategoryPicker'
 
 const categories: PickerCategory[] = [
   { id: 1, name: 'General', parentId: null },

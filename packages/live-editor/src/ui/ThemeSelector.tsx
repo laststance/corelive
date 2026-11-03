@@ -4,15 +4,22 @@ import { Check, Monitor, Moon, Sun } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useId } from 'react'
 
-import { ThemePreviewSwatch } from '@/components/ThemePreviewSwatch'
-import { Label } from '@/components/ui/label'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { useThemeAxis } from '@/hooks/useThemeAxis'
-import type { ThemeModeChoice } from '@/hooks/useThemeAxis'
-import { getThemePreview } from '@/lib/themes/preview'
-import { getThemeId } from '@/lib/themes/registry'
-import { cn } from '@/lib/utils'
+import { cn } from '../cn'
+import { getThemePreview } from '../themes/preview'
+import { getThemeId } from '../themes/registry'
+import { deriveThemeAxis } from '../themes/themeAxis'
+import type { ThemeModeChoice, ThemePersistence } from '../themes/themeAxis'
+
+import { Label } from './label'
+import { RadioGroup, RadioGroupItem } from './radio-group'
+import { ThemePreviewSwatch } from './ThemePreviewSwatch'
+import { ToggleGroup, ToggleGroupItem } from './toggle-group'
+
+/** Props of {@link ThemeSelector}. */
+export interface ThemeSelectorProps {
+  /** Host theme store: next-themes on the web, the preload preferences on the desktop. */
+  persistence: ThemePersistence
+}
 
 /** Label + icon for each mode-axis option (shared with the sidebar quick-switch). */
 export const MODE_META: Record<
@@ -31,12 +38,16 @@ export const MODE_META: Record<
  * every other family, Warm Cathedral included, is an explicit choice); while a
  * non-Default palette is active a helper line explains how to follow the device
  * setting. Picks flow through `useThemeAxis`, which maps the (family, mode) pair
- * to a stored theme id.
+ * to a stored theme id. It is host-agnostic: all reads and writes go through
+ * `persistence`, so the web (next-themes) and the desktop (preload) share this one component.
+ * @param props - {@link ThemeSelectorProps}.
  * @returns the Settings "Theme" section.
  * @example
- * <ThemeSelector />
+ * <ThemeSelector persistence={persistence} />
  */
-export const ThemeSelector = function ThemeSelector() {
+export const ThemeSelector = function ThemeSelector({
+  persistence,
+}: ThemeSelectorProps) {
   const {
     family,
     mode,
@@ -46,7 +57,7 @@ export const ThemeSelector = function ThemeSelector() {
     selectMode,
     selectFamily,
     mounted,
-  } = useThemeAxis()
+  } = deriveThemeAxis(persistence)
 
   // System only exists for Default, so every other palette gets the helper line.
   const showSystemHint = family !== 'default'

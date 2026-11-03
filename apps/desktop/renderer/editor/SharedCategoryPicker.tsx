@@ -1,17 +1,26 @@
 'use client'
 
-import { Check, ChevronsUpDown, Plus, Settings2 } from 'lucide-react'
-import { useMemo, useRef, useState } from 'react'
-
 import {
   createCategoryHierarchy,
   searchCategoryHierarchy,
-} from './categoryHierarchy'
-import { cn } from './cn'
+} from '@corelive/live-editor/categoryHierarchy'
+import { cn } from '@corelive/live-editor/cn'
+import { Button } from '@corelive/live-editor/ui/button'
+import {
+  Command,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@corelive/live-editor/ui/command'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@corelive/live-editor/ui/popover'
+import { Check, ChevronsUpDown, Plus, Settings2 } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+
 import { isEditorComposing } from './editorInput'
-import { Button } from './ui/button'
-import { Command, CommandInput, CommandItem, CommandList } from './ui/command'
-import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 
 export interface PickerCategory {
   id: number

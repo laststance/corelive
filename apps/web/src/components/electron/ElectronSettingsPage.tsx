@@ -1,5 +1,6 @@
 'use client'
 
+import { ThemeSelector } from '@corelive/live-editor/ui/ThemeSelector'
 import * as React from 'react'
 import { useTransition } from 'react'
 
@@ -20,6 +21,7 @@ import { useTransition } from 'react'
  *
  * <ElectronSettingsPage />
  */
+
 import { useIsElectron } from '@/components/auth/ElectronLoginForm'
 import { AppUpdateSettings } from '@/components/electron/AppUpdateSettings'
 import { LiveEditorAppearance } from '@/components/electron/LiveEditorAppearance'
@@ -34,10 +36,10 @@ import { LiveEditorStatusSetting } from '@/components/settings/LiveEditorStatusS
 import { SettingsSection } from '@/components/settings/SettingsSection'
 import { ShortcutOpeningSoundSetting } from '@/components/settings/ShortcutOpeningSoundSetting'
 import { TaskSettings } from '@/components/settings/TaskSettings'
-import { ThemeSelector } from '@/components/ThemeSelector'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { useNextThemesPersistence } from '@/hooks/useThemeAxis'
 import { useAppDispatch, useAppSelector } from '@/lib/redux/hooks'
 import {
   setHideAppIcon,
@@ -68,6 +70,8 @@ export const ElectronSettingsPage =
   function ElectronSettingsPage(): React.ReactElement | null {
     const dispatch = useAppDispatch()
     const isElectron = useIsElectron() // SSR-safe via useSyncExternalStore
+    // Web persistence adapter for the shared theme picker (next-themes).
+    const themePersistence = useNextThemesPersistence()
 
     const [isResettingPopoverSize, startResetSizeTransition] = useTransition()
 
@@ -213,7 +217,7 @@ export const ElectronSettingsPage =
             <TaskSettings />
           </SettingsSection>
           <SettingsSection label="Appearance">
-            <ThemeSelector />
+            <ThemeSelector persistence={themePersistence} />
           </SettingsSection>
         </>
       )
@@ -249,7 +253,7 @@ export const ElectronSettingsPage =
               <OfflineCategoryManagement />
             </SettingsSection>
             <SettingsSection label="Appearance">
-              <ThemeSelector />
+              <ThemeSelector persistence={themePersistence} />
             </SettingsSection>
             {(shortcuts || canConfigureShortcutSound) && (
               <SettingsSection label="Shortcuts & Sound">

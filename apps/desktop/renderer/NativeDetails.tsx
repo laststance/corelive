@@ -10,7 +10,6 @@ import type {
   OfflineWorkspace,
   WorkspaceCommand,
 } from '@corelive/desktop-contract/offline-workspace'
-import type { DurableEditorStore } from '@corelive/live-editor/store'
 import { Button } from '@corelive/live-editor/ui/button'
 import {
   Dialog,
@@ -19,6 +18,8 @@ import {
   DialogTitle,
 } from '@corelive/live-editor/ui/dialog'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+
+import type { DurableEditorStore } from './editor/DurableEditorStore'
 
 type ReadySnapshot = Extract<OfflineEditorSnapshot, { phase: 'ready' }>
 type RecoveryCopy = OfflineWorkspace['recoveryCopies'][number]

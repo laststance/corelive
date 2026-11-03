@@ -43,7 +43,7 @@ const THEME_DEFINITION_PATHS = [
   'packages/live-editor/src/styles/generated.css',
   'packages/live-editor/src/themes/registry.ts',
   'apps/web/scripts/generate-theme-css.ts',
-  'apps/web/src/lib/themes/preview.ts',
+  'packages/live-editor/src/themes/preview.ts',
   'apps/web/src/lib/themes/contrast.ts',
 ]
 

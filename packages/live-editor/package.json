@@ -4,7 +4,6 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./utils": "./src/liveEditorUtils.ts",
     "./day": "./src/toLocalDayKey.ts",
     "./ui/button": "./src/ui/button.tsx",
     "./ui/label": "./src/ui/label.tsx",
@@ -13,21 +12,19 @@
     "./ui/popover": "./src/ui/popover.tsx",
     "./ui/command": "./src/ui/command.tsx",
     "./ui/dialog": "./src/ui/dialog.tsx",
+    "./ui/radio-group": "./src/ui/radio-group.tsx",
+    "./ui/toggle": "./src/ui/toggle.tsx",
+    "./ui/toggle-group": "./src/ui/toggle-group.tsx",
+    "./ui/ThemePreviewSwatch": "./src/ui/ThemePreviewSwatch.tsx",
+    "./ui/ThemeSelector": "./src/ui/ThemeSelector.tsx",
     "./cn": "./src/cn.ts",
-    "./hooks/useMounted": "./src/hooks/useMounted.ts",
     "./categoryHierarchy": "./src/categoryHierarchy.ts",
     "./heatmap-intensity": "./src/heatmap-intensity.ts",
-    "./surface": "./src/SharedEditorSurface.tsx",
-    "./ember": "./src/TodayEmber.tsx",
-    "./category-picker": "./src/SharedCategoryPicker.tsx",
-    "./input": "./src/editorInput.ts",
-    "./store": "./src/DurableEditorStore.ts",
-    "./draft-edits": "./src/draftEdits.ts",
-    "./draft-input-limit": "./src/draftInputLimit.ts",
     "./themes": "./src/themes/registry.ts",
+    "./themes/preview": "./src/themes/preview.ts",
+    "./themes/axis": "./src/themes/themeAxis.ts",
     "./theme-transition": "./src/ThemeTransition.tsx",
-    "./styles/*": "./src/styles/*",
-    "./window-settings": "./src/useEditorWindowSettings.ts"
+    "./styles/*": "./src/styles/*"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -39,9 +36,12 @@
     "@radix-ui/react-dialog": "^1.3.1",
     "@radix-ui/react-label": "^2.1.17",
     "@radix-ui/react-popover": "^1.3.1",
+    "@radix-ui/react-radio-group": "^1.5.1",
     "@radix-ui/react-slider": "^1.6.1",
     "@radix-ui/react-slot": "^1.5.0",
     "@radix-ui/react-switch": "^1.4.1",
+    "@radix-ui/react-toggle": "^1.2.1",
+    "@radix-ui/react-toggle-group": "^1.2.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -58,5 +58,6 @@
     "@types/react-dom": "^19.3.0",
     "typescript": "catalog:",
     "vitest": "catalog:"
-  }
+  },
+  "description": "Shared UI primitives, theme system and local-day utilities used by both the web app and the desktop renderer."
 }

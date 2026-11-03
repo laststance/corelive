@@ -13,14 +13,15 @@ import {
   type OfflineWorkspace,
   type WorkspaceCommand,
 } from '@corelive/desktop-contract/offline-workspace'
-import { diffDraftRows } from '@corelive/live-editor/draft-edits'
-import { getDraftInputLimit } from '@corelive/live-editor/draft-input-limit'
+
+import { diffDraftRows } from '../../renderer/editor/draftEdits'
+import { getDraftInputLimit } from '../../renderer/editor/draftInputLimit'
 import {
   markPlainLineCompleted,
   normalizeCompletedTitle,
   parseCheckboxLine,
   setCheckboxStateAtLine,
-} from '@corelive/live-editor/utils'
+} from '../../renderer/editor/liveEditorUtils'
 
 import type { AtomicWorkspaceFile } from './AtomicWorkspaceFile'
 
