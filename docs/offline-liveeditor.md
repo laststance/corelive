@@ -267,7 +267,9 @@ The first v2 launch converts the workspace of the last active account into the
 device workspace once, before the editor opens: categories get local ids, the
 account becomes the binding, operations keep their ids and receipts, and the old
 files stay as backups. Other prepared accounts' drafts and pending titles become
-recovery copies in the device workspace and nothing is sent to them. A summary
+recovery copies in the device workspace and nothing is sent to them. A draft on a
+category that no longer exists also becomes a recovery copy in the default
+category, because the editor never opens such an earlier category. A summary
 (source, imported drafts and completions, recovery copies, v1 files kept) is
 logged and shown on the Sync details page. A corrupt source opens `recovery`
 ([WORKSPACE_MIGRATION_FAILED](#workspace-migration-failed)); the migration is
