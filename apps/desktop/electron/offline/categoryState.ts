@@ -17,6 +17,7 @@ import {
   type AccountBinding,
   type CategoryOutboxEntry,
   type LocalCategory,
+  type OfflineCompletion,
   type OfflineWorkspace,
   type SyncHistoryItem,
 } from '@corelive/desktop-contract/offline-workspace-v2'
@@ -30,6 +31,8 @@ export type DeclinedMarker = AccountBinding['declined'][string][string]
 export interface CategoryContext {
   now: number
   nextId: () => string
+  /** Archived never-uploaded keeps; they count as sendable work for C22. */
+  archivedUnsent?: ReadonlyMap<string, OfflineCompletion>
 }
 
 /** Categories that take part in the sync rules: not server-removed, not migration placeholders. */
@@ -297,11 +300,10 @@ export function createKey(category: LocalCategory): string {
 }
 
 /**
- * Re-targets local completions and unsent completion operations from a retired category (D4).
+ * Re-targets local completions from a retired category (D4); unsent uploads are derived from them.
  *
  * The server already moved its records, so a completion that is known there only changes its
- * local category (and its remembered projection); a provably unsent create is revised to the
- * destination. Sent operations are untouched: the server's `category-removed` answer repairs them.
+ * local category (and its remembered projection). Sent operations are untouched: the server's `category-removed` answer repairs them.
  *
  * @param state - Workspace being mutated.
  * @param source - The retired local category.
@@ -318,10 +320,6 @@ function retargetCompletions(
     completion.categoryId = destination
     if (completion.remote?.categoryId === source)
       completion.remote = { ...completion.remote, categoryId: destination }
-  }
-  for (const entry of Object.values(state.outbox)) {
-    if (entry.state === 'queued' && entry.operation.categoryId === source)
-      entry.operation.categoryId = destination
   }
 }
 

@@ -364,7 +364,10 @@ describe('v1 to v2 workspace migration', () => {
         (c) => c.origin?.accountId === 'user_b',
       ).length,
     ).toBe(2)
-    expect(Object.keys(result.workspace.outbox)).toHaveLength(2)
+    // The queued v1 entry was never offered to the server and is re-derived; the sent one stays.
+    expect(
+      Object.values(result.workspace.outbox).map((entry) => entry.state),
+    ).toEqual(['sent'])
     expect(result.summary).toEqual({
       sourceAccountId: 'user_a',
       importedDrafts: 3,

@@ -414,7 +414,7 @@ describe('benchmark:offline', () => {
     // Assert
     expect(result.status).toBe(1)
     expect(result.stderr).toMatch(
-      /^benchmark:offline: keep-commit p95 [\d.]+ ms > 0 ms at 20 completions \(BENCH_GATE_FAILED\)\. Fix: rerun once on an idle Mac;/,
+      /^benchmark:offline: keep-commit p95 attached [\d.]+ ms, local-only [\d.]+ ms > 0 ms at 20 completions \(BENCH_GATE_FAILED\)\. Fix: rerun once on an idle Mac;/,
     )
   }, 120_000)
 
@@ -441,8 +441,18 @@ describe('benchmark:offline', () => {
       'node',
     ])
     expect(
-      output.runs.map((run: { operation: string }) => run.operation),
-    ).toEqual(['keep', 'autosave', 'cold-parse'])
+      output.runs.map(
+        (run: { profile: string; operation: string }) =>
+          `${run.profile}/${run.operation}`,
+      ),
+    ).toEqual([
+      'attached/keep',
+      'attached/autosave',
+      'attached/cold-parse',
+      'local-only/keep',
+      'local-only/autosave',
+      'local-only/cold-parse',
+    ])
     expect(output.gate).toBeNull()
   }, 120_000)
 })

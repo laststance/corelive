@@ -32,6 +32,14 @@ const category2 = categoryUuid(2)
 const category3 = categoryUuid(3)
 const accountId = 'account-a'
 
+/**
+ * Freezes the next derivable keeps the way one sync pass does.
+ * @example const [first] = await freeze(service)
+ */
+async function freeze(service: WorkspaceService, limit = 100) {
+  return service.markSentBatch(accountId, limit)
+}
+
 /** Creates a device workspace bound to a synthetic account with three categories in an isolated directory.
  * @example const fixture = await createWorkspace()
  */
@@ -517,13 +525,8 @@ describe('offline writing and completion transactions', () => {
     expect(state.drafts[category2]!.rows.map((row) => row.text)).toEqual([
       'Keep Work draft',
     ])
-    const queued = Object.values(state.outbox).map((entry) => entry.operation)
-    const creates = (
-      await service.markSentBatch(
-        accountId,
-        queued.map((operation) => operation.operationId),
-      )
-    ).map((entry) => entry.wire!)
+    expect(Object.values(state.outbox)).toEqual([])
+    const creates = (await freeze(service)).map((entry) => entry.wire!)
     creates.forEach(deliver)
     service = new WorkspaceService(
       new AtomicWorkspaceFile(fixture.options),
@@ -560,16 +563,13 @@ describe('offline writing and completion transactions', () => {
       () => undoTime,
     )
     state = await fixture.file.read()
-    const cancellations = Object.values(state.outbox).map(
-      (entry) => entry.operation,
+    expect(Object.values(state.outbox)).toEqual([])
+    const sentCancellations = (await freeze(service)).map(
+      (entry) => entry.wire!,
     )
-    expect(cancellations.map((operation) => operation.kind)).toEqual(['cancel'])
-    const sentCancellations = (
-      await service.markSentBatch(
-        accountId,
-        cancellations.map((operation) => operation.operationId),
-      )
-    ).map((entry) => entry.wire!)
+    expect(sentCancellations.map((operation) => operation.kind)).toEqual([
+      'cancel',
+    ])
     state = await service.acceptReceipts(
       accountId,
       sentCancellations.map(deliver),
@@ -599,8 +599,7 @@ describe('offline writing and completion transactions', () => {
     // Arrange
     const { file, service } = await createWorkspace()
     let state = await service.execute(completionCommand(await file.read()))
-    const operation = Object.values(state.outbox)[0]!.operation
-    await service.markSentBatch(accountId, [operation.operationId])
+    await freeze(service)
     state = await file.read()
 
     // Act
@@ -646,7 +645,6 @@ describe('offline writing and completion transactions', () => {
     // Arrange
     const { file, service } = await createWorkspace()
     let state = await service.execute(completionCommand(await file.read()))
-    const operation = Object.values(state.outbox)[0]!.operation
     state = await service.checkpoint(accountId, state.revision, {
       day: '2026-10-21',
       timezone: 'Asia/Tokyo',
@@ -660,7 +658,7 @@ describe('offline writing and completion transactions', () => {
     })
 
     // Act
-    await service.markSentBatch(accountId, [operation.operationId])
+    await freeze(service)
     state = await file.read()
 
     // Assert
@@ -679,7 +677,8 @@ describe('offline writing and completion transactions', () => {
     // Arrange
     const { file, service, setNow, options } = await createWorkspace()
     let state = await service.execute(completionCommand(await file.read()))
-    const operation = Object.values(state.outbox)[0]!.operation
+    const operation = (await freeze(service))[0]!.operation
+    state = await file.read()
     const projection = {
       completionId: completionA,
       revision: 1,
@@ -768,7 +767,8 @@ describe('offline writing and completion transactions', () => {
     })
     state = await reopened.execute(completionCommand(state, completionB))
     expect(state.completions[completionB]?.title).toBe('A different task')
-    expect(Object.values(state.outbox)).toHaveLength(1)
+    // The two keeps are derived uploads, so the outbox holds neither.
+    expect(Object.values(state.outbox)).toEqual([])
   })
 
   test('more than 2000 old acknowledged records can reconcile in bounded batches without blocking forever', async () => {
@@ -870,9 +870,9 @@ describe('offline writing and completion transactions', () => {
       originalCompletedAt: instant,
       undoUntil: instant + 5000,
     })
-    expect(
-      Object.values(state.outbox).map((entry) => entry.operation.kind),
-    ).toEqual(['cancel'])
+    // Cancelled before anything reached the dashboard: there is nothing to cancel there.
+    expect(Object.values(state.outbox)).toEqual([])
+    expect(await freeze(restarted)).toEqual([])
   })
 
   test('identical titles remain separate completions and replaying one command creates no third record', async () => {
@@ -893,7 +893,8 @@ describe('offline writing and completion transactions', () => {
       'Same',
       'Same',
     ])
-    expect(Object.values(state.outbox)).toHaveLength(2)
+    expect(Object.values(state.outbox)).toEqual([])
+    expect(await freeze(service)).toHaveLength(2)
   })
 
   test('reusing a command identity with different text fails without overwriting writing', async () => {
@@ -1224,22 +1225,15 @@ describe('offline writing and completion transactions', () => {
     expect(state.drafts[category2]).toBeUndefined()
     expect(state.completions[completionA]!.categoryId).toBe(category3)
     expect(state.selectedCategoryId).toBe(category3)
-    expect(
-      Object.values(state.outbox).map((entry) => [
-        entry.operation.kind,
-        entry.operation.categoryId,
-      ]),
-    ).toEqual([['cancel', category3]])
+    // Undone before it was uploaded, so nothing is owed to the dashboard.
+    expect(Object.values(state.outbox)).toEqual([])
   })
 
   test('a confirmed move waits for an uncertain create receipt without rewriting its bytes', async () => {
     // Arrange
     const { file, service } = await createWorkspace()
-    const completed = await service.execute(
-      completionCommand(await file.read()),
-    )
-    const original = Object.values(completed.outbox)[0]!.operation
-    await service.markSentBatch(accountId, [original.operationId])
+    await service.execute(completionCommand(await file.read()))
+    const original = (await freeze(service))[0]!.operation
 
     // Act
     const moved = await service.execute({
@@ -1267,8 +1261,9 @@ describe('offline writing and completion transactions', () => {
 
     // Assert
     expect(moved.outbox[original.operationId]!.operation).toEqual(original)
+    expect(Object.values(acknowledged.outbox)).toEqual([])
     expect(
-      Object.values(acknowledged.outbox).map((entry) => [
+      (await freeze(service)).map((entry) => [
         entry.operation.kind,
         entry.operation.revision,
         entry.operation.categoryId,
@@ -1280,11 +1275,8 @@ describe('offline writing and completion transactions', () => {
   test('Undo during delivery survives a late create acknowledgement without resurrection', async () => {
     // Arrange
     const { file, service } = await createWorkspace()
-    const completed = await service.execute(
-      completionCommand(await file.read()),
-    )
-    const original = Object.values(completed.outbox)[0]!.operation
-    await service.markSentBatch(accountId, [original.operationId])
+    await service.execute(completionCommand(await file.read()))
+    const original = (await freeze(service))[0]!.operation
     await service.execute({
       type: 'undo',
       commandId: randomUUID(),
@@ -1315,8 +1307,9 @@ describe('offline writing and completion transactions', () => {
       'Original',
       'Later',
     ])
+    expect(Object.values(state.outbox)).toEqual([])
     expect(
-      Object.values(state.outbox).map((entry) => entry.operation.kind),
+      (await freeze(service)).map((entry) => entry.operation.kind),
     ).toEqual(['cancel'])
   })
 
@@ -1340,8 +1333,9 @@ describe('offline writing and completion transactions', () => {
       originalCompletedAt: instant,
       revision: 2,
     })
+    expect(Object.values(state.outbox)).toEqual([])
     expect(
-      Object.values(state.outbox).map((entry) => [
+      (await freeze(service)).map((entry) => [
         entry.operation.kind,
         entry.operation.completedAt,
       ]),
@@ -1381,8 +1375,8 @@ describe('offline writing and completion transactions', () => {
   test('a receipt for an account the device is not attached to cannot mutate the current workspace', async () => {
     // Arrange
     const { file, service } = await createWorkspace()
-    const state = await service.execute(completionCommand(await file.read()))
-    const operation = Object.values(state.outbox)[0]!.operation
+    await service.execute(completionCommand(await file.read()))
+    const operation = (await freeze(service))[0]!.operation
 
     // Act / Assert
     await expect(
@@ -1409,8 +1403,8 @@ describe('offline writing and completion transactions', () => {
   test('a terminal remote cancellation restores writing only after a choice and never replays a new keep', async () => {
     // Arrange
     const { file, service } = await createWorkspace()
-    const initial = await service.execute(completionCommand(await file.read()))
-    const operation = Object.values(initial.outbox)[0]!.operation
+    await service.execute(completionCommand(await file.read()))
+    const operation = (await freeze(service))[0]!.operation
 
     // Act
     const conflicted = await service.acceptReceipts(accountId, [
@@ -1454,8 +1448,8 @@ describe('offline writing and completion transactions', () => {
   test('an acknowledgement missing its identity projection cannot retire queued work', async () => {
     // Arrange
     const { file, service } = await createWorkspace()
-    const state = await service.execute(completionCommand(await file.read()))
-    const operation = Object.values(state.outbox)[0]!.operation
+    await service.execute(completionCommand(await file.read()))
+    const operation = (await freeze(service))[0]!.operation
 
     // Act / Assert
     await expect(
@@ -1476,8 +1470,8 @@ describe('offline writing and completion transactions', () => {
 test('stale conflict confirmation cannot replace a newer server version the user never reviewed', async () => {
   // Arrange
   const { file, service } = await createWorkspace()
-  const initial = await service.execute(completionCommand(await file.read()))
-  const operation = Object.values(initial.outbox)[0]!.operation
+  await service.execute(completionCommand(await file.read()))
+  const operation = (await freeze(service))[0]!.operation
   await service.acceptReceipts(accountId, [
     {
       operationId: operation.operationId,
@@ -1518,8 +1512,8 @@ test('stale conflict confirmation cannot replace a newer server version the user
 test('retrying a rejected dependency queues one new operation while keeping the completion identity and original time', async () => {
   // Arrange
   const { file, service } = await createWorkspace()
-  const initial = await service.execute(completionCommand(await file.read()))
-  const operation = Object.values(initial.outbox)[0]!.operation
+  await service.execute(completionCommand(await file.read()))
+  const operation = (await freeze(service))[0]!.operation
   await service.acceptReceipts(accountId, [
     {
       operationId: operation.operationId,
@@ -1541,9 +1535,11 @@ test('retrying a rejected dependency queues one new operation while keeping the 
   const retried = await service.execute(command)
 
   // Assert
-  expect(Object.values(retried.outbox)).toHaveLength(1)
-  expect(Object.values(retried.outbox)[0]).toMatchObject({
-    state: 'queued',
+  // The rejected entry is superseded; the new operation is derived and frozen on the next send.
+  expect(Object.values(retried.outbox)).toEqual([])
+  const [resent] = await freeze(service)
+  expect(resent).toMatchObject({
+    state: 'sent',
     operation: {
       completionId: completionA,
       kind: 'create',
@@ -1551,27 +1547,25 @@ test('retrying a rejected dependency queues one new operation while keeping the 
       originalCompletedAt: instant,
     },
   })
-  expect(Object.values(retried.outbox)[0]!.operation.operationId).not.toBe(
-    operation.operationId,
-  )
+  expect(resent!.operation.operationId).not.toBe(operation.operationId)
 })
 
 describe('outgoing delivery uses frozen server-id payloads', () => {
   test('markSentBatch freezes the server-id payload once and a retry after the category binding is gone returns identical bytes', async () => {
     // Arrange
     const { file, service } = await createWorkspace()
-    const queued = await service.execute(completionCommand(await file.read()))
-    const operationId = Object.values(queued.outbox)[0]!.operation.operationId
+    await service.execute(completionCommand(await file.read()))
 
     // Act
-    const first = await service.markSentBatch(accountId, [operationId])
+    const first = await freeze(service)
+    const operationId = first[0]!.operation.operationId
     await file.update((current) => {
       const state = structuredClone(current)
       delete state.binding!.serverCategoryIds[category1]
       state.revision++
       return state
     })
-    const retry = await service.markSentBatch(accountId, [operationId])
+    const retry = await freeze(service)
 
     // Assert
     expect(first).toHaveLength(1)
@@ -1602,35 +1596,35 @@ describe('outgoing delivery uses frozen server-id payloads', () => {
       next.revision++
       return next
     })
-    const operationIds = Object.keys(state.outbox)
 
     // Act
-    const batch = await service.markSentBatch(accountId, operationIds)
+    const batch = await freeze(service)
 
     // Assert
     expect(batch.map((entry) => entry.operation.completionId)).toEqual([
       completionA,
     ])
     const after = await file.read()
-    const waiting = Object.values(after.outbox).find(
-      (entry) => entry.operation.completionId === completionB,
-    )!
-    expect(waiting.state).toBe('queued')
-    expect(waiting.wire).toBeUndefined()
+    // B has no entry: it is still derivable once its category has a server id.
+    expect(
+      Object.values(after.outbox).some(
+        (entry) => entry.operation.completionId === completionB,
+      ),
+    ).toBe(false)
+    expect((await service.pendingWork(16)).sendable).toBe(0)
   })
 
   test('markSentBatch for an account other than the attached one sends nothing', async () => {
     // Arrange
     const { file, service } = await createWorkspace()
-    const queued = await service.execute(completionCommand(await file.read()))
-    const operationId = Object.values(queued.outbox)[0]!.operation.operationId
+    await service.execute(completionCommand(await file.read()))
 
     // Act
-    const batch = await service.markSentBatch('account-b', [operationId])
+    const batch = await service.markSentBatch('account-b', 16)
 
     // Assert
     expect(batch).toEqual([])
-    expect((await file.read()).outbox[operationId]!.state).toBe('queued')
+    expect(Object.values((await file.read()).outbox)).toEqual([])
   })
 
   test('a late receipt after the editor changed applies only to its own operation', async () => {
@@ -1640,18 +1634,13 @@ describe('outgoing delivery uses frozen server-id payloads', () => {
     state = await service.execute(
       completionCommand(await file.read(), completionB, 1),
     )
-    const operationA = Object.values(state.outbox).find(
-      (entry) => entry.operation.completionId === completionA,
-    )!.operation
-    await service.markSentBatch(accountId, [operationA.operationId])
+    const operationA = (await service.markSentBatch(accountId, 1))[0]!.operation
+    expect(operationA.completionId).toBe(completionA)
     await service.execute({
       type: 'undo',
       commandId: randomUUID(),
       completionId: completionA,
     })
-    const queuedForB = Object.values(await file.read().then((v) => v.outbox))
-      .filter((entry) => entry.operation.completionId === completionB)
-      .map((entry) => structuredClone(entry))
 
     // Act
     state = await service.acceptReceipts(accountId, [
@@ -1672,10 +1661,14 @@ describe('outgoing delivery uses frozen server-id payloads', () => {
     ])
 
     // Assert
-    const afterForB = Object.values(state.outbox).filter(
-      (entry) => entry.operation.completionId === completionB,
-    )
-    expect(afterForB).toEqual(queuedForB)
+    expect(
+      Object.values(state.outbox).filter(
+        (entry) => entry.operation.completionId === completionB,
+      ),
+    ).toEqual([])
+    expect(
+      (await freeze(service)).map((e) => e.operation.completionId),
+    ).toContain(completionB)
     expect(state.completions[completionA]!.cancelled).toBe(true)
   })
 
@@ -1686,7 +1679,7 @@ describe('outgoing delivery uses frozen server-id payloads', () => {
       true,
     )
     let state = await service.execute(completionCommand(await file.read()))
-    const operation = Object.values(state.outbox)[0]!.operation
+    const operation = (await freeze(service))[0]!.operation
     state = await service.clearDue()
     const projection = {
       completionId: completionA,
@@ -1703,7 +1696,6 @@ describe('outgoing delivery uses frozen server-id payloads', () => {
       fetchedAt: instant + 6000,
       identities: { [completionA]: projection },
     }
-    await service.markSentBatch(accountId, [operation.operationId])
     state = await service.acceptReceipts(accountId, [
       {
         operationId: operation.operationId,

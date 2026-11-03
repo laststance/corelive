@@ -281,9 +281,9 @@ export class OfflineEditorController {
     if (!pending || !this.context || this.signOutRun) return false
     const bound = await this.context.worker.call('binding', null)
     if (bound && bound.accountId !== pending.accountId) return false
-    const view =
-      this.snapshot.phase === 'ready' ? this.snapshot.workspace : null
-    this.firstUpload = { state: 'uploading', count: view?.pendingCount ?? 0 }
+    // DA4: the progress count is every unsent keep, archived history included.
+    const total = await this.context.worker.call('pendingTotal', null)
+    this.firstUpload = { state: 'uploading', count: total }
     this.pendingEmail = pending.displayEmail || null
     this.registryState = await this.registry.update({
       attachedAccountId: pending.accountId,

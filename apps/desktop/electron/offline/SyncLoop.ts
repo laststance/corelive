@@ -11,6 +11,12 @@ import type { TokenBroker } from './TokenBroker'
 import type { WorkspaceView } from './workspace-worker-protocol'
 import type { WorkspaceWorkerClient } from './WorkspaceWorkerClient'
 
+/** The dashboard accepts at most 100 operations per `completed.syncApply` request. */
+const COMPLETION_BATCH_SIZE = 100
+
+/** Batches sent per pass; a backlog continues in a follow-up pass after a 20 ms pause. */
+const COMPLETION_BATCHES_PER_PASS = 8
+
 type CompletionSyncStatus = 'idle' | 'syncing' | 'offline' | 'sign-in-required'
 export interface SyncAccountContext {
   ownerId: string
@@ -141,20 +147,30 @@ export class SyncLoop {
         if (!(await this.sendCategoryBatch(context, transport, signal))) break
       }
       // Bound each pass so an offline backlog cannot monopolize the account actor.
-      for (let batch = 0; batch < 4 && this.current(context); batch++) {
+      for (
+        let batch = 0;
+        batch < COMPLETION_BATCHES_PER_PASS && this.current(context);
+        batch++
+      ) {
         if (!(await this.sendBatch(context, transport, signal))) break
       }
       if (!this.current(context)) return
-      if (await this.refreshCheckpoint(context, transport, signal)) delay = 20
       const remaining = await context.worker.call('pending', { limit: 1 })
       const categoryWork = await context.worker.call('categoryPending', {
         limit: 1,
       })
       if (!this.current(context)) return
       const sendable =
-        remaining.length +
+        remaining.uncertain.length +
+        remaining.sendable +
         categoryWork.sendable.length +
         categoryWork.uncertain.length
+      // A large first upload drains in short, bounded passes; the count checkpoint waits for the end.
+      if (
+        !sendable &&
+        (await this.refreshCheckpoint(context, transport, signal))
+      )
+        delay = 20
       // C22: a pass with nothing sendable left counts as synced; dependency-waiting work does not block it.
       if (!sendable) {
         const view = await context.worker.call('markSynced', {
@@ -403,7 +419,10 @@ export class SyncLoop {
     if (this.current(context)) this.options.onView(view, context.generation)
   }
 
-  /** Dispatches at most sixteen durable operations, recovering uncertain outcomes first.
+  /**
+   * Dispatches at most {@link COMPLETION_BATCH_SIZE} durable operations: uncertain ones are looked up first, then the
+   * worker derives and freezes the next sendable keeps (D1, EA3) and replays any uncertain ones
+   * byte for byte.
    * @example const more = await this.sendBatch(context, transport, signal)
    */
   private async sendBatch(
@@ -411,20 +430,34 @@ export class SyncLoop {
     transport: CompletionSyncTransport,
     signal: AbortSignal,
   ): Promise<boolean> {
-    let pending = await context.worker.call('pending', { limit: 16 })
-    if (!this.current(context) || !pending.length) return false
-    const uncertain = pending
-      .filter((entry) => entry.state === 'sent')
-      .map((entry) => entry.operation.operationId)
-    if (uncertain.length) {
-      await this.recoverReceipts(context, transport, uncertain, signal)
+    let pending = await context.worker.call('pending', {
+      limit: COMPLETION_BATCH_SIZE,
+    })
+    if (
+      !this.current(context) ||
+      !(pending.uncertain.length + pending.sendable)
+    )
+      return false
+    if (pending.uncertain.length) {
+      await this.recoverReceipts(
+        context,
+        transport,
+        pending.uncertain.map((entry) => entry.operation.operationId),
+        signal,
+      )
       if (!this.current(context)) return false
-      pending = await context.worker.call('pending', { limit: 16 })
-      if (!this.current(context) || !pending.length) return false
+      pending = await context.worker.call('pending', {
+        limit: COMPLETION_BATCH_SIZE,
+      })
+      if (
+        !this.current(context) ||
+        !(pending.uncertain.length + pending.sendable)
+      )
+        return false
     }
     const confirmed = await context.worker.call('markSentBatch', {
       accountId: context.ownerId,
-      operationIds: pending.map((entry) => entry.operation.operationId),
+      limit: COMPLETION_BATCH_SIZE,
     })
     if (!this.current(context)) return false
     // The frozen server-id payload is what goes on the wire, byte for byte, on every retry (EA3).

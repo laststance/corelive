@@ -33,7 +33,14 @@ checksummed envelope, atomic rename, file and directory flush and its own
 `device-archive.recovery.json`. The record is made durable in the archive first and only
 then dropped from `device.json`, so a crash can leave it in both files but never in
 neither. Export includes the archive, and an existing v2 file migrates by simply having
-its old records moved on the first roll. Command receipts are kept for the last 2,000
+its old records moved on the first roll. A Mac that was never attached (or is detached) keeps and edits without creating any
+outbox entry: whether a completion still has to reach the dashboard is derived from the
+completion itself (not cancelled before it was uploaded, and the dashboard copy is older
+than its revision), so a local-only history archives like any other. When an account
+is attached, the sync loop derives the next batch from the workspace and the archive and
+freezes each operation's payload into the outbox in the same commit that marks it in flight;
+the outbox therefore holds only in-flight, uncertain or blocked operations, and those stay
+with the bound account across sign-out and settle by receipts. Command receipts are kept for the last 2,000
 commits only (a receipt answers a replayed command id, which cannot span more than a
 few commits); they used to grow by about 160 bytes per command forever.
 
@@ -52,26 +59,40 @@ the entries it changed.
 The 36,500 row was measured; the smaller rows are scaled from it.
 
 The 2026-11-03 run of `pnpm benchmark:offline` on an Apple M4 Max (Node 26.12.1,
-worker round trip; fixture: 20 completions a day over the real span, an outbox with
-10% of completions still waiting to send, command receipts, one recovery generation,
-10% of titles and draft lines at the 255-character limit) measured, before this
-change, keep p95 227 ms at 3,650 completions and 1,091 ms at 36,500 (cold parse about
-200 ms, peak RSS 2.9 GB). After it, three runs measured:
+worker round trip; fixture: 20 completions a day over the real span, command receipts,
+one recovery generation, 10% of titles and draft lines at the 255-character limit)
+measured, before the archive, keep p95 227 ms at 3,650 completions and 1,091 ms at
+36,500 (cold parse about 200 ms, peak RSS 2.9 GB). The gate runs two profiles and passes
+only if both pass:
 
-| Run | keep p50 / p95 at 3,650 | at 10,000   | at 36,500   | peak RSS |
-| --- | ----------------------- | ----------- | ----------- | -------- |
-| 1   | 19.7 / 20.8 ms          | 22.9 / 24.1 | 33.0 / 35.2 | 1,209 MB |
-| 2   | 20.4 / 22.2 ms          | 23.3 / 24.8 | 33.0 / 37.2 | 1,211 MB |
-| 3   | 20.4 / 21.5 ms          | 23.3 / 24.2 | 32.2 / 35.1 | 1,234 MB |
+- **attached**: a signed-in Mac. Older history was sent (retired records) and 10% of the
+  completions are in flight with an outbox entry (a lost reply).
+- **local-only**: a Mac that was never attached. 100% of the completions are unsent, there is
+  no binding and no outbox entry, and 10% of the titles are at the length limit. This is the
+  D1 gate; it only holds because uploads are derived at attach instead of queued per keep.
 
-The cold parse of the keep-path file is about 40 ms at 36,500 (the archive is not read
-on open). Peak RSS is the benchmark process holding the 36,500-record fixture it
-built, not the worker.
+Three runs after the change (keep p50 / p95 in ms; RSS is the benchmark process, which also
+holds the fixture it built and the earlier runs' garbage, not the worker):
+
+| Run | Profile    | 3,650       | 10,000      | 36,500      | RSS at 3,650 / 10,000 / 36,500 |
+| --- | ---------- | ----------- | ----------- | ----------- | ------------------------------ |
+| 1   | attached   | 19.1 / 21.3 | 22.9 / 23.9 | 39.9 / 42.1 | 255 / 436 / 997 MB             |
+| 1   | local-only | 18.4 / 19.8 | 18.0 / 19.9 | 16.8 / 19.9 | 946 / 764 / 1,182 MB           |
+| 2   | attached   | 18.4 / 23.3 | 23.0 / 25.1 | 40.5 / 43.3 | 265 / 438 / 1,004 MB           |
+| 2   | local-only | 17.1 / 19.3 | 17.4 / 19.6 | 17.9 / 20.1 | 953 / 766 / 1,180 MB           |
+| 3   | attached   | 18.8 / 21.1 | 22.1 / 24.0 | 41.2 / 44.0 | 267 / 440 / 1,002 MB           |
+| 3   | local-only | 16.8 / 19.1 | 17.4 / 19.5 | 17.8 / 19.0 | 954 / 768 / 1,101 MB           |
+
+The cold parse of the keep-path file is about 70 ms (attached) and 6 ms (local-only) at
+36,500; the archive is not read on open unless an account is attached. `--drain` times the
+first upload of the 36,500-completion local-only workspace through the real sync loop
+(batches of 100, the dashboard's limit) against an in-process fake dashboard: 85 s
+(430 keeps/s). A real dashboard adds one network round trip per 100 keeps.
 
 Measure it on your own Mac with `pnpm benchmark:offline` (see
 [Recipes](#recipes)). The gate is a keep-commit p95 of at most 100 ms at
-36,500 completions; the command exits 1 with `BENCH_GATE_FAILED` when a given
-`--max-p95-ms` is exceeded.
+36,500 completions in both profiles; the command exits 1 with `BENCH_GATE_FAILED` when a
+given `--max-p95-ms` is exceeded by either.
 
 ## Signing in and connecting (optional)
 
@@ -313,7 +334,8 @@ current build again, and open Details to find the line as a recovery copy
 pnpm benchmark:offline --json --max-p95-ms 100
 ```
 
-`--completions 3650,36500` changes the fixture sizes; the gate uses the largest.
+`--completions 3650,36500` changes the fixture sizes; the gate uses the largest. `--drain` also
+times the first upload of the largest local-only workspace.
 It works in a temp directory and never reads or writes `userData`. Sample output
 shape (values vary by Mac):
 
@@ -328,20 +350,30 @@ shape (values vary by Mac):
   },
   "runs": [
     {
+      "profile": "local-only",
       "completions": 36500,
       "operation": "keep",
       "p50Ms": 32.16,
       "p95Ms": 35.09,
-      "samples": 40
+      "samples": 40,
+      "rssMb": 1182
     }
   ],
   "peakRssMb": 1234,
-  "gate": { "maxP95Ms": 100, "passed": true }
+  "gate": {
+    "maxP95Ms": 100,
+    "passed": true,
+    "profiles": {
+      "attached": { "p95Ms": 42.06, "passed": true },
+      "local-only": { "p95Ms": 19.89, "passed": true }
+    }
+  },
+  "drain": null
 }
 ```
 
-Without `--max-p95-ms` the command always exits 0 (report only). With it, a miss
-exits 1 and prints the `BENCH_GATE_FAILED` line.
+Without `--max-p95-ms` the command always exits 0 (report only). With it, a miss in
+either profile exits 1 and prints the `BENCH_GATE_FAILED` line.
 
 ## Development and release checks
 

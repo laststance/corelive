@@ -16,6 +16,7 @@ import type {
 import type {
   AccountBinding,
   CategoryOutboxEntry,
+  OfflineCompletion,
   OfflineWorkspace,
 } from '@corelive/desktop-contract/offline-workspace-v2'
 
@@ -37,6 +38,7 @@ import {
   setMarker,
   type CategoryContext,
 } from './categoryState'
+import { selectUploads } from './completionUpload'
 
 type CategoryReceipt = Extract<SyncOutcome, { kind: 'category' }>
 
@@ -352,21 +354,31 @@ export function applyCategoryReceipts(
     applyReceipt(state, binding, entry, receipt, context)
     delete state.categoryOutbox[receipt.operationId]
   }
-  if (!hasSendableWork(state)) binding.lastSyncedAt = context.now
+  if (!hasSendableWork(state, context.archivedUnsent))
+    binding.lastSyncedAt = context.now
 }
 
-/** Whether any completion or category operation could still be sent (C22). */
-export function hasSendableWork(state: OfflineWorkspace): boolean {
+/**
+ * Whether any completion or category operation could still be sent (C22).
+ *
+ * Completion work is derived: an uncertain entry, or a hot or archived completion that needs
+ * an upload and whose category already has a dashboard id.
+ * @param state - The workspace.
+ * @param archivedUnsent - Archived never-uploaded keeps, when loaded.
+ * @example if (!hasSendableWork(state)) binding.lastSyncedAt = now
+ */
+export function hasSendableWork(
+  state: OfflineWorkspace,
+  archivedUnsent: ReadonlyMap<string, OfflineCompletion> = new Map(),
+): boolean {
   const binding = state.binding
   if (!binding) return false
   if (categoryWork(state, 1).sendable.length) return true
   if (Object.values(state.categoryOutbox).some((e) => e.state === 'sent'))
     return true
-  return Object.values(state.outbox).some(
-    (entry) =>
-      entry.state === 'sent' ||
-      (entry.state === 'queued' &&
-        binding.serverCategoryIds[entry.operation.categoryId] !== undefined),
+  return (
+    Object.values(state.outbox).some((entry) => entry.state === 'sent') ||
+    selectUploads(state, archivedUnsent, 1).length > 0
   )
 }
 

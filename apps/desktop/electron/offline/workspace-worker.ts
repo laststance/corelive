@@ -6,6 +6,7 @@ import {
   DEVICE_OWNER_ID,
   DEVICE_WORKSPACE_FILE_NAME,
   OfflineWorkspaceSchema,
+  type OfflineWorkspace,
   validateWorkspaceChange,
   WorkspaceArchiveSchema,
   type WorkspaceCommand,
@@ -14,8 +15,14 @@ import { z } from 'zod'
 
 import { AtomicWorkspaceFile, WorkspaceFileError } from './AtomicWorkspaceFile'
 import {
+  buildOperation,
+  outboxByCompletion,
+  uploadKind,
+} from './completionUpload'
+import {
   eligibleUndo,
   workspaceView,
+  type WorkspaceView,
   type WorkspaceWorkerRequest,
   type WorkspaceWorkerCalls,
 } from './workspace-worker-protocol'
@@ -57,13 +64,14 @@ let archiveTimer: ReturnType<typeof setTimeout> | undefined
 
 /**
  * Schedules one archive roll per local day (and one at startup), after a quiet period.
+ * `force` adds a roll when an upload drain moved many records back out of the archive.
  * Failures only delay the roll: the workspace keeps every record until it is archived.
  *
  * @example scheduleArchive()
  */
-function scheduleArchive(): void {
+function scheduleArchive(force = false): void {
   const day = new Date().toDateString()
-  if (archivedDay === day || archiveTimer) return
+  if ((archivedDay === day && !force) || archiveTimer) return
   archiveTimer = setTimeout(() => {
     archiveTimer = undefined
     service.archiveSettled().then(
@@ -74,6 +82,16 @@ function scheduleArchive(): void {
     )
   }, ARCHIVE_IDLE_MS)
   archiveTimer.unref()
+}
+/**
+ * Projects a workspace for the renderer, counting never-uploaded archived keeps as waiting.
+ *
+ * @param state - A committed workspace.
+ * @returns The bounded view.
+ * @example return view(await service.clearDue())
+ */
+function view(state: OfflineWorkspace): WorkspaceView {
+  return workspaceView(state, service.archivedPendingCount())
 }
 const pageSchema = z.object({
   offset: z.number().int().nonnegative(),
@@ -87,14 +105,16 @@ const pageSchema = z.object({
 async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
   switch (request.type) {
     case 'open': {
-      const view = workspaceView(await service.clearDue())
+      // Files written before uploads were derived may hold never-sent entries (#216 D1).
+      await service.dropDerivableEntries()
+      const opened = view(await service.clearDue())
       scheduleArchive()
-      return view
+      return opened
     }
     case 'archive':
       return { archived: await service.archiveSettled() }
     case 'clearDue':
-      return workspaceView(await service.clearDue())
+      return view(await service.clearDue())
     case 'command': {
       const result = await executeCommand(request.input)
       scheduleArchive()
@@ -102,20 +122,26 @@ async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
     }
     case 'draft':
       return readDraft(request.input.categoryId)
-    case 'markSentBatch':
-      return service.markSentBatch(
+    case 'markSentBatch': {
+      const sent = await service.markSentBatch(
         request.input.accountId,
-        request.input.operationIds,
+        request.input.limit,
       )
+      // Records moved back from the archive for upload leave the keep path again soon.
+      if (service.needsArchiveRoll()) scheduleArchive(true)
+      return sent
+    }
+    case 'pendingTotal':
+      return service.pendingTotal()
     case 'receipts':
-      return workspaceView(
+      return view(
         await service.acceptReceipts(
           request.input.accountId,
           request.input.receipts,
         ),
       )
     case 'reconcile':
-      return workspaceView(await service.reconcileCategories(request.input))
+      return view(await service.reconcileCategories(request.input))
     case 'categoryPending':
       return service.categoryPending(request.input.limit)
     case 'markCategorySent':
@@ -124,21 +150,21 @@ async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
         request.input.operationIds,
       )
     case 'categoryReceipts':
-      return workspaceView(
+      return view(
         await service.acceptCategoryReceipts(
           request.input.accountId,
           request.input.receipts,
         ),
       )
     case 'noteCategoryQuery':
-      return workspaceView(
+      return view(
         await service.noteCategoryQuery(
           request.input.accountId,
           request.input.operationIds,
         ),
       )
     case 'parkCategory':
-      return workspaceView(
+      return view(
         await service.parkCategory(
           request.input.accountId,
           request.input.operationIds,
@@ -147,7 +173,7 @@ async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
     case 'syncDetails':
       return service.syncDetails()
     case 'markSynced':
-      return workspaceView(
+      return view(
         await service.markSynced(request.input.accountId, request.input.at),
       )
     case 'binding': {
@@ -178,25 +204,10 @@ async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
         copies: copies.slice(offset, offset + limit),
       }
     }
-    case 'pending': {
-      const state = await file.read()
-      const limit = z.number().int().min(1).max(100).parse(request.input.limit)
-      const serverIds = state.binding?.serverCategoryIds ?? {}
-      return Object.values(state.outbox)
-        .filter(
-          (entry) =>
-            // Uncertain work is always recoverable; queued work needs its category on the server.
-            entry.state === 'sent' ||
-            (entry.state === 'queued' &&
-              serverIds[entry.operation.categoryId] !== undefined),
-        )
-        .sort(
-          (left, right) =>
-            Number(right.operation.kind === 'cancel') -
-            Number(left.operation.kind === 'cancel'),
-        )
-        .slice(0, limit)
-    }
+    case 'pending':
+      return service.pendingWork(
+        z.number().int().min(1).max(100).parse(request.input.limit),
+      )
     case 'undoHistory': {
       const { offset, limit } = pageSchema.parse(request.input)
       const completions = eligibleUndo(await file.read())
@@ -217,19 +228,19 @@ async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
         request.input.expectedRevision,
         request.input.checkpoint,
       )
-      return workspaceView(state)
+      return view(state)
     }
     case 'export':
       return exportWriting()
     case 'previewRecovery': {
       const preview = await file.previewRecoveryInfo()
       return {
-        workspace: workspaceView(preview.workspace),
+        workspace: view(preview.workspace),
         savedAt: preview.savedAt,
       }
     }
     case 'recover':
-      return workspaceView(
+      return view(
         await file.restoreRecovery((current) => ({
           ...current,
           revision: current.revision + 1,
@@ -320,7 +331,7 @@ async function executeCommand(
   const categoryId = effectiveCategory(state, affected)
   const draft = state.drafts[categoryId]
   if (!draft) throw new WorkspaceCommandError('category-unavailable')
-  return { ...workspaceView(state), writtenDraft: { categoryId, draft } }
+  return { ...view(state), writtenDraft: { categoryId, draft } }
 }
 
 /** Returns one page of distinct completion identities, prioritizing records that need repair.
@@ -336,6 +347,23 @@ async function readDetails(
     const previous = latest.get(entry.operation.completionId)
     if (!previous || previous.operation.revision < entry.operation.revision)
       latest.set(entry.operation.completionId, entry)
+  }
+  // Keeps that wait for the dashboard have no outbox entry (uploads are derived, #216 D1); they
+  // are listed as queued rows keyed by the completion id, which is not a real operation id.
+  const grouped = outboxByCompletion(state)
+  for (const completion of Object.values(state.completions)) {
+    if (latest.has(completion.id)) continue
+    const kind = uploadKind(completion, grouped.get(completion.id) ?? [])
+    if (kind)
+      latest.set(completion.id, {
+        state: 'queued',
+        operation: buildOperation(
+          state.deviceId,
+          completion,
+          kind,
+          completion.id,
+        ),
+      })
   }
   const entries = [...latest.values()].sort(
     (left, right) =>

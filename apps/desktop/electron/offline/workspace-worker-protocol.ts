@@ -15,6 +15,7 @@ import type {
   WorkspaceCommand,
 } from '@corelive/desktop-contract/offline-workspace-v2'
 
+import { waitingCompletionCount } from './completionUpload'
 import { needsALookCount, type SyncDetailsView } from './syncDetails'
 import { workspaceToday } from './workspaceCounts'
 
@@ -33,10 +34,16 @@ export interface WorkspaceWorkerCalls {
     output: WorkspaceView & { writtenDraft: OfflineDraftRecord }
   }
   draft: { input: { categoryId: string }; output: OfflineDraftRecord }
-  /** Sendable work for the bound account: uncertain entries plus queued ones with a server category id. */
-  pending: { input: { limit: number }; output: OutboxEntry[] }
+  /** Uncertain entries plus how many derived keeps could be frozen and sent now (capped at `limit`). */
+  pending: {
+    input: { limit: number }
+    output: { uncertain: OutboxEntry[]; sendable: number }
+  }
+  /** Every completion waiting for the dashboard, archive included (DA4 progress). */
+  pendingTotal: { input: null; output: number }
+  /** Derives, freezes and marks the next batch in flight; uncertain entries are replayed. */
   markSentBatch: {
-    input: { accountId: string; operationIds: string[] }
+    input: { accountId: string; limit: number }
     output: OutboxEntry[]
   }
   receipts: {
@@ -135,9 +142,13 @@ export type WorkspaceWorkerRequest = {
 }[keyof WorkspaceWorkerCalls]
 
 /** Snapshot projection runs in the storage worker so even large queues never block main's shortcuts.
+ * @param archivedPending - Archived keeps that never uploaded; they wait for the dashboard too.
  * @example workspaceView(state)
  */
-export function workspaceView(state: OfflineWorkspace): WorkspaceView {
+export function workspaceView(
+  state: OfflineWorkspace,
+  archivedPending = 0,
+): WorkspaceView {
   const draft = state.drafts[state.selectedCategoryId]
   if (!draft) throw new Error('Invalid selected workspace category')
   const entries = Object.values(state.outbox)
@@ -149,8 +160,7 @@ export function workspaceView(state: OfflineWorkspace): WorkspaceView {
     categories: state.categories,
     preferences: state.preferences,
     draft,
-    pendingCount: new Set(entries.map((entry) => entry.operation.completionId))
-      .size,
+    pendingCount: waitingCompletionCount(state) + archivedPending,
     blockedCount: new Set(
       entries
         .filter((entry) => entry.state === 'blocked')

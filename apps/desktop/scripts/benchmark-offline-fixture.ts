@@ -14,18 +14,38 @@ const DRAFT_ROWS = 100
 const COMPLETIONS_PER_DAY = 20
 const DAY_MS = 24 * 60 * 60 * 1000
 
+/** Which kind of Mac the fixture models. */
+export type BenchmarkProfile = 'attached' | 'local-only'
+
+/** The synthetic account both attached shapes are bound to. */
+export const BENCHMARK_ACCOUNT_ID = 'synthetic-benchmark'
+
 /**
- * Builds the realistic benchmark workspace: completions with receipts, a partial outbox,
+ * Builds the realistic benchmark workspace: completions with receipts, a partial outbox of in-flight sends,
  * a 100-line draft whose every tenth line is at the title length limit.
  *
+ * The `attached` profile is a signed-in Mac: older history was sent (retired records) and a
+ * tenth is still in flight. The `local-only` profile is the D1 gate: a Mac that was never
+ * attached, so every completion is unsent, there is no binding, no retired record and no
+ * outbox entry (uploads are derived at attach, #216).
+ *
  * @param completions - Number of kept completions to hold.
- * @returns A schema-valid v2 workspace bound to a synthetic account.
- * @example const workspace = buildBenchmarkWorkspace(100)
+ * @param profile - The Mac being modelled.
+ * @param options - `bound` binds the account without sending anything (the first attach).
+ * @returns A schema-valid v2 workspace.
+ * @example const workspace = buildBenchmarkWorkspace(100, 'local-only')
  */
-export function buildBenchmarkWorkspace(completions: number): OfflineWorkspace {
+export function buildBenchmarkWorkspace(
+  completions: number,
+  profile: BenchmarkProfile = 'attached',
+  options: { bound?: boolean } = {},
+): OfflineWorkspace {
+  const localOnly = profile === 'local-only'
   const seeded = buildDeviceWorkspace({
     categoryCount: CATEGORY_COUNT,
-    boundAccountId: 'synthetic-benchmark',
+    ...(!localOnly || options.bound
+      ? { boundAccountId: BENCHMARK_ACCOUNT_ID }
+      : {}),
   })
   const firstCategory = categoryUuid(1)
   seeded.drafts[firstCategory] = {
@@ -54,10 +74,15 @@ export function buildBenchmarkWorkspace(completions: number): OfflineWorkspace {
       now -
       Math.floor(index / COMPLETIONS_PER_DAY) * DAY_MS -
       (index % 20) * 1000
-    // One completion in ten is still waiting to send: it stays live whatever its age.
-    const waiting = index % 10 === 0
+    // One completion in ten is in flight (reply lost): it stays live whatever its age.
+    const waiting = !localOnly && index % 10 === 0
     // Older, sent history is what a signed-in Mac holds: retired records that keep their text.
-    if (!waiting && index % 2 === 1 && completedAt < now - 2 * DAY_MS) {
+    if (
+      !localOnly &&
+      !waiting &&
+      index % 2 === 1 &&
+      completedAt < now - 2 * DAY_MS
+    ) {
       seeded.retiredCompletions[id] = {
         completedAt,
         originalCompletedAt: completedAt,
@@ -97,22 +122,25 @@ export function buildBenchmarkWorkspace(completions: number): OfflineWorkspace {
       revision: index + 1,
     }
     if (waiting) {
+      // In flight with a lost reply: the entry (and its record) stays on the keep path.
       const operationId = randomUUID()
+      const operation = {
+        operationId,
+        completionId: id,
+        deviceId: seeded.deviceId,
+        revision: 1,
+        expectedRemoteRevision: 0,
+        kind: 'create' as const,
+        categoryId,
+        title,
+        completedAt,
+        originalCompletedAt: completedAt,
+        timezone: 'Asia/Tokyo',
+      }
       seeded.outbox[operationId] = {
-        state: 'queued',
-        operation: {
-          operationId,
-          completionId: id,
-          deviceId: seeded.deviceId,
-          revision: 1,
-          expectedRemoteRevision: 0,
-          kind: 'create',
-          categoryId,
-          title,
-          completedAt,
-          originalCompletedAt: completedAt,
-          timezone: 'Asia/Tokyo',
-        },
+        state: 'sent',
+        operation,
+        wire: { ...operation, categoryId: (index % CATEGORY_COUNT) + 1 },
       }
     }
   }

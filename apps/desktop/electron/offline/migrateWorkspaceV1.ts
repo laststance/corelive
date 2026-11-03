@@ -698,21 +698,24 @@ function buildWorkspace(input: BuildInput): OfflineWorkspace {
         { ...retired, originalCategoryId: local(retired.originalCategoryId) },
       ]),
     ),
+    // A queued v1 entry was never offered to the server: it is re-derived from its completion.
     outbox: Object.fromEntries(
-      Object.entries(v1?.outbox ?? {}).map(([id, entry]) => [
-        id,
-        {
-          operation: {
-            ...entry.operation,
-            categoryId: local(entry.operation.categoryId),
+      Object.entries(v1?.outbox ?? {})
+        .filter(([, entry]) => entry.state !== 'queued')
+        .map(([id, entry]) => [
+          id,
+          {
+            operation: {
+              ...entry.operation,
+              categoryId: local(entry.operation.categoryId),
+            },
+            // Anything already offered to the server keeps its exact bytes (EA3, P3).
+            wire: entry.operation,
+            state: entry.state,
+            failure: entry.failure,
+            receipt: entry.receipt ? mapReceipt(entry.receipt) : undefined,
           },
-          // Anything already offered to the server keeps its exact bytes (EA3, P3).
-          ...(entry.state === 'queued' ? {} : { wire: entry.operation }),
-          state: entry.state,
-          failure: entry.failure,
-          receipt: entry.receipt ? mapReceipt(entry.receipt) : undefined,
-        },
-      ]),
+        ]),
     ),
     categoryOutbox: {},
     commandReceipts: v1?.commandReceipts ?? {},

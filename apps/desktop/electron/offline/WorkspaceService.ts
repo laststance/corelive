@@ -33,7 +33,10 @@ import {
   setCheckboxStateAtLine,
 } from '../../renderer/editor/liveEditorUtils'
 
-import type { AtomicWorkspaceFile } from './AtomicWorkspaceFile'
+import {
+  WorkspaceFileError,
+  type AtomicWorkspaceFile,
+} from './AtomicWorkspaceFile'
 import { mergeCategories, type CategoryMergeInput } from './categoryMerge'
 import {
   applyCategoryReceipts,
@@ -44,10 +47,17 @@ import {
   parkOperations,
 } from './categoryReceipts'
 import { clearMarker, type CategoryContext } from './categoryState'
+import {
+  buildOperation,
+  selectUploads,
+  uploadKind,
+  waitingCompletionCount,
+} from './completionUpload'
+import { effectiveCategory } from './effectiveCategory'
 import { applySyncDetailAction, buildSyncDetails } from './syncDetails'
 import { WorkspaceCommandError } from './WorkspaceCommandError'
 
-export { WorkspaceCommandError }
+export { WorkspaceCommandError, effectiveCategory }
 
 /**
  * Commands whose receipts are kept. A receipt only answers a replay of the same command id
@@ -55,6 +65,11 @@ export { WorkspaceCommandError }
  * grew by about 160 bytes per command forever (#216 perf gate).
  */
 export const COMMAND_RECEIPT_WINDOW = 2000
+
+/** Records moved back from the archive for upload before the roll moves settled ones out again. */
+const ARCHIVE_DRAIN_ROLL_THRESHOLD = 1000
+
+const EMPTY_ARCHIVE: ReadonlyMap<string, OfflineCompletion> = new Map()
 
 /** Settled records must be older than this before they leave the keep-path snapshot. */
 export const ARCHIVE_MIN_AGE_MS = 48 * 60 * 60 * 1000
@@ -165,6 +180,16 @@ export class WorkspaceService {
   ) {}
 
   /**
+   * Archived completions that were never uploaded, keyed by id; null until first needed.
+   * Local-only history is archivable after two days yet stays derivable for upload (#216 D1),
+   * so the sync paths read the archive file once into this map instead of once per batch.
+   */
+  private archivedUnsent: Map<string, OfflineCompletion> | null = null
+
+  /** Records moved back from the archive since the last roll; bounds the drain's hot growth. */
+  private unarchivedSinceRoll = 0
+
+  /**
    * Validates/idempotently applies one user intent. Same command ID with different bytes
    * is rejected; stale full-draft writes are returned as conflicts for live-text rebase.
    * @example await service.execute({ type: 'select', commandId, categoryId: 1 })
@@ -255,15 +280,20 @@ export class WorkspaceService {
         completions: {},
         retiredCompletions: {},
       },
-      (current) => ({
-        ...current,
-        // The newest copy wins if a record was archived before and has changed since.
-        completions: { ...current.completions, ...chosen.completions },
-        retiredCompletions: {
-          ...current.retiredCompletions,
-          ...chosen.retired,
-        },
-      }),
+      (current) => {
+        const completions = { ...current.completions, ...chosen.completions }
+        // A retired record supersedes any stale never-uploaded copy left by an earlier upload.
+        for (const id of Object.keys(chosen.retired)) delete completions[id]
+        return {
+          ...current,
+          // The newest copy wins if a record was archived before and has changed since.
+          completions,
+          retiredCompletions: {
+            ...current.retiredCompletions,
+            ...chosen.retired,
+          },
+        }
+      },
     )
     let moved = 0
     await this.file.update((current) => {
@@ -284,6 +314,9 @@ export class WorkspaceService {
         ) {
           delete completions[id]
           moved++
+          // Never-uploaded history stays derivable for the next attach (#216 D1).
+          if (this.archivedUnsent && uploadKind(archived, []))
+            this.archivedUnsent.set(id, archived)
         }
       }
       for (const [id, archived] of Object.entries(chosen.retired)) {
@@ -301,48 +334,203 @@ export class WorkspaceService {
         retiredCompletions,
       }
     })
+    this.unarchivedSinceRoll = 0
     return moved
   }
 
   /**
-   * Freezes and marks sendable operations in flight in one transaction, before any request leaves
-   * the process (D1, EA3). Only the bound account can send; an operation whose category has no
-   * server id yet stays queued (D4 last bullet).
+   * Drops outbox entries that were queued but never offered to the dashboard.
+   *
+   * Uploads are derived from completion state now, so such an entry (written by an earlier build
+   * of this workspace version) is re-derivable; `sent` (uncertain) and `blocked` entries stay
+   * for their receipts and for the user's decision (P3). Runs once per open.
+   * @returns How many entries were dropped.
+   * @example await service.dropDerivableEntries()
+   */
+  async dropDerivableEntries(): Promise<number> {
+    let dropped = 0
+    await this.file.update((current) => {
+      const queued = Object.keys(current.outbox).filter(
+        (id) => current.outbox[id]!.state === 'queued',
+      )
+      if (!queued.length) return current
+      const next = forkWorkspace(current)
+      for (const id of queued) delete next.outbox[id]
+      dropped = queued.length
+      next.revision++
+      return next
+    })
+    return dropped
+  }
+
+  /**
+   * Reads the never-uploaded archived records once (see {@link archivedUnsent}).
+   *
+   * Ids that also live in the workspace or in either retired map are skipped: a stale archive
+   * copy is left behind when an upload moved the record back (crash or pending roll), and the
+   * workspace always wins on read.
+   * @returns The shared map; callers must not mutate its records.
+   * @throws {@link WorkspaceFileError} when the archive exists but cannot be read.
+   * @example const unsent = await this.loadArchivedUnsent()
+   */
+  private async loadArchivedUnsent(): Promise<Map<string, OfflineCompletion>> {
+    if (this.archivedUnsent) return this.archivedUnsent
+    const unsent = new Map<string, OfflineCompletion>()
+    if (this.archive) {
+      let stored: WorkspaceArchive | null = null
+      try {
+        // A shared no-op read avoids cloning a multi-year archive.
+        stored = await this.archive.update((current) => current, {
+          shared: true,
+        })
+      } catch (error) {
+        if (
+          !(error instanceof WorkspaceFileError) ||
+          error.reason !== 'missing'
+        )
+          throw error
+      }
+      if (stored) {
+        const hot = await this.file.update((current) => current, {
+          shared: true,
+        })
+        for (const [id, completion] of Object.entries(stored.completions))
+          if (
+            !hot.completions[id] &&
+            !hot.retiredCompletions[id] &&
+            !stored.retiredCompletions[id] &&
+            uploadKind(completion, [])
+          )
+            unsent.set(id, completion)
+      }
+    }
+    // An archive roll that finished while reading may already have filled the map.
+    this.archivedUnsent ??= unsent
+    return this.archivedUnsent
+  }
+
+  /**
+   * How many archived completions still wait for their first upload (0 until the archive was read).
+   * Added to the view's waiting count so the footer and the attach progress include archive.
+   * @example view.pendingCount + service.archivedPendingCount()
+   */
+  archivedPendingCount(): number {
+    return this.archivedUnsent?.size ?? 0
+  }
+
+  /**
+   * Whether enough records came back from the archive that a roll should move them out again.
+   * @example if (service.needsArchiveRoll()) scheduleArchive()
+   */
+  needsArchiveRoll(): boolean {
+    return this.unarchivedSinceRoll >= ARCHIVE_DRAIN_ROLL_THRESHOLD
+  }
+
+  /**
+   * Counts every completion still waiting to be sent, archive included (D2/DA4 progress).
+   * Read when the user presses Connect so "Sending N keeps…" is the true total.
+   * @returns Hot completions needing upload or holding an entry, plus archived unsent ones.
+   * @example const total = await service.pendingTotal()
+   */
+  async pendingTotal(): Promise<number> {
+    const archivedUnsent = await this.loadArchivedUnsent()
+    const state = await this.file.update((current) => current, { shared: true })
+    return waitingCompletionCount(state) + archivedUnsent.size
+  }
+
+  /**
+   * Lists the work the sync loop can do now: uncertain entries to recover plus how many
+   * completions could be frozen and sent (capped at `limit`). Nothing is written (EA3).
+   * @param limit - Upper bound for both numbers.
+   * @example const { uncertain, sendable } = await service.pendingWork(16)
+   */
+  async pendingWork(
+    limit: number,
+  ): Promise<{ uncertain: OutboxEntry[]; sendable: number }> {
+    const state = await this.file.update((current) => current, { shared: true })
+    const uncertain = Object.values(state.outbox)
+      .filter((entry) => entry.state === 'sent')
+      .slice(0, limit)
+    if (!state.binding) return { uncertain, sendable: 0 }
+    const archivedUnsent = await this.loadArchivedUnsent()
+    return {
+      uncertain,
+      sendable: selectUploads(state, archivedUnsent, limit).length,
+    }
+  }
+
+  /**
+   * Derives the next sendable operations from completion state and freezes each wire payload
+   * into the outbox in the same transaction that marks it in flight, before any request leaves
+   * the process (D1, EA3). Only the bound account can send; a completion whose category has no
+   * server id yet is skipped (D4 last bullet). Uncertain entries are returned unchanged so the
+   * loop replays their stored bytes.
    * @param accountId - The attached account; anything but the binding's account sends nothing.
-   * @param operationIds - Candidate queued operations.
-   * @returns The entries that are now in flight, each with its frozen server-id `wire` payload.
-   * @example const sent = await service.markSentBatch(accountId, ids)
+   * @param limit - Maximum number of operations in the batch, replays included.
+   * @returns Uncertain entries first, then the newly frozen ones, each with its `wire` payload.
+   * @example const sent = await service.markSentBatch(accountId, 16)
    */
   async markSentBatch(
     accountId: string,
-    operationIds: string[],
+    limit: number,
   ): Promise<OutboxEntry[]> {
+    const probe = await this.file.update((current) => current, { shared: true })
+    if (probe.binding?.accountId !== accountId) return []
+    const archivedUnsent = await this.loadArchivedUnsent()
+    let replay: OutboxEntry[] = []
+    const frozen: string[] = []
+    const fromArchive: string[] = []
     const state = await this.file.update((current) => {
       const binding = current.binding
       if (binding?.accountId !== accountId) return current
-      const candidates = operationIds.filter(
-        (id) =>
-          current.outbox[id]?.state === 'queued' &&
-          binding.serverCategoryIds[current.outbox[id].operation.categoryId] !==
-            undefined,
+      replay = Object.values(current.outbox)
+        .filter((entry) => entry.state === 'sent')
+        .slice(0, limit)
+      const candidates = selectUploads(
+        current,
+        archivedUnsent,
+        limit - replay.length,
       )
       if (!candidates.length) return current
-      const next = structuredClone(current)
-      for (const id of candidates) {
-        const entry = next.outbox[id]!
+      // Replace entries, never mutate: the fork shares them with the committed state.
+      const next = forkWorkspace(current)
+      for (const { completion, kind, archived } of candidates) {
+        // A proven-unsent or rejected entry is superseded by the operation frozen now.
+        for (const [id, entry] of Object.entries(next.outbox))
+          if (
+            entry.operation.completionId === completion.id &&
+            entry.state !== 'sent'
+          )
+            delete next.outbox[id]
+        const operationId = this.nextId()
+        const operation = buildOperation(
+          next.deviceId,
+          completion,
+          kind,
+          operationId,
+        )
         // Server ids are mapped exactly once here; every retry sends these stored bytes.
-        entry.wire = {
-          ...entry.operation,
-          categoryId: binding.serverCategoryIds[entry.operation.categoryId]!,
+        next.outbox[operationId] = {
+          state: 'sent',
+          operation,
+          wire: {
+            ...operation,
+            categoryId: binding.serverCategoryIds[operation.categoryId]!,
+          },
         }
-        entry.state = 'sent'
+        if (archived) {
+          next.completions[completion.id] = completion
+          fromArchive.push(completion.id)
+        }
+        frozen.push(operationId)
       }
       next.revision++
       return next
     })
-    return operationIds.flatMap((id) =>
-      state.outbox[id]?.state === 'sent' ? [state.outbox[id]] : [],
-    )
+    // The workspace now owns these records; any archive copy is stale and loses on read.
+    for (const id of fromArchive) archivedUnsent.delete(id)
+    this.unarchivedSinceRoll += fromArchive.length
+    return [...replay, ...frozen.flatMap((id) => state.outbox[id] ?? [])]
   }
 
   /**
@@ -364,13 +552,23 @@ export class WorkspaceService {
         throw new WorkspaceCommandError('command-conflict')
       if (!receipts.some((receipt) => current.outbox[receipt.operationId]))
         return current
-      const state = structuredClone(current)
+      // A fork is enough: applyReceipt replaces the entries it changes.
+      const state = forkWorkspace(current)
       for (const receipt of receipts) this.applyReceipt(state, receipt)
       // C22: written with the receipt that leaves nothing sendable.
-      if (!hasSendableWork(state)) state.binding!.lastSyncedAt = this.now()
+      if (!this.hasSendableWork(state)) state.binding!.lastSyncedAt = this.now()
       state.revision++
       return state
     })
+  }
+
+  /**
+   * Whether anything could still be sent: category work, uncertain entries, or derivable keeps
+   * (archive included).
+   * @example if (!this.hasSendableWork(state)) binding.lastSyncedAt = now
+   */
+  private hasSendableWork(state: OfflineWorkspace): boolean {
+    return hasSendableWork(state, this.archivedUnsent ?? EMPTY_ARCHIVE)
   }
 
   /** Reduces one receipt without changing an uncertain operation's original payload.
@@ -387,7 +585,7 @@ export class WorkspaceService {
       pending.operation.revision !== wireReceipt.revision
     )
       throw new WorkspaceCommandError('command-conflict')
-    const completion = this.completion(state, wireReceipt.completionId)
+    let completion = this.completion(state, wireReceipt.completionId)
     const toLocal = localProjectionMapper(state, completion.categoryId)
     const receipt = {
       ...wireReceipt,
@@ -398,8 +596,11 @@ export class WorkspaceService {
     if (
       receipt.projection &&
       receipt.projection.revision >= (completion.remote?.revision ?? 0)
-    )
-      completion.remote = receipt.projection
+    ) {
+      // Replace, never mutate: the receipt commit forks the workspace and shares entries.
+      completion = { ...completion, remote: receipt.projection }
+      state.completions[completion.id] = completion
+    }
     if (receipt.projection?.cancelled && !completion.cancelled) {
       state.outbox[receipt.operationId] = {
         ...pending,
@@ -409,7 +610,7 @@ export class WorkspaceService {
       }
     } else if (receipt.status === 'applied') {
       delete state.outbox[receipt.operationId]
-      this.queueDesired(state, completion)
+      this.supersedeUnsent(state, completion)
     } else {
       state.outbox[receipt.operationId] = {
         ...pending,
@@ -422,7 +623,7 @@ export class WorkspaceService {
         completion.revision > receipt.revision &&
         receipt.reason !== 'conflict'
       )
-        this.queueDesired(state, completion)
+        this.supersedeUnsent(state, completion)
     }
   }
 
@@ -450,7 +651,11 @@ export class WorkspaceService {
 
   /** Clock and id source handed to the pure category modules. */
   private categoryContext(): CategoryContext {
-    return { now: this.now(), nextId: this.nextId }
+    return {
+      now: this.now(),
+      nextId: this.nextId,
+      archivedUnsent: this.archivedUnsent ?? EMPTY_ARCHIVE,
+    }
   }
 
   /**
@@ -862,7 +1067,7 @@ export class WorkspaceService {
 
     draft.revision++
 
-    this.queueDesired(state, completion)
+    this.supersedeUnsent(state, completion)
 
     return
   }
@@ -970,7 +1175,7 @@ export class WorkspaceService {
 
     draft.revision++
 
-    this.queueDesired(state, completion)
+    this.supersedeUnsent(state, completion)
 
     return
   }
@@ -1092,7 +1297,7 @@ export class WorkspaceService {
       completion.categoryId = destination
       completion.revision =
         Math.max(completion.revision, completion.remote?.revision ?? 0) + 1
-      this.queueDesired(state, completion)
+      this.supersedeUnsent(state, completion)
     }
 
     return
@@ -1217,7 +1422,7 @@ export class WorkspaceService {
     completion.revision =
       Math.max(completion.revision, completion.remote?.revision ?? 0) + 1
 
-    this.queueDesired(state, completion)
+    this.supersedeUnsent(state, completion)
 
     return
   }
@@ -1281,7 +1486,7 @@ export class WorkspaceService {
           delete state.outbox[id]
     } else {
       completion.revision = Math.max(completion.revision, remote.revision) + 1
-      this.queueDesired(state, completion)
+      this.supersedeUnsent(state, completion)
     }
 
     return
@@ -1313,7 +1518,7 @@ export class WorkspaceService {
     completion.remote = rejected.receipt!.projection
     completion.revision =
       Math.max(completion.revision, completion.remote?.revision ?? 0) + 1
-    this.queueDesired(state, completion)
+    this.supersedeUnsent(state, completion)
   }
 
   /** Appends an explicitly selected recovery copy once, preserving newer destination writing.
@@ -1363,10 +1568,16 @@ export class WorkspaceService {
     return
   }
 
-  /** Queues the latest desired projection without ever changing an uncertain sent payload.
-   * @example this.queueDesired(state, completion)
+  /**
+   * Drops proven-unsent or rejected entries that a newer revision of the completion supersedes.
+   *
+   * It no longer creates an operation: upload work is derived from completion state and frozen
+   * only when first marked in flight ({@link markSentBatch}), so keeping or editing while
+   * detached leaves the outbox untouched (#216 D1 local-only gate). Sent bytes stay for
+   * receipt lookup and are never changed (EA3).
+   * @example this.supersedeUnsent(state, completion)
    */
-  private queueDesired(
+  private supersedeUnsent(
     state: OfflineWorkspace,
     completion: OfflineCompletion,
   ): void {
@@ -1376,41 +1587,14 @@ export class WorkspaceService {
     if (
       entries.some(
         ([, entry]) => entry.operation.revision === completion.revision,
-      )
+      ) ||
+      (entries.some(([, entry]) => entry.state === 'sent') &&
+        !completion.cancelled) ||
+      (completion.remote?.revision ?? 0) >= completion.revision
     )
       return
-    if (
-      entries.some(([, entry]) => entry.state === 'sent') &&
-      !completion.cancelled
-    )
-      return
-    if ((completion.remote?.revision ?? 0) >= completion.revision) return
     for (const [id, entry] of entries) {
-      // Proven unsent/rejected operations can be superseded; sent bytes stay for receipt lookup.
       if (entry.state !== 'sent') delete state.outbox[id]
-    }
-    const operationId = this.nextId()
-    state.outbox[operationId] = {
-      state: 'queued',
-      operation: {
-        operationId,
-        completionId: completion.id,
-        deviceId: state.deviceId,
-        revision: completion.revision,
-        expectedRemoteRevision: completion.remote?.revision ?? 0,
-        kind: completion.cancelled
-          ? 'cancel'
-          : !completion.remote
-            ? 'create'
-            : completion.remote.categoryId !== completion.categoryId
-              ? 'relocate'
-              : 'correctTime',
-        categoryId: completion.categoryId,
-        title: completion.title,
-        completedAt: completion.completedAt,
-        originalCompletedAt: completion.originalCompletedAt,
-        timezone: completion.timezone,
-      },
     }
   }
 
@@ -1447,24 +1631,6 @@ export class WorkspaceService {
   private rows(text: string): DraftRow[] {
     return text.split('\n').map((line) => ({ id: this.nextId(), text: line }))
   }
-}
-
-/** Resolves chained category moves without restoring into a retired source.
- * @example effectiveCategory(workspace, 3)
- */
-export function effectiveCategory(
-  state: OfflineWorkspace,
-  categoryId: string,
-): string {
-  const visited = new Set<string>()
-  let current = categoryId
-  while (state.categoryMoves[current]) {
-    if (visited.has(current))
-      throw new WorkspaceCommandError('category-unavailable')
-    visited.add(current)
-    current = state.categoryMoves[current]!
-  }
-  return current
 }
 
 /**

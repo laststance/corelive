@@ -407,10 +407,9 @@ async function createEditorFixture(
     if (input.syncNow) {
       sync = 'syncing'
       await publish()
-      const pending = await worker.call('pending', { limit: 100 })
       const sent = await worker.call('markSentBatch', {
         accountId: QA_ACCOUNT_ID,
-        operationIds: pending.map((entry) => entry.operation.operationId),
+        limit: 100,
       })
       await worker.call('receipts', {
         accountId: QA_ACCOUNT_ID,
