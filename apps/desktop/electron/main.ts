@@ -347,9 +347,10 @@ function ensureDeepLinkManager(): DeepLinkManagerType | null {
 /**
  * Sets the currently authenticated user.
  *
- * In WebView architecture, authentication is handled by the web app (Clerk).
- * This function simply stores the user info for Electron-side features
- * (e.g., displaying in menu, notifications).
+ * The editor and Settings are bundled and need no account. Sign-in is handled
+ * by the remote login window (Clerk); this function only stores the user info
+ * for Electron-side features (e.g., displaying in menu, notifications). The
+ * attached account itself is decided by the verified identity, not this payload.
  *
  * @param userPayload - User data from Clerk authentication
  * @returns The active user object

@@ -1,9 +1,72 @@
 # Development without taking over the Mac
 
+## Desktop states in two commands
+
+The desktop editor and Settings run from bundled files, so their states need no
+dev server, database, Clerk account or running Electron window. From a fresh
+worktree with dependencies installed:
+
+```sh
+pnpm electron:build:ts
+pnpm qa:offline-editor --fixture local-only --screenshots .gstack/qa-reports/desktop
+```
+
+The second command starts the fixture on a temporary synthetic workspace, renders
+it at 320x300, 360x380 and 600x700 through the isolated `qa:browser` session,
+writes `<state>-<w>x<h>.png` plus `manifest.json`, and exits. A manifest entry:
+
+```json
+{
+  "state": "local-only",
+  "width": 320,
+  "height": 300,
+  "file": "local-only-320x300.png",
+  "readyText": "Saved on this Mac"
+}
+```
+
+Interactive variant: read the URL from the JSON first line instead of copying it.
+
+```sh
+pnpm qa:offline-editor --fixture signed-out > .gstack/fixture.json &
+pnpm qa:browser open "$(head -n1 .gstack/fixture.json | jq -r .url)"
+pnpm qa:browser snapshot
+kill "$(jq -r .pid .gstack/fixture.json)"; pnpm qa:browser close
+```
+
+`pnpm` reports any failed script as exit 1; the stderr line carries the stable code
+(`FIXTURE_UNKNOWN`, `FIXTURE_BUILD_MISSING`, `FIXTURE_WORKER_FAILED`,
+`FIXTURE_STATE_TIMEOUT`, `FIXTURE_BROWSER_MISSING`), and running the script with
+`pnpm --filter @corelive/desktop exec tsx scripts/<name>.ts` returns the exact
+status (2, 3, 4, 5, 6). If Chromium is missing: `pnpm exec playwright-cli install-browser chromium`.
+
+| Command                                   | Fixtures, states or views                                                                                                                                                                                                                                                                                      |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm qa:offline-editor --fixture <name>` | `local-only` (default), `signed-out`, `attached`, `recovery`; `all` with `--screenshots`                                                                                                                                                                                                                       |
+| `pnpm qa:settings` (`?state=<name>`)      | `account-never-attached` (default), `account-attached`, `account-signed-out`, `account-other-account`, `connect-confirm`, `connect-uploading`, `signout-confirm`, `signout-running`, `signout-residual`, `signin-offline`, `signin-unreachable`, `sync-details-empty`, `sync-details-rows`, `category-refusal` |
+| `pnpm qa:web` (`?view=<name>`)            | `home` (default), `appearance` (the web dashboard Appearance)                                                                                                                                                                                                                                                  |
+| `pnpm benchmark:offline`                  | Workspace write latency; see the [offline guide](offline-liveeditor.md#recipes)                                                                                                                                                                                                                                |
+
+Each takes `--help` (exit 0, no build needed) and prints one JSON line
+(`{"fixture","url","pid","data"}`, `{"url","pid","states"}` or `{"url","pid","views"}`)
+once it is serving. A timed cold and warm run of the two commands is recorded in
+each PR (`/usr/bin/time -p`; target: 5 minutes at most).
+
 Use the web app and an isolated, headless Playwright CLI session for routine
 development and renderer QA. The CLI is a development tool, not a login E2E suite.
 Do not repeatedly authenticate real accounts to test local rendering, IPC contracts,
 or error handling. Development Clerk results do not prove Production Clerk behavior.
+
+## Owner instruction — 2026-11-03 (isolated dev instance QA)
+
+When native behavior must be checked while the owner is working, QA an isolated
+dev instance through agent-desktop's semantic accessibility (AX) actions only: no
+`--headed`, no physical input, no focus changes, a fresh `--user-data-dir`, and
+headless fixtures for everything else. Any dev or QA Electron run claims the
+`corelive://` handler, so after every such run restore it to `com.corelive.app`,
+verify it with `NSWorkspace URLForApplicationToOpenURL` (it must name
+`com.corelive.app`), and record that verification in the QA report. This is
+mandatory, not optional.
 
 ## Current QA authorization — 2026-10-07
 
@@ -108,55 +171,56 @@ shared artifacts. Do not import the owner's Chrome or Electron profile.
 
 ```sh
 pnpm electron:build:ts
-pnpm qa:offline-editor
-# In another terminal, use the printed loopback URL:
-pnpm qa:browser open http://127.0.0.1:<port>
+pnpm qa:offline-editor --fixture attached      # prints the JSON first line
+pnpm qa:browser open http://127.0.0.1:<port>   # the "url" field
 
-# For the web dashboard, run separately and open the printed URL:
-pnpm qa:web   # ?view=home (default) or ?view=appearance
+pnpm qa:settings                               # then ...?state=signout-confirm
+pnpm qa:web                                    # then ...?view=appearance
 ```
 
-The offline fixture serves the built renderer and real workspace worker against
-a temporary synthetic workspace. It injects a test-only preload bridge for save
-failure, delayed acknowledgement, sync state and preference changes.
-`pnpm qa:web` serves the web Home sidebar and Completed card against an in-page
-fake oRPC router, and the web `/settings` Appearance section. The desktop
-Settings window is bundled (`corelive-editor://app/settings.html`); its
-headless fixture, `pnpm qa:settings`, arrives with the Account section.
-Neither helper launches Electron, reads an owner profile, authenticates, or sends
-completion records to production. The web Vite server disables env-file
-loading. Both listen only on loopback and are outside production bundle entries.
-Stop each server with Ctrl-C; the offline helper closes its worker and deletes
-its temporary workspace. Save videos and screenshots under the ignored `.gstack/`
-directory; fixture results establish renderer behavior, not native OS interaction.
+The offline fixture serves the built renderer and the real workspace worker against
+a temporary synthetic v2 device workspace. It injects a test-only preload bridge for
+save failure, delayed acknowledgement, sync state and preference changes.
+`pnpm qa:settings` serves the built bundled `settings.html`
+(`corelive-editor://app/settings.html` in the app) with a stubbed
+`window.settingsAPI` under a `connect-src 'none'` policy, so it can make no network
+request. `pnpm qa:web` serves the web Home sidebar and Completed card against an
+in-page fake oRPC router, and the web `/settings` Appearance section. None launches
+Electron, reads an owner profile, authenticates, or sends completion records to
+production. The web Vite server disables env-file loading. All listen only on
+loopback and are outside production bundle entries. Stop each server with SIGTERM
+(Ctrl-C); the offline helper closes its worker and deletes its temporary workspace.
+Save videos and screenshots under the ignored `.gstack/` directory; fixture
+results establish renderer behavior, not native OS interaction.
 
 ## Coverage boundaries
 
-| Surface                                                           | Routine method                                      | What the evidence proves                                      |
-| ----------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------- |
-| Public LiveEditor, local persistence, Undo, layout, motion        | Headless CLI                                        | Actual browser renderer behavior with isolated local storage  |
-| React settings, signed-in placeholders, recoverable errors        | Component tests; headless page fixtures when needed | UI behavior and local boundaries, not provider authentication |
-| Main-process logic and typed preload/IPC                          | Existing Electron unit/integration tests            | The tested contracts; no claim of a real Cocoa interaction    |
-| Actual menu, tray, Dock, traffic lights, global shortcuts, Spaces | A dedicated macOS VM or separate test Mac           | Native behavior in that isolated environment                  |
-| Production Clerk or distribution-specific behavior                | A narrowly scoped explicit validation when needed   | Only the exact production scenario exercised                  |
+| Surface                                                           | Routine method                                      | What the evidence proves                                       |
+| ----------------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------- |
+| Desktop editor, Settings and Sync details states, layout, motion  | `qa:offline-editor`, `qa:settings` + headless CLI   | Actual browser renderer behavior against a synthetic workspace |
+| React settings, signed-in placeholders, recoverable errors        | Component tests; headless page fixtures when needed | UI behavior and local boundaries, not provider authentication  |
+| Main-process logic and typed preload/IPC                          | Existing Electron unit/integration tests            | The tested contracts; no claim of a real Cocoa interaction     |
+| Actual menu, tray, Dock, traffic lights, global shortcuts, Spaces | A dedicated macOS VM or separate test Mac           | Native behavior in that isolated environment                   |
+| Production Clerk or distribution-specific behavior                | A narrowly scoped explicit validation when needed   | Only the exact production scenario exercised                   |
 
 Keep `pnpm validate` and focused `pnpm test:electron`/database checks. There is no
 login E2E test runner, authentication loop, or new E2E CI job in this setup.
 
 ### Bundled offline editor
 
-The desktop editor now loads packaged renderer assets and uses an account-owned
-storage worker. Use synthetic account/workspace fixtures for renderer and IPC
+The desktop editor loads packaged renderer assets and uses the device workspace's
+storage worker. Use synthetic workspace fixtures for renderer and IPC
 checks; never copy the owner's profile or use their session for refresh tests.
 Inspect the packaged renderer, worker and both standalone offline preloads in
 addition to the native contract tests. Record completion, Undo, save failure and
 recovery navigation, then inspect extracted frames.
 
-The [offline LiveEditor guide](offline-liveeditor.md) covers first preparation,
-completion synchronization, export/recovery, downgrade precautions and retention.
+The [offline LiveEditor guide](offline-liveeditor.md) covers the device workspace,
+connecting an account, completion synchronization, export/recovery, backup,
+downgrade round trip, error codes and retention.
 Its release order is the verified additive database migration, then Web/API
 deployment, then desktop publication.
-Run `pnpm --filter @corelive/desktop benchmark:offline` under the pinned runtime
+Run `pnpm benchmark:offline` under the pinned runtime
 for reproducible synthetic volume measurements; distinguish worker acknowledgement
 latency from renderer input latency and native startup latency.
 

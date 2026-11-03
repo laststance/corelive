@@ -5,9 +5,9 @@
 
 # 🚧 It is a work in progress 🚧
 
-CoreLive is a personal task tracker and LiveEditor archive whose centerpiece is an **Activity Heatmap** — every completed task accumulates as warm density across a year, so you close the app feeling validated, not graded. You write in the macOS desktop app (Electron); the [Next.js](https://nextjs.org/) web app handles sign-in, the read-only Home dashboard and Settings.
+CoreLive is a personal task tracker and LiveEditor archive whose centerpiece is an **Activity Heatmap** — every completed task accumulates as warm density across a year, so you close the app feeling validated, not graded. You write in the macOS desktop app (Electron), which works fully on its own with no account; signing in only adds the [Next.js](https://nextjs.org/) web dashboard (the read-only Home view, Appearance and category management).
 
-> **⚠️ Pre-launch — there are no users yet.** Breaking changes are fine, anywhere. Reshape the database, Drizzle schema, APIs, or any other element freely and abruptly — there is **no need to keep existing data or maintain backward compatibility**. Every schema change still ships as a generated migration (CI fails when `apps/web/src/db/schema.ts` and `apps/web/drizzle/` disagree): run `pnpm db:generate`, commit the SQL, then reset the database (`pnpm db:reset`) — a reset only replays the committed migrations.
+> **⚠️ Pre-launch — there are no users yet.** Breaking changes are fine, anywhere. Reshape the database, Drizzle schema, APIs, or any other element freely and abruptly — there is **no need to keep existing data or maintain backward compatibility**, except the owner's local desktop workspace, which must migrate losslessly (#216). Every schema change still ships as a generated migration (CI fails when `apps/web/src/db/schema.ts` and `apps/web/drizzle/` disagree): run `pnpm db:generate`, commit the SQL, then reset the database (`pnpm db:reset`) — a reset only replays the committed migrations.
 
 ## Documentation
 
@@ -16,10 +16,10 @@ The design system (typography, color, motion, voice) is in **[`DESIGN.md`](DESIG
 Categories organize writing and completed history in two levels:
 
 - Create a main category or choose a main category as its parent to create a subcategory, such as `Work / CoreLive`. The sidebar shows both levels; Manage categories lets you rename, recolor, move, or promote them. A main category with children must have those children moved or promoted before it can become a subcategory. The default `General` category stays a main category and cannot be deleted.
-- In the desktop LiveEditor picker, search by the main or subcategory name, select the full displayed path, or use **Create category…** and **Manage categories…** without leaving the editor.
+- In the desktop LiveEditor picker, search by the main or subcategory name, select the full displayed path, or use **Create category…** and **Manage categories…** without leaving the editor. Category changes work offline and sync after you sign in and connect this Mac.
 - Completed-history filters include a main category's direct entries and its subcategories. Weekly summaries, daily detail, and year in review group totals by main category with an optional subcategory breakdown. Moving a subcategory changes the grouping of past entries under the current hierarchy; their dates stay the same.
 - Deleting a category moves its direct entries to the destination shown in the confirmation, preserving the entries and their dates. The initial destination is the parent for a subcategory and `General` for a main category. Children of a deleted main category become main categories with their entries still attached; rename any child that conflicts with another main category before deleting.
-- Writing stays in the desktop app on each Mac. When a category is deleted, the desktop editor keeps the removed category's writing and lets you confirm **Move writing** in Details; it refreshes connected category changes within 60 seconds. The web Home dashboard refreshes its lists every 15 seconds while visible and on focus. See the [offline LiveEditor guide](docs/offline-liveeditor.md) for desktop preparation, synchronization, export, recovery and downgrade instructions.
+- Writing stays in the desktop app on each Mac. When a category is deleted, the desktop editor keeps the removed category's writing and lets you confirm **Move writing** in Details; connected Macs sync category changes in the background. The web Home dashboard refreshes its lists every 15 seconds while visible and on focus. See the [offline LiveEditor guide](docs/offline-liveeditor.md) for the device workspace, synchronization, export, recovery, backup and downgrade instructions.
 
 ## Platform Support
 
@@ -57,20 +57,29 @@ and `close` operate without taking over the Mac's desktop. See
 [Headless development](docs/headless-development.md) for setup, CLI examples,
 Hammerspoon/accessory-mode limitations, and native QA isolation.
 
+Desktop editor and Settings states need no dev server, database or account. Build
+the bundled files once, then render every state headlessly (details and the
+interactive variant are in [Desktop states in two commands](docs/headless-development.md#desktop-states-in-two-commands)):
+
+```bash
+pnpm electron:build:ts
+pnpm qa:offline-editor --fixture local-only --screenshots .gstack/qa-reports/desktop
+```
+
 ### Workspace layout
 
 One root pnpm lockfile owns all workspaces. Root commands delegate to their app;
-`pnpm dev` starts only Web, and `pnpm electron:dev` starts Web plus desktop.
+`pnpm dev` starts only Web, and `pnpm electron:dev` starts Web plus desktop. The desktop editor and Settings run from bundled files without `pnpm dev`; only sign-in, sync and the dashboard need the web app.
 Web-specific framework instructions are in [`apps/web/AGENTS.md`](apps/web/AGENTS.md).
 
-| Directory                   | Responsibility                                                              |
-| --------------------------- | --------------------------------------------------------------------------- |
-| `apps/web`                  | Next.js, oRPC, Drizzle schema/migrations, renderer and DB tests             |
-| `apps/desktop`              | Electron main/preload, macOS packaging and native unit tests                |
-| `packages/desktop-contract` | Browser-safe IPC/preload contracts and native constants used by both apps   |
-| `packages/live-editor`      | Shared editor/input/category/theme presentation and durable desktop adapter |
-| `assets`                    | Canonical icons and shortcut sounds; app outputs are generated              |
-| `scripts`                   | Workspace, asset, environment and Headless QA orchestration                 |
+| Directory                   | Responsibility                                                                                                     |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `apps/web`                  | Next.js, oRPC, Drizzle schema/migrations, renderer and DB tests                                                    |
+| `apps/desktop`              | Electron main/preload, macOS packaging and native unit tests                                                       |
+| `packages/desktop-contract` | Browser-safe IPC/preload contracts and native constants used by both apps                                          |
+| `packages/live-editor`      | Shared theme, UI primitives and editor-neutral helpers (the editor itself lives in `apps/desktop/renderer/editor`) |
+| `assets`                    | Canonical icons and shortcut sounds; app outputs are generated                                                     |
+| `scripts`                   | Workspace, asset, environment and Headless QA orchestration                                                        |
 
 Run `pnpm install --frozen-lockfile` from the root. App prebuild hooks generate
 icons/sounds even in a clean checkout. `pnpm clean` removes compiled outputs;
@@ -208,33 +217,34 @@ like `ngrok http --domain=foo.bar-ngrok.app 4991`
 
 ## Desktop Application (Electron - macOS 13+)
 
-The Electron desktop application bundles LiveEditor locally and loads Settings and sign-in from the Next.js web app. **Desktop builds require macOS 13 or later.**
+The Electron desktop application bundles the LiveEditor and Settings locally (served from `corelive-editor://`) and loads only the sign-in window and the dashboard from the Next.js web app. **Desktop builds require macOS 13 or later.**
 
 ### Desktop features
 
 Beyond the web app, the macOS build adds native surfaces:
 
-- **LiveEditor** — a bundled freeform capture window that saves writing locally and reopens offline after one connected account preparation; see the [offline LiveEditor guide](docs/offline-liveeditor.md).
-- **Login window** — a small fixed-size sign-in shell (`/login-shell`) opened by **Sign in**; after OAuth sign-in it closes and LiveEditor opens. If the panel fails to load, use **Open LiveEditor** on the signed-in recovery screen to retry without signing in again.
-- **Startup** — the app opens the bundled LiveEditor at launch. A prepared account can write without a connection; an unprepared Mac shows the preparation state, and explicit sign-out leaves a locked editor with **Sign in**. Existing config migration removes retired keys (`window.floating`, the retired `shortcuts.*` toggles, `liveEditor.syncMode` / `lastCategoryId`) from `config.json`; it preserves the unused `behavior.startup` values for older builds after a downgrade.
-- **Settings** — a native settings window
+- **LiveEditor** — a bundled freeform capture window that saves writing in a device workspace on the Mac, with no account needed; see the [offline LiveEditor guide](docs/offline-liveeditor.md).
+- **Login window** — a small fixed-size sign-in shell (`/login-shell`) opened by **Sign in** in Settings ▸ Account; after OAuth sign-in it closes and Settings asks you to **Connect this Mac**. If the sign-in page cannot be reached, Account says so and offers **Try again**.
+- **Startup** — the app opens the bundled LiveEditor at launch, always writable: there is no account gate and sign-out never locks the editor. Existing config migration removes retired keys (`window.floating`, the retired `shortcuts.*` toggles, `liveEditor.syncMode` / `lastCategoryId`) from `config.json`; it preserves the unused `behavior.startup` values for older builds after a downgrade.
+- **Settings** — a bundled native settings window; Account is the last section and holds Sign in, Connect this Mac, Sign out and the Sync details page
 - **System tray** — menu-bar access and quick toggles
 - **Always-on-top** — keep LiveEditor above other windows (off by default)
 - **Hide dock icon** — run as a menu-bar-only accessory; the choice persists across restarts
 - **Global keyboard shortcuts** — optional system-wide hotkeys, including lone-modifier keys (opt-in, off by default). If a single-modifier shortcut such as Right Option stops after an unfinished start, open Settings and select that shortcut again to retry. Startup keeps the crash guard.
 - **In-app shortcuts** — while any CoreLive window has focus, `⌘N` opens the LiveEditor panel and `⌘M` minimizes; both release when the app loses focus
 - **Deep links** — `corelive://` URLs open the app
-- **Load recovery** — the app retries failed local editor loads and failed remote login-window loads three times, then offers a native Retry / Close dialog. Network or authentication failures after account preparation pause completion synchronization while local writing remains available.
+- **Load recovery** — the app retries failed local editor loads and failed remote login-window loads three times, then offers a native Retry / Close dialog. Network or authentication failures pause synchronization while local writing remains available.
 - **Auto-update** — signed, notarized releases update in place. Choose **Download Now** or **Later** when prompted; Settings → Updates shows download progress and offers **Restart to Update** when ready. **Check for Updates** is available in Settings and the app menu.
 
 ### Electron Development
 
 ```bash
-# Run the desktop app in development mode
+# Run the desktop app in development mode (starts Web too)
 pnpm electron:dev
 
-# Run Electron directly (requires Next.js dev server to be running)
-pnpm electron
+# Run Electron directly from the bundled files; the editor and Settings need no
+# Next.js dev server. Only sign-in, sync and the dashboard need `pnpm dev`.
+pnpm electron:build:ts && pnpm electron
 ```
 
 ### Electron Build Commands

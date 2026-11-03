@@ -4,7 +4,7 @@
 > If it touches neither the loop nor that reward, it is a deletion candidate, not a polish candidate.
 > **Never:** streaks, completion rates, grading, social comparison (DESIGN.md North Star).
 
-**Web role (since #215, 2026-11-03):** sign-in, the read-only Home dashboard and Settings. All writing happens in the desktop app; `/write`, `/live-editor` and `/braindump` redirect to `/home`.
+**Web role (since #215/#216, 2026-11-03):** sign-in, the read-only Home dashboard, Appearance and category management. Category management stays on the web by decision (#216 U1 and C30). The desktop is account-optional and is the only writing surface; the desktop-only toggles (Today Ember) are not on the web. `/write`, `/live-editor` and `/braindump` redirect to `/home`.
 
 Design record: [docs/design/roadmap-2026-09-no-login-live-editor.md](design/roadmap-2026-09-no-login-live-editor.md) (office-hours 2026-09-02, approved; eng review 2026-09-02, D1–D16 folded; design review 2026-09-04, DR1–DR10 folded, 14 tasks). Superseded by #215: the web LiveEditor it planned was removed.
 

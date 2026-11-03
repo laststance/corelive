@@ -92,7 +92,7 @@ interface PanelLoadRecoveryOptions {
  * - Handles platform-specific window behaviors
  */
 export class WindowManager {
-  /** Fixed-size sign-in window (`/login-shell`); the only signed-out surface. */
+  /** Fixed-size sign-in window (`/login-shell`), opened from Settings ▸ Account; the editor never depends on it. */
   private loginWindow: BrowserWindow | null
 
   /**
@@ -383,8 +383,9 @@ export class WindowManager {
 
   /**
    * Create the login window: a fixed-size shell ({@link LOGIN_WINDOW_WIDTH_PX} ×
-   * {@link LOGIN_WINDOW_HEIGHT_PX}) that loads `/login-shell`, the only
-   * signed-out surface. Nothing about it is persisted (no config, no
+   * {@link LOGIN_WINDOW_HEIGHT_PX}) that loads the remote `/login-shell`. It is
+   * the optional sign-in surface, never a gate: the bundled editor and Settings
+   * open without an account. Nothing about it is persisted (no config, no
    * window-state); it is created hidden so callers decide when it appears.
    *
    * @returns The (possibly already-existing) login BrowserWindow.
@@ -533,9 +534,9 @@ export class WindowManager {
   }
 
   /**
-   * Surface the login window (creating it if needed). The signed-out fallback
-   * for every LiveEditor path — called directly, never via {@link restoreFromTray},
-   * so a signed-out LiveEditor bounce cannot loop back into LiveEditor.
+   * Surface the login window (creating it if needed) when the user chooses Sign in
+   * (Settings ▸ Account). Called directly, never via {@link restoreFromTray}, so
+   * the window cannot bounce back into LiveEditor while sign-in is pending.
    *
    * @returns Nothing.
    * @example
@@ -1033,8 +1034,8 @@ export class WindowManager {
     this.beforeEditorHide = flush
   }
 
-  /** Refreshes cached categories after a prepared editor becomes visible.
-   * @example manager.setOnEditorShown(() => controller.retryPreparation())
+  /** Runs a callback whenever the bundled editor becomes visible, for example to refresh synced categories.
+   * @example manager.setOnEditorShown(() => controller.retrySync())
    */
   setOnEditorShown(callback: () => void): void {
     this.onEditorShown = callback
@@ -1111,8 +1112,8 @@ export class WindowManager {
 
   /**
    * Surface the app from the tray / dock / notification click / deep link:
-   * opens LiveEditor, whose auth gate re-homes a signed-out user to the login
-   * window. Shared chokepoint for every native-chrome caller that "restores the
+   * opens the bundled LiveEditor, which is always writable (no auth gate).
+   * Shared chokepoint for every native-chrome caller that "restores the
    * app". Deliberately no `hasLoginWindow()` short-circuit — this is also the
    * retry path while a login handoff is pending.
    *
