@@ -63,7 +63,13 @@ describe('qa:offline-editor CLI contract', () => {
 
     // Assert
     expect(result.status).toBe(0)
-    for (const name of ['local-only', 'signed-out', 'attached', 'recovery'])
+    for (const name of [
+      'local-only',
+      'signed-out',
+      'session-expired',
+      'attached',
+      'recovery',
+    ])
       expect(result.stdout).toContain(name)
     expect(result.stdout).toContain('{"fixture","url","pid","data"}')
     expect(fixtureTempDirectories()).toBe(before)
@@ -83,7 +89,7 @@ describe('qa:offline-editor CLI contract', () => {
     expect(result.status).toBe(2)
     expect(result.stdout).toBe('')
     expect(result.stderr).toBe(
-      'qa:offline-editor: unknown fixture "bogus" (FIXTURE_UNKNOWN). Valid: local-only, signed-out, attached, recovery. Fix: pnpm qa:offline-editor --fixture local-only\n',
+      'qa:offline-editor: unknown fixture "bogus" (FIXTURE_UNKNOWN). Valid: local-only, signed-out, session-expired, attached, recovery. Fix: pnpm qa:offline-editor --fixture local-only\n',
     )
     expect(fixtureTempDirectories()).toBe(before)
   })

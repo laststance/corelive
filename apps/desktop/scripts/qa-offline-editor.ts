@@ -105,7 +105,9 @@ const SYNC_STATE = {
 } as const
 const INITIAL_SYNC: Record<EditorFixtureSpec['name'], SyncControl> = {
   'local-only': 'local-only',
-  'signed-out': 'sign-in-required',
+  // A deliberate sign-out detaches sync, which the controller reports as local-only (DA2).
+  'signed-out': 'local-only',
+  'session-expired': 'sign-in-required',
   attached: 'idle',
   recovery: 'local-only',
 }
@@ -151,13 +153,14 @@ async function createEditorFixture(
   const actor = () =>
     new WorkspaceWorkerClient({ directory: data, ownerId: 'device', script })
   let worker = actor()
-  const bound = name === 'signed-out' || name === 'attached'
+  const bound =
+    name === 'signed-out' || name === 'session-expired' || name === 'attached'
   await initializeDeviceWorkspace(data, {
     ...(bound ? { boundAccountId: QA_ACCOUNT_ID, displayEmail: QA_EMAIL } : {}),
     notes:
       name === 'local-only' || name === 'recovery'
         ? {}
-        : name === 'signed-out'
+        : name === 'signed-out' || name === 'session-expired'
           ? { 1: 'A small offline win\nAnother idea' }
           : {
               1: 'A small offline win\nAnother idea',
@@ -184,7 +187,8 @@ async function createEditorFixture(
       await writeFile(file.path, '{ "corrupt": ')
     } else {
       await worker.call('open', null)
-      if (name === 'signed-out') await seedCompletions(worker)
+      if (name === 'signed-out' || name === 'session-expired')
+        await seedCompletions(worker)
     }
   } catch (error) {
     // Keep a diagnostic outside the temp directory, which is removed below.

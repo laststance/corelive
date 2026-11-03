@@ -32,7 +32,13 @@ export const EDITOR_FIXTURES: readonly EditorFixtureSpec[] = [
   {
     name: 'signed-out',
     description:
-      'Bound to an account but detached, with unsent completion updates waiting',
+      'Bound to an account but signed out (detached), with unsent completion updates waiting; only the save line shows (DA2)',
+    readyText: 'Saved on this Mac',
+  },
+  {
+    name: 'session-expired',
+    description:
+      'Bound and attached, but the session expired unexpectedly; the footer asks to sign in to sync (DA2)',
     readyText: 'Sign in to sync completions',
   },
   {
