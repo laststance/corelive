@@ -169,7 +169,7 @@ describe('Icon System', () => {
 
       // Import after mocking
       const SystemTrayManagerModule = await import('../SystemTrayManager.ts')
-      SystemTrayManager = SystemTrayManagerModule.default
+      SystemTrayManager = SystemTrayManagerModule.SystemTrayManager
 
       mockWindowManager = {
         getMainWindow: vi.fn(() => ({ show: vi.fn() })),

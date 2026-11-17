@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events'
 import { describe, expect, test, vi } from 'vitest'
 
 import type { ConfigManager } from '../ConfigManager'
-import ShortcutManager from '../ShortcutManager'
+import { ShortcutManager } from '../ShortcutManager'
 import { createUiohookShortcutEngine } from '../uiohookEngine'
 import { applyShortcutRebind } from '../utils/applyShortcutRebind'
 import type { WindowManager } from '../WindowManager'

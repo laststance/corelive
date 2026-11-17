@@ -553,5 +553,3 @@ export class OAuthManager {
     this.pendingStates.clear()
   }
 }
-
-export default OAuthManager

@@ -1182,5 +1182,3 @@ export class ShortcutManager {
     }
   }
 }
-
-export default ShortcutManager

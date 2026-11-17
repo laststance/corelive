@@ -571,5 +571,3 @@ export class AutoUpdater {
     this.statusMessage = null
   }
 }
-
-export default AutoUpdater

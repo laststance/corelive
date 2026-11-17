@@ -2,7 +2,7 @@ import { globalShortcut } from 'electron'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import type { ConfigManager } from '../ConfigManager'
-import ShortcutManager from '../ShortcutManager'
+import { ShortcutManager } from '../ShortcutManager'
 import type { WindowManager } from '../WindowManager'
 
 /**

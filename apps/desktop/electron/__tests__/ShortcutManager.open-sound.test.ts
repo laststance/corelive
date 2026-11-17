@@ -20,7 +20,7 @@ vi.mock('../utils/openWebAppInBrowser', () => ({
 
 import type { ConfigManager } from '../ConfigManager'
 import type { NotificationManager } from '../NotificationManager'
-import ShortcutManager from '../ShortcutManager'
+import { ShortcutManager } from '../ShortcutManager'
 import type { ShortcutOpenSoundController } from '../ShortcutOpenSoundPlayer'
 import { openWebAppInBrowser } from '../utils/openWebAppInBrowser'
 import type { WindowManager } from '../WindowManager'
