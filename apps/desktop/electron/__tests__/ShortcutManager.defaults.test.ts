@@ -11,7 +11,7 @@ vi.mock('electron', () => ({
   },
 }))
 
-import ShortcutManager from '../ShortcutManager'
+import { ShortcutManager } from '../ShortcutManager'
 import type { WindowManager } from '../WindowManager'
 
 /**

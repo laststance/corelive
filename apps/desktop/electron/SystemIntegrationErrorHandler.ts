@@ -472,5 +472,3 @@ export class SystemIntegrationErrorHandler {
     }
   }
 }
-
-export default SystemIntegrationErrorHandler

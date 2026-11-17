@@ -521,5 +521,3 @@ export class DeepLinkManager {
     }
   }
 }
-
-export default DeepLinkManager

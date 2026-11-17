@@ -763,5 +763,3 @@ export class SystemTrayManager {
     return this.tray !== null && !this.tray.isDestroyed()
   }
 }
-
-export default SystemTrayManager

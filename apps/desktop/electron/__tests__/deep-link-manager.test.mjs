@@ -79,9 +79,9 @@ describe('DeepLinkManager', () => {
     vi.resetModules()
 
     // Import DeepLinkManager using dynamic ESM import (works with CommonJS modules)
-    // CommonJS module.exports becomes .default in ESM
+    // Electron managers expose the same named export used by the lazy loader.
     const module = await import('../DeepLinkManager.ts?t=' + Date.now())
-    DeepLinkManager = module.default
+    DeepLinkManager = module.DeepLinkManager
     deepLinkManager = new DeepLinkManager(
       mockWindowManager,
       mockNotificationManager,

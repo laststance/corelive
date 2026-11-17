@@ -457,5 +457,3 @@ Copyright © 2025 CoreLive`,
     this._configManager = null
   }
 }
-
-export default MenuManager

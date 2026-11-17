@@ -5,7 +5,7 @@ import type { ConfigManager } from '../ConfigManager'
 import { createNativeBinding } from '../nativeBinding'
 import type { NativeShortcutEngine } from '../nativeShortcutEngine'
 import type { NotificationManager } from '../NotificationManager'
-import ShortcutManager from '../ShortcutManager'
+import { ShortcutManager } from '../ShortcutManager'
 import type { WindowManager } from '../WindowManager'
 
 /**

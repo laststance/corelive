@@ -1,7 +1,7 @@
 import { BrowserWindow, globalShortcut } from 'electron'
 import { beforeEach, expect, test, vi } from 'vitest'
 
-import ShortcutManager from '../ShortcutManager'
+import { ShortcutManager } from '../ShortcutManager'
 import type { WindowManager } from '../WindowManager'
 
 vi.mock('electron', () => ({
