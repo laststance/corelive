@@ -288,7 +288,7 @@ test('Account retries a failed upload acknowledgement on its next visit without 
   const acknowledge = fake.api.account.acknowledgeFirstUpload
   acknowledge.mockImplementationOnce(
     async () =>
-      new Promise<void>((_, reject) => {
+      new Promise<never>((_, reject) => {
         failFirstAttempt = (): void => reject(new Error('IPC unavailable'))
       }),
   )
