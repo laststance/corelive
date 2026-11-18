@@ -149,6 +149,7 @@ export const ContributionGraph = function ContributionGraph({
     dataByDate,
     total,
     hasData,
+    throughDate,
     isCurrentDay,
     isLoading,
     isError,
@@ -158,7 +159,7 @@ export const ContributionGraph = function ContributionGraph({
   } = activity
   const activityHeadingRef = useRef<HTMLHeadingElement>(null)
   const today = useLocalDayKey()
-  const showHeatmap = hasData && total > 0
+  const showHeatmap = throughDate !== undefined && total > 0
   const showSnapshotNotice = hasData && !isCurrentDay && !isError && !isPaused
   const containerRef = useRef<HTMLDivElement>(null)
   const containerWidth = useObservedElementWidth(containerRef, showHeatmap)
@@ -214,7 +215,7 @@ export const ContributionGraph = function ContributionGraph({
     }
   }, [selectedDate])
 
-  const endDate = new Date(`${today}T00:00:00`)
+  const endDate = new Date(`${throughDate ?? today}T00:00:00`)
   const startDate = getAlignedHeatmapStartDate(endDate)
 
   const weekCount = getHeatmapWeekCount(startDate, endDate)

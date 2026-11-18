@@ -18,6 +18,7 @@ import { getLocalTodayIsoDate } from '@/lib/getLocalTodayIsoDate'
 import { orpc } from '@/lib/orpc/client-query'
 
 import { Dashboard } from './Dashboard'
+import { DASHBOARD_REFRESH_INTERVAL_MS } from './useDashboardFreshness'
 
 const { heatmap } = vi.hoisted(() => ({ heatmap: vi.fn() }))
 vi.mock('@/lib/orpc/create-client', () => ({
@@ -278,9 +279,25 @@ test('a Sunday recap dismissed without storage stays dismissed after a failed re
   client.clear()
 })
 
-test('an activity response started before midnight cannot confirm an empty new period', async () => {
+test('an activity response started before midnight cannot confirm an empty new period', async ({
+  onTestFinished,
+}) => {
   // Arrange
-  vi.setSystemTime(new Date(2026, 9, 1, 23, 59))
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date(2026, 9, 1, 23, 59, 58))
+  const svgWidth = Object.getOwnPropertyDescriptor(
+    SVGElement.prototype,
+    'clientWidth',
+  )
+  Object.defineProperty(SVGElement.prototype, 'clientWidth', {
+    configurable: true,
+    value: 850,
+  })
+  onTestFinished(() => {
+    if (svgWidth)
+      Object.defineProperty(SVGElement.prototype, 'clientWidth', svgWidth)
+    else Reflect.deleteProperty(SVGElement.prototype, 'clientWidth')
+  })
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
     new DOMRect(0, 0, 640, 160),
   )
@@ -297,21 +314,25 @@ test('an activity response started before midnight cannot confirm an empty new p
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   })
-  render(
+  const { container } = render(
     <QueryClientProvider client={client}>
       <Dashboard />
     </QueryClientProvider>,
   )
-  expect(await screen.findByText('Daily completions')).toBeVisible()
+  await act(async () => vi.advanceTimersByTimeAsync(1))
+  expect(screen.getByText('Daily completions')).toBeVisible()
+  expect(container.querySelector('rect[data-date="2026/10/1"]')).toBeVisible()
   fireEvent(window, new Event('focus'))
-  await waitFor(() => expect(heatmap).toHaveBeenCalledTimes(2))
+  expect(heatmap).toHaveBeenCalledTimes(2)
 
-  // Act — resume on the following day while the previous day's request is still in flight.
-  vi.setSystemTime(new Date(2026, 9, 2, 0, 1))
-  fireEvent(window, new Event('focus'))
+  // Act — cross midnight while the previous day's request is still in flight.
+  await act(async () => vi.advanceTimersByTimeAsync(2_000))
 
   // Assert
-  expect(await screen.findByText('Oct 2, 2026')).toBeVisible()
+  expect(screen.queryByText('Oct 2, 2026')).toBeNull()
+  expect(screen.queryByRole('option', { name: /Oct 2, 2026/ })).toBeNull()
+  expect(container.querySelector('rect[data-date="2026/10/2"]')).toBeNull()
+  expect(container.querySelector('rect[data-date="2026/10/1"]')).toBeVisible()
   expect(screen.queryByText('No completions in this period.')).toBeNull()
   expect(
     screen.getByText('Recent activity is showing the last loaded data.'),
@@ -325,13 +346,12 @@ test('an activity response started before midnight cannot confirm an empty new p
       total: 0,
     }),
   )
-  await waitFor(() =>
-    expect(
-      screen.getByRole('heading', { name: 'Activity' }).parentElement,
-    ).toHaveTextContent('0 completed'),
-  )
+  await act(async () => vi.advanceTimersByTimeAsync(1))
 
   // Assert
+  expect(
+    screen.getByRole('heading', { name: 'Activity' }).parentElement,
+  ).toHaveTextContent('0 completed')
   expect(screen.queryByText('No completions in this period.')).toBeNull()
   expect(screen.queryByText('No completions in the last year')).toBeNull()
   expect(
@@ -340,17 +360,61 @@ test('an activity response started before midnight cannot confirm an empty new p
 
   // Act
   heatmap.mockResolvedValue({ ...EMPTY_HEATMAP, throughDate: '2026-10-02' })
-  await act(async () => {
-    await client.invalidateQueries({ queryKey: orpc.completed.heatmap.key() })
+  await act(async () =>
+    vi.advanceTimersByTimeAsync(DASHBOARD_REFRESH_INTERVAL_MS),
+  )
+
+  // Assert
+  expect(heatmap).toHaveBeenCalledTimes(3)
+  expect(screen.getByText('No completions in this period.')).toBeVisible()
+  expect(screen.getByText('No completions in the last year')).toBeVisible()
+  expect(
+    screen.getByRole('option', { name: 'Oct 2, 2026 · Rest day' }),
+  ).toBeVisible()
+  expect(
+    screen.queryByText('Recent activity is showing the last loaded data.'),
+  ).toBeNull()
+  client.clear()
+})
+
+test('a restored activity snapshot without date coverage shows no rest days until refresh', async () => {
+  // Arrange
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   })
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  client.setQueryData(
+    orpc.completed.heatmap.key({
+      input: { days: 365, timezone },
+      type: 'query',
+    }),
+    {
+      data: [{ date: '2026-10-01', count: 1, categories: [] }],
+      total: 1,
+      streaks: { current: 1, longest: 1 },
+    },
+  )
+  render(
+    <QueryClientProvider client={client}>
+      <Dashboard />
+    </QueryClientProvider>,
+  )
+
+  // Assert
+  expect(
+    screen.getByText('Activity is showing the last loaded data.'),
+  ).toBeVisible()
+  expect(screen.getByText('1 completed')).toBeVisible()
+  expect(screen.queryByText('Less')).toBeNull()
+  expect(screen.queryByRole('combobox', { name: 'Day to view' })).toBeNull()
+
+  // Act
+  fireEvent(window, new Event('focus'))
 
   // Assert
   expect(
     await screen.findByText('No completions in this period.'),
   ).toBeVisible()
-  expect(screen.getByText('No completions in the last year')).toBeVisible()
-  expect(
-    screen.queryByText('Recent activity is showing the last loaded data.'),
-  ).toBeNull()
+  expect(screen.getByRole('combobox', { name: 'Day to view' })).toBeVisible()
   client.clear()
 })

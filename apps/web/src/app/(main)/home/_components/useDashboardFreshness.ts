@@ -16,8 +16,8 @@ export const DASHBOARD_REFRESH_INTERVAL_MS = 15_000
  * the window regains focus and when the tab becomes visible. Mounted once by
  * {@link Dashboard}.
  *
- * At most one refresh is in flight: a trigger that arrives while the previous
- * refresh is pending is dropped, and a hidden document never refreshes.
+ * Overlapping dashboard refreshes and triggers from a hidden document are
+ * skipped. Open day details refresh independently.
  *
  * @param intervalMs - Polling period; tests pass a small value.
  * @returns Nothing; subscribes for the component's lifetime.
@@ -74,12 +74,21 @@ export function useDashboardFreshness(
  */
 async function refreshDashboardViews(queryClient: QueryClient): Promise<void> {
   const signatureBeforeRefresh = readDashboardChangeSignature(queryClient)
-  await Promise.all([
+  const refresh = Promise.all([
     queryClient.invalidateQueries({ queryKey: orpc.category.list.key() }),
     queryClient.invalidateQueries({ queryKey: orpc.completed.heatmap.key() }),
-    queryClient.invalidateQueries({ queryKey: orpc.completed.dayDetail.key() }),
     queryClient.invalidateQueries({ queryKey: orpc.home.bootstrap.key() }),
   ])
+
+  // An open day dialog may be slow. Skip its pending request and keep polling the dashboard.
+  void queryClient
+    .invalidateQueries({
+      queryKey: orpc.completed.dayDetail.key(),
+      predicate: (query) => query.state.fetchStatus === 'idle',
+    })
+    .catch(() => undefined)
+
+  await refresh
   // Unchanged heatmap and categories mean no completion moved: skip the per-page journal refetch.
   if (readDashboardChangeSignature(queryClient) === signatureBeforeRefresh)
     return

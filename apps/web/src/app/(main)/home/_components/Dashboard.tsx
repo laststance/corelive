@@ -65,13 +65,14 @@ export const Dashboard = function Dashboard() {
       >
         <ContributionGraph activity={activity} />
         {activity.hasData ? (
-          <>
-            <YearInReviewModal dataByDate={activity.dataByDate} />
-            <RecentActivityCard
-              dataByDate={activity.dataByDate}
-              isRefreshUnavailable={activityRefreshUnavailable}
-            />
-          </>
+          <YearInReviewModal dataByDate={activity.dataByDate} />
+        ) : null}
+        {activity.throughDate ? (
+          <RecentActivityCard
+            dataByDate={activity.dataByDate}
+            throughDate={activity.throughDate}
+            isRefreshUnavailable={activityRefreshUnavailable}
+          />
         ) : null}
         <SundayDigestCard
           dataByDate={activity.dataByDate}

@@ -88,8 +88,8 @@ Each concurrent Vitest suite uses its own filesystem module cache to avoid
 clearing another suite's transformed modules.
 
 For a fresh checkout, copy `.env.example` to `apps/web/.env` and provide the Dashboard
-configuration. If you have a root `.env`, `pnpm setup:env` creates each missing
-app file. It sends Apple signing settings, `WIN_CSC_LINK`,
+configuration. If you have a root `.env` in Node’s `--env-file` format,
+`pnpm setup:env` creates each missing app file. It sends Apple signing settings, `WIN_CSC_LINK`,
 `WIN_CSC_KEY_PASSWORD`, and `GH_TOKEN` to `apps/desktop/.env`.
 Existing app files are preserved. When upgrading an older checkout, first verify
 that Desktop has the signing settings it needs, including any multiline values.
@@ -106,6 +106,20 @@ pnpm dev
 Generated assets come from
 `assets/` and are written to each app by its prebuild hook. Desktop packaging uses
 `apps/desktop/.env` and emits `apps/desktop/dist/`.
+
+For a signed macOS build, the signing launcher starts before Electron Builder
+loads `apps/desktop/.env`. With a Keychain profile, export its name in the build
+shell and run:
+
+```sh
+export APPLE_KEYCHAIN_PROFILE="your-notary-profile"
+pnpm electron:build:mac
+```
+
+With an app-specific password, supply `APPLE_APP_SPECIFIC_PASSWORD` in the build
+process environment through your secret manager, then run `pnpm electron:build:mac`.
+The launcher can also resolve the existing 1Password reference in
+`.env.apple.1password`.
 
 In a second terminal:
 
@@ -124,16 +138,6 @@ get different browser sessions. It removes inherited Playwright MCP connection a
 profile settings, `PWDEBUG` (including npm aliases), remote Selenium settings,
 and session overrides from the child environment. The browser closes after five idle
 minutes. Explicitly close it when the work is done.
-
-The signing launcher reads the profile
-from its process environment before Electron Builder reads the desktop file.
-When building with a Keychain profile, run the following in the same shell,
-using the name of your configured notary profile.
-
-```sh
-export APPLE_KEYCHAIN_PROFILE="your-notary-profile"
-pnpm electron:build:mac
-```
 
 Put the command first and any command-specific options after it, such as
 `pnpm qa:browser snapshot --json`. `open` accepts only an optional URL. The wrapper

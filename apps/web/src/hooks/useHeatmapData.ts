@@ -82,6 +82,7 @@ export function useHeatmapData(days: number = HOME_HEATMAP_DAYS) {
     streaks: data?.streaks ?? { current: 0, longest: 0 },
     total: data?.total ?? 0,
     hasData: data !== undefined,
+    throughDate: data?.throughDate,
     // Compare coverage, not arrival time, since a response may cross midnight.
     isCurrentDay: data?.throughDate === today,
     isLoading,

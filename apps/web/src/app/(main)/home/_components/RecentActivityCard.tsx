@@ -5,7 +5,6 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import type { HeatmapDay } from '@/hooks/useHeatmapData'
-import { useLocalDayKey } from '@/hooks/useLocalDayKey'
 import { buildDateSyncUrl } from '@/lib/buildDateSyncUrl'
 
 import { CategoryTotals } from './CategoryTotals'
@@ -25,21 +24,22 @@ const PERIODS = [7, 30] as const satisfies readonly ActivityPeriod[]
  * Shows recent completions beneath the annual heatmap. Both chart and keyboard
  * controls use the day-detail URL consumed by {@link ContributionGraph}.
  * @example
- * <RecentActivityCard dataByDate={heatmapByDate} />
+ * <RecentActivityCard dataByDate={heatmapByDate} throughDate="2026-10-01" />
  */
 export function RecentActivityCard({
   dataByDate,
+  throughDate,
   isRefreshUnavailable = false,
 }: {
   isRefreshUnavailable?: boolean
   dataByDate: ReadonlyMap<string, HeatmapDay>
+  throughDate: string
 }) {
-  const today = useLocalDayKey()
   const [period, setPeriod] = useState<ActivityPeriod>(7)
   const { start, end, days, total, activeDays, categories } = getRecentActivity(
     {
       dataByDate,
-      today,
+      today: throughDate,
       period,
     },
   )

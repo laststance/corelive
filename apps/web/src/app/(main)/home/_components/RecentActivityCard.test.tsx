@@ -11,10 +11,6 @@ import type { HeatmapDay } from '@/hooks/useHeatmapData'
 
 import { RecentActivityCard } from './RecentActivityCard'
 
-vi.mock('@/hooks/useLocalDayKey', () => ({
-  useLocalDayKey: () => '2026-10-01',
-}))
-
 afterEach(() => {
   cleanup()
   window.history.replaceState(null, '', '/')
@@ -48,7 +44,7 @@ test('changing the period updates the dates, totals, and category breakdown toge
       { date: '2026-09-12', count: 3, categories: [{ ...work, count: 3 }] },
     ],
   ])
-  render(<RecentActivityCard dataByDate={data} />)
+  render(<RecentActivityCard dataByDate={data} throughDate="2026-10-01" />)
   expect(screen.getByText('Sep 25, 2026')).toBeVisible()
   expect(screen.getByText('Oct 1, 2026')).toBeVisible()
   expect(screen.getByText('7', { selector: 'dd' })).toBeVisible()
@@ -88,7 +84,7 @@ test('a quiet 7-day window can switch to show older completions', () => {
   const data = new Map<string, HeatmapDay>([
     ['2026-09-12', { date: '2026-09-12', count: 3, categories: [] }],
   ])
-  render(<RecentActivityCard dataByDate={data} />)
+  render(<RecentActivityCard dataByDate={data} throughDate="2026-10-01" />)
   expect(screen.getByText('No completions in this period.')).toBeVisible()
   expect(screen.queryByText('Daily completions')).toBeNull()
 
@@ -113,7 +109,7 @@ test('the native day selector adds the chosen date to the URL and preserves its 
   const data = new Map<string, HeatmapDay>([
     ['2026-09-30', { date: '2026-09-30', count: 2, categories: [] }],
   ])
-  render(<RecentActivityCard dataByDate={data} />)
+  render(<RecentActivityCard dataByDate={data} throughDate="2026-10-01" />)
   expect(screen.getAllByRole('option')[0]).toHaveTextContent(
     'Oct 1, 2026 · Rest day',
   )
@@ -141,7 +137,7 @@ test('clicking a rest-day marker selects its zero-completion date', async () => 
   const data = new Map<string, HeatmapDay>([
     ['2026-09-30', { date: '2026-09-30', count: 2, categories: [] }],
   ])
-  render(<RecentActivityCard dataByDate={data} />)
+  render(<RecentActivityCard dataByDate={data} throughDate="2026-10-01" />)
   const marker = await screen.findByLabelText('Rest day, Oct 1, 2026')
   expect(screen.queryByLabelText('Rest day, Sep 30, 2026')).toBeNull()
 
@@ -162,6 +158,7 @@ test('adjacent rest days have separate tap targets in a narrow 30-day chart', as
   )
   render(
     <RecentActivityCard
+      throughDate="2026-10-01"
       dataByDate={
         new Map([
           ['2026-10-01', { date: '2026-10-01', count: 1, categories: [] }],

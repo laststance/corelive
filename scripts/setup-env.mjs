@@ -31,19 +31,23 @@ const signingKeys = new Set([
  * @example splitWorkspaceSettings('APPLE_ID=fixture\nPORT=3000\n')
  */
 function splitWorkspaceSettings(sourceText) {
-  // Match whole dotenv assignments so assignment-like lines inside a quoted value stay together.
+  // The root .env follows Node's --env-file format: the first matching quote ends a value,
+  // even after a backslash. Keep the original text for each workspace's own loader.
   const assignment =
-    /^[\t \uFEFF]*(?:export[ \t]+)?([\w.-]+)[ \t]*(?:=[ \t]*|:[ \t]+)(?:'(?:\\'|[^'])*'|"(?:\\"|[^"])*"|`(?:\\`|[^`])*`|([^\r\n]*))[ \t]*(?:#[^\r\n]*)?(?:\r?\n|$)/gm
+    /^[\t \uFEFF]*(?:export[ \t]+)?([\w.-]+)[ \t]*(?:=[ \t]*|:[ \t]+)(?:(["'`])[\s\S]*?\2[^\r\n]*|([^\r\n]*))(?:\r?\n|$)/gm
   const signing = []
-  const dashboard = sourceText.replace(assignment, (entry, key, unquoted) => {
-    // An unmatched delimiter makes the destination of continuation lines ambiguous.
-    if (/^["'`]/.test(unquoted?.trimStart() ?? '')) {
-      throw new Error('Unterminated quoted value in root .env')
-    }
-    if (!signingKeys.has(key)) return entry
-    signing.push(entry)
-    return ''
-  })
+  const dashboard = sourceText.replace(
+    assignment,
+    (entry, key, _quote, unquoted) => {
+      // An unmatched delimiter makes the destination of continuation lines ambiguous.
+      if (/^["'`]/.test(unquoted?.trimStart() ?? '')) {
+        throw new Error('Unterminated quoted value in root .env')
+      }
+      if (!signingKeys.has(key)) return entry
+      signing.push(entry)
+      return ''
+    },
+  )
   return { dashboard, signing: signing.join('') }
 }
 

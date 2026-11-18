@@ -11,6 +11,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { parseEnv } from 'node:util'
 
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 
@@ -117,6 +118,39 @@ describe('workspace environment setup', () => {
     expect(result.status).toBe(0)
     expect(existsSync(path.join(root, 'apps/web/.env'))).toBe(false)
     expect(existsSync(path.join(root, 'apps/desktop/.env'))).toBe(false)
+  })
+  test('a trailing backslash keeps the next multiline setting in its own workspace', () => {
+    // Arrange
+    const contents = [
+      'WIN_CSC_KEY_PASSWORD="fixture-password\\"',
+      'DASHBOARD_MESSAGE="',
+      'fixture message"',
+      'DASHBOARD_PATH="fixture-path\\"',
+      'WIN_CSC_LINK="',
+      'fixture certificate"',
+      '',
+    ].join('\n')
+    writeFileSync(path.join(root, '.env'), contents)
+
+    // Act
+    const result = spawnSync(process.execPath, ['scripts/setup-env.mjs'], {
+      cwd: root,
+    })
+
+    // Assert
+    expect(result.status).toBe(0)
+    expect(
+      parseEnv(readFileSync(path.join(root, 'apps/desktop/.env'), 'utf8')),
+    ).toEqual({
+      WIN_CSC_KEY_PASSWORD: 'fixture-password\\',
+      WIN_CSC_LINK: '\nfixture certificate',
+    })
+    expect(
+      parseEnv(readFileSync(path.join(root, 'apps/web/.env'), 'utf8')),
+    ).toEqual({
+      DASHBOARD_MESSAGE: '\nfixture message',
+      DASHBOARD_PATH: 'fixture-path\\',
+    })
   })
   test('keeps both app files uncreated when a quoted signing value is unfinished', () => {
     // Arrange
