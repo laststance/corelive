@@ -34,7 +34,9 @@ export function CategoryTotals({
       <ul
         aria-label={label}
         className={
-          periodTotal ? 'grid gap-3' : 'flex flex-wrap items-start gap-1.5'
+          periodTotal
+            ? 'grid grid-cols-1 gap-3'
+            : 'flex flex-wrap items-start gap-1.5'
         }
       >
         {categories.map((category) => (
@@ -68,7 +70,7 @@ export function CategoryTotals({
             <ul className="space-y-2">
               {(category.directCount ?? 0) > 0 ? (
                 <li className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">
+                  <span className="wrap-anywhere min-w-0 text-muted-foreground">
                     Directly in {category.name}
                   </span>
                   <span className="font-mono tabular-nums">
@@ -89,7 +91,7 @@ export function CategoryTotals({
                         getColorDotClass(child.color),
                       )}
                     />
-                    <span className="break-words">{child.name}</span>
+                    <span className="wrap-anywhere min-w-0">{child.name}</span>
                   </span>
                   <span className="font-mono tabular-nums">{child.count}</span>
                 </li>

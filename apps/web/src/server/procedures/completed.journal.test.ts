@@ -372,8 +372,8 @@ describeIfDb('completed.journal (permanent win journal)', () => {
     const clerkId = freshClerkId()
     await seedCompletedRowAt(
       clerkId,
-      'focus before period',
-      new Date('2026-05-31T23:59:59.999Z'),
+      'focus other category inside period',
+      new Date('2026-06-20T08:00:00.000Z'),
     )
     const user = requireRow(
       await db
@@ -394,19 +394,6 @@ describeIfDb('completed.journal (permanent win journal)', () => {
         .returning(),
       'category.insert',
     )
-    const generalCategory = requireRow(
-      await db
-        .select()
-        .from(categoryTable)
-        .where(
-          and(
-            eq(categoryTable.userId, user.id),
-            eq(categoryTable.isDefault, true),
-          ),
-        )
-        .limit(1),
-      'category.select',
-    )
     await db.insert(completedTable).values([
       {
         title: 'focus lower boundary',
@@ -415,9 +402,9 @@ describeIfDb('completed.journal (permanent win journal)', () => {
         userId: user.id,
       },
       {
-        title: 'focus other category inside period',
-        completedAt: new Date('2026-06-20T08:00:00.000Z'),
-        categoryId: generalCategory.id,
+        title: 'focus before period',
+        completedAt: new Date('2026-05-31T23:59:59.999Z'),
+        categoryId: focusCategory.id,
         userId: user.id,
       },
       {

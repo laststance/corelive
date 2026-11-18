@@ -68,16 +68,17 @@ export const Dashboard = function Dashboard() {
             {activity.total > 0 ? (
               <RecentActivityCard dataByDate={activity.dataByDate} />
             ) : null}
-            {!activity.isError ? (
-              <SundayDigestCard dataByDate={activity.dataByDate} />
-            ) : null}
           </>
         ) : null}
+        <SundayDigestCard
+          dataByDate={activity.dataByDate}
+          hidden={!activity.hasData || activity.isError || activity.isPaused}
+        />
       </Suspense>
 
       <CompletedTodos
         categories={categoryData?.categories}
-        isActivityLoading={activity.isLoading}
+        hasActivityData={activity.hasData}
       />
     </Grid>
   )

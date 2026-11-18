@@ -11,7 +11,10 @@
 
 import { URL } from 'url'
 
-import { DEEP_LINK_PROTOCOL } from '@corelive/desktop-contract/constants'
+import {
+  COMPLETED_JOURNAL_SEARCH_MAX_LENGTH,
+  DEEP_LINK_PROTOCOL,
+} from '@corelive/desktop-contract/constants'
 import type { App } from 'electron'
 import { app as electronApp } from 'electron'
 
@@ -420,15 +423,31 @@ export class DeepLinkManager {
   }
 
   /**
-   * Handle search action.
-   *
-   * @param params - URL parameters
+   * Opens a Dashboard journal search when the app receives a search deep link.
+   * @param params - Decoded query text and optional completion filter.
+   * @example
+   * await manager.handleSearchAction({ query: 'reading', filter: 'completed' })
    */
   async handleSearchAction(params: Record<string, string>): Promise<void> {
-    // Open search results in the browser — mirrors the renderer's default
-    // `deep-link-search` route (`/home?search=<q>&filter=<f>`). `params` are
-    // pre-decoded by `parseDeepLinkUrl`; `URLSearchParams` re-encodes them.
-    const { query, filter } = params
+    const query = params.query?.trim()
+    const { filter } = params
+    if (query && query.length > COMPLETED_JOURNAL_SEARCH_MAX_LENGTH) {
+      this.notificationManager?.showNotification(
+        'Dashboard search',
+        `Shorten your search to ${COMPLETED_JOURNAL_SEARCH_MAX_LENGTH} characters or fewer.`,
+        { type: 'info' },
+      )
+      return
+    }
+    // Pending work lives in LiveEditor; the Dashboard journal only contains completions.
+    if (filter && filter !== 'all' && filter !== 'completed') {
+      this.notificationManager?.showNotification(
+        'Dashboard search',
+        'Dashboard searches completed tasks. Open LiveEditor on your Mac for pending tasks.',
+        { type: 'info' },
+      )
+      return
+    }
 
     const search = new URLSearchParams()
     if (query) search.set('search', query)
@@ -504,7 +523,7 @@ export class DeepLinkManager {
       }),
       searchTasks: this.generateDeepLink('search', {
         query: 'important',
-        filter: 'pending',
+        filter: 'completed',
       }),
       openView: this.generateDeepLink('view/completed'),
     }

@@ -225,7 +225,7 @@ CoreLive bundles LiveEditor and Settings locally under `corelive-editor://`. The
 - **Hide dock icon** — run as a menu-bar-only accessory; the choice persists across restarts
 - **Global keyboard shortcuts** — optional system-wide hotkeys, including lone-modifier keys (opt-in, off by default). If a single-modifier shortcut such as Right Option stops after an unfinished start, open Settings and select that shortcut again to retry. Startup keeps the crash guard.
 - **In-app shortcuts** — while any CoreLive window has focus, `⌘N` opens the LiveEditor panel and `⌘M` minimizes; both release when the app loses focus
-- **Deep links** — `corelive://` URLs open the app
+- **Deep links** — `corelive://` URLs open the app. For example, `corelive://search?query=reading&filter=completed` opens the Dashboard journal. Search accepts up to 200 characters. Pending tasks live in LiveEditor on the Mac.
 - **Load recovery** — the app retries failed local editor loads and failed remote login-window loads three times, then offers a native Retry / Close dialog. Network or authentication failures pause synchronization while local writing remains available.
 - **Auto-update** — signed, notarized releases update in place. Choose **Download Now** or **Later** when prompted; Settings → Updates shows download progress and offers **Restart to Update** when ready. **Check for Updates** is available in Settings and the app menu.
 

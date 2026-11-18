@@ -101,13 +101,16 @@ test('a quiet 7-day window can switch to show older completions', () => {
   expect(screen.queryByText('No completions in this period.')).toBeNull()
 })
 
-test('the native day selector opens the chosen day and preserves the existing URL state', () => {
+test('the native day selector adds the chosen date to the URL and preserves its existing query and fragment', () => {
   // Arrange
   window.history.replaceState(null, '', '/home?force=2026-10-01#journal')
   const data = new Map<string, HeatmapDay>([
     ['2026-09-30', { date: '2026-09-30', count: 2, categories: [] }],
   ])
   render(<RecentActivityCard dataByDate={data} />)
+  expect(screen.getAllByRole('option')[0]).toHaveTextContent(
+    'Oct 1, 2026 · Rest day',
+  )
   expect(
     screen.getByRole('option', { name: 'Sep 30, 2026 · 2 completed' }),
   ).toBeVisible()
@@ -122,4 +125,26 @@ test('the native day selector opens the chosen day and preserves the existing UR
   expect(
     window.location.pathname + window.location.search + window.location.hash,
   ).toBe('/home?force=2026-10-01&date=2026-09-30#journal')
+})
+
+test('clicking a rest-day marker selects its zero-completion date', async () => {
+  // Arrange
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
+    new DOMRect(0, 0, 480, 160),
+  )
+  const data = new Map<string, HeatmapDay>([
+    ['2026-09-30', { date: '2026-09-30', count: 2, categories: [] }],
+  ])
+  render(<RecentActivityCard dataByDate={data} />)
+  const marker = await screen.findByLabelText('Rest day, Oct 1, 2026')
+  expect(screen.queryByLabelText('Rest day, Sep 30, 2026')).toBeNull()
+
+  // Act
+  fireEvent.click(marker)
+
+  // Assert
+  expect(window.location.search).toBe('?date=2026-10-01')
+  expect(
+    screen.getByRole('option', { name: 'Oct 1, 2026 · Rest day' }),
+  ).toBeVisible()
 })

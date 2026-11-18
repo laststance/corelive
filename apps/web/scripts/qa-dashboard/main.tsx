@@ -19,7 +19,7 @@ const query = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 createRoot(document.getElementById('root')!).render(
   <ThemeProvider attribute="data-theme" defaultTheme="system" enableSystem>
     <QueryClientProvider client={query}>
-      {view === 'home' && installHomeFixture(parameters)}
+      {view === 'home' && installHomeFixture(parameters).element}
       {view === 'appearance' && (
         <main className="mx-auto max-w-2xl space-y-12 px-4 py-6 sm:px-6">
           <AppearanceSettings />

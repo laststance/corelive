@@ -10,9 +10,11 @@ import { AppSidebar } from './AppSidebar'
 vi.mock('@clerk/nextjs', () => ({
   useUser: () => ({ user: null, isLoaded: true }),
 }))
-vi.mock('next/navigation', () => ({
-  usePathname: () => '/home',
+const navigation = vi.hoisted(() => ({
+  usePathname: vi.fn(() => '/home'),
+  useSearchParams: vi.fn(() => new URLSearchParams()),
 }))
+vi.mock('next/navigation', () => navigation)
 vi.mock('@/app/(main)/home/_components/Category', () => ({
   Category: () => null,
 }))
@@ -53,4 +55,31 @@ describe('AppSidebar', () => {
     expect(settings).toHaveAttribute('href', '/settings')
     expect(screen.queryByRole('link', { name: /LiveEditor/i })).toBeNull()
   })
+  test.each([
+    ['/home', '/home?search=reading&category=2#journal'],
+    ['/skill-tree', '/home#journal'],
+  ])(
+    'opens the journal from %s with the applicable journal filters',
+    (pathname, expectedHref) => {
+      // Arrange
+      navigation.usePathname.mockReturnValueOnce(pathname)
+      navigation.useSearchParams.mockImplementationOnce(
+        () => new URLSearchParams('date=2026-11-18&search=reading&category=2'),
+      )
+
+      // Act
+      render(
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>,
+      )
+
+      // Assert
+      expect(screen.getByRole('link', { name: 'Journal' })).toHaveAttribute(
+        'href',
+        expectedHref,
+      )
+      expect(screen.getByRole('button', { name: 'Account' })).toBeVisible()
+    },
+  )
 })

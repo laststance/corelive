@@ -75,22 +75,31 @@ function toDeleteMode(value: string | null): DeleteMode {
  * with its sidebar, activity and journal, so the `?view=home` QA page needs no sign-in or database.
  * Called by `main.tsx` before the first render.
  * @param parameters - The page's query string (`delete=` picks the delete behavior).
- * @returns The Home fixture element to render inside the shared providers.
+ * @returns The Home element and the teardown for its browser globals.
  * @example
- * const home = installHomeFixture(new URLSearchParams('view=home&delete=pending'))
+ * const { element, uninstall } = installHomeFixture(new URLSearchParams('delete=pending'))
  */
-export function installHomeFixture(
-  parameters: URLSearchParams,
-): React.JSX.Element {
+export function installHomeFixture(parameters: URLSearchParams): {
+  element: React.JSX.Element
+  uninstall: () => void
+} {
   const deleteMode = toDeleteMode(parameters.get('delete'))
-  let categories = [
-    seedCategory(1, 'General', true),
-    seedCategory(2, 'Reading', false),
-  ]
+  const general = seedCategory(1, 'General', true)
+  const reading = seedCategory(2, 'Reading', false)
+  const categories = new Map([
+    [general.id, general],
+    [reading.id, reading],
+  ])
+  const activity = createActivityFixture(categories, parameters)
   let releasePendingDelete: (() => void) | undefined
   const router = {
     category: {
-      list: os.handler(() => ({ categories })),
+      list: os.handler(() => ({
+        categories: [...categories.values()].map((category) => ({
+          ...category,
+          recordCount: activity.countCategoryRecords(category.id),
+        })),
+      })),
       create: os.handler(() => {
         throw new ORPCError('FORBIDDEN', {
           message: 'The QA fixture does not create categories',
@@ -114,39 +123,58 @@ export function installHomeFixture(
             await new Promise<void>((resolve) => {
               releasePendingDelete = resolve
             })
-          if (deleteMode === 'destination-gone')
-            throw new ORPCError('NOT_FOUND', {
-              message: 'Destination category not found',
-              data: { reason: CATEGORY_DELETE_NOT_FOUND_REASON.destination },
-            })
-          if (deleteMode === 'source-gone')
+          const source = categories.get(input.id)
+          const destinationId = input.targetCategoryId ?? general.id
+          if (deleteMode === 'source-gone' || !source)
             throw new ORPCError('NOT_FOUND', {
               message: 'Category not found',
               data: { reason: CATEGORY_DELETE_NOT_FOUND_REASON.source },
             })
-          categories = categories.filter((category) => category.id !== input.id)
+          if (source.isDefault)
+            throw new ORPCError('FORBIDDEN', {
+              message: 'Cannot delete the default category',
+            })
+          if (source.id === destinationId)
+            throw new ORPCError('BAD_REQUEST', {
+              message: 'Choose a different destination category',
+            })
+          if (
+            deleteMode === 'destination-gone' ||
+            !categories.has(destinationId)
+          )
+            throw new ORPCError('NOT_FOUND', {
+              message: 'Destination category not found',
+              data: { reason: CATEGORY_DELETE_NOT_FOUND_REASON.destination },
+            })
+          activity.moveCategoryRecords(source.id, destinationId)
+          categories.delete(source.id)
           return {
             success: true as const,
-            movedToCategoryId: input.targetCategoryId ?? 1,
+            movedToCategoryId: destinationId,
             promotedCategoryIds: [],
           }
         }),
     },
-    completed: createActivityFixture(categories, parameters),
+    completed: activity.completed,
   }
   const handler = new RPCHandler(router)
-  const realFetch = window.fetch.bind(window)
+  const realFetch = window.fetch
+  const previousControl = Object.getOwnPropertyDescriptor(
+    window,
+    '__homeFixture',
+  )
   window.fetch = async (input, init) => {
     const request = new Request(input, init)
     // Only the app's own oRPC endpoint is faked; everything else is a real request.
     if (!new URL(request.url).pathname.startsWith(ORPC_PREFIX))
-      return realFetch(input, init)
+      return realFetch.call(window, input, init)
     const { matched, response } = await handler.handle(request, {
       prefix: ORPC_PREFIX,
     })
     return matched ? response : new Response('Not found', { status: 404 })
   }
   Object.defineProperty(window, '__homeFixture', {
+    configurable: true,
     value: {
       release: () => {
         releasePendingDelete?.()
@@ -154,12 +182,22 @@ export function installHomeFixture(
       },
     },
   })
-  return (
-    <SidebarProvider>
-      <AppSidebar />
-      <SidebarInset>
-        <DashboardContent />
-      </SidebarInset>
-    </SidebarProvider>
-  )
+  return {
+    element: (
+      <SidebarProvider>
+        <AppSidebar />
+        <SidebarInset>
+          <DashboardContent />
+        </SidebarInset>
+      </SidebarProvider>
+    ),
+    uninstall: (): void => {
+      window.fetch = realFetch
+      if (previousControl) {
+        Object.defineProperty(window, '__homeFixture', previousControl)
+      } else {
+        Reflect.deleteProperty(window, '__homeFixture')
+      }
+    },
+  }
 }

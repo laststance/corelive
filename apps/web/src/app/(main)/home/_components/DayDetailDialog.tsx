@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, ImageDown } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { type RefObject, useRef, useState } from 'react'
 import { match } from 'ts-pattern'
 
 import { Button } from '@/components/ui/button'
@@ -39,6 +39,8 @@ import { CategoryTotals } from './CategoryTotals'
 interface DayDetailDialogProps {
   date: string | null
   onOpenChange: (open: boolean) => void
+  /** Dashboard heading to focus when the opening control is unavailable. */
+  fallbackFocusRef?: RefObject<HTMLElement | null>
   /**
    * Optional day navigation callback. When provided, `< >` icon buttons are
    * rendered inside DialogHeader. The handler receives a signed day offset
@@ -187,6 +189,7 @@ export const DayDetailDialog = function DayDetailDialog({
   date,
   onOpenChange,
   onNavigate,
+  fallbackFocusRef,
 }: DayDetailDialogProps) {
   const isClerkQueryReady = useClerkQueryReady()
   const [isSaving, setIsSaving] = useState(false)
@@ -284,9 +287,13 @@ export const DayDetailDialog = function DayDetailDialog({
         }}
         onCloseAutoFocus={(event) => {
           const previous = previousFocusRef.current
-          if (!previous?.isConnected) return
+          // Direct links and removed controls return to the Activity section.
+          const target = previous?.isConnected
+            ? previous
+            : fallbackFocusRef?.current
+          if (!target) return
           event.preventDefault()
-          previous.focus({ preventScroll: true })
+          target.focus({ preventScroll: true })
         }}
         className={cn(
           'max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md',

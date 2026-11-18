@@ -55,7 +55,7 @@ describe('SundayDigestCard', () => {
     const { container } = render(
       <SundayDigestCard
         dataByDate={buildWeekFixture(3)}
-        isLoading={false}
+        hidden={false}
         now={LOCAL_TUESDAY}
       />,
     )
@@ -66,7 +66,7 @@ describe('SundayDigestCard', () => {
     const { container } = render(
       <SundayDigestCard
         dataByDate={buildWeekFixture(3)}
-        isLoading={true}
+        hidden={true}
         now={LOCAL_SUNDAY}
       />,
     )
@@ -80,7 +80,7 @@ describe('SundayDigestCard', () => {
     render(
       <SundayDigestCard
         dataByDate={new Map()}
-        isLoading={false}
+        hidden={false}
         now={LOCAL_SUNDAY}
       />,
     )
@@ -94,7 +94,7 @@ describe('SundayDigestCard', () => {
         dataByDate={buildWeekFixture(4, [
           { date: shiftIsoDate(LOCAL_SUNDAY_ISO, -2), count: 2 },
         ])}
-        isLoading={false}
+        hidden={false}
         now={LOCAL_SUNDAY}
       />,
     )
@@ -111,11 +111,7 @@ describe('SundayDigestCard', () => {
     data.set(oldDate, { date: oldDate, count: 5, categories: [] })
 
     render(
-      <SundayDigestCard
-        dataByDate={data}
-        isLoading={false}
-        now={LOCAL_SUNDAY}
-      />,
+      <SundayDigestCard dataByDate={data} hidden={false} now={LOCAL_SUNDAY} />,
     )
     expect(screen.getByText(/room was quiet this week/i)).toBeInTheDocument()
   })
@@ -124,11 +120,7 @@ describe('SundayDigestCard', () => {
     const wednesday = shiftIsoDate(LOCAL_SUNDAY_ISO, -4)
     const data = buildWeekFixture(2, [{ date: wednesday, count: 6 }])
     render(
-      <SundayDigestCard
-        dataByDate={data}
-        isLoading={false}
-        now={LOCAL_SUNDAY}
-      />,
+      <SundayDigestCard dataByDate={data} hidden={false} now={LOCAL_SUNDAY} />,
     )
     // The "brightest day:" line surfaces the best day; assert the spelled-out
     // count ("6 things") renders — the previous "(6)" framing read as KPI.
@@ -140,11 +132,7 @@ describe('SundayDigestCard', () => {
     const wednesday = shiftIsoDate(LOCAL_SUNDAY_ISO, -4)
     const data = buildWeekFixture(0, [{ date: wednesday, count: 1 }])
     render(
-      <SundayDigestCard
-        dataByDate={data}
-        isLoading={false}
-        now={LOCAL_SUNDAY}
-      />,
+      <SundayDigestCard dataByDate={data} hidden={false} now={LOCAL_SUNDAY} />,
     )
     expect(screen.getByText(/1 thing(?!s)/i)).toBeInTheDocument()
   })
@@ -153,7 +141,7 @@ describe('SundayDigestCard', () => {
     render(
       <SundayDigestCard
         dataByDate={buildWeekFixture(3)}
-        isLoading={false}
+        hidden={false}
         now={LOCAL_SUNDAY}
       />,
     )
@@ -185,7 +173,7 @@ describe('SundayDigestCard', () => {
     const { container } = render(
       <SundayDigestCard
         dataByDate={buildWeekFixture(3)}
-        isLoading={false}
+        hidden={false}
         now={LOCAL_SUNDAY}
       />,
     )
@@ -201,7 +189,7 @@ describe('SundayDigestCard', () => {
     render(
       <SundayDigestCard
         dataByDate={buildWeekFixture(3)}
-        isLoading={false}
+        hidden={false}
         now={LOCAL_SUNDAY}
       />,
     )

@@ -96,7 +96,7 @@ test('sidebar links from Skill Tree open the child journal and preserve its sear
   expect(select).toHaveBeenCalledExactlyOnceWith(2)
   expect(child).toHaveAttribute(
     'href',
-    '/home?date=2026-10-01&search=Release&category=2#journal',
+    '/home?search=Release&category=2#journal',
   )
   expect(screen.getByRole('link', { name: 'Work' })).toBeVisible()
 })

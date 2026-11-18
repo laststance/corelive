@@ -145,8 +145,8 @@ test('reopens a journal search from its URL and Clear resets search, category, a
         offset: 0,
         search: 'Updated term',
         categoryId: 1,
-        completedFrom: expect.any(Date),
-        completedBefore: expect.any(Date),
+        completedFrom: new Date(2026, 9, 1),
+        completedBefore: new Date(2026, 10, 1),
       }),
       expect.anything(),
     ),
@@ -165,7 +165,13 @@ test('reopens a journal search from its URL and Clear resets search, category, a
   client.clear()
 })
 
-test.each(['/home#journal', '/home?search=Release&filter=pending'])(
+test.each([
+  '/home#journal',
+  '/home?search=Release&date=',
+  '/home?search=Release&date=2026-02-30',
+  '/home?search=Release&filter=completed',
+  '/home?search=Release&filter=all',
+])(
   'a link to %s scrolls to and focuses the journal after the Dashboard finishes loading',
   async (href) => {
     // Arrange
@@ -194,6 +200,152 @@ test.each(['/home#journal', '/home?search=Release&filter=pending'])(
   },
 )
 
+test('a valid day detail link keeps focus outside the journal', async () => {
+  // Arrange
+  window.history.replaceState(null, '', '/home?search=Release&date=2026-10-01')
+  const scrollIntoView = vi.spyOn(Element.prototype, 'scrollIntoView')
+  journal.mockResolvedValue({ entries: [], total: 0 })
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+
+  // Act
+  render(
+    <QueryClientProvider client={client}>
+      <CompletedTodos categories={CATEGORIES} />
+    </QueryClientProvider>,
+  )
+
+  // Assert
+  expect(await screen.findByText('No matching wins')).toBeVisible()
+  expect(
+    screen.getByRole('region', { name: 'Completion journal' }),
+  ).not.toHaveFocus()
+  expect(scrollIntoView).not.toHaveBeenCalled()
+  client.clear()
+})
+
+test.each(['x'.repeat(201), 'One\0Two'])(
+  'an invalid shared search can be corrected without loading the unfiltered journal',
+  async (term) => {
+    // Arrange
+    window.history.replaceState(
+      null,
+      '',
+      '/home?search=' + encodeURIComponent(term),
+    )
+    journal.mockResolvedValue({ entries: [], total: 0 })
+    const user = userEvent.setup()
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    render(
+      <QueryClientProvider client={client}>
+        <CompletedTodos categories={CATEGORIES} />
+      </QueryClientProvider>,
+    )
+    const input = screen.getByRole('searchbox', {
+      name: 'Search completed tasks',
+    })
+    expect(input).toHaveValue(term)
+    expect(
+      screen.getByText(/Edit your search to use up to 200 characters/),
+    ).toBeVisible()
+    expect(
+      screen.queryByLabelText('0 completed tasks in current view'),
+    ).toBeNull()
+    expect(journal).not.toHaveBeenCalled()
+
+    // Act
+    await user.clear(input)
+    await user.type(input, 'Release{Enter}')
+
+    // Assert
+    expect(await screen.findByText('No matching wins')).toBeVisible()
+    expect(journal).toHaveBeenCalledExactlyOnceWith(
+      { limit: 10, offset: 0, search: 'Release' },
+      expect.anything(),
+    )
+    client.clear()
+  },
+)
+
+test.each([
+  ['pending', 'Pending tasks are available in the CoreLive desktop app.'],
+  ['archived', 'This task filter is unavailable in the completion journal.'],
+])(
+  'the legacy %s filter explains how to open the journal before showing completed tasks',
+  async (filter, message) => {
+    // Arrange
+    window.history.replaceState(null, '', '/home?filter=' + filter)
+    journal.mockResolvedValue({ entries: [], total: 0 })
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const user = userEvent.setup()
+    render(
+      <QueryClientProvider client={client}>
+        <CompletedTodos categories={CATEGORIES} />
+      </QueryClientProvider>,
+    )
+    expect(screen.getByText(message, { exact: false })).toBeVisible()
+    expect(journal).not.toHaveBeenCalled()
+
+    // Act
+    await user.click(screen.getByRole('button', { name: 'Clear' }))
+
+    // Assert
+    expect(await screen.findByText('Your year starts here')).toBeVisible()
+    expect(window.location.search).toBe('')
+    expect(journal).toHaveBeenCalledExactlyOnceWith(
+      { limit: 10, offset: 0 },
+      expect.anything(),
+    )
+    client.clear()
+  },
+)
+
+test('a failed journal search retries the same term and category', async () => {
+  // Arrange
+  window.history.replaceState(null, '', '/home?category=2&search=Release')
+  journal
+    .mockRejectedValueOnce(new Error('network down'))
+    .mockResolvedValueOnce({ entries: [], total: 0 })
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  const user = userEvent.setup()
+  render(
+    <QueryClientProvider client={client}>
+      <CompletedTodos categories={CATEGORIES} />
+    </QueryClientProvider>,
+  )
+  expect(await screen.findByText('The journal could not load.')).toBeVisible()
+
+  // Act
+  await user.click(screen.getByRole('button', { name: 'Retry journal' }))
+
+  // Assert
+  expect(await screen.findByText('No matching wins')).toBeVisible()
+  expect(journal.mock.calls.map(([input]) => input)).toEqual([
+    {
+      limit: 10,
+      offset: 0,
+      categoryId: 2,
+      includeSubcategories: true,
+      search: 'Release',
+    },
+    {
+      limit: 10,
+      offset: 0,
+      categoryId: 2,
+      includeSubcategories: true,
+      search: 'Release',
+    },
+  ])
+  client.clear()
+})
+
 test('the journal stays in view when activity cards expand after opening a journal link', async () => {
   // Arrange
   window.history.replaceState(null, '', '/home#journal')
@@ -204,7 +356,7 @@ test('the journal stays in view when activity cards expand after opening a journ
   })
   const { rerender } = render(
     <QueryClientProvider client={client}>
-      <CompletedTodos categories={CATEGORIES} isActivityLoading />
+      <CompletedTodos categories={CATEGORIES} hasActivityData={false} />
     </QueryClientProvider>,
   )
   const region = await screen.findByRole('region', {
@@ -216,7 +368,7 @@ test('the journal stays in view when activity cards expand after opening a journ
   // Act
   rerender(
     <QueryClientProvider client={client}>
-      <CompletedTodos categories={CATEGORIES} isActivityLoading={false} />
+      <CompletedTodos categories={CATEGORIES} hasActivityData />
     </QueryClientProvider>,
   )
 
@@ -523,6 +675,6 @@ test('a failed background refetch keeps the loaded history visible instead of an
   // Assert
   await waitFor(() => expect(journal).toHaveBeenCalledTimes(2))
   expect(screen.getByText('Shipped the thing')).toBeVisible()
-  expect(screen.queryByText('An error occurred')).toBeNull()
+  expect(screen.queryByText('The journal could not load.')).toBeNull()
   client.clear()
 })

@@ -13,7 +13,7 @@ import {
   within,
 } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { type PropsWithChildren, useState } from 'react'
+import { type PropsWithChildren, useRef, useState } from 'react'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
@@ -133,6 +133,55 @@ test('Escape returns keyboard focus to the dashboard control that opened the day
   expect(screen.queryByRole('dialog')).toBeNull()
 })
 
+test.each(['direct link', 'removed button'] as const)(
+  'closing a day opened via %s returns focus to the Activity heading',
+  async (entry) => {
+    // Arrange
+    const user = userEvent.setup()
+    function Example({ showButton }: { showButton: boolean }) {
+      const heading = useRef<HTMLHeadingElement>(null)
+      const [date, setDate] = useState<string | null>(
+        entry === 'direct link' ? '2026-05-11' : null,
+      )
+      return (
+        <>
+          <h2 ref={heading} tabIndex={-1}>
+            Activity
+          </h2>
+          {showButton && (
+            <button type="button" onClick={() => setDate('2026-05-11')}>
+              View day
+            </button>
+          )}
+          <DayDetailDialog
+            date={date}
+            onOpenChange={() => setDate(null)}
+            fallbackFocusRef={heading}
+          />
+        </>
+      )
+    }
+    const { rerender } = render(
+      <Example showButton={entry === 'removed button'} />,
+      { wrapper: QueryWrapper },
+    )
+    if (entry === 'removed button') {
+      await user.click(screen.getByRole('button', { name: 'View day' }))
+      // Remove the original trigger after the dialog has captured its focus.
+      rerender(<Example showButton={false} />)
+    }
+    expect(screen.getByRole('dialog')).toBeVisible()
+
+    // Act
+    await user.keyboard('{Escape}')
+
+    // Assert
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Activity' })).toHaveFocus(),
+    )
+  },
+)
+
 test('a failed day can be retried and only its confirmed zero count shows a rest day', async () => {
   // Arrange
   loadDay.mockRejectedValueOnce(new Error('Unavailable'))
@@ -246,7 +295,11 @@ test('moving to an uncached day clears the previous day and keeps focus on the n
   expect(screen.getByText('Loading day details…')).toBeVisible()
   expect(screen.queryByText('Win 1')).toBeNull()
   expect(nextDay).toHaveFocus()
+
+  // Act
   await user.keyboard('k')
+
+  // Assert
   expect(screen.getByText('May 11, 2026')).toBeVisible()
   expect(screen.getByText('Win 1')).toBeVisible()
   expect(nextDay).toHaveFocus()

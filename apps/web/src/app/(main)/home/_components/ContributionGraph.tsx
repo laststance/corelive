@@ -151,9 +151,11 @@ export const ContributionGraph = function ContributionGraph({
     hasData,
     isLoading,
     isError,
+    isPaused,
     isFetching,
     refetch,
   } = activity
+  const activityHeadingRef = useRef<HTMLHeadingElement>(null)
   const today = useLocalDayKey()
   const showHeatmap = hasData && total > 0
   const containerRef = useRef<HTMLDivElement>(null)
@@ -308,8 +310,10 @@ export const ContributionGraph = function ContributionGraph({
       <Card aria-busy={isLoading}>
         <CardHeader>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <h2 className="type-h3">Activity</h2>
-            {hasData && total > 0 ? (
+            <h2 ref={activityHeadingRef} tabIndex={-1} className="type-h3">
+              Activity
+            </h2>
+            {hasData && (total > 0 || isError || isPaused) ? (
               <Badge variant="secondary">{total} completed</Badge>
             ) : null}
           </div>
@@ -320,13 +324,20 @@ export const ContributionGraph = function ContributionGraph({
             Loading activity…
           </CardContent>
         ) : null}
-        {isError ? (
+        {isPaused ? (
+          <CardContent role="status" className="text-sm text-muted-foreground">
+            {hasData
+              ? 'Activity refresh paused. Showing the last loaded data.'
+              : 'Activity will load when you’re back online.'}
+          </CardContent>
+        ) : null}
+        {isError && !isPaused ? (
           <CardContent className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <p role="status" className="text-sm text-muted-foreground">
               {hasData
                 ? 'Activity could not refresh.'
                 : 'Activity could not load.'}
-              {isError && showHeatmap ? ' Showing the last loaded data.' : null}
+              {hasData ? ' Showing the last loaded data.' : null}
             </p>
             <Button
               type="button"
@@ -339,7 +350,7 @@ export const ContributionGraph = function ContributionGraph({
             </Button>
           </CardContent>
         ) : null}
-        {hasData && !isError && total === 0 ? (
+        {hasData && !isError && !isPaused && total === 0 ? (
           <CardContent className="flex flex-wrap items-center justify-between gap-4 border-t pt-5">
             <div className="space-y-1">
               <p className="text-sm font-medium">
@@ -399,6 +410,7 @@ export const ContributionGraph = function ContributionGraph({
       </Card>
       <DayDetailDialog
         date={selectedDate}
+        fallbackFocusRef={activityHeadingRef}
         onOpenChange={handleDayDetailOpenChange}
         onNavigate={handleNavigate}
       />

@@ -12,7 +12,7 @@
  * Triggered when: `pnpm test:electron` (Vitest, node env).
  *
  * @example
- *   pnpm test:electron -- WindowManager.dashboard-origin
+ *   pnpm test:electron WindowManager.dashboard-origin
  */
 import { describe, expect, test, vi } from 'vitest'
 

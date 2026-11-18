@@ -177,7 +177,7 @@ describe('LoginShell', () => {
     // Assert: NO OAuth buttons (they'd be dead without the bridge), and the
     // skew-safe fallback guides the user to the Dashboard instead.
     expect(screen.queryByTestId('oauth-buttons')).not.toBeInTheDocument()
-    expect(screen.getByText(/CoreLive Dashboard/i)).toBeInTheDocument()
+    expect(screen.getByText(/CoreLive Dashboard/i)).toBeVisible()
   })
 
   test('greets the signed-out user with the north-star invitation, not a sign-in demand', () => {

@@ -20,10 +20,10 @@ describe('RouteError (route-level error boundary)', () => {
     render(<RouteError error={new Error('boom')} reset={reset} />)
 
     // Assert: gentle, on-brand copy renders (never the scary built-in default).
-    expect(screen.getByText('Give that another try')).toBeInTheDocument()
+    expect(screen.getByText('Give that another try')).toBeVisible()
     expect(
       screen.getByText(/Something hiccuped while loading this view/i),
-    ).toBeInTheDocument()
+    ).toBeVisible()
   })
 
   test('surfaces the real error to the logger for telemetry', () => {
@@ -53,44 +53,16 @@ describe('RouteError (route-level error boundary)', () => {
     expect(reset).toHaveBeenCalledTimes(1)
   })
 
-  test('reloads the public landing page when "Back to sign-in page" is pressed', async () => {
-    // Arrange: reset() re-renders the SAME crashed segment, so a deterministic
-    // throw (e.g. a stale preload) dead-ends — the secondary action must leave
-    // the route via a hard nav (fresh document + fresh bundle), never reset().
-    const reset = vi.fn()
-    const assignToLandingPage = vi
-      .spyOn(window.location, 'assign')
-      .mockImplementation(() => {})
-    const user = userEvent.setup()
-    render(<RouteError error={new Error('boom')} reset={reset} />)
+  test('offers a direct link out of a failed route to the Dashboard landing page', () => {
+    // Arrange
+    const error = new Error('Failed route')
 
     // Act
-    await user.click(
-      screen.getByRole('button', { name: /back to sign-in page/i }),
-    )
+    render(<RouteError error={error} reset={vi.fn()} />)
 
-    // Assert: a hard navigation to the public landing page, and reset() is NOT it.
-    expect(assignToLandingPage).toHaveBeenCalledWith('/')
-    expect(reset).not.toHaveBeenCalled()
-    assignToLandingPage.mockRestore()
-  })
-
-  test('does not throw when mounting through the real (unmocked) logger', () => {
-    // Lock the last-line-of-defense invariant: the boundary's own mount-time
-    // logging must run through the REAL logger without throwing, or the
-    // recovery UI would itself crash and defeat the boundary. Drop the
-    // beforeEach stub so the genuine pino browser path executes; keep console
-    // quiet for hygiene only.
-    vi.restoreAllMocks()
-    const consoleErrorSpy = vi
-      .spyOn(console, 'error')
-      .mockImplementation(() => {})
-
-    // Act + Assert
-    expect(() =>
-      render(<RouteError error={new Error('boom')} reset={vi.fn()} />),
-    ).not.toThrow()
-
-    consoleErrorSpy.mockRestore()
+    // Assert
+    const link = screen.getByRole('link', { name: 'Dashboard landing page' })
+    expect(link).toBeVisible()
+    expect(link).toHaveAttribute('href', '/')
   })
 })

@@ -89,7 +89,9 @@ clearing another suite's transformed modules.
 
 For a fresh checkout, copy `.env.example` to `apps/web/.env` and provide the Dashboard
 configuration. For an existing root `.env`, the setup helper below copies it
-without overwriting app files and keeps signing credentials in desktop only.
+without overwriting app files and keeps signing credentials in desktop only. If
+`apps/desktop/.env` already exists, add any missing signing settings such as
+`APPLE_KEYCHAIN_PROFILE` to that file before building a signed release.
 
 ```sh
 pnpm install --frozen-lockfile

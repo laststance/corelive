@@ -1,7 +1,14 @@
 'use client'
 
 import { useId, type FormEvent } from 'react'
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts'
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ReferenceDot,
+  XAxis,
+  YAxis,
+} from 'recharts'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -97,6 +104,23 @@ export function DailyCompletionsChart({
             }}
             isAnimationActive={false}
           />
+          {/* A zero-height bar has no pointer target. Mark its day on the baseline. */}
+          {days
+            .filter((day) => day.count === 0)
+            .map(({ date }) => (
+              <ReferenceDot
+                key={date}
+                x={date}
+                y={0}
+                r={3}
+                fill="var(--muted-foreground)"
+                stroke="transparent"
+                strokeWidth={4}
+                className="cursor-pointer"
+                aria-label={`Rest day, ${formatActivityDate(date, 'full')}`}
+                onClick={() => onOpenDay(date)}
+              />
+            ))}
         </BarChart>
       </ChartContainer>
       <form
@@ -111,7 +135,7 @@ export function DailyCompletionsChart({
           name="day"
           className="min-h-9 max-w-full cursor-pointer rounded-md border bg-card px-2 text-sm focus-visible:outline-2 focus-visible:outline-ring"
         >
-          {days.toReversed().map(({ date, count }) => (
+          {[...days].reverse().map(({ date, count }) => (
             <option key={date} value={date}>
               {formatActivityDate(date, 'full')} ·{' '}
               {count === 0 ? 'Rest day' : `${count} completed`}

@@ -4,7 +4,7 @@ export const COMPLETED_JOURNAL_PAGE_SIZE = 10
 /** First-page offset shared by the journal infinite query, its cache key, and the SSR-hydrated `pageParams` seed. */
 export const COMPLETED_JOURNAL_INITIAL_OFFSET = 0
 
-export const COMPLETED_JOURNAL_SEARCH_MAX_LENGTH = 200
+export { COMPLETED_JOURNAL_SEARCH_MAX_LENGTH } from '@corelive/desktop-contract/constants'
 
 export const DECIMAL_RADIX = 10
 

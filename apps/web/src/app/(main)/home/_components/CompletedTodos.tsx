@@ -35,6 +35,7 @@ import {
 } from '@/lib/utils/resolveCompletedJournalDateRange'
 import {
   CompletedJournalSearchSchema,
+  DayDetailInputSchema,
   type DayDetailTask,
 } from '@/server/schemas/completed'
 
@@ -47,8 +48,8 @@ import {
 interface CompletedTodosProps {
   /** Dashboard categories, or undefined until the category list is available. */
   categories: readonly CompletedFilterCategory[] | undefined
-  /** Whether activity cards above the journal can still shift its position. */
-  isActivityLoading?: boolean
+  /** Whether the first activity snapshot has rendered above this journal. */
+  hasActivityData?: boolean
 }
 
 interface GroupedEntries {
@@ -66,6 +67,49 @@ const INITIAL_COMPLETED_TODOS_FILTERS: CompletedTodosFilterState = {
 
 // Category IDs are PostgreSQL serial values.
 const MAX_CATEGORY_ID = 2_147_483_647
+
+/**
+ * Reads a journal link before the Dashboard requests or displays its results.
+ * An invalid search stays editable, and a category can resolve while its catalog loads.
+ * @example
+ * readJournalLink(new URLSearchParams('search=planning'), [])
+ */
+function readJournalLink(
+  searchParams: Pick<URLSearchParams, 'get'>,
+  categories: CompletedTodosProps['categories'],
+) {
+  const rawSearch = searchParams.get('search') ?? ''
+  const parsedSearch = CompletedJournalSearchSchema.safeParse(rawSearch)
+  const search = parsedSearch.success ? parsedSearch.data : rawSearch
+  const taskFilter = searchParams.get('filter')
+  const unsupportedFilter =
+    taskFilter !== null && taskFilter !== 'completed' && taskFilter !== 'all'
+  const canLoadJournal = parsedSearch.success && !unsupportedFilter
+  const requestedCategory = searchParams.get('category')
+  const requestedCategoryId = Number(requestedCategory)
+  const isValidCategoryId =
+    requestedCategoryId > 0 &&
+    requestedCategoryId <= MAX_CATEGORY_ID &&
+    Number.isInteger(requestedCategoryId) &&
+    String(requestedCategoryId) === requestedCategory
+  // Honor valid links before the catalog loads, then resolve against confirmed categories.
+  const availableCategories = categories?.filter(({ id }) => id > 0) ?? []
+  const categoryId =
+    isValidCategoryId &&
+    (categories === undefined ||
+      availableCategories.some(({ id }) => id === requestedCategoryId))
+      ? requestedCategoryId
+      : null
+  return {
+    search,
+    invalidSearch: !parsedSearch.success,
+    taskFilter,
+    unsupportedFilter,
+    canLoadJournal,
+    availableCategories,
+    categoryId,
+  }
+}
 
 /**
  * Renders the searchable completion journal on Home and bounds its URL-dependent content.
@@ -93,7 +137,7 @@ export function CompletedTodos(props: CompletedTodosProps) {
 
 function CompletedTodosContent({
   categories,
-  isActivityLoading = false,
+  hasActivityData = true,
 }: CompletedTodosProps) {
   const journalRef = useRef<HTMLDivElement>(null)
   const initialScrollOffset = useRef<number | null>(null)
@@ -101,24 +145,15 @@ function CompletedTodosContent({
   const searchInputRef = useRef<HTMLInputElement>(null)
   const isClerkQueryReady = useClerkQueryReady()
   const searchParams = useSearchParams()
-  const search =
-    CompletedJournalSearchSchema.safeParse(searchParams.get('search')).data ??
-    ''
-  const requestedCategory = searchParams.get('category')
-  const requestedCategoryId = Number(requestedCategory)
-  const isValidCategoryId =
-    requestedCategoryId > 0 &&
-    requestedCategoryId <= MAX_CATEGORY_ID &&
-    Number.isInteger(requestedCategoryId) &&
-    String(requestedCategoryId) === requestedCategory
-  // Honor valid links before the catalog loads, then resolve against confirmed categories.
-  const availableCategories = categories?.filter(({ id }) => id > 0) ?? []
-  const categoryId =
-    isValidCategoryId &&
-    (categories === undefined ||
-      availableCategories.some(({ id }) => id === requestedCategoryId))
-      ? requestedCategoryId
-      : null
+  const {
+    search,
+    invalidSearch,
+    taskFilter,
+    unsupportedFilter,
+    canLoadJournal,
+    availableCategories,
+    categoryId,
+  } = readJournalLink(searchParams, categories)
   const [draft, setDraft] = useState({ search, value: search })
   // Keep the input in sync with links and Back/Forward while typing stays local.
   if (draft.search !== search) {
@@ -140,18 +175,22 @@ function CompletedTodosContent({
   // Next can consume the fragment while Dashboard still shows its loading state.
   useInitialEffect(() => {
     const { hash } = window.location
-    const isSearchLink = !hash && !!search && !searchParams.has('date')
+    const opensDayDetail = DayDetailInputSchema.safeParse({
+      date: searchParams.get('date'),
+    }).success
+    const isSearchLink =
+      !hash && (!!search || unsupportedFilter) && !opensDayDetail
     const journal = journalRef.current
     if (journal && (hash === '#journal' || isSearchLink)) {
       journal.scrollIntoView()
       journal.focus({ preventScroll: true })
-      if (isActivityLoading) initialScrollOffset.current = window.scrollY
+      if (!hasActivityData) initialScrollOffset.current = window.scrollY
     }
   })
 
   // Activity cards can push the journal out of view after the first jump.
   useCycleEffect(() => {
-    if (isActivityLoading) return
+    if (!hasActivityData) return
 
     const scrollOffset = initialScrollOffset.current
     initialScrollOffset.current = null
@@ -165,7 +204,7 @@ function CompletedTodosContent({
       return
 
     journal.scrollIntoView()
-  }, [isActivityLoading])
+  }, [hasActivityData])
 
   const localDayKey = useLocalDayKey()
   // The Date instances must stay stable between unrelated renders because they
@@ -192,6 +231,8 @@ function CompletedTodosContent({
     isFetchingNextPage,
     isLoading,
     isError,
+    isPaused,
+    refetch,
   } = useInfiniteQuery({
     ...orpc.completed.journal.infiniteOptions({
       input: (pageParam) => ({
@@ -206,7 +247,7 @@ function CompletedTodosContent({
     // Same pre-auth fetch guard as every sibling Home query: if a future
     // mount path renders this panel before Clerk hydrates, the stale-refetch
     // fires unauthenticated — hydrated/persisted journal data still displays.
-    enabled: isClerkQueryReady,
+    enabled: isClerkQueryReady && canLoadJournal,
   })
 
   // Flatten journal entries across all loaded pages (already newest-first).
@@ -258,6 +299,7 @@ function CompletedTodosContent({
   const updateJournalUrl = (changes: {
     search?: string
     category?: string
+    filter?: string
   }): void => {
     const url = new URL(window.location.href)
     // Apply only the given filters so other Dashboard state stays in the URL.
@@ -284,27 +326,56 @@ function CompletedTodosContent({
   const clearFilters = (): void => {
     setFilters(INITIAL_COMPLETED_TODOS_FILTERS)
     setDirectOnlyCategoryId(null)
-    updateJournalUrl({ search: '', category: '' })
+    updateJournalUrl({ search: '', category: '', filter: '' })
     setDraft({ search, value: '' })
     searchInputRef.current?.focus()
   }
 
-  const total = data?.pages[0]?.total ?? 0
+  const total = canLoadJournal ? data?.pages[0]?.total : undefined
   const journalContent = match({
+    invalidSearch,
+    unsupportedFilter,
+    waitingForConnection: isPaused && data === undefined,
     hasEntries: allEntries.length > 0,
     // A failed background refetch keeps the already-loaded history on screen;
     // the error block is only for "nothing loaded at all".
     isError: isError && data === undefined,
     isLoading,
   })
+    .with({ unsupportedFilter: true }, () => (
+      <p role="status" className="p-8 text-center text-muted-foreground">
+        {taskFilter === 'pending'
+          ? 'Pending tasks are available in the CoreLive desktop app.'
+          : 'This task filter is unavailable in the completion journal.'}{' '}
+        Clear filters to view completed tasks.
+      </p>
+    ))
+    .with({ invalidSearch: true }, () => (
+      <p
+        id="journal-search-error"
+        role="status"
+        className="p-8 text-center text-muted-foreground"
+      >
+        Edit your search to use up to {COMPLETED_JOURNAL_SEARCH_MAX_LENGTH}{' '}
+        characters of plain text, or clear filters.
+      </p>
+    ))
+    .with({ waitingForConnection: true }, () => (
+      <p role="status" className="p-8 text-center text-muted-foreground">
+        The journal will load when you’re back online.
+      </p>
+    ))
     .with({ isLoading: true }, () => (
       <div className="flex h-full min-h-40 items-center justify-center p-8 text-muted-foreground">
         Loading...
       </div>
     ))
     .with({ isError: true }, () => (
-      <div className="flex h-full min-h-40 items-center justify-center p-8 text-center text-muted-foreground">
-        <p className="text-destructive">An error occurred</p>
+      <div className="flex h-full min-h-40 flex-col items-center justify-center gap-4 p-8 text-center text-muted-foreground">
+        <p role="status">The journal could not load.</p>
+        <Button type="button" variant="outline" onClick={() => void refetch()}>
+          Retry journal
+        </Button>
       </div>
     ))
     .with({ hasEntries: false }, () => (
@@ -411,14 +482,16 @@ function CompletedTodosContent({
             <CheckCircle2 className="size-5" aria-hidden="true" />
             Completion journal
           </h2>
-          <Badge
-            variant="secondary"
-            className="flex items-center gap-1"
-            aria-live="polite"
-            aria-label={`${total} completed tasks in current view`}
-          >
-            {total} completed
-          </Badge>
+          {total !== undefined ? (
+            <Badge
+              variant="secondary"
+              className="flex items-center gap-1"
+              aria-live="polite"
+              aria-label={`${total} completed tasks in current view`}
+            >
+              {total} completed
+            </Badge>
+          ) : null}
         </CardTitle>
         <CardDescription>Your wins, newest first</CardDescription>
         <form
@@ -434,6 +507,12 @@ function CompletedTodosContent({
             ref={searchInputRef}
             type="search"
             aria-label="Search completed tasks"
+            aria-invalid={invalidSearch || undefined}
+            aria-describedby={
+              invalidSearch && !unsupportedFilter
+                ? 'journal-search-error'
+                : undefined
+            }
             placeholder="Search completed tasks"
             autoComplete="off"
             maxLength={COMPLETED_JOURNAL_SEARCH_MAX_LENGTH}
@@ -453,7 +532,7 @@ function CompletedTodosContent({
             period={period}
             categoryId={categoryId}
             includeSubcategories={includeSubcategories}
-            hasSearch={search !== ''}
+            hasSearch={search !== '' || unsupportedFilter}
             onIncludeSubcategoriesChange={(include) =>
               setDirectOnlyCategoryId(include ? null : categoryId)
             }

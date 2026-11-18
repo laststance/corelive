@@ -10,7 +10,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { useState } from 'react'
 
 import { Category } from '@/app/(main)/home/_components/Category'
@@ -52,6 +52,19 @@ export const AppSidebar = function AppSidebar() {
   const { user } = useUser()
   const isElectron = useIsElectron()
   const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const journalParams = new URLSearchParams()
+  if (pathname === '/home') {
+    // Day-detail and review links should land in the journal with the active filters.
+    for (const key of ['search', 'category', 'filter']) {
+      const value = searchParams.get(key)
+      if (value) journalParams.set(key, value)
+    }
+  }
+  const journalQuery = journalParams.toString()
+  const journalHref = journalQuery
+    ? `/home?${journalQuery}#journal`
+    : '/home#journal'
   const { setOpenMobile } = useSidebar()
   const [manageDialogOpen, setManageDialogOpen] = useState(false)
   const email = user?.emailAddresses?.[0]?.emailAddress
@@ -74,7 +87,7 @@ export const AppSidebar = function AppSidebar() {
                 variant="ghost"
                 className="h-auto w-full justify-start gap-2 p-2 hover:bg-sidebar-accent"
               >
-                <Avatar className="size-6">
+                <Avatar aria-hidden="true" className="size-6">
                   <AvatarImage src={user?.imageUrl} alt="" />
                   <AvatarFallback className="bg-primary text-xs text-primary-foreground">
                     {displayName.charAt(0).toUpperCase()}
@@ -135,7 +148,7 @@ export const AppSidebar = function AppSidebar() {
                   </SidebarMenuItem>
                   <SidebarMenuItem>
                     <SidebarMenuButton asChild>
-                      <Link href="/home#journal" onClick={closeMobileSidebar}>
+                      <Link href={journalHref} onClick={closeMobileSidebar}>
                         <BookOpen className="size-4" />
                         <span>Journal</span>
                       </Link>

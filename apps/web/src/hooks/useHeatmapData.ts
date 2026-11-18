@@ -54,11 +54,10 @@ export function useHeatmapData(days: number = HOME_HEATMAP_DAYS) {
   // locally-rendered grid. Stable per session, so the query key stays stable;
   // an absent/garbage zone makes the server fall back to UTC bucketing.
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
-  const { data, fetchStatus, isPending, isError, isFetching, refetch } =
-    useQuery({
-      ...orpc.completed.heatmap.queryOptions({ input: { days, timezone } }),
-      enabled: isClerkQueryReady,
-    })
+  const { data, isLoading, isError, isPaused, isFetching, refetch } = useQuery({
+    ...orpc.completed.heatmap.queryOptions({ input: { days, timezone } }),
+    enabled: isClerkQueryReady,
+  })
 
   // Keep the calendar-day index stable for the year-in-review effect.
   const { heatmapValues, dataByDate } = useMemo(
@@ -81,8 +80,9 @@ export function useHeatmapData(days: number = HOME_HEATMAP_DAYS) {
     streaks: data?.streaks ?? { current: 0, longest: 0 },
     total: data?.total ?? 0,
     hasData: data !== undefined,
-    isLoading: !isClerkQueryReady || (isPending && fetchStatus !== 'paused'),
-    isError: isError || (data === undefined && fetchStatus === 'paused'),
+    isLoading,
+    isError,
+    isPaused,
     isFetching,
     refetch,
   }

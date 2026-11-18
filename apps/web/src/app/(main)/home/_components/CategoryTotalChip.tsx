@@ -30,7 +30,9 @@ export function CategoryTotalChip({
           getColorDotClass(category.color),
         )}
       />
-      <span className="break-words text-foreground">{category.name}</span>
+      <span className="wrap-anywhere min-w-0 text-foreground">
+        {category.name}
+      </span>
       <span
         className={cn(
           'font-mono tabular-nums text-muted-foreground',
@@ -51,7 +53,7 @@ export function CategoryTotalChip({
     ? 'flex w-full items-center gap-2 text-left text-sm'
     : 'inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-xs'
   return (
-    <li className="max-w-full">
+    <li className="min-w-0 max-w-full">
       {onToggle ? (
         <button
           type="button"

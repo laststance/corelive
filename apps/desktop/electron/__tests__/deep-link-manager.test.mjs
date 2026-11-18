@@ -282,20 +282,48 @@ describe('DeepLinkManager', () => {
       deepLinkManager.initialize()
     })
 
-    test('opens search results in the browser at /home?search=<query>', async () => {
-      // Arrange: a `corelive://search?query=important&filter=pending` deep link.
+    test('opens a completed-task search in the Dashboard', async () => {
+      // Arrange
+      const query = 'important'
 
       // Act
       await deepLinkManager.handleSearchAction({
-        query: 'important',
-        filter: 'pending',
+        query,
+        filter: 'completed',
       })
 
       // Assert: search runs in the Dashboard, not a (now-gone) main renderer.
       expect(mockShell.openExternal).toHaveBeenCalledWith(
-        'https://corelive.app/home?search=important&filter=pending',
+        'https://corelive.app/home?search=important&filter=completed',
       )
     })
+    test.each([
+      [
+        { query: 'x'.repeat(201) },
+        'Shorten your search to 200 characters or fewer.',
+      ],
+      [
+        { query: 'draft', filter: 'pending' },
+        'Dashboard searches completed tasks. Open LiveEditor on your Mac for pending tasks.',
+      ],
+    ])(
+      'explains unsupported searches without opening unrelated results',
+      async (params, message) => {
+        // Arrange
+        const openInBrowser = mockShell.openExternal
+
+        // Act
+        await deepLinkManager.handleSearchAction(params)
+
+        // Assert
+        expect(openInBrowser).not.toHaveBeenCalled()
+        expect(mockNotificationManager.showNotification).toHaveBeenCalledWith(
+          'Dashboard search',
+          message,
+          { type: 'info' },
+        )
+      },
+    )
   })
 
   describe('URL generation', () => {

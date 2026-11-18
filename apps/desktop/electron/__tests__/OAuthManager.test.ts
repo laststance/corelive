@@ -98,23 +98,33 @@ describe('OAuthManager', () => {
   })
 
   test('builds the OAuth start URL from the dev Dashboard origin', () => {
+    // Arrange
     const oauthManager = new OAuthManager(
       createWindowManagerMock('http://localhost:4991') as never,
       null,
     )
 
-    expect(oauthManager.buildOAuthURL('google', 'state_123')).toBe(
+    // Act
+    const url = oauthManager.buildOAuthURL('google', 'state_123')
+
+    // Assert
+    expect(url).toBe(
       'http://localhost:4991/oauth/start?provider=google&state=state_123',
     )
   })
 
   test('builds the OAuth start URL from the production Dashboard origin', () => {
+    // Arrange
     const oauthManager = new OAuthManager(
       createWindowManagerMock('https://corelive.app') as never,
       null,
     )
 
-    expect(oauthManager.buildOAuthURL('google', 'state_456')).toBe(
+    // Act
+    const url = oauthManager.buildOAuthURL('google', 'state_456')
+
+    // Assert
+    expect(url).toBe(
       'https://corelive.app/oauth/start?provider=google&state=state_456',
     )
   })

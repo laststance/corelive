@@ -358,6 +358,7 @@ function CategorySidebarRow({
   const isConfirmed = category.id > 0
   const isActive = isConfirmed && activeCategory === String(category.id)
   const params = new URLSearchParams(searchParams)
+  params.delete('date')
   params.set('category', String(category.id))
   const content = (
     <>

@@ -36,9 +36,8 @@ interface SundayDigestCardProps {
   /** Per-day heatmap entries from `useHeatmapData()` — same Map the
    * WeeklySummaryCard reads, so no extra fetch. */
   dataByDate: Map<string, HeatmapDay>
-  /** Loading sentinel from `useHeatmapData`. The card stays hidden while
-   * the query is in-flight so the digest never shows zero-and-then-real. */
-  isLoading?: boolean
+  /** Hide the recap until activity is available, retaining this Sunday’s dismissal. */
+  hidden?: boolean
   /** Optional injection for tests. Production callers leave undefined. */
   now?: Date
 }
@@ -177,11 +176,11 @@ function localSundayIso(now: Date): string {
  * the local Sunday's ISO date. Next Sunday gets a fresh key automatically.
  *
  * @example
- * <SundayDigestCard dataByDate={dataByDate} isLoading={isLoading} />
+ * <SundayDigestCard dataByDate={dataByDate} hidden={!activity.hasData} />
  */
 export const SundayDigestCard = function SundayDigestCard({
   dataByDate,
-  isLoading,
+  hidden,
   now,
 }: SundayDigestCardProps) {
   const isMounted = useMounted()
@@ -217,7 +216,7 @@ export const SundayDigestCard = function SundayDigestCard({
   }
 
   if (!isMounted) return null
-  if (isLoading) return null
+  if (hidden) return null
   if (!isSunday) return null
   if (dismissed) return null
   // Note: an empty `dataByDate` does NOT suppress the card — a fully
