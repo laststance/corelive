@@ -4,19 +4,21 @@ The owner selected the section menu after comparing five working layouts at the 
 
 ## Implementation
 
-The desktop renderer owns the section menu in `apps/desktop/renderer/settings/SettingsNavigation.tsx`. The existing section components retain their state while hidden. Sync details returns to the Account heading. The account completion notice is acknowledged when its section is shown.
+Switching sections preserves pending edits. Back from Sync details returns focus to the Account heading. When the native Settings window hides, the renderer receives a `window.settingsAPI.onHidden` notification and resets to the top of Application for the next visit.
+
+If another window covers Settings, the selected section stays selected. Account acknowledges the first-upload notice and restores pending focus only when both the Account pane and the document are visible.
 
 ## Comparison
 
-| Layout                  | Decision |
-| ----------------------- | -------- |
-| Pinned headings         | Archived |
-| Section menu            | Selected |
-| Horizontal tabs         | Archived |
-| Expandable sections     | Archived |
-| Section list and detail | Archived |
+| Layout                  | At the default 360 × 380 window size                       | Decision |
+| ----------------------- | ---------------------------------------------------------- | -------- |
+| Pinned headings         | Reaching a distant section takes a long scroll.            | Archived |
+| Section menu            | Shows the current section and opens all seven in one menu. | Selected |
+| Horizontal tabs         | The last tab names require horizontal scrolling.           | Archived |
+| Expandable sections     | Expanded controls push later sections below the fold.      | Archived |
+| Section list and detail | Switching sections takes a trip back to the list.          | Archived |
 
-The local comparison is in `_trials/COMPARISON.md`. Each alternative under `_trials/_archived/` includes a standalone HTML preview, a screenshot, and a recording. Its HTML embeds the styles, renderer and sample data.
+The owner saved the five interactive previews and screenshots in their local Product Inspiration archive. Each HTML preview includes its styles, renderer and sample data.
 
 ## References
 

@@ -98,9 +98,10 @@ export function AccountSection({
     const was = previousSignIn.current
     previousSignIn.current = account.signIn
     if (was === 'in-progress' && account.signIn !== 'in-progress')
-      headingRef.current?.focus()
+      pendingFocus.current ??= 'heading'
     const want = pendingFocus.current
-    if (!want) return
+    // Keep the request until Account is visible and its target can take focus.
+    if (!visible || !want) return
     const target = {
       heading: headingRef.current,
       'sign-in': signInRef.current,
@@ -109,7 +110,7 @@ export function AccountSection({
     }[want]
     if (target) {
       target.focus()
-      pendingFocus.current = null
+      if (document.activeElement === target) pendingFocus.current = null
     }
   })
 

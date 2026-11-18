@@ -36,6 +36,7 @@ test('opens Settings with Application and the Dock icon switch first, with Accou
     'Account',
   ])
   const application = screen.getByRole('region', { name: 'Application' })
+  expect(application).toBeVisible()
   expect(within(application).getAllByRole('switch')[0]).toHaveAccessibleName(
     'Hide App Icon',
   )
@@ -155,11 +156,15 @@ test('opens Sync details from Account, hides the Settings sections behind it, an
     account: { needsALookCount: 2 },
   })
 
+  const menu = screen.getByRole('combobox', {
+    name: 'Current settings section',
+  })
+  await user.selectOptions(menu, 'Account')
+  const account = screen.getByRole('region', { name: 'Account' })
+  expect(menu).toBeVisible()
+  expect(account).toBeVisible()
+
   // Act
-  await user.selectOptions(
-    screen.getByRole('combobox', { name: 'Current settings section' }),
-    'Account',
-  )
   await user.click(
     screen.getByRole('button', { name: '2 changes need a look' }),
   )
@@ -168,7 +173,8 @@ test('opens Sync details from Account, hides the Settings sections behind it, an
   expect(
     await screen.findByRole('heading', { name: 'Needs a look' }),
   ).toBeVisible()
-  expect(screen.queryByRole('heading', { name: 'Application' })).toBeNull()
+  expect(menu).not.toBeVisible()
+  expect(account).not.toBeVisible()
 
   // Act
   await user.click(screen.getByRole('button', { name: /Back to Settings/ }))
@@ -257,4 +263,100 @@ test('preserves an upload notice that arrives while Sync details covers Account'
   await waitFor(() =>
     expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalledOnce(),
   )
+})
+
+test('reopens on Application after dismissing Sync details and preserves the Dock preference', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  const { fake } = await renderWithSettings(<ElectronSettingsPage />, {
+    account: { needsALookCount: 2 },
+  })
+  const menu = screen.getByRole('combobox', {
+    name: 'Current settings section',
+  })
+  await user.click(screen.getByRole('switch', { name: 'Hide App Icon' }))
+  await user.selectOptions(menu, 'Account')
+  await user.click(
+    screen.getByRole('button', { name: '2 changes need a look' }),
+  )
+  expect(
+    await screen.findByRole('heading', { name: 'Needs a look' }),
+  ).toBeVisible()
+
+  // Act
+  act(() => fake.hideWindow())
+
+  // Assert
+  expect(menu).toBeVisible()
+  expect(menu).toHaveValue('Application')
+  expect(screen.getByRole('switch', { name: 'Hide App Icon' })).toBeChecked()
+})
+
+test('keeps an upload pending until Account is visible after the Settings window reopens', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  const { fake } = await renderWithSettings(<ElectronSettingsPage />, {
+    account: { state: 'attached' },
+  })
+  const menu = screen.getByRole('combobox', {
+    name: 'Current settings section',
+  })
+  await user.selectOptions(menu, 'Account')
+
+  // Act
+  act(() => fake.hideWindow())
+  await act(async () =>
+    fake.setAccount({ firstUpload: { state: 'done', count: 3 } }),
+  )
+
+  // Assert
+  expect(menu).toHaveValue('Application')
+  expect(fake.api.account.acknowledgeFirstUpload).not.toHaveBeenCalled()
+
+  // Act
+  await user.selectOptions(menu, 'Account')
+
+  // Assert
+  expect(screen.getByText('3 keeps are on your dashboard')).toBeVisible()
+  expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalledOnce()
+})
+
+test('resumes the Account notice on uncovering Settings without changing its selected section', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  const { fake } = await renderWithSettings(<ElectronSettingsPage />, {
+    account: { state: 'attached' },
+  })
+  const menu = screen.getByRole('combobox', {
+    name: 'Current settings section',
+  })
+  await user.selectOptions(menu, 'Account')
+  const visibility = vi.spyOn(document, 'visibilityState', 'get')
+
+  try {
+    // Act
+    visibility.mockReturnValue('hidden')
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    await act(async () =>
+      fake.setAccount({ firstUpload: { state: 'done', count: 3 } }),
+    )
+
+    // Assert
+    expect(fake.api.account.acknowledgeFirstUpload).not.toHaveBeenCalled()
+
+    // Act
+    visibility.mockReturnValue('visible')
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+
+    // Assert
+    expect(menu).toHaveValue('Account')
+    expect(screen.getByText('3 keeps are on your dashboard')).toBeVisible()
+    expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalledOnce()
+  } finally {
+    visibility.mockRestore()
+  }
 })

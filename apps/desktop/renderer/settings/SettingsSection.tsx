@@ -1,7 +1,7 @@
 import * as React from 'react'
 
 import {
-  useSettingsSectionVisible,
+  useSettingsSectionSelected,
   type SettingsSectionName,
 } from './SettingsNavigation'
 
@@ -36,11 +36,11 @@ export const SettingsSection = function SettingsSection({
   /** Lets a caller move focus to the heading (DA14: focus returns to the Account heading). */
   headingRef?: React.Ref<HTMLHeadingElement>
 }): React.ReactNode {
-  const visible = useSettingsSectionVisible(label)
+  const selected = useSettingsSectionSelected(label)
   const headingId = id ?? slugifySectionId(label)
   return (
     <section
-      hidden={!visible}
+      hidden={!selected}
       aria-labelledby={headingId}
       className="settings-section space-y-6"
     >

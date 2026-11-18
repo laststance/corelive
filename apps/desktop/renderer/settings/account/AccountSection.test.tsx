@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event'
 import { useRef } from 'react'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
+import { ElectronSettingsPage } from '../ElectronSettingsPage'
 import { renderWithSettings } from '../settingsTestkit'
 
 import { AccountSection } from './AccountSection'
@@ -301,6 +302,65 @@ test('signing out shows a disabled "Signing out…" while it runs, then state C 
   expect(
     screen.getByText(/This Mac syncs with/).closest('p'),
   ).toHaveTextContent('This Mac syncs with raphtalia@example.com.')
+})
+
+test('returning to Account focuses Sign in when sign-out completed in another section', async () => {
+  // Arrange
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+  const { fake } = await renderWithSettings(<ElectronSettingsPage />, {
+    account: ATTACHED,
+  })
+  const menu = screen.getByRole('combobox', {
+    name: 'Current settings section',
+  })
+  await user.selectOptions(menu, 'Account')
+  let finishSignOut!: () => void
+  fake.api.account.signOut.mockImplementation(
+    async () =>
+      new Promise((resolve) => {
+        finishSignOut = (): void => resolve({ status: 'signed-out' })
+      }),
+  )
+  await user.click(screen.getByRole('button', { name: 'Sign out' }))
+  await user.click(
+    within(screen.getByRole('group', { name: 'Confirm sign out' })).getByRole(
+      'button',
+      { name: 'Sign out' },
+    ),
+  )
+
+  // Act
+  await user.selectOptions(menu, 'Application')
+  await act(async () => {
+    fake.setAccount({ state: 'signed-out' })
+    finishSignOut()
+  })
+
+  // Assert
+  expect(menu).toHaveFocus()
+  await user.selectOptions(menu, 'Account')
+  expect(screen.getByRole('button', { name: 'Sign in' })).toHaveFocus()
+})
+
+test('returning to Account focuses its heading when the sign-in window closed in another section', async () => {
+  // Arrange
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+  const { fake } = await renderWithSettings(<ElectronSettingsPage />, {
+    account: { signIn: 'in-progress' },
+  })
+  const menu = screen.getByRole('combobox', {
+    name: 'Current settings section',
+  })
+  await user.selectOptions(menu, 'Account')
+  await user.selectOptions(menu, 'Application')
+
+  // Act
+  await act(async () => fake.setAccount({ signIn: 'idle' }))
+
+  // Assert
+  expect(menu).toHaveFocus()
+  await user.selectOptions(menu, 'Account')
+  expect(screen.getByRole('heading', { name: 'Account' })).toHaveFocus()
 })
 
 test('a residual sign-in cookie shows the cleanup note instead of plain success, and Clear again completes it', async () => {

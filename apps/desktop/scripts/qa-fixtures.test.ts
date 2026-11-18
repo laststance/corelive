@@ -114,7 +114,7 @@ describe('qa:offline-editor CLI contract', () => {
 })
 
 describe('qa:settings CLI contract', () => {
-  test('--help lists all 15 states from the one shared list', () => {
+  test('--help lists all 15 settings states', () => {
     // Arrange + Act
     const result = runDesktopScript('scripts/qa-settings.ts', ['--help'], {
       QA_FIXTURE_DIST: join(scratch, 'no-build'),
@@ -200,7 +200,7 @@ describe.skipIf(!existsSync(builtSettings))(
       }
     }
 
-    test('every state name renders its ready text and an unknown one renders the alert and the error object', async () => {
+    test('the fixture opens on Application, renders each named state and reports unknown states', async () => {
       // Arrange
       const require = createRequire(import.meta.url)
       const playwright = createRequire(
@@ -215,6 +215,17 @@ describe.skipIf(!existsSync(builtSettings))(
           outside.push(request.url())
       })
       try {
+        // Opening the printed URL must show the same first control as the app.
+        await page.goto(server.first.url)
+        await page
+          .getByRole('switch', { name: 'Hide App Icon' })
+          .waitFor({ state: 'visible', timeout: 10_000 })
+        expect(
+          await page
+            .getByRole('combobox', { name: 'Current settings section' })
+            .inputValue(),
+        ).toBe('Application')
+
         // Act + Assert: each state shows its ready text
         expect(server.first.states).toHaveLength(15)
         for (const state of SETTINGS_FIXTURE_STATES) {
@@ -263,6 +274,7 @@ interface PlaywrightCore {
 }
 interface LocatorLike {
   first: () => LocatorLike
+  inputValue: () => Promise<string>
   waitFor: (options?: { state?: 'visible'; timeout?: number }) => Promise<void>
   textContent: () => Promise<string | null>
 }
@@ -273,7 +285,10 @@ interface PageLike {
   ) => void
   goto: (url: string) => Promise<unknown>
   getByText: (text: string) => LocatorLike
-  getByRole: (role: 'alert') => LocatorLike
+  getByRole: (
+    role: 'alert' | 'combobox' | 'switch',
+    options?: { name: string },
+  ) => LocatorLike
   evaluate: <T>(callback: () => T) => Promise<T>
 }
 

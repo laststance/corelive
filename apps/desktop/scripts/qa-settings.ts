@@ -94,6 +94,7 @@ if (!spec) {
     platform: 'darwin',
     snapshot: async () => ({ phase:'ready', generation:1, preferences: structuredClone(stored), categories:[GENERAL], account }),
     onChanged: (listener) => { listeners.add(listener); return () => listeners.delete(listener); },
+    onHidden: (listener) => { window.addEventListener('settings-window-hidden', listener); return () => window.removeEventListener('settings-window-hidden', listener); },
     preferences: { patch: async (_generation, command) => {
       if (command.expectedRevision !== stored.revision) return { ok:false, reason:'revision-conflict' };
       Object.assign(stored.settings, command.patch);

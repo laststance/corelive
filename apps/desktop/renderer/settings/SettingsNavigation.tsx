@@ -9,7 +9,12 @@ import {
   Palette,
   Settings2,
 } from 'lucide-react'
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  useContext,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react'
 
 const sections = [
   { name: 'Application', icon: AppWindow },
@@ -28,36 +33,59 @@ const CurrentSection = createContext<SettingsSectionName | 'standalone' | null>(
 )
 
 /**
- * Lets a section and its effects distinguish a visible pane from a mounted, hidden pane.
- * A section rendered individually is visible by default.
+ * Keeps each mounted section in the layout only while its menu entry is selected.
+ *
+ * @example
+ * const selected = useSettingsSectionSelected('Account')
+ */
+export function useSettingsSectionSelected(name: SettingsSectionName): boolean {
+  const current = useContext(CurrentSection)
+  return current === 'standalone' || name === current
+}
+
+// Electron also reports occlusion on macOS, which should pause visible-only effects without ending the visit.
+function subscribeToVisibility(onChange: () => void): () => void {
+  document.addEventListener('visibilitychange', onChange)
+  return (): void => document.removeEventListener('visibilitychange', onChange)
+}
+
+/**
+ * Guards effects that consume notices or move focus while the selected section can be seen.
+ * An occluded macOS window retains its selected section and scroll position.
  *
  * @example
  * const visible = useSettingsSectionVisible('Account')
  */
 export function useSettingsSectionVisible(name: SettingsSectionName): boolean {
-  const current = useContext(CurrentSection)
-  return current === 'standalone' || name === current
+  const selected = useSettingsSectionSelected(name)
+  const documentVisible = useSyncExternalStore(
+    subscribeToVisibility,
+    () => document.visibilityState !== 'hidden',
+  )
+  return selected && documentVisible
 }
 
 /**
  * Keeps the current section visible in the bundled Settings window and retains its children's state.
- * Opening a new window starts in Application.
+ * A null section means Sync details covers those controls.
  *
  * @example
- * <SettingsNavigation><SettingsSection label="Application">{controls}</SettingsSection></SettingsNavigation>
+ * <SettingsNavigation section={section} onSelect={setSection}>{controls}</SettingsNavigation>
  */
 export function SettingsNavigation({
   children,
-  hidden = false,
+  section,
+  onSelect,
 }: {
   children: ReactNode
-  hidden?: boolean
+  section: SettingsSectionName | null
+  onSelect: (section: SettingsSectionName) => void
 }) {
-  const [selected, setSelected] = useState<Section>(sections[0])
+  const selected = sections.find(({ name }) => name === section) ?? sections[0]
   const Icon = selected.icon
   return (
-    <CurrentSection value={hidden ? null : selected.name}>
-      <div hidden={hidden}>
+    <CurrentSection value={section}>
+      <div hidden={section === null}>
         <nav
           aria-label="Settings sections"
           className="sticky top-0 z-10 -mx-4 mb-4 flex items-center gap-2 border-b bg-background px-4 py-2 text-sm font-medium"
@@ -79,7 +107,7 @@ export function SettingsNavigation({
               onChange={(event) => {
                 const section = sections[event.currentTarget.selectedIndex]
                 if (section) {
-                  setSelected(section)
+                  onSelect(section.name)
                   window.scrollTo(0, 0)
                 }
               }}

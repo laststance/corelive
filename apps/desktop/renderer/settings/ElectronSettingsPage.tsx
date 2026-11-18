@@ -1,3 +1,4 @@
+import { useCycleEffect } from '@corelive/live-editor/hooks/use-cycle-effect'
 import { Button } from '@corelive/live-editor/ui/button'
 import { Label } from '@corelive/live-editor/ui/label'
 import { ThemeSelector } from '@corelive/live-editor/ui/ThemeSelector'
@@ -16,7 +17,11 @@ import {
   PanelToggle,
   VISIBLE_ON_ALL_WORKSPACES_SETTING,
 } from './PanelToggle'
-import { SettingsNavigation } from './SettingsNavigation'
+import {
+  SettingsNavigation,
+  type SettingsSectionName,
+} from './SettingsNavigation'
+import { useSettings } from './SettingsProvider'
 import { SettingsSection } from './SettingsSection'
 import { ShortcutOpeningSoundSetting } from './ShortcutOpeningSoundSetting'
 import { TodayEmberSetting } from './TodayEmberSetting'
@@ -67,14 +72,26 @@ const saveStartAtLogin = async (enabled: boolean): Promise<boolean> =>
  * <SettingsProvider api={api}><ElectronSettingsPage /></SettingsProvider>
  */
 export const ElectronSettingsPage = function ElectronSettingsPage() {
+  const { api } = useSettings()
   const themePersistence = useThemePersistence()
   const [isResettingPopoverSize, startResetSizeTransition] = useTransition()
-  const [view, setView] = useState<'settings' | 'sync-details'>('settings')
+  const [view, setView] = useState<SettingsSectionName | 'sync-details'>(
+    'Application',
+  )
   const accountHeadingRef = useRef<HTMLHeadingElement>(null)
+
+  useCycleEffect(
+    () =>
+      api.onHidden(() => {
+        setView('Application')
+        window.scrollTo(0, 0)
+      }),
+    [api],
+  )
 
   /** Back to Settings returns focus to the Account heading, where the link lives (DA14). */
   const showSettings = (): void => {
-    setView('settings')
+    setView('Account')
     requestAnimationFrame(() => accountHeadingRef.current?.focus())
   }
 
@@ -91,7 +108,10 @@ export const ElectronSettingsPage = function ElectronSettingsPage() {
   return (
     <>
       {view === 'sync-details' && <SyncDetailsPage onBack={showSettings} />}
-      <SettingsNavigation hidden={view !== 'settings'}>
+      <SettingsNavigation
+        section={view === 'sync-details' ? null : view}
+        onSelect={setView}
+      >
         <LiveEditorSettings>
           {({ opacity, shortcuts, config }) => (
             <>
