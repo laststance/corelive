@@ -68,7 +68,7 @@ export function AccountSection({
   const [now, setNow] = useState(() => Date.now())
   // Keep the displayed line for this visit after main clears its pending notice.
   const [uploadDone, setUploadDone] = useState<number | null>(null)
-  const acknowledgedUpload = useRef<number | null>(null)
+  const uploadAcknowledgement = useRef<{ count: number } | null>(null)
   const signInRef = useRef<HTMLButtonElement>(null)
   const signOutRef = useRef<HTMLButtonElement>(null)
   const cancelRef = useRef<HTMLButtonElement>(null)
@@ -95,15 +95,23 @@ export function AccountSection({
     account.signIn !== 'in-progress'
   useCycleEffect(() => {
     // A stale snapshot can outlive a window hide while main broadcasts the acknowledgement.
-    if (uploadCount === null) acknowledgedUpload.current = null
-    else if (showAccountStatus && acknowledgedUpload.current !== uploadCount) {
+    if (uploadCount === null) uploadAcknowledgement.current = null
+    else if (
+      showAccountStatus &&
+      uploadAcknowledgement.current?.count !== uploadCount
+    ) {
       if (uploadDone !== uploadCount) {
         setUploadDone(uploadCount)
         return
       }
       // The completion line is now in the visible Account pane.
-      acknowledgedUpload.current = uploadCount
-      void api.account.acknowledgeFirstUpload()
+      const attempt = { count: uploadCount }
+      uploadAcknowledgement.current = attempt
+      void api.account.acknowledgeFirstUpload().catch(() => {
+        // Retry on the next visible visit. A late failure cannot clear a newer request.
+        if (uploadAcknowledgement.current === attempt)
+          uploadAcknowledgement.current = null
+      })
     }
   }, [api, showAccountStatus, uploadCount, uploadDone])
 

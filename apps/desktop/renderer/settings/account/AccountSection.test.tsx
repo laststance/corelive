@@ -222,6 +222,8 @@ test('the first-upload notice lasts through section changes and disappears on th
   fake.api.account.acknowledgeFirstUpload.mockImplementation(async () => {
     fake.setAccount({ firstUpload: null })
   })
+  expect(menu).toHaveValue('Application')
+  expect(fake.api.account.acknowledgeFirstUpload).not.toHaveBeenCalled()
 
   // Act
   await user.selectOptions(menu, 'Account')
@@ -271,6 +273,56 @@ test('an acknowledged upload stays dismissed when Settings reopens before the cl
   // Assert
   expect(screen.queryByText('7 keeps are on your dashboard')).toBeNull()
   expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalledOnce()
+})
+
+test('Account retries a failed upload acknowledgement on its next visit without duplicating pending requests', async () => {
+  // Arrange
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+  const { fake } = await renderWithSettings(<ElectronSettingsPage />, {
+    account: { ...ATTACHED, firstUpload: { state: 'done', count: 7 } },
+  })
+  const menu = screen.getByRole('combobox', {
+    name: 'Current settings section',
+  })
+  let failFirstAttempt!: () => void
+  const acknowledge = fake.api.account.acknowledgeFirstUpload
+  acknowledge.mockImplementationOnce(
+    async () =>
+      new Promise<void>((_, reject) => {
+        failFirstAttempt = (): void => reject(new Error('IPC unavailable'))
+      }),
+  )
+
+  // Act
+  await user.selectOptions(menu, 'Account')
+  await user.selectOptions(menu, 'Application')
+  await user.selectOptions(menu, 'Account')
+
+  // Assert
+  expect(acknowledge).toHaveBeenCalledOnce()
+
+  // Act
+  await act(async () => failFirstAttempt())
+
+  // Assert
+  expect(screen.getByText('7 keeps are on your dashboard')).toBeVisible()
+  expect(acknowledge).toHaveBeenCalledOnce()
+
+  // Act
+  act(() => fake.hideWindow())
+  await user.selectOptions(menu, 'Account')
+
+  // Assert
+  expect(screen.getByText('7 keeps are on your dashboard')).toBeVisible()
+  expect(acknowledge).toHaveBeenCalledTimes(2)
+
+  // Act
+  act(() => fake.hideWindow())
+  await user.selectOptions(menu, 'Account')
+
+  // Assert
+  expect(screen.queryByText('7 keeps are on your dashboard')).toBeNull()
+  expect(acknowledge).toHaveBeenCalledTimes(2)
 })
 
 test('Open dashboard asks main to open it without supplying an address', async () => {
