@@ -45,7 +45,7 @@ const HEATMAP_RIBBON_CELLS = [
  * @returns
  * - A desktop-only notice in a plain browser tab
  * - "Loading…" until Clerk resolves
- * - The signed-out front door: native OAuth buttons, or a web-app fallback when a frozen preload lacks the oauth bridge
+ * - The signed-out front door: native OAuth buttons, or a Dashboard fallback when a frozen preload lacks the oauth bridge
  * - A signed-in placeholder
  * @example
  * <LoginShell />
@@ -160,7 +160,8 @@ export const LoginShell = function LoginShell() {
           <ElectronOAuthButtons />
         ) : (
           <p className="text-sm text-muted-foreground">
-            Sign in from the CoreLive web app, then reopen this window.
+            Sign in to CoreLive Dashboard in your browser, then reopen this
+            window.
           </p>
         )}
       </div>

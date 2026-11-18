@@ -326,3 +326,6 @@ export const DEEP_LINK_PROTOCOL = 'corelive'
  * reject instead of keeping the runner alive after the dev Electron exited.
  */
 export const LAUNCH_SERVICES_OSASCRIPT_TIMEOUT_MS = 5000
+
+/** Search length accepted by Dashboard journal queries and macOS search links. */
+export const COMPLETED_JOURNAL_SEARCH_MAX_LENGTH = 200

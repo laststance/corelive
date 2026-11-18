@@ -299,14 +299,109 @@ describeIfDb('completed.journal (permanent win journal)', () => {
     expect(secondPage.nextOffset).toBeUndefined()
   })
 
-  test('filters both completion sources by a half-open period and category before pagination', async () => {
+  test('paginates literal search matches across both sources even when stored titles contain line breaks', async () => {
+    // Arrange
+    const clerkId = freshClerkId()
+    await seedCompletedRowAt(
+      clerkId,
+      'Imported RELE\r\nASE_50% milestone',
+      new Date('2024-05-14T09:00:00.000Z'),
+    )
+    await seedTodoCompletionAt(
+      clerkId,
+      'Finish rele\rase_50% update',
+      new Date('2026-05-14T09:00:00.000Z'),
+    )
+    await seedCompletedRowAt(
+      clerkId,
+      'Imported release 50% milestone',
+      new Date('2026-05-14T10:00:00.000Z'),
+    )
+    await seedTodoCompletionAt(
+      clerkId,
+      'Finish release_500 update',
+      new Date('2026-05-14T11:00:00.000Z'),
+    )
+    await seedCompletedRowAt(
+      freshClerkId(),
+      'Another account’s release_50%',
+      new Date('2026-05-14T12:00:00.000Z'),
+    )
+
+    // Act
+    const context = authContext(clerkId)
+    const firstPage = await call(
+      getJournal,
+      { search: '  Rele\nase_50%  ', limit: 1 },
+      context,
+    )
+    const secondPage = await call(
+      getJournal,
+      { search: 'Release_50%', limit: 1, offset: 1 },
+      context,
+    )
+    const emptyPage = await call(
+      getJournal,
+      { search: 'Unknown milestone' },
+      context,
+    )
+
+    // Assert
+    expect(firstPage).toMatchObject({
+      entries: [{ title: 'Finish rele\rase_50% update', source: 'todo' }],
+      total: 2,
+      hasMore: true,
+      nextOffset: 1,
+    })
+    expect(secondPage).toMatchObject({
+      entries: [
+        { title: 'Imported RELE\r\nASE_50% milestone', source: 'completed' },
+      ],
+      total: 2,
+      hasMore: false,
+      nextOffset: undefined,
+    })
+    expect(emptyPage).toEqual({
+      entries: [],
+      total: 0,
+      hasMore: false,
+      nextOffset: undefined,
+    })
+  })
+
+  test('matches Greek sigma and final sigma without changing the returned title', async () => {
+    // Arrange
+    const owner = freshClerkId()
+    await seedCompletedRowAt(owner, 'κόσμος', new Date('2026-05-14T09:00:00Z'))
+    await seedTodoCompletionAt(
+      owner,
+      'κόσμοσ',
+      new Date('2026-05-15T09:00:00Z'),
+    )
+
+    // Act
+    const result = await call(
+      getJournal,
+      { search: 'κόσμοΣ' },
+      authContext(owner),
+    )
+
+    // Assert
+    expect(result.total).toBe(2)
+    expect(result.entries.map((entry) => entry.title)).toEqual([
+      'κόσμοσ',
+      'κόσμος',
+    ])
+  })
+
+  test('combines title search with a half-open period and category before pagination', async () => {
     // Arrange — create the real user/default category through the import path,
     // then add a second category with rows on each date boundary and source.
     const clerkId = freshClerkId()
     await seedCompletedRowAt(
       clerkId,
-      'outside before period',
-      new Date('2026-05-31T23:59:59.999Z'),
+      'focus other category inside period',
+      new Date('2026-06-20T08:00:00.000Z'),
     )
     const user = requireRow(
       await db
@@ -327,19 +422,6 @@ describeIfDb('completed.journal (permanent win journal)', () => {
         .returning(),
       'category.insert',
     )
-    const generalCategory = requireRow(
-      await db
-        .select()
-        .from(categoryTable)
-        .where(
-          and(
-            eq(categoryTable.userId, user.id),
-            eq(categoryTable.isDefault, true),
-          ),
-        )
-        .limit(1),
-      'category.select',
-    )
     await db.insert(completedTable).values([
       {
         title: 'focus lower boundary',
@@ -348,9 +430,15 @@ describeIfDb('completed.journal (permanent win journal)', () => {
         userId: user.id,
       },
       {
-        title: 'other category inside period',
+        title: 'focus before period',
+        completedAt: new Date('2026-05-31T23:59:59.999Z'),
+        categoryId: focusCategory.id,
+        userId: user.id,
+      },
+      {
+        title: 'unrelated win',
         completedAt: new Date('2026-06-20T08:00:00.000Z'),
-        categoryId: generalCategory.id,
+        categoryId: focusCategory.id,
         userId: user.id,
       },
       {
@@ -376,6 +464,7 @@ describeIfDb('completed.journal (permanent win journal)', () => {
         categoryId: focusCategory.id,
         completedFrom: new Date('2026-06-01T00:00:00.000Z'),
         completedBefore: new Date('2026-07-01T00:00:00.000Z'),
+        search: 'focus',
       },
       authContext(clerkId),
     )

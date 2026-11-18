@@ -47,7 +47,7 @@ const rendererReadableConfigPathSchema = z
  * channel to `types/ipc.ts` without a schema is a compile error.
  *
  * Why validate at the main boundary:
- *   Renderer processes can be compromised (e.g., via XSS on the web app shell).
+ *   Renderer processes can be compromised (e.g., via XSS on the Dashboard shell).
  *   Trusting renderer-supplied payloads with DB/FS access is an OWASP-level risk.
  *   Electron's official security checklist item #17 requires validating IPC senders and payloads.
  *

@@ -6,7 +6,7 @@ import type { ReactElement } from 'react'
 import { useNextThemesPersistence } from '@/hooks/useThemeAxis'
 
 /**
- * The web dashboard's only Settings section: the dashboard theme.
+ * Lets users choose a theme for the Dashboard.
  *
  * Desktop preferences (LiveEditor, shortcuts, application, categories, updates, account) live in
  * the bundled Settings window since #216 D5, so `/settings` keeps just Appearance. Rendered by the

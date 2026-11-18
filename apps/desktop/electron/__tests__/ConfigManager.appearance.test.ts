@@ -34,7 +34,7 @@ describe('ConfigManager appearance config', () => {
     fs.rmSync(userDataDir.current, { recursive: true, force: true })
   })
 
-  test('does not carry a native theme or accent color — the web app owns theme via localStorage', () => {
+  test('does not carry a native theme or accent color', () => {
     // Arrange
     const configManager = new ConfigManager()
 

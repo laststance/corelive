@@ -1,18 +1,19 @@
 'use client'
 
 import HeatMap, { type HeatMapValue } from '@uiw/react-heat-map'
+import { differenceInCalendarDays } from 'date-fns'
 import { useSearchParams } from 'next/navigation'
 import * as React from 'react'
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
 } from '@/components/ui/card'
 import {
   Tooltip,
@@ -22,11 +23,12 @@ import {
 } from '@/components/ui/tooltip'
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { useUpdateEffect } from '@/hooks/use-update-effect'
-import { useHeatmapData } from '@/hooks/useHeatmapData'
-import type { HeatmapDay } from '@/hooks/useHeatmapData'
+import type { HeatmapDay, useHeatmapData } from '@/hooks/useHeatmapData'
+import { useLocalDayKey } from '@/hooks/useLocalDayKey'
 import { buildDateSyncUrl } from '@/lib/buildDateSyncUrl'
 import { calcMonthlyMaxDates } from '@/lib/calcMonthlyMaxDates'
 import { HEATMAP_TOP_PAD_PX } from '@/lib/constants/heatmap'
+import { MAC_DOWNLOAD_URL } from '@/lib/constants/macDownload'
 import {
   HEATMAP_CATHEDRAL_MIN,
   HEATMAP_FULL_DAY_MIN,
@@ -39,7 +41,6 @@ import { DayDetailInputSchema } from '@/server/schemas/completed'
 import { DayDetailDialog } from './DayDetailDialog'
 
 /** Milliseconds in a single day. */
-const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000
 
 /** Number of days displayed in a week column. */
 const DAYS_IN_WEEK = 7
@@ -136,12 +137,32 @@ const CategoryBreakdown = function CategoryBreakdown({
  * Hover affirms completed work and names empty days as rest.
  *
  * @example
- * <ContributionGraph />
+ * <ContributionGraph activity={heatmap} />
  */
-export const ContributionGraph = function ContributionGraph() {
-  const { heatmapValues, dataByDate, total, isLoading } = useHeatmapData()
+export const ContributionGraph = function ContributionGraph({
+  activity,
+}: {
+  activity: ReturnType<typeof useHeatmapData>
+}) {
+  const {
+    heatmapValues,
+    dataByDate,
+    total,
+    hasData,
+    throughDate,
+    isCurrentDay,
+    isLoading,
+    isError,
+    isPaused,
+    isFetching,
+    refetch,
+  } = activity
+  const activityHeadingRef = useRef<HTMLHeadingElement>(null)
+  const today = useLocalDayKey()
+  const showHeatmap = throughDate !== undefined && total > 0
+  const showSnapshotNotice = hasData && !isCurrentDay && !isError && !isPaused
   const containerRef = useRef<HTMLDivElement>(null)
-  const containerWidth = useObservedElementWidth(containerRef, !isLoading)
+  const containerWidth = useObservedElementWidth(containerRef, showHeatmap)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   // `?date=YYYY-MM-DD` deep-link (INBOUND): validated via the same Zod schema
   // the server uses for `getDayDetail`, so invalid input is rejected with the
@@ -190,11 +211,11 @@ export const ContributionGraph = function ContributionGraph() {
       selectedDate,
     )
     if (nextUrl !== window.location.pathname + window.location.search) {
-      window.history.replaceState(null, '', nextUrl)
+      window.history.replaceState(null, '', nextUrl + window.location.hash)
     }
   }, [selectedDate])
 
-  const endDate = normalizeDate(new Date())
+  const endDate = new Date(`${throughDate ?? today}T00:00:00`)
   const startDate = getAlignedHeatmapStartDate(endDate)
 
   const weekCount = getHeatmapWeekCount(startDate, endDate)
@@ -287,66 +308,121 @@ export const ContributionGraph = function ContributionGraph() {
     if (!open) setSelectedDate(null)
   }
 
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            Activity
-          </CardTitle>
-          <CardDescription>Loading activity data...</CardDescription>
-        </CardHeader>
-      </Card>
-    )
-  }
-
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          Activity
-          <Badge variant="secondary">{total} completed</Badge>
-        </CardTitle>
-        <CardDescription>Task completions in the last year</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div ref={containerRef} className="overflow-x-auto pb-1">
-          <TooltipProvider delayDuration={100}>
-            <HeatMap
-              value={heatmapValues}
-              startDate={startDate}
-              endDate={endDate}
-              weekLabels={WEEK_LABELS}
-              panelColors={PANEL_COLORS}
-              legendCellSize={0}
-              rectSize={heatmapLayout.rectSize}
-              space={HEATMAP_SPACE}
-              height={heatmapLayout.height}
-              width={heatmapLayout.width}
-              style={heatmapStyle}
-              rectRender={renderHeatmapRect}
-            />
-          </TooltipProvider>
-        </div>
-        {/* Legend */}
-        <div className="mt-2 flex items-center justify-end gap-1 text-xs">
-          <span className="mr-1 text-muted-foreground">Less</span>
-          {LEGEND_COLORS.map((color) => (
-            <span
-              key={color}
-              className="inline-block size-2.5 rounded-sm"
-              style={{ backgroundColor: color }}
-            />
-          ))}
-          <span className="ml-1 text-muted-foreground">More</span>
-        </div>
-        <DayDetailDialog
-          date={selectedDate}
-          onOpenChange={handleDayDetailOpenChange}
-          onNavigate={handleNavigate}
-        />
-      </CardContent>
-    </Card>
+    <>
+      <Card aria-busy={isLoading}>
+        <CardHeader>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <h2 ref={activityHeadingRef} tabIndex={-1} className="type-h3">
+              Activity
+            </h2>
+            {hasData && (total > 0 || !isCurrentDay || isError || isPaused) ? (
+              <Badge variant="secondary">{total} completed</Badge>
+            ) : null}
+          </div>
+          <CardDescription>Completions in the last 365 days</CardDescription>
+        </CardHeader>
+        {isLoading ? (
+          <CardContent role="status" className="text-sm text-muted-foreground">
+            Loading activity…
+          </CardContent>
+        ) : null}
+        {isPaused ? (
+          <CardContent role="status" className="text-sm text-muted-foreground">
+            {hasData
+              ? 'Activity refresh paused. Showing the last loaded data.'
+              : 'Activity will load when you’re back online.'}
+          </CardContent>
+        ) : null}
+        {isError && !isPaused ? (
+          <CardContent className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <p role="status" className="text-sm text-muted-foreground">
+              {hasData
+                ? 'Activity could not refresh.'
+                : 'Activity could not load.'}
+              {hasData ? ' Showing the last loaded data.' : null}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isFetching}
+              onClick={() => void refetch()}
+            >
+              {isFetching ? 'Retrying…' : 'Retry activity'}
+            </Button>
+          </CardContent>
+        ) : null}
+        {showSnapshotNotice ? (
+          <CardContent role="status" className="text-sm text-muted-foreground">
+            Activity is showing the last loaded data.
+          </CardContent>
+        ) : null}
+        {hasData && isCurrentDay && !isError && !isPaused && total === 0 ? (
+          <CardContent className="flex flex-wrap items-center justify-between gap-4 border-t pt-5">
+            <div className="space-y-1">
+              <p className="text-sm font-medium">
+                No completions in the last year
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Check off a line in the CoreLive desktop app to see it here.
+              </p>
+            </div>
+            <a
+              className="rounded-sm text-sm font-medium underline underline-offset-4 hover:text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
+              href={MAC_DOWNLOAD_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Get Mac app
+              <span className="sr-only"> (opens GitHub in a new tab)</span>
+            </a>
+          </CardContent>
+        ) : null}
+        {showHeatmap ? (
+          <CardContent>
+            {/* Start at the newest days when a year's cells exceed the viewport. */}
+            <div ref={containerRef} dir="rtl" className="overflow-x-auto pb-1">
+              <div dir="ltr" className="w-max min-w-full">
+                <TooltipProvider delayDuration={100}>
+                  <HeatMap
+                    value={heatmapValues}
+                    startDate={startDate}
+                    endDate={endDate}
+                    weekLabels={WEEK_LABELS}
+                    panelColors={PANEL_COLORS}
+                    legendCellSize={0}
+                    rectSize={heatmapLayout.rectSize}
+                    space={HEATMAP_SPACE}
+                    height={heatmapLayout.height}
+                    width={heatmapLayout.width}
+                    style={heatmapStyle}
+                    rectRender={renderHeatmapRect}
+                  />
+                </TooltipProvider>
+              </div>
+            </div>
+            <div className="mt-2 flex items-center justify-end gap-1 text-xs">
+              <span className="mr-1 text-muted-foreground">Less</span>
+              {LEGEND_COLORS.map((color) => (
+                <span
+                  key={color}
+                  className="inline-block size-2.5 rounded-sm"
+                  style={{ backgroundColor: color }}
+                />
+              ))}
+              <span className="ml-1 text-muted-foreground">More</span>
+            </div>
+          </CardContent>
+        ) : null}
+      </Card>
+      <DayDetailDialog
+        date={selectedDate}
+        fallbackFocusRef={activityHeadingRef}
+        onOpenChange={handleDayDetailOpenChange}
+        onNavigate={handleNavigate}
+      />
+    </>
   )
 }
 
@@ -479,25 +555,10 @@ function getAlignedHeatmapStartDate(endDate: Date): Date {
  * @example
  * getHeatmapWeekCount(new Date('2025-04-06T00:00:00'), new Date('2026-04-08T00:00:00')) // => 53
  */
-function getHeatmapWeekCount(startDate: Date, endDate: Date): number {
-  const totalDayCount =
-    Math.floor((endDate.getTime() - startDate.getTime()) / ONE_DAY_IN_MS) + 1
+export function getHeatmapWeekCount(startDate: Date, endDate: Date): number {
+  const totalDayCount = differenceInCalendarDays(endDate, startDate) + 1
 
   return Math.ceil(totalDayCount / DAYS_IN_WEEK)
-}
-
-/**
- * Normalizes a date to local midnight so layout math stays stable across renders.
- * @param date - Date to normalize
- * @returns
- * - A new date at 00:00:00 local time
- * @example
- * normalizeDate(new Date('2026-04-08T15:30:00')) // => 2026-04-08T00:00:00 local
- */
-function normalizeDate(date: Date): Date {
-  const normalizedDate = new Date(date)
-  normalizedDate.setHours(0, 0, 0, 0)
-  return normalizedDate
 }
 
 /**

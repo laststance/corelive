@@ -24,9 +24,10 @@ const mockApp = {
   requestSingleInstanceLock: vi.fn(() => true),
 }
 
+const mockDialog = { showMessageBox: vi.fn(async () => ({ response: 0 })) }
+
 const mockShell = {
-  // openWebAppInBrowser awaits `.catch` on the result, so the mock must be thenable.
-  openExternal: vi.fn(async () => Promise.resolve()),
+  openExternal: vi.fn(async () => undefined),
 }
 
 // Mock modules using vi.doMock for better CommonJS support
@@ -37,6 +38,7 @@ vi.doMock('../logger.ts', () => ({
 vi.doMock('electron', () => ({
   app: mockApp,
   shell: mockShell,
+  dialog: mockDialog,
 }))
 
 describe('DeepLinkManager', () => {
@@ -67,8 +69,9 @@ describe('DeepLinkManager', () => {
       hasMainWindow: vi.fn(() => true),
       getMainWindow: vi.fn(() => mockWindow), // Return the same instance every time
       restoreFromTray: vi.fn(),
-      // Post-retirement deep links open the web app in the browser (T15).
-      getWebAppOrigin: vi.fn(() => 'https://corelive.app'),
+      getLiveEditorWindow: vi.fn(() => null),
+      // Post-retirement deep links open the Dashboard in the browser (T15).
+      getDashboardOrigin: vi.fn(() => 'https://corelive.app'),
     }
 
     mockNotificationManager = {
@@ -169,7 +172,7 @@ describe('DeepLinkManager', () => {
       // Act
       await deepLinkManager.handleTaskAction('/123', {})
 
-      // Assert: the task surfaces in the web app, not a (now-gone) main renderer.
+      // Assert: the task surfaces in the Dashboard, not a (now-gone) main renderer.
       expect(mockShell.openExternal).toHaveBeenCalledWith(
         'https://corelive.app/home?focus=123',
       )
@@ -270,7 +273,7 @@ describe('DeepLinkManager', () => {
       // Act
       await deepLinkManager.handleViewAction('/completed', { filter: 'recent' })
 
-      // Assert: the view opens in the web app at the matching route.
+      // Assert: the view opens in the Dashboard at the matching route.
       expect(mockShell.openExternal).toHaveBeenCalledWith(
         'https://corelive.app/completed?filter=recent',
       )
@@ -282,20 +285,125 @@ describe('DeepLinkManager', () => {
       deepLinkManager.initialize()
     })
 
-    test('opens search results in the browser at /home?search=<query>', async () => {
-      // Arrange: a `corelive://search?query=important&filter=pending` deep link.
+    test('opens a decoded search as one Dashboard journal query', async () => {
+      // Arrange
+      const url = 'corelive://search?query=+R%26D%0A+notes+'
 
       // Act
-      await deepLinkManager.handleSearchAction({
-        query: 'important',
-        filter: 'pending',
-      })
+      await deepLinkManager.handleDeepLink(url)
 
-      // Assert: search runs in the web app, not a (now-gone) main renderer.
+      // Assert
       expect(mockShell.openExternal).toHaveBeenCalledWith(
-        'https://corelive.app/home?search=important&filter=pending',
+        'https://corelive.app/home?search=R%26D+notes&filter=completed#journal',
       )
+      expect(mockDialog.showMessageBox).not.toHaveBeenCalled()
     })
+
+    test.each([
+      [
+        'corelive://search',
+        'https://corelive.app/home?filter=completed#journal',
+      ],
+      [
+        'corelive://search?query=+%0D%0A+&filter=completed',
+        'https://corelive.app/home?filter=completed#journal',
+      ],
+    ])('opens the journal for an empty search link %s', async (url, target) => {
+      // Arrange
+      const open = mockShell.openExternal
+
+      // Act
+      await deepLinkManager.handleDeepLink(url)
+
+      // Assert
+      expect(open).toHaveBeenCalledWith(target)
+    })
+
+    test('attaches rejected-search guidance to the visible LiveEditor', async () => {
+      // Arrange
+      const editor = { isVisible: () => true, isDestroyed: () => false }
+      mockWindowManager.getLiveEditorWindow.mockReturnValue(editor)
+
+      // Act
+      await deepLinkManager.handleDeepLink('corelive://search?filter=pending')
+
+      // Assert
+      expect(mockDialog.showMessageBox).toHaveBeenCalledWith(editor, {
+        type: 'info',
+        title: 'Dashboard search',
+        message:
+          'Dashboard searches completed tasks. Open LiveEditor on your Mac for pending tasks.',
+        buttons: ['OK'],
+      })
+      expect(mockShell.openExternal).not.toHaveBeenCalled()
+    })
+
+    test('explains a failed browser launch for a valid search even when notifications are unavailable', async () => {
+      // Arrange
+      deepLinkManager.setNotificationManager(null)
+      mockShell.openExternal.mockRejectedValueOnce(
+        new Error('Browser unavailable'),
+      )
+
+      // Act
+      const opened = await deepLinkManager.handleDeepLink(
+        'corelive://search?query=Release&filter=all',
+      )
+
+      // Assert
+      expect(opened).toBe(false)
+      expect(mockShell.openExternal).toHaveBeenCalledExactlyOnceWith(
+        'https://corelive.app/home?search=Release&filter=all#journal',
+      )
+      expect(mockDialog.showMessageBox).toHaveBeenCalledExactlyOnceWith({
+        type: 'info',
+        title: 'Dashboard search',
+        message:
+          'The Dashboard could not open in your default browser. Open your browser and try the search link again.',
+        buttons: ['OK'],
+      })
+    })
+
+    test.each([
+      [
+        'overlong',
+        'corelive://search?query=' + 'x'.repeat(201),
+        'Shorten your search to 200 characters or fewer.',
+      ],
+      [
+        'pending',
+        'corelive://search?query=draft&filter=pending',
+        'Dashboard searches completed tasks. Open LiveEditor on your Mac for pending tasks.',
+      ],
+      [
+        'empty filter',
+        'corelive://search?query=draft&filter=',
+        'Choose the completed or all filter to search the Dashboard journal.',
+      ],
+      [
+        'null character',
+        'corelive://search?query=release%00',
+        'Use plain text without null characters.',
+      ],
+    ])(
+      'explains a rejected %s search even when notifications are unavailable',
+      async (_reason, url, message) => {
+        // Arrange
+        deepLinkManager.setNotificationManager(null)
+
+        // Act
+        await deepLinkManager.handleDeepLink(url)
+
+        // Assert
+        expect(mockShell.openExternal).not.toHaveBeenCalled()
+        expect(mockDialog.showMessageBox).toHaveBeenCalledWith({
+          type: 'info',
+          title: 'Dashboard search',
+          message,
+          buttons: ['OK'],
+        })
+      },
+    )
   })
 
   describe('URL generation', () => {

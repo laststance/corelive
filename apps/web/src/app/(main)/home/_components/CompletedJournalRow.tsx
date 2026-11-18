@@ -13,6 +13,16 @@ interface CompletedJournalRowProps {
 }
 
 /**
+ * Identifies a journal row for focus after more wins load. Both sources have independent IDs.
+ * @example getJournalRowId({ source: 'completed', id: 11 }) // => 'journal-completed-11'
+ */
+export function getJournalRowId(
+  entry: Pick<DayDetailTask, 'source' | 'id'>,
+): string {
+  return `journal-${entry.source}-${entry.id}`
+}
+
+/**
  * One row in the permanent completion journal — renders a finished task as a
  * win (check indicator + title + category dot + completion time), mirroring the
  * day-detail dialog row so the two completed surfaces read identically.
@@ -31,7 +41,11 @@ export const CompletedJournalRow = function CompletedJournalRow({
   entry,
 }: CompletedJournalRowProps) {
   return (
-    <div className="flex items-center gap-3 rounded-lg border bg-card p-4">
+    <div
+      id={getJournalRowId(entry)}
+      tabIndex={-1}
+      className="flex items-center gap-3 rounded-lg border bg-card p-4"
+    >
       {/* Permanent record: a static, display-only check for every source. */}
       <CheckCircle2
         className="size-5 shrink-0 text-primary"

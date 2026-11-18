@@ -101,7 +101,7 @@ test('a conflict row shows both values and Use / Keep actions', async () => {
   const row = (await screen.findByText('Work')).closest('li')!
   expect(within(row).getByText('Color')).toBeVisible()
   expect(row).toHaveTextContent('On this Mac: red')
-  expect(row).toHaveTextContent('On the dashboard: blue')
+  expect(row).toHaveTextContent('On the Dashboard: blue')
   expect(within(row).getByRole('button', { name: 'Use "red"' })).toBeVisible()
   expect(within(row).getByRole('button', { name: 'Keep "blue"' })).toBeVisible()
 })
@@ -262,7 +262,7 @@ test('a digest-mismatch row says the change was kept on this Mac and Try again r
   )
 })
 
-test('a blocked delete offers Rename "<child>" and Keep it on the dashboard', async () => {
+test('a blocked category deletion lets the user rename the remaining child', async () => {
   // Arrange
   const user = userEvent.setup()
   const { fake } = await renderWithSettings(
@@ -272,7 +272,7 @@ test('a blocked delete offers Rename "<child>" and Keep it on the dashboard', as
 
   // Assert
   expect(
-    await screen.findByText(`Couldn't remove "Archive" on the dashboard.`),
+    await screen.findByText(`Couldn't remove "Archive" on the Dashboard.`),
   ).toBeVisible()
 
   // Act
@@ -293,7 +293,7 @@ test('a blocked delete offers Rename "<child>" and Keep it on the dashboard', as
   )
 })
 
-test('Keep it on the dashboard sends keep-dashboard-value for a blocked delete', async () => {
+test('requests to keep the category on the Dashboard after a blocked deletion', async () => {
   // Arrange
   const user = userEvent.setup()
   const { fake } = await renderWithSettings(
@@ -303,7 +303,7 @@ test('Keep it on the dashboard sends keep-dashboard-value for a blocked delete',
 
   // Act
   await user.click(
-    await screen.findByRole('button', { name: 'Keep it on the dashboard' }),
+    await screen.findByRole('button', { name: 'Keep it on the Dashboard' }),
   )
 
   // Assert
@@ -316,7 +316,7 @@ test('Keep it on the dashboard sends keep-dashboard-value for a blocked delete',
   )
 })
 
-test('a waiting row says the dashboard has not confirmed yet and offers no action', async () => {
+test('a waiting row says the Dashboard has not confirmed yet and offers no action', async () => {
   // Arrange / Act
   await renderWithSettings(<SyncDetailsPage onBack={vi.fn()} />, {
     syncDetails: withRows([WAITING]),
@@ -325,12 +325,12 @@ test('a waiting row says the dashboard has not confirmed yet and offers no actio
   // Assert
   const row = (await screen.findByText('Reading')).closest('li')!
   expect(
-    within(row).getByText('Waiting for the dashboard to confirm a change'),
+    within(row).getByText('Waiting for the Dashboard to confirm a change'),
   ).toBeVisible()
   expect(within(row).queryAllByRole('button')).toHaveLength(0)
 })
 
-test('an informational row says it was changed back to match the dashboard', async () => {
+test('an informational row says it was changed back to match the Dashboard', async () => {
   // Arrange / Act
   await renderWithSettings(<SyncDetailsPage onBack={vi.fn()} />, {
     syncDetails: withRows([
@@ -348,7 +348,7 @@ test('an informational row says it was changed back to match the dashboard', asy
 
   // Assert
   expect(
-    await screen.findByText('Changed back to match the dashboard.'),
+    await screen.findByText('Changed back to match the Dashboard.'),
   ).toBeVisible()
 })
 
@@ -486,7 +486,7 @@ test('History lists the migration summary with Open recovery copies, preserved b
   // Assert
   expect(history).toHaveTextContent('4 drafts, 120 keeps, 2 recovery copies')
   expect(history).toHaveTextContent('Kept as a backup: old-workspace.json')
-  expect(history).toHaveTextContent('Changed back to match the dashboard.')
+  expect(history).toHaveTextContent('Changed back to match the Dashboard.')
   expect(fake.api.liveEditor.show).toHaveBeenCalledOnce()
 })
 
@@ -683,7 +683,7 @@ test('a fresh install with preserved backups lists them in History without "Noth
   ).toBeNull()
 })
 
-// Regression: /ship pre-landing review on 2026-11-03 — after the zero-count summary was hidden, History said "Nothing here yet." right under "Kept on the dashboard only"
+// Regression: /ship pre-landing review on 2026-11-03 — after the zero-count summary was hidden, History said "Nothing here yet." right under "Kept on the Dashboard only"
 test('History with dashboard-only writing does not also say "Nothing here yet"', async () => {
   // Arrange
   const syncDetails = withRows([], {
@@ -708,7 +708,7 @@ test('History with dashboard-only writing does not also say "Nothing here yet"',
     await screen.findByRole('heading', { name: 'History' })
   ).closest('section')!
   expect(
-    within(history).getByText('Kept on the dashboard only: 3'),
+    within(history).getByText('Kept on the Dashboard only: 3'),
   ).toBeVisible()
   expect(within(history).queryByText('Nothing here yet.')).toBeNull()
 })

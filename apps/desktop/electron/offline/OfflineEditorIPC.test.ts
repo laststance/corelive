@@ -143,7 +143,7 @@ function createFixture() {
     hasLoginWindow: () => false,
     closeLoginWindow: vi.fn(),
     setLoginWindowObserver: vi.fn(),
-    getWebAppOrigin: () => 'https://corelive.app',
+    getDashboardOrigin: () => 'https://corelive.app',
   }
   let online = true
   const signOutDevice = vi.fn(async (run: () => Promise<unknown>) => run())

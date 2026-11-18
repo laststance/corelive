@@ -24,11 +24,11 @@ function historyMessage(item: SyncHistoryItem): string {
     case 'resolved':
       return 'Resolved'
     case 'reverted':
-      return 'Changed back to match the dashboard.'
+      return 'Changed back to match the Dashboard.'
     case 'applied-elsewhere':
-      return 'Changed on the dashboard.'
+      return 'Changed on the Dashboard.'
     default:
-      return 'Removed on the dashboard. Its writing moved to your default category.'
+      return 'Removed on the Dashboard. Its writing moved to your default category.'
   }
 }
 
@@ -213,7 +213,7 @@ export function SyncDetailsPage({ onBack }: { onBack: () => void }) {
         ))}
         {dashboardOnlyCount > 0 && (
           <p className="type-small border-b pb-3 text-muted-foreground">
-            Kept on the dashboard only: {dashboardOnlyCount}
+            Kept on the Dashboard only: {dashboardOnlyCount}
           </p>
         )}
         {/* Empty only when no entry, summary, recovery copy, backup or dashboard-only line is shown. */}

@@ -4,6 +4,8 @@ import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
+import { useLocalDayKey } from '@/hooks/useLocalDayKey'
+import { HOME_HEATMAP_DAYS } from '@/lib/constants/home'
 import { orpc } from '@/lib/orpc/client-query'
 
 /**
@@ -32,42 +34,34 @@ export type HeatmapDay = {
 }
 
 /**
- * Fetches and transforms heatmap data for the ContributionGraph component.
+ * Provides the dashboard with one annual snapshot, its calendar-day index,
+ * and the state needed to distinguish loading, stale data and first-load failure.
  * @param days - Number of days to look back (default: 365)
  * @returns
  * - heatmapValues: Array of { date, count } with YYYY/MM/DD format for @uiw/react-heat-map
  * - dataByDate: Map keyed by YYYY-MM-DD for tooltip lookup
  * - streaks: { current, longest } consecutive-day streaks
  * - total: Total completed tasks in the period
- * - isLoading / isError: Query states
+ * - Query status and refetch for the activity area
  * @example
  * const { heatmapValues, dataByDate, streaks, total } = useHeatmapData(365)
  * // heatmapValues => [{ date: "2026/03/24", count: 5 }, ...]
  * // dataByDate.get("2026-03-24") => { date: "2026-03-24", count: 5, categories: [...] }
  */
-export function useHeatmapData(days: number = 365) {
+export function useHeatmapData(days: number = HOME_HEATMAP_DAYS) {
   const isClerkQueryReady = useClerkQueryReady()
+  const today = useLocalDayKey()
   // Report the browser's IANA zone so the server buckets completions by the
   // user's LOCAL calendar day (L3) — keeping heatmap data aligned with the
   // locally-rendered grid. Stable per session, so the query key stays stable;
   // an absent/garbage zone makes the server fall back to UTC bucketing.
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, isPaused, isFetching, refetch } = useQuery({
     ...orpc.completed.heatmap.queryOptions({ input: { days, timezone } }),
     enabled: isClerkQueryReady,
   })
 
-  // Memoize on `data` identity so call sites keep the SAME Map/Array references
-  // across renders while `data` is unchanged — ContributionGraph's
-  // `calcMonthlyMaxDates(dataByDate)`, WeeklySummaryCard's `aggregateLastSevenDays`,
-  // and especially YearInReviewModal's auto-open effect (which lists `dataByDate`
-  // in its dep array) would otherwise see a fresh Map every render. We do NOT
-  // rely on the React Compiler for this: it provably BAILED on the since-deleted
-  // sibling that had the identical fresh-Map/Array-every-render shape, letting an
-  // unstable effect dep drive a render loop that starved App Router navigation
-  // (the "Settings does nothing" bug, fixed 2026-06-24). TanStack
-  // Query keeps `data` referentially stable via structural sharing, so this memo
-  // recomputes only on a real data change.
+  // Keep the calendar-day index stable for the year-in-review effect.
   const { heatmapValues, dataByDate } = useMemo(
     () => ({
       heatmapValues:
@@ -87,7 +81,14 @@ export function useHeatmapData(days: number = 365) {
     dataByDate,
     streaks: data?.streaks ?? { current: 0, longest: 0 },
     total: data?.total ?? 0,
-    isLoading: !isClerkQueryReady || isLoading,
+    hasData: data !== undefined,
+    throughDate: data?.throughDate,
+    // Compare coverage, not arrival time, since a response may cross midnight.
+    isCurrentDay: data?.throughDate === today,
+    isLoading,
     isError,
+    isPaused,
+    isFetching,
+    refetch,
   }
 }

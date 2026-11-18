@@ -119,7 +119,7 @@ async function refusal(
 }
 
 describe('attaching with local categories (C19, D4)', () => {
-  test('categories edited while detached reach the dashboard on attach with no spurious conflict', async () => {
+  test('categories edited while detached reach the Dashboard on attach with no spurious conflict', async () => {
     // Arrange
     const fx = await createFixture()
     const idea = randomUUID()
@@ -161,7 +161,7 @@ describe('attaching with local categories (C19, D4)', () => {
     expect(state.binding?.declined).toEqual({})
   })
 
-  test('the local default pairs with the dashboard default even when its color differs', async () => {
+  test('the local default pairs with the Dashboard default even when its color differs', async () => {
     // Arrange
     const fx = await createFixture({
       remote: [
@@ -180,7 +180,7 @@ describe('attaching with local categories (C19, D4)', () => {
   })
 
   test('a replayed create that adopts a same-path dashboard category recolors it without another refresh', async () => {
-    // Arrange: the local Work is blue; the dashboard Work is rose.
+    // Arrange: the local Work is blue; the Dashboard Work is rose.
     const fx = await createFixture({
       remote: [
         remoteCategory(1, 'General', { isDefault: true }),
@@ -216,7 +216,7 @@ describe('three-way merge of one field (D4 table, C8, C18)', () => {
     })
   })
 
-  test('both sides renaming shows the dashboard name and keeps this Mac name as a row that Use applies with the new expected value', async () => {
+  test('both sides renaming shows the Dashboard name and keeps this Mac name as a row that Use applies with the new expected value', async () => {
     // Arrange
     const fx = await createFixture()
     await runUntilSettled(fx.service, fx.dashboard, accountId)
@@ -242,7 +242,7 @@ describe('three-way merge of one field (D4 table, C8, C18)', () => {
       }),
     ])
 
-    // Act: Use "Mine" queues a rename whose expected is the dashboard value just received (C24).
+    // Act: Use "Mine" queues a rename whose expected is the Dashboard value just received (C24).
     await fx.command({
       type: 'syncDetailAction',
       rowId: rows[0]!.id,
@@ -293,8 +293,8 @@ describe('three-way merge of one field (D4 table, C8, C18)', () => {
     expect(localPaths(await fx.file.read()).Work).toBe('rose')
   })
 
-  test('a rename the dashboard rejects as name-taken stays declined across two refreshes and never re-queues', async () => {
-    // Arrange: refresh once, rename locally, then the dashboard gains the same name before sending.
+  test('a rename the Dashboard rejects as name-taken stays declined across two refreshes and never re-queues', async () => {
+    // Arrange: refresh once, rename locally, then the Dashboard gains the same name before sending.
     const fx = await createFixture()
     await runUntilSettled(fx.service, fx.dashboard, accountId)
     await fx.command({
@@ -333,7 +333,7 @@ describe('three-way merge of one field (D4 table, C8, C18)', () => {
       Ideas: 'blue',
     })
 
-    // Act: Choose another name queues a fresh rename with expected = the dashboard name.
+    // Act: Choose another name queues a fresh rename with expected = the Dashboard name.
     await fx.command({
       type: 'syncDetailAction',
       rowId: row!.id,
@@ -386,7 +386,7 @@ describe('three-way merge of one field (D4 table, C8, C18)', () => {
       categoryId: work,
       name: 'First',
     })
-    // Derive against a stale view (the dashboard has not been re-read), then freeze.
+    // Derive against a stale view (the Dashboard has not been re-read), then freeze.
     await fx.service.reconcileCategories({
       accountId,
       displayEmail: null,
@@ -645,7 +645,7 @@ describe('local delete and its dashboard outcomes (D4, EA8)', () => {
     return fx
   }
 
-  test('deleting a parent offline deletes it on the dashboard and promotes its child without a reparent', async () => {
+  test('deleting a parent offline deletes it on the Dashboard and promotes its child without a reparent', async () => {
     // Arrange
     const fx = await deleteParentFixture()
     await fx.command({
@@ -723,7 +723,7 @@ describe('local delete and its dashboard outcomes (D4, EA8)', () => {
     })
   })
 
-  test('Keep it on the dashboard re-adds the blocked category empty under a new local id', async () => {
+  test('keeping a category on the Dashboard restores it empty on this Mac after a blocked deletion', async () => {
     // Arrange
     const fx = await deleteParentFixture()
     await fx.command({
@@ -879,7 +879,7 @@ describe('delivery safety (EA3, EA4, EA16)', () => {
     expect(dashboardPaths(fx.dashboard).Work).toBe('violet')
   })
 
-  test('three unanswered receipt lookups show Waiting for the dashboard to confirm a change and block only dependents', async () => {
+  test('three unanswered receipt lookups show Waiting for the Dashboard to confirm a change and block only dependents', async () => {
     // Arrange
     const fx = await createFixture()
     await runUntilSettled(fx.service, fx.dashboard, accountId)

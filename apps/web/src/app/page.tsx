@@ -1,32 +1,30 @@
-import type { Metadata } from 'next'
 import Link from 'next/link'
 
 import { Flex } from '@/components/flex'
 import { Button } from '@/components/ui/button'
 
-export const metadata: Metadata = {
-  title: {
-    template: '%s | CoreLive',
-    default: 'CoreLive',
-  },
-  description: 'A quiet place to write your wins and watch the year add up.',
-}
-
-function Home() {
+function DashboardLandingPage() {
   return (
-    <div className="container mx-auto min-h-screen px-4 py-8 sm:px-6 lg:px-8">
-      <Flex className="min-h-[calc(100vh-4rem)] flex-col items-center justify-center">
-        <div className="flex justify-center gap-4">
-          <Button asChild>
-            <Link href="/login">Login</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href="/sign-up">Sign Up</Link>
-          </Button>
-        </div>
+    <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-6 px-6 py-8 text-center">
+      <div className="space-y-2">
+        <h1 className="text-3xl font-semibold tracking-tight">
+          CoreLive Dashboard
+        </h1>
+        <p className="text-muted-foreground">
+          Revisit the tasks you finish in CoreLive for Mac and see how they add
+          up.
+        </p>
+      </div>
+      <Flex className="justify-center gap-4">
+        <Button asChild>
+          <Link href="/login">Sign in</Link>
+        </Button>
+        <Button asChild variant="outline">
+          <Link href="/sign-up">Create account</Link>
+        </Button>
       </Flex>
-    </div>
+    </main>
   )
 }
 
-export default Home
+export default DashboardLandingPage

@@ -12,7 +12,7 @@ import { ThemeProvider } from '@/providers/ThemeProvider'
 /**
  * Mounts normal application state outside the credential-only broker route.
  * The root layout keeps Clerk available to both. The desktop Settings window is bundled
- * (#216 D5), so the web app owns no native preference state.
+ * (#216 D5), so the Dashboard keeps its own theme preference.
  * @example <ApplicationProviders>{children}</ApplicationProviders>
  */
 export function ApplicationProviders({ children }: { children: ReactNode }) {

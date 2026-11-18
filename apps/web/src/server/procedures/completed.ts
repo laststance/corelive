@@ -1,3 +1,4 @@
+import { JOURNAL_SEARCH_LINE_BREAKS } from '@corelive/desktop-contract/journal-search'
 import { ORPCError } from '@orpc/server'
 import { sql } from 'drizzle-orm'
 
@@ -39,9 +40,10 @@ import { fetchCompletedEntries } from '../utils/completedAggregation'
  * - data: Array of daily entries with count and category breakdown
  * - streaks: Current and longest consecutive-day streaks
  * - total: Total completed tasks within the displayed local-day window
+ * - throughDate: Inclusive local end date of the snapshot
  * @example
  * getHeatmap({ days: 365, timezone: 'Asia/Tokyo' })
- * // => { data: [{ date: "2026-03-24", count: 5, categories: [...] }], streaks: { current: 3, longest: 12 }, total: 89 }
+ * // => { data: [{ date: "2026-03-24", count: 5, categories: [...] }], streaks: { current: 3, longest: 12 }, total: 89, throughDate: "2026-03-24" }
  */
 export const getHeatmap = authMiddleware
   .input(HeatmapInputSchema)
@@ -57,7 +59,8 @@ export const getHeatmap = authMiddleware
       // Bucket completions by the user's LOCAL calendar day (L3). The window
       // edges and "today" are local-day keys; `shiftIsoDate` is tz-neutral
       // calendar-string math, so it stays correct on local keys.
-      const todayLocalKey = toLocalDayKey(new Date(), zone)
+      const endDate = new Date()
+      const todayLocalKey = toLocalDayKey(endDate, zone)
       // `days` local calendar days ending today = today + (days - 1) prior.
       const startLocalKey = shiftIsoDate(todayLocalKey, -(days - 1))
 
@@ -70,13 +73,9 @@ export const getHeatmap = authMiddleware
       const startDate = new Date(
         `${shiftIsoDate(startLocalKey, -1)}T00:00:00.000Z`,
       )
-      const endDate = new Date()
-
       const entries = await fetchCompletedEntries(user.id, startDate, endDate)
 
-      // Per-day rollup keyed by local-day string. Mirrors the previous shape
-      // so the API contract (HeatmapResponseSchema) is unchanged — `Completed`
-      // rows contribute counts alongside lifecycle Todos.
+      // Both Completed rows and lifecycle Todos contribute to each local day.
       const dayMap = new Map<
         string,
         {
@@ -135,6 +134,7 @@ export const getHeatmap = authMiddleware
         data,
         streaks,
         total: totalInWindow,
+        throughDate: todayLocalKey,
       }
     } catch (error) {
       log.error('Error in getHeatmap:', error)
@@ -235,7 +235,7 @@ export const getDayDetail = authMiddleware
   })
 
 /**
- * Returns the filtered, newest-first unified completion journal page when Home loads, scrolls, or changes its Warm Preset Bar.
+ * Returns the newest-first completion journal page when Home loads, scrolls, or changes its search or filters.
  * SQL applies normalized Todo/Completed predicates before pagination and count so the rows and total cannot drift.
  *
  * @param input.limit - Page size (1-100, default 20)
@@ -243,6 +243,7 @@ export const getDayDetail = authMiddleware
  * @param input.categoryId - Optional authenticated-user category ID.
  * @param input.completedFrom - Optional inclusive completion timestamp.
  * @param input.completedBefore - Optional exclusive completion timestamp.
+ * @param input.search - Optional literal substring of the task title, case-insensitive.
  * @returns `{ entries, total, hasMore, nextOffset }` — entries newest-first,
  *   each tagged with its `source` ('todo' | 'completed')
  * @example
@@ -261,6 +262,7 @@ export const getJournal = authMiddleware
         includeSubcategories,
         completedFrom,
         completedBefore,
+        search,
       } = input
       const { user } = context
 
@@ -319,6 +321,13 @@ export const getJournal = authMiddleware
         completedBefore === undefined
           ? sql``
           : sql`AND m.completed_at < ${completedBefore.toISOString()}`
+      // Match the single-line input against stored titles while keeping % and _ literal.
+      const searchFilter = search
+        ? sql`AND strpos(
+            replace(lower(translate(m.title, ${JOURNAL_SEARCH_LINE_BREAKS}, '')), 'ς', 'σ'),
+            replace(lower(${search}), 'ς', 'σ')
+          ) > 0`
+        : sql``
 
       // One statement gives page and count the same snapshot even when another window moves a category.
       const { rows } = await db.execute<JournalRow>(sql`
@@ -330,6 +339,7 @@ export const getJournal = authMiddleware
           INNER JOIN "Category" c ON c.id = m.category_id AND c."userId" = ${user.id}
           LEFT JOIN "Category" p ON p.id = c."parentId" AND p."userId" = c."userId"
           WHERE TRUE ${categoryFilter} ${completedFromFilter} ${completedBeforeFilter}
+            ${searchFilter}
         ), page AS (
           SELECT * FROM scoped
           ORDER BY completed_at DESC, source ASC, id ASC

@@ -5,7 +5,7 @@
 
 # 🚧 It is a work in progress 🚧
 
-CoreLive is a personal task tracker and LiveEditor archive whose centerpiece is an **Activity Heatmap** — every completed task accumulates as warm density across a year, so you close the app feeling validated, not graded. You write in the macOS desktop app (Electron), which works fully on its own with no account; signing in only adds the [Next.js](https://nextjs.org/) web dashboard (the read-only Home view, Appearance and category management).
+Use **CoreLive for Mac** to write and check off tasks in LiveEditor, even offline. Sign in and connect your Mac to revisit completed tasks in **CoreLive Dashboard**. Use the yearly heatmap or the 7-day and 30-day charts to open a day’s entries. Search the completion journal by title, select a category from the sidebar, or narrow the results to a date range.
 
 > **⚠️ Pre-launch — there are no users yet.** Breaking changes are fine, anywhere. Reshape the database, Drizzle schema, APIs, or any other element freely and abruptly — there is **no need to keep existing data or maintain backward compatibility**, except the owner's local desktop workspace, which must migrate losslessly (#216). Every schema change still ships as a generated migration (CI fails when `apps/web/src/db/schema.ts` and `apps/web/drizzle/` disagree): run `pnpm db:generate`, commit the SQL, then reset the database (`pnpm db:reset`) — a reset only replays the committed migrations.
 
@@ -19,16 +19,12 @@ Categories organize writing and completed history in two levels:
 - In the desktop LiveEditor picker, search by the main or subcategory name, select the full displayed path, or use **Create category…** and **Manage categories…** without leaving the editor. Category changes work offline and sync after you sign in and connect this Mac.
 - Completed-history filters include a main category's direct entries and its subcategories. Weekly summaries, daily detail, and year in review group totals by main category with an optional subcategory breakdown. Moving a subcategory changes the grouping of past entries under the current hierarchy; their dates stay the same.
 - Deleting a category moves its direct entries to the destination shown in the confirmation, preserving the entries and their dates. The initial destination is the parent for a subcategory and `General` for a main category. Children of a deleted main category become main categories with their entries still attached; rename any child that conflicts with another main category before deleting.
-- Writing stays in the desktop app on each Mac. When a category is deleted, the desktop editor keeps the removed category's writing and lets you confirm **Move writing** in Details; connected Macs sync category changes in the background. The web Home dashboard refreshes its lists every 15 seconds while visible and on focus. See the [offline LiveEditor guide](docs/offline-liveeditor.md) for the device workspace, synchronization, export, recovery, backup and downgrade instructions.
+- Writing stays in the desktop app on each Mac. When a category is deleted, the desktop editor keeps the removed category's writing and lets you confirm **Move writing** in Details; connected Macs sync category changes in the background. While visible, Dashboard checks categories and activity every 15 seconds and on window focus. It skips an overlapping refresh and refreshes the journal when either result changes. See the [offline LiveEditor guide](docs/offline-liveeditor.md) for the device workspace, synchronization, export, recovery, backup and downgrade instructions.
 
 ## Platform Support
 
-This project supports:
-
-- **Web**: Browser-based application accessible via web browsers
-- **Desktop (macOS 13+)**: Electron-based desktop application for macOS 13 or later
-
-> **Note**: Desktop builds are currently limited to macOS. Windows and Linux support has been removed.
+- **CoreLive Dashboard** runs in the browser at [corelive.app](https://www.corelive.app/).
+- **CoreLive** runs on macOS 13 or later.
 
 ## Getting Started
 
@@ -69,12 +65,11 @@ pnpm qa:offline-editor --fixture all --screenshots .gstack/qa-reports/desktop
 ### Workspace layout
 
 One root pnpm lockfile owns all workspaces. Root commands delegate to their app;
-`pnpm dev` starts only Web, and `pnpm electron:dev` starts Web plus desktop. The desktop editor and Settings run from bundled files without `pnpm dev`; only sign-in, sync and the dashboard need the web app.
-Web-specific framework instructions are in [`apps/web/AGENTS.md`](apps/web/AGENTS.md).
+`pnpm dev` starts Dashboard. `pnpm electron:dev` starts Dashboard and CoreLive for Mac. The desktop editor and Settings run from bundled files. Sign-in and sync use the Dashboard server. See [`apps/web/AGENTS.md`](apps/web/AGENTS.md) for Next.js development instructions.
 
 | Directory                   | Responsibility                                                                                                     |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `apps/web`                  | Next.js, oRPC, Drizzle schema/migrations, renderer and DB tests                                                    |
+| `apps/web`                  | CoreLive Dashboard (`@corelive/dashboard`), oRPC, Drizzle schema, migrations and tests                             |
 | `apps/desktop`              | Electron main/preload, macOS packaging and native unit tests                                                       |
 | `packages/desktop-contract` | Browser-safe IPC/preload contracts and native constants used by both apps                                          |
 | `packages/live-editor`      | Shared theme, UI primitives and editor-neutral helpers (the editor itself lives in `apps/desktop/renderer/editor`) |
@@ -85,7 +80,7 @@ Run `pnpm install --frozen-lockfile` from the root. App prebuild hooks generate
 icons/sounds even in a clean checkout. `pnpm clean` removes compiled outputs;
 `pnpm check:workspace` rejects old app paths and nested lockfiles. Desktop release
 version, `main`, build resources and artifacts belong to `apps/desktop`; release
-outputs are under `apps/desktop/dist`. Web does not require a new desktop release.
+outputs are under `apps/desktop/dist`. Vercel deploys Dashboard independently from the macOS app.
 
 Configure Vercel's project Root Directory as `apps/web`, with files outside the root enabled
 for the shared contracts and asset generator. Run Vercel commands with
@@ -129,7 +124,7 @@ Keep `APPLE_ID`, `APPLE_TEAM_ID`, and other unmigrated settings in
 legacy root `.env`. Install 1Password CLI and enable its desktop integration.
 
 CI and explicit environment credentials keep working without a local vault.
-An exported `APPLE_KEYCHAIN_PROFILE` also bypasses password injection. Web builds
+An exported `APPLE_KEYCHAIN_PROFILE` also bypasses password injection. Dashboard builds
 and ordinary desktop development do not receive the notarization password.
 
 ### Database Setup
@@ -217,11 +212,9 @@ like `ngrok http --domain=foo.bar-ngrok.app 4991`
 
 ## Desktop Application (Electron - macOS 13+)
 
-The Electron desktop application bundles the LiveEditor and Settings locally (served from `corelive-editor://`) and loads only the sign-in window and the dashboard from the Next.js web app. **Desktop builds require macOS 13 or later.**
+CoreLive bundles LiveEditor and Settings locally under `corelive-editor://`. The sign-in window loads from the Dashboard server. **Open Dashboard in browser** in the menu bar opens `/home` in the default browser.
 
 ### Desktop features
-
-Beyond the web app, the macOS build adds native surfaces:
 
 - **LiveEditor** — a bundled freeform capture window that saves writing in a device workspace on the Mac, with no account needed; see the [offline LiveEditor guide](docs/offline-liveeditor.md).
 - **Login window** — a small fixed-size sign-in shell (`/login-shell`) opened by **Sign in** in Settings ▸ Account; after OAuth sign-in it closes and Settings asks you to **Connect this Mac**. If the sign-in page cannot be reached, Account says so and offers **Try again**.
@@ -232,18 +225,17 @@ Beyond the web app, the macOS build adds native surfaces:
 - **Hide dock icon** — run as a menu-bar-only accessory; the choice persists across restarts
 - **Global keyboard shortcuts** — optional system-wide hotkeys, including lone-modifier keys (opt-in, off by default). If a single-modifier shortcut such as Right Option stops after an unfinished start, open Settings and select that shortcut again to retry. Startup keeps the crash guard.
 - **In-app shortcuts** — while any CoreLive window has focus, `⌘N` opens the LiveEditor panel and `⌘M` minimizes; both release when the app loses focus
-- **Deep links** — `corelive://` URLs open the app
+- **Deep links** — `corelive://` URLs open the app. For example, `corelive://search?query=reading&filter=completed` opens the Dashboard journal. Search accepts up to 200 characters. Pending tasks live in LiveEditor on the Mac.
 - **Load recovery** — the app retries failed local editor loads and failed remote login-window loads three times, then offers a native Retry / Close dialog. Network or authentication failures pause synchronization while local writing remains available.
 - **Auto-update** — signed, notarized releases update in place. Choose **Download Now** or **Later** when prompted; Settings → Updates shows download progress and offers **Restart to Update** when ready. **Check for Updates** is available in Settings and the app menu.
 
 ### Electron Development
 
 ```bash
-# Run the desktop app in development mode (starts Web too)
+# Start the desktop app and local Dashboard together for sign-in and sync
 pnpm electron:dev
 
-# Run Electron directly from the bundled files; the editor and Settings need no
-# Next.js dev server. Only sign-in, sync and the dashboard need `pnpm dev`.
+# Run the bundled LiveEditor and Settings for offline development.
 pnpm electron:build:ts && pnpm electron
 ```
 

@@ -135,7 +135,7 @@ export class WindowManager {
   private isDev: boolean
 
   /** URL of the Next.js server */
-  private serverUrl: string | null
+  private dashboardUrl: string | null
 
   /** Manages user settings */
   private configManager: ConfigManager | null
@@ -168,12 +168,12 @@ export class WindowManager {
   /**
    * Creates a new WindowManager instance.
    *
-   * @param serverUrl - URL of the Next.js server (null uses default)
+   * @param dashboardUrl - URL of the Dashboard server (null uses production).
    * @param configManager - Manages user settings
    * @param windowStateManager - Handles window state persistence
    */
   constructor(
-    serverUrl: string | null = null,
+    dashboardUrl: string | null = null,
     configManager: ConfigManager | null = null,
     windowStateManager: WindowStateManager | null = null,
   ) {
@@ -186,7 +186,7 @@ export class WindowManager {
     this.liveEditorNeedsReloadBeforeReveal = false
     this.settingsWindow = null
     this.isDev = process.env.NODE_ENV === 'development'
-    this.serverUrl = serverUrl
+    this.dashboardUrl = dashboardUrl
     this.configManager = configManager
     this.windowStateManager = windowStateManager
     this.getTrayBoundsProvider = null
@@ -420,7 +420,7 @@ export class WindowManager {
         : LOGIN_WINDOW_BACKGROUND_LIGHT,
       webPreferences: {
         additionalArguments: [
-          `--corelive-app-origin=${this.getWebAppOrigin()}`,
+          `--corelive-app-origin=${this.getDashboardOrigin()}`,
         ],
         nodeIntegration: false,
         contextIsolation: true,
@@ -756,7 +756,7 @@ export class WindowManager {
       ...windowOptions,
       webPreferences: {
         additionalArguments: [
-          `--corelive-app-origin=${this.getWebAppOrigin()}`,
+          `--corelive-app-origin=${this.getDashboardOrigin()}`,
         ],
         nodeIntegration: false,
         contextIsolation: true,
@@ -1131,7 +1131,7 @@ export class WindowManager {
   // ==========================================================================
 
   /**
-   * Build a panel's URL from the configured server origin. Single source of
+   * Build a panel's URL from the configured Dashboard origin. Single source of
    * truth shared by the create methods, the retries and the post-login reload.
    *
    * @param kind - Which panel.
@@ -1141,24 +1141,22 @@ export class WindowManager {
    * this.getPanelUrl('liveEditor') // => 'corelive-editor://app/index.html'
    */
   private getPanelUrl(kind: 'login' | 'liveEditor'): string {
-    const baseUrl = this.serverUrl || 'https://corelive.app'
+    const baseUrl = this.dashboardUrl || 'https://corelive.app'
     return kind === 'login' ? `${baseUrl}/login-shell` : LOCAL_EDITOR_URL
   }
 
   /**
-   * Resolve the web-app origin the renderers point at, independent of any one
-   * window. OAuth URL building uses this so the system-browser flow targets the
-   * correct origin (localhost in dev, corelive.app in prod) even with no main
-   * window — the retired main window can no longer be read for its URL.
+   * Resolves the Dashboard origin for browser links, OAuth and preload arguments.
+   * The origin comes from configuration and is available before a window opens.
    *
-   * @returns The origin (scheme + host + port) of the configured server URL, or
-   * the production origin when `serverUrl` is unset/unparseable.
+   * @returns The origin (scheme + host + port) of the configured Dashboard URL, or
+   * the production origin when `dashboardUrl` is unset/unparseable.
    * @example
-   * windowManager.getWebAppOrigin() // => 'http://localhost:4991' (dev)
-   * windowManager.getWebAppOrigin() // => 'https://corelive.app'    (prod)
+   * windowManager.getDashboardOrigin() // => 'http://localhost:4991' (dev)
+   * windowManager.getDashboardOrigin() // => 'https://corelive.app'    (prod)
    */
-  getWebAppOrigin(): string {
-    const baseUrl = this.serverUrl || 'https://corelive.app'
+  getDashboardOrigin(): string {
+    const baseUrl = this.dashboardUrl || 'https://corelive.app'
     try {
       return new URL(baseUrl).origin
     } catch {

@@ -25,7 +25,7 @@ type SignOutStorage =
   'cookies' | 'localstorage' | 'indexdb' | 'serviceworkers' | 'cachestorage'
 
 /** Storage kinds cleared for both origins (D3 step 4, C3). */
-export const SIGN_OUT_STORAGES: SignOutStorage[] = [
+const SIGN_OUT_STORAGES: SignOutStorage[] = [
   'cookies',
   'localstorage',
   'indexdb',
@@ -60,17 +60,17 @@ function hasRegistrableParent(hostname: string): boolean {
  * Production: the app host (plus its `www` alias) and `clerk.<app domain>`. Development: the
  * app host plus the `*.clerk.accounts.dev` Frontend API hosts found among the cookies; the
  * `clerk.accounts.dev` suffix and any public suffix are never included.
- * @param appOrigin - The configured `serverUrl` origin.
+ * @param dashboardOrigin - The configured `dashboardUrl` origin.
  * @param cookieDomains - Domains currently present in the session (development discovery).
  * @returns Exact hosts, the parent (or null) and the Clerk Frontend API hosts.
  * @example deriveSweepScope('https://corelive.app', [])
  * // { exactHosts: ['corelive.app', 'www.corelive.app', 'clerk.corelive.app'], parent: 'corelive.app', clerkHosts: ['clerk.corelive.app'] }
  */
 export function deriveSweepScope(
-  appOrigin: string,
+  dashboardOrigin: string,
   cookieDomains: string[],
 ): { exactHosts: string[]; parent: string | null; clerkHosts: string[] } {
-  const appHost = new URL(appOrigin).hostname.toLowerCase()
+  const appHost = new URL(dashboardOrigin).hostname.toLowerCase()
   const bareHost = appHost.replace(/^www\./, '')
   const parent = hasRegistrableParent(bareHost) ? bareHost : null
   const appHosts = parent
@@ -146,28 +146,28 @@ async function readSweepable(
  * resume (EA1) and by the "Clear again" action.
  *
  * @param options.session - The default session (or a fake).
- * @param options.appOrigin - The configured `serverUrl` origin.
+ * @param options.dashboardOrigin - The configured `dashboardUrl` origin.
  * @param options.log - Redacted log sink.
  * @returns `signed-out`, or `signed-out-residual` listing what survived the read-back.
  * @example
  * ```ts
- * const result = await endLocalSession({ session: session.defaultSession, appOrigin: 'https://corelive.app' })
+ * const result = await endLocalSession({ session: session.defaultSession, dashboardOrigin: 'https://corelive.app' })
  * ```
  */
 export async function endLocalSession(options: {
   session: SessionLike
-  appOrigin: string
+  dashboardOrigin: string
   log?: (line: string) => void
 }): Promise<Exclude<SignOutResult, { status: 'flush-failed' }>> {
   const { session } = options
   const initial = await session.cookies.get({})
   const scope = deriveSweepScope(
-    options.appOrigin,
+    options.dashboardOrigin,
     initial.map((cookie) => cookie.domain ?? ''),
   )
   // C3: only these origins, each with an explicit origin option.
   const origins = [
-    new URL(options.appOrigin).origin,
+    new URL(options.dashboardOrigin).origin,
     ...scope.clerkHosts.map((host) => `https://${host}`),
   ]
   for (const origin of origins)

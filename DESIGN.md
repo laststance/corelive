@@ -9,7 +9,7 @@
 - **What this is:** Personal task tracker + LiveEditor archive whose centerpiece is an Activity Heatmap visualizing every completed task as warm density over a year.
 - **Who it's for:** Solo, taste-driven productivity users who want quiet self-affirmation, not KPI grading or social comparison. Single-user (no team features).
 - **Space/industry:** Personal productivity. Adjacent: Things 3, Bear, Linear, Reflect, Tana, Cron. Distant: Notion (too much), Todoist (KPI guilt), Asana (team).
-- **Project type:** Hybrid — `(main)/*` is the dashboard app, `/login` and `/sign-up` are auth, marketing surfaces may follow. Web + Electron (macOS only).
+- **Product surfaces:** CoreLive for Mac contains LiveEditor and desktop Settings. CoreLive Dashboard runs in the browser, with the signed-in Dashboard at `/home`, Skill Tree at `/skill-tree`, and Appearance at `/settings`.
 
 ## Aesthetic Direction
 
@@ -150,7 +150,7 @@ The applied default is shadcn Default (neutral). Warm Cathedral is one selectabl
 **Theme-safe UI in three steps:**
 
 1. Use semantic token classes (`bg-background text-foreground`, `bg-primary text-primary-foreground`, `text-muted-foreground`, `border-border`), never a hue literal.
-2. View it on Default and Warm Cathedral. For desktop Settings, run `pnpm qa:settings`, open the printed URL and choose **Appearance** from the top menu. For the web dashboard, run `pnpm qa:web` and open `?view=appearance`, or run `pnpm dev` and open Settings > Appearance > Palette. Expect neutral colors on Default light and dark. [Desktop fixture](apps/desktop/scripts/qa-settings.ts) · [Web fixture](apps/web/scripts/qa-web.ts)
+2. View it on Default and Warm Cathedral. For desktop Settings, run `pnpm qa:settings`, open the printed URL and choose **Appearance** from the top menu. For the Dashboard, run `pnpm qa:dashboard` and open `?view=appearance`, or run `pnpm dev` and open Settings > Appearance > Palette. Expect neutral colors on Default light and dark. [Desktop fixture](apps/desktop/scripts/qa-settings.ts) · [Dashboard fixture](apps/web/scripts/qa-dashboard.ts)
 3. Run `pnpm test`; only when the registry changed, also `pnpm theme:generate && pnpm theme:check`.
 
 The guard `apps/web/src/lib/themes/no-hardcoded-amber.test.ts` gives **partial** coverage: it detects `oklch()` literals (hue 30-80, chroma >= 0.1) and Tailwind `amber-` classes in hand-authored UI code; hex, hsl and rgb are not parsed.

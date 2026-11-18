@@ -1,4 +1,8 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import {
+  QueryClient,
+  QueryClientProvider,
+  QueryObserver,
+} from '@tanstack/react-query'
 import { act, cleanup, renderHook } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
@@ -206,13 +210,10 @@ describe('useDashboardFreshness', () => {
   test('drops interval, focus and visibility triggers that arrive during one pending refresh', async () => {
     // Arrange
     const client = mountFreshness()
-    let finishRefresh: () => void = () => {}
-    const spy = vi.spyOn(client, 'invalidateQueries').mockImplementation(
-      async () =>
-        new Promise<void>((resolve) => {
-          finishRefresh = resolve
-        }),
-    )
+    const pendingRefresh = Promise.withResolvers<void>()
+    const spy = vi
+      .spyOn(client, 'invalidateQueries')
+      .mockReturnValue(pendingRefresh.promise)
 
     // Act
     await act(async () => {
@@ -223,9 +224,51 @@ describe('useDashboardFreshness', () => {
 
     // Assert
     expect(spy).toHaveBeenCalledTimes(INVALIDATIONS_PER_REFRESH)
-    await act(async () => {
-      finishRefresh()
+    await act(async () => pendingRefresh.resolve())
+  })
+
+  test('keeps polling activity without restarting a pending day detail request', async () => {
+    // Arrange
+    const client = mountFreshness()
+    const heatmapKey = orpc.completed.heatmap.key()
+    const dayDetailKey = orpc.completed.dayDetail.key()
+    client.setQueryData(heatmapKey, { total: 1 })
+    client.setQueryData(dayDetailKey, { count: 1 })
+    const pendingDay = Promise.withResolvers<{ count: number }>()
+    const abortDay = vi.fn()
+    const readDay = vi.fn(async ({ signal }: { signal: AbortSignal }) => {
+      signal.addEventListener('abort', abortDay)
+      return pendingDay.promise
     })
+    const readHeatmap = vi.fn(async () => ({ total: 1 }))
+    const unsubscribeDay = new QueryObserver(client, {
+      queryKey: dayDetailKey,
+      queryFn: readDay,
+    }).subscribe(() => undefined)
+    const unsubscribeHeatmap = new QueryObserver(client, {
+      queryKey: heatmapKey,
+      queryFn: readHeatmap,
+    }).subscribe(() => undefined)
+
+    try {
+      // Act
+      await act(async () => vi.advanceTimersByTimeAsync(INTERVAL_MS * 3))
+
+      // Assert
+      expect(readHeatmap).toHaveBeenCalledTimes(3)
+      expect(readDay).toHaveBeenCalledOnce()
+      expect(abortDay).not.toHaveBeenCalled()
+
+      // Act
+      await act(async () => pendingDay.resolve({ count: 2 }))
+
+      // Assert
+      expect(client.getQueryData(dayDetailKey)).toEqual({ count: 2 })
+    } finally {
+      unsubscribeDay()
+      unsubscribeHeatmap()
+      client.clear()
+    }
   })
 
   test('refreshes again on the next trigger after a rejected refresh', async () => {

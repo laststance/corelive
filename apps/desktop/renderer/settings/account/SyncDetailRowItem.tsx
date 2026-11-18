@@ -29,14 +29,14 @@ function rowMessage(row: SyncDetailRow): string | null {
   switch (row.type) {
     case 'invalid-parent':
     case 'forbidden':
-      return 'Changed back to match the dashboard.'
+      return 'Changed back to match the Dashboard.'
     case 'digest-mismatch':
     case 'parked':
       return "Couldn't apply a change. It was kept on this Mac."
     case 'delete-blocked':
-      return `Couldn't remove "${row.categoryPath.split(' / ').pop()}" on the dashboard.`
+      return `Couldn't remove "${row.categoryPath.split(' / ').pop()}" on the Dashboard.`
     case 'waiting-confirm':
-      return 'Waiting for the dashboard to confirm a change'
+      return 'Waiting for the Dashboard to confirm a change'
     default:
       return null
   }
@@ -50,7 +50,7 @@ function actionLabel(row: SyncDetailRow, action: SyncDetailAction): string {
       return `Use "${row.macValue ?? ''}"`
     case 'keep-dashboard-value':
       return blocked
-        ? 'Keep it on the dashboard'
+        ? 'Keep it on the Dashboard'
         : `Keep "${row.dashboardValue ?? ''}"`
     case 'choose-another-name':
       return blocked ? `Rename "${row.childName ?? ''}"` : 'Choose another name'
@@ -63,7 +63,7 @@ function actionLabel(row: SyncDetailRow, action: SyncDetailAction): string {
  * One "Needs a look" row of the Sync details page (#216 DA7, DA9, DA13).
  *
  * A hairline-separated list item, not a card: the category's full path, the field, "On this
- * Mac" and "On the dashboard" values, then the row's actions. While an action runs the row shows
+ * Mac" and "On the Dashboard" values, then the row's actions. While an action runs the row shows
  * "Applying…" with its actions disabled; a failure shows "Couldn't apply. Try again." inline;
  * Choose another name opens an inline form whose refusals show the DA8 copy and keep the typed
  * value. On success the page refetches and the row moves to History as "Resolved".
@@ -150,7 +150,7 @@ export function SyncDetailRowItem({ row, onAction }: SyncDetailRowItemProps) {
           {row.dashboardValue !== null && (
             <div className="min-w-0">
               <dt className="inline text-muted-foreground">
-                On the dashboard:{' '}
+                On the Dashboard:{' '}
               </dt>
               <dd className="inline break-words">{row.dashboardValue}</dd>
             </div>

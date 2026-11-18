@@ -1,12 +1,22 @@
 import {
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query'
+import {
+  act,
   cleanup,
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from '@testing-library/react'
-import { afterEach, expect, test, vi } from 'vitest'
+import userEvent from '@testing-library/user-event'
+import { type PropsWithChildren, useRef, useState } from 'react'
+import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
+import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import type { DayDetailTask } from '@/server/schemas/completed'
 
 import { DayDetailDialog } from './DayDetailDialog'
@@ -30,26 +40,51 @@ const TASKS: DayDetailTask[] = [
   completedAt: new Date('2026-05-11T09:00:00Z'),
   category,
 }))
-vi.mock('@tanstack/react-query', () => ({
-  keepPreviousData: (previous: unknown) => previous,
-  useQuery: () => ({
-    data: { date: '2026-05-11', count: 7, tasks: TASKS },
-    isLoading: false,
-    isPlaceholderData: false,
-  }),
-}))
+const loadedDay = { date: '2026-05-11', count: 7, tasks: TASKS, categories: [] }
+const loadDay = vi.fn<() => Promise<typeof loadedDay>>()
+let client: QueryClient
+
 vi.mock('@/lib/orpc/client-query', () => ({
-  orpc: { completed: { dayDetail: { queryOptions: () => ({}) } } },
+  orpc: {
+    completed: {
+      dayDetail: {
+        queryOptions: ({ input }: { input: { date: string } }) => ({
+          queryKey: [input.date],
+        }),
+      },
+    },
+  },
 }))
 vi.mock('@/hooks/useClerkQueryReady', () => ({
-  useClerkQueryReady: () => true,
+  useClerkQueryReady: vi.fn(),
 }))
 
-afterEach(cleanup)
+function QueryWrapper({ children }: PropsWithChildren) {
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+}
+
+beforeEach(() => {
+  vi.mocked(useClerkQueryReady).mockReturnValue(true)
+  loadDay.mockReset()
+  client = new QueryClient({
+    defaultOptions: {
+      queries: { queryFn: loadDay, retry: false, staleTime: Infinity },
+    },
+  })
+  client.setQueryData(['2026-05-11'], loadedDay)
+})
+
+afterEach(() => {
+  cleanup()
+  client.clear()
+  onlineManager.setOnline(true)
+})
 
 test('day details group seven entries into Work six and General one with full child paths', () => {
   // Arrange
-  render(<DayDetailDialog date="2026-05-11" onOpenChange={vi.fn()} />)
+  render(<DayDetailDialog date="2026-05-11" onOpenChange={vi.fn()} />, {
+    wrapper: QueryWrapper,
+  })
   // Act
   fireEvent.click(
     screen.getByRole('button', { name: 'Work: 6 entries, show breakdown' }),
@@ -65,4 +100,214 @@ test('day details group seven entries into Work six and General one with full ch
   expect(screen.getAllByText('Work / CoreLive')).toHaveLength(3)
   expect(screen.getAllByText(/^Win \d$/)).toHaveLength(7)
   expect(screen.getByText('General', { selector: 'p' })).toBeVisible()
+})
+
+test('Escape returns keyboard focus to the dashboard control that opened the day', async () => {
+  // Arrange
+  const user = userEvent.setup()
+
+  function Example() {
+    const [date, setDate] = useState<string | null>(null)
+    return (
+      <>
+        <button type="button" onClick={() => setDate('2026-05-11')}>
+          View day
+        </button>
+        <DayDetailDialog date={date} onOpenChange={() => setDate(null)} />
+      </>
+    )
+  }
+
+  render(<Example />, { wrapper: QueryWrapper })
+  const viewDay = screen.getByRole('button', { name: 'View day' })
+  await user.tab()
+  expect(viewDay).toHaveFocus()
+
+  // Act
+  await user.keyboard('{Enter}')
+  expect(screen.getByRole('dialog')).toBeVisible()
+  await user.keyboard('{Escape}')
+
+  // Assert
+  await waitFor(() => expect(viewDay).toHaveFocus())
+  expect(screen.queryByRole('dialog')).toBeNull()
+})
+
+test.each(['direct link', 'removed button'] as const)(
+  'closing a day opened via %s returns focus to the Activity heading',
+  async (entry) => {
+    // Arrange
+    const user = userEvent.setup()
+    function Example({ showButton }: { showButton: boolean }) {
+      const heading = useRef<HTMLHeadingElement>(null)
+      const [date, setDate] = useState<string | null>(
+        entry === 'direct link' ? '2026-05-11' : null,
+      )
+      return (
+        <>
+          <h2 ref={heading} tabIndex={-1}>
+            Activity
+          </h2>
+          {showButton && (
+            <button type="button" onClick={() => setDate('2026-05-11')}>
+              View day
+            </button>
+          )}
+          <DayDetailDialog
+            date={date}
+            onOpenChange={() => setDate(null)}
+            fallbackFocusRef={heading}
+          />
+        </>
+      )
+    }
+    const { rerender } = render(
+      <Example showButton={entry === 'removed button'} />,
+      { wrapper: QueryWrapper },
+    )
+    if (entry === 'removed button') {
+      await user.click(screen.getByRole('button', { name: 'View day' }))
+      // Remove the original trigger after the dialog has captured its focus.
+      rerender(<Example showButton={false} />)
+    }
+    expect(screen.getByRole('dialog')).toBeVisible()
+    const heading = screen.getByText('Activity', { selector: 'h2' })
+    const revealHeading = vi.spyOn(heading, 'scrollIntoView')
+
+    // Act
+    await user.keyboard('{Escape}')
+
+    // Assert
+    await waitFor(() => expect(heading).toHaveFocus())
+    expect(revealHeading).toHaveBeenCalledWith({
+      block: 'nearest',
+      inline: 'nearest',
+    })
+  },
+)
+
+test('a failed day can be retried and only its confirmed zero count shows a rest day', async () => {
+  // Arrange
+  loadDay.mockRejectedValueOnce(new Error('Unavailable'))
+  loadDay.mockResolvedValueOnce({
+    date: '2026-05-12',
+    count: 0,
+    tasks: [],
+    categories: [],
+  })
+  // Act
+  render(<DayDetailDialog date="2026-05-12" onOpenChange={vi.fn()} />, {
+    wrapper: QueryWrapper,
+  })
+
+  // Assert
+  const retry = await screen.findByRole('button', { name: 'Retry day details' })
+  expect(screen.getByText('Day details could not load.')).toBeVisible()
+  expect(screen.queryByText('rest day')).toBeNull()
+  expect(screen.getByRole('button', { name: 'Save as image' })).toBeDisabled()
+
+  // Act
+  fireEvent.click(retry)
+
+  // Assert
+  expect(await screen.findByRole('heading', { name: 'rest day' })).toBeVisible()
+  expect(loadDay).toHaveBeenCalledTimes(2)
+})
+
+test('the day waits for the account session before requesting or describing activity', () => {
+  // Arrange
+  vi.mocked(useClerkQueryReady).mockReturnValue(false)
+
+  // Act
+  render(<DayDetailDialog date="2026-05-12" onOpenChange={vi.fn()} />, {
+    wrapper: QueryWrapper,
+  })
+
+  // Assert
+  expect(screen.getByText('Waiting for your session…')).toBeVisible()
+  expect(screen.queryByText('rest day')).toBeNull()
+  expect(loadDay).not.toHaveBeenCalled()
+})
+
+test('an uncached offline day waits for a connection before showing its entries', async () => {
+  // Arrange
+  onlineManager.setOnline(false)
+  loadDay.mockResolvedValue({ ...loadedDay, date: '2026-05-12' })
+  render(<DayDetailDialog date="2026-05-12" onOpenChange={vi.fn()} />, {
+    wrapper: QueryWrapper,
+  })
+  expect(
+    screen.getByText('Connect to the internet to load this day.'),
+  ).toBeVisible()
+  expect(screen.queryByText('rest day')).toBeNull()
+  expect(loadDay).not.toHaveBeenCalled()
+
+  // Act
+  await act(async () => onlineManager.setOnline(true))
+
+  // Assert
+  expect(await screen.findByText('Win 1')).toBeVisible()
+})
+
+test('a refresh failure keeps the selected day’s entries visible and identifies them as cached', async () => {
+  // Arrange
+  loadDay.mockRejectedValue(new Error('Unavailable'))
+  render(<DayDetailDialog date="2026-05-11" onOpenChange={vi.fn()} />, {
+    wrapper: QueryWrapper,
+  })
+
+  // Act
+  await act(async () => {
+    await client.invalidateQueries({ queryKey: ['2026-05-11'] })
+  })
+
+  // Assert
+  expect(
+    await screen.findByText(
+      'Day details could not refresh. Showing the last loaded entries.',
+    ),
+  ).toBeVisible()
+  expect(screen.getByText('Win 1')).toBeVisible()
+  expect(
+    screen.getByRole('button', { name: 'Retry day details' }),
+  ).toBeEnabled()
+})
+
+test('moving to an uncached day clears the previous day and keeps focus on the navigation control', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  loadDay.mockReturnValue(new Promise(() => {}))
+  function Example() {
+    const [date, setDate] = useState('2026-05-11')
+    return (
+      <DayDetailDialog
+        date={date}
+        onOpenChange={vi.fn()}
+        onNavigate={(offset) =>
+          setDate(offset === 1 ? '2026-05-12' : '2026-05-11')
+        }
+      />
+    )
+  }
+  render(<Example />, { wrapper: QueryWrapper })
+  const nextDay = screen.getByRole('button', { name: 'Next day' })
+  expect(screen.getByText('Win 1')).toBeVisible()
+
+  // Act
+  await user.click(nextDay)
+
+  // Assert
+  expect(screen.getByText('May 12, 2026')).toBeVisible()
+  expect(screen.getByRole('heading', { name: 'Day details' })).toBeVisible()
+  expect(screen.getByText('Loading day details…')).toBeVisible()
+  expect(screen.queryByText('Win 1')).toBeNull()
+  expect(nextDay).toHaveFocus()
+
+  // Act
+  await user.keyboard('k')
+
+  // Assert
+  expect(screen.getByText('May 11, 2026')).toBeVisible()
+  expect(screen.getByText('Win 1')).toBeVisible()
+  expect(nextDay).toHaveFocus()
 })

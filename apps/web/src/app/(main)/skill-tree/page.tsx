@@ -1,7 +1,10 @@
 import { auth } from '@clerk/nextjs/server'
+import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 
 import { SkillTreeView } from './SkillTreeView'
+
+export const metadata: Metadata = { title: 'Skill Tree' }
 
 /**
  * Server component shell for /skill-tree.

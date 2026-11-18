@@ -264,7 +264,7 @@ test('acknowledges the first upload notice only after Account is opened', async 
   )
 
   // Assert
-  expect(screen.getByText('7 keeps are on your dashboard')).toBeVisible()
+  expect(screen.getByText('7 keeps are on your Dashboard')).toBeVisible()
   await waitFor(() =>
     expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalledOnce(),
   )
@@ -297,7 +297,7 @@ test('preserves an upload notice that arrives while Sync details covers Account'
   await user.click(screen.getByRole('button', { name: /Back to Settings/ }))
 
   // Assert
-  expect(screen.getByText('7 keeps are on your dashboard')).toBeVisible()
+  expect(screen.getByText('7 keeps are on your Dashboard')).toBeVisible()
   await waitFor(() =>
     expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalledOnce(),
   )
@@ -355,7 +355,7 @@ test('keeps an upload pending until Account is visible after the Settings window
   await user.selectOptions(menu, 'Account')
 
   // Assert
-  expect(screen.getByText('3 keeps are on your dashboard')).toBeVisible()
+  expect(screen.getByText('3 keeps are on your Dashboard')).toBeVisible()
   expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalledOnce()
 })
 
@@ -392,7 +392,7 @@ test('resumes the Account notice on uncovering Settings without changing its sel
 
     // Assert
     expect(menu).toHaveValue('Account')
-    expect(screen.getByText('3 keeps are on your dashboard')).toBeVisible()
+    expect(screen.getByText('3 keeps are on your Dashboard')).toBeVisible()
     expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalledOnce()
   } finally {
     visibility.mockRestore()

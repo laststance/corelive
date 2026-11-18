@@ -40,32 +40,32 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-test('state A offers the dashboard sign-in as its only primary action', async () => {
+test('state A offers the Dashboard sign-in as its only primary action', async () => {
   // Arrange / Act
   await renderWithSettings(<Harness />)
 
   // Assert
   expect(
     screen.getByText(
-      'Your writing is saved on this Mac. Sign in to also see it on the dashboard.',
+      'Your writing is saved on this Mac. Sign in to also see it on the Dashboard.',
     ),
   ).toBeVisible()
   expect(primaryButtons()).toEqual(['Sign in'])
 })
 
-test('state B shows the email, an up-to-date line and Open dashboard as the only primary action', async () => {
+test('state B shows the email, an up-to-date line and Open Dashboard as the only primary action', async () => {
   // Arrange / Act
   await renderWithSettings(<Harness />, { account: ATTACHED })
 
   // Assert
   expect(screen.getByText('raphtalia@example.com')).toBeVisible()
   expect(screen.getByText('Up to date · checked 5 minutes ago')).toBeVisible()
-  expect(primaryButtons()).toEqual(['Open dashboard'])
+  expect(primaryButtons()).toEqual(['Open Dashboard'])
   expect(screen.getByRole('button', { name: 'Sign out' })).toBeVisible()
   expect(screen.queryByText(/changes? needs? a look/)).toBeNull()
 })
 
-test('state B never claims everything is on the dashboard while keeps wait, and links changes that need a look', async () => {
+test('state B never claims everything is on the Dashboard while keeps wait, and links changes that need a look', async () => {
   // Arrange / Act
   await renderWithSettings(<Harness />, {
     account: { ...ATTACHED, waitingCount: 3, needsALookCount: 2 },
@@ -149,7 +149,7 @@ test('Not now declines the pending connect and keeps state A', async () => {
   expect(
     screen.getByText(/Connect this Mac to/).closest('p'),
   ).toHaveTextContent(
-    'Connect this Mac to raphtalia@example.com? Your keeps and categories on this Mac will appear on the dashboard. Your writing stays on this Mac.',
+    'Connect this Mac to raphtalia@example.com? Your keeps and categories on this Mac will appear on the Dashboard. Your writing stays on this Mac.',
   )
   expect(primaryButtons()).toEqual(['Connect this Mac'])
   fake.api.account.notNow.mockImplementation(async () => {
@@ -166,7 +166,7 @@ test('Not now declines the pending connect and keeps state A', async () => {
   expect(await screen.findByRole('button', { name: 'Sign in' })).toBeVisible()
 })
 
-test('Connect this Mac sends the connect request, then shows progress and the one-time completion with Open dashboard', async () => {
+test('Connect this Mac sends the connect request, then shows progress and the one-time completion with Open Dashboard', async () => {
   // Arrange
   const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
   const { fake } = await renderWithSettings(<Harness />, {
@@ -186,7 +186,7 @@ test('Connect this Mac sends the connect request, then shows progress and the on
 
   // Assert: progress
   expect(
-    await screen.findByText('Sending 12 keeps to your dashboard…'),
+    await screen.findByText('Sending 12 keeps to your Dashboard…'),
   ).toBeVisible()
 
   // Act: the first upload finishes
@@ -194,9 +194,9 @@ test('Connect this Mac sends the connect request, then shows progress and the on
 
   // Assert: completion once, then main is told it was shown
   expect(
-    await screen.findByText('12 keeps are on your dashboard'),
+    await screen.findByText('12 keeps are on your Dashboard'),
   ).toBeVisible()
-  expect(primaryButtons()).toEqual(['Open dashboard'])
+  expect(primaryButtons()).toEqual(['Open Dashboard'])
   await waitFor(() =>
     expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalled(),
   )
@@ -207,7 +207,7 @@ test('Connect this Mac sends the connect request, then shows progress and the on
     expect(fake.api.snapshot.mock.calls.length).toBeGreaterThan(reloadsBefore),
   )
   await act(async () => undefined)
-  expect(screen.getByText('12 keeps are on your dashboard')).toBeVisible()
+  expect(screen.getByText('12 keeps are on your Dashboard')).toBeVisible()
 })
 
 test('the first-upload notice lasts through section changes and disappears on the next Settings visit', async () => {
@@ -229,7 +229,7 @@ test('the first-upload notice lasts through section changes and disappears on th
   await user.selectOptions(menu, 'Account')
 
   // Assert
-  expect(screen.getByText('7 keeps are on your dashboard')).toBeVisible()
+  expect(screen.getByText('7 keeps are on your Dashboard')).toBeVisible()
   expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalledOnce()
 
   // Act
@@ -237,14 +237,14 @@ test('the first-upload notice lasts through section changes and disappears on th
   await user.selectOptions(menu, 'Account')
 
   // Assert
-  expect(screen.getByText('7 keeps are on your dashboard')).toBeVisible()
+  expect(screen.getByText('7 keeps are on your Dashboard')).toBeVisible()
 
   // Act
   act(() => fake.hideWindow())
   await user.selectOptions(menu, 'Account')
 
   // Assert
-  expect(screen.queryByText('7 keeps are on your dashboard')).toBeNull()
+  expect(screen.queryByText('7 keeps are on your Dashboard')).toBeNull()
   expect(screen.getByText('Up to date · checked 5 minutes ago')).toBeVisible()
   expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalledOnce()
 })
@@ -263,7 +263,7 @@ test('an acknowledged upload stays dismissed when Settings reopens before the cl
   await user.selectOptions(menu, 'Account')
 
   // Assert
-  expect(screen.getByText('7 keeps are on your dashboard')).toBeVisible()
+  expect(screen.getByText('7 keeps are on your Dashboard')).toBeVisible()
   expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalledOnce()
 
   // Act
@@ -271,7 +271,7 @@ test('an acknowledged upload stays dismissed when Settings reopens before the cl
   await user.selectOptions(menu, 'Account')
 
   // Assert
-  expect(screen.queryByText('7 keeps are on your dashboard')).toBeNull()
+  expect(screen.queryByText('7 keeps are on your Dashboard')).toBeNull()
   expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalledOnce()
 })
 
@@ -305,7 +305,7 @@ test('Account retries a failed upload acknowledgement on its next visit without 
   await act(async () => failFirstAttempt())
 
   // Assert
-  expect(screen.getByText('7 keeps are on your dashboard')).toBeVisible()
+  expect(screen.getByText('7 keeps are on your Dashboard')).toBeVisible()
   expect(acknowledge).toHaveBeenCalledOnce()
 
   // Act
@@ -313,7 +313,7 @@ test('Account retries a failed upload acknowledgement on its next visit without 
   await user.selectOptions(menu, 'Account')
 
   // Assert
-  expect(screen.getByText('7 keeps are on your dashboard')).toBeVisible()
+  expect(screen.getByText('7 keeps are on your Dashboard')).toBeVisible()
   expect(acknowledge).toHaveBeenCalledTimes(2)
 
   // Act
@@ -321,17 +321,17 @@ test('Account retries a failed upload acknowledgement on its next visit without 
   await user.selectOptions(menu, 'Account')
 
   // Assert
-  expect(screen.queryByText('7 keeps are on your dashboard')).toBeNull()
+  expect(screen.queryByText('7 keeps are on your Dashboard')).toBeNull()
   expect(acknowledge).toHaveBeenCalledTimes(2)
 })
 
-test('Open dashboard asks main to open it without supplying an address', async () => {
+test('Open Dashboard asks main to open it without supplying an address', async () => {
   // Arrange
   const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
   const { fake } = await renderWithSettings(<Harness />, { account: ATTACHED })
 
   // Act
-  await user.click(screen.getByRole('button', { name: 'Open dashboard' }))
+  await user.click(screen.getByRole('button', { name: 'Open Dashboard' }))
 
   // Assert
   expect(fake.api.account.openDashboard).toHaveBeenCalledExactlyOnceWith()
@@ -549,7 +549,7 @@ test('a failed disk flush keeps the account signed in and says the writing was n
   expect(
     await screen.findByText('Not saved — retry or copy your writing'),
   ).toBeVisible()
-  expect(screen.getByRole('button', { name: 'Open dashboard' })).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Open Dashboard' })).toBeVisible()
   expect(screen.getByRole('button', { name: 'Sign out' })).toBeVisible()
 })
 

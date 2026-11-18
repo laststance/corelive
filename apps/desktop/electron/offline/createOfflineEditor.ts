@@ -22,7 +22,7 @@ export function createOfflineEditor(
   mainDirectory: string,
   deps: ConstructorParameters<typeof OfflineEditorIPC>[2],
 ) {
-  const origin = windows.getWebAppOrigin()
+  const origin = windows.getDashboardOrigin()
   const broker = new TokenBroker({
     origin,
     preload: join(mainDirectory, '..', 'preload', 'preload-offline-auth.cjs'),
@@ -40,7 +40,7 @@ export function createOfflineEditor(
     endLocalSession: async () =>
       endLocalSession({
         session: session.defaultSession,
-        appOrigin: origin,
+        dashboardOrigin: origin,
         log: (line) => log.info(line),
       }),
     log: (line) => log.info(line),

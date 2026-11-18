@@ -83,7 +83,7 @@ reviews:
   path_instructions:
     - path: 'src/**/*.{ts,tsx}'
       instructions: |
-        CoreLive web/renderer conventions:
+        CoreLive Dashboard and desktop renderer conventions:
         - Next.js 16 App Router; keep `'use client'` at the boundary only.
         - Prefer lifecycle hooks from `@/hooks` (`useInitialEffect`, `useUpdateEffect`, etc.) over raw `useEffect` when intent matches.
         - Use `useSyncExternalStore` for SSR-safe subscriptions (timers, media queries).

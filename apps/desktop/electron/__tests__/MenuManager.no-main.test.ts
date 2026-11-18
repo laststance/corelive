@@ -100,7 +100,7 @@ function findItemByLabel(
  */
 function createStubWindowManager(): WindowManager {
   return {
-    getWebAppOrigin: vi.fn(() => 'https://corelive.app'),
+    getDashboardOrigin: vi.fn(() => 'https://corelive.app'),
     openSettings: vi.fn(),
     toggleLiveEditor: vi.fn(),
     showLiveEditor: vi.fn(),

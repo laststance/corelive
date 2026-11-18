@@ -13,7 +13,7 @@ import { app, Menu, nativeImage, Notification, Tray } from 'electron'
 import type { MenuItemConstructorOptions, NativeImage } from 'electron'
 
 import { log } from './logger'
-import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
+import { openDashboardInBrowser } from './utils/openDashboardInBrowser'
 import { trayShortcutMenuFields } from './utils/trayShortcutMenuFields'
 import type { WindowManager } from './WindowManager'
 
@@ -498,12 +498,12 @@ export class SystemTrayManager {
 
       const template: MenuItemConstructorOptions[] = [
         {
-          label: 'Open full app in browser ↗',
+          label: 'Open Dashboard in browser ↗',
           click: (): void => {
-            // The full task app is web-only now that the main window is retired:
-            // open corelive.app in the user's browser (↗ = leaves the app),
-            // never a native main window. (T9 / user: no item restores main.)
-            openWebAppInBrowser(this.windowManager.getWebAppOrigin(), '/home')
+            openDashboardInBrowser(
+              this.windowManager.getDashboardOrigin(),
+              '/home',
+            )
           },
         },
         { type: 'separator' },
@@ -569,10 +569,12 @@ export class SystemTrayManager {
     try {
       const fallbackMenu = Menu.buildFromTemplate([
         {
-          label: 'Open full app in browser ↗',
+          label: 'Open Dashboard in browser ↗',
           click: (): void => {
-            // Degraded menu still never restores a native main window.
-            openWebAppInBrowser(this.windowManager.getWebAppOrigin(), '/home')
+            openDashboardInBrowser(
+              this.windowManager.getDashboardOrigin(),
+              '/home',
+            )
           },
         },
         {

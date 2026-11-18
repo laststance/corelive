@@ -34,11 +34,11 @@ vi.mock('../logger', () => ({
 
 /**
  * Creates a minimal WindowManager mock for OAuth URL tests. OAuthManager now
- * sources the OAuth origin from `WindowManager.getWebAppOrigin()` (window-
+ * sources the OAuth origin from `WindowManager.getDashboardOrigin()` (window-
  * agnostic, so it survives main-window retirement) rather than reading a live
  * BrowserWindow URL — the mock just returns the resolved origin.
  *
- * @param origin - Web-app origin WindowManager resolves from its server URL
+ * @param origin - Dashboard origin WindowManager resolves from its server URL
  *   (localhost in dev, corelive.app in prod).
  * @returns WindowManager-compatible mock object.
  * @example
@@ -46,7 +46,7 @@ vi.mock('../logger', () => ({
  */
 function createWindowManagerMock(origin = 'https://corelive.app') {
   return {
-    getWebAppOrigin: () => origin,
+    getDashboardOrigin: () => origin,
     getMainWindow: () => null,
     hasMainWindow: () => false,
   }
@@ -97,24 +97,34 @@ describe('OAuthManager', () => {
     ).not.toContain('sensitive-')
   })
 
-  test('builds the OAuth start URL from the dev web-app origin', () => {
+  test('builds the OAuth start URL from the dev Dashboard origin', () => {
+    // Arrange
     const oauthManager = new OAuthManager(
       createWindowManagerMock('http://localhost:4991') as never,
       null,
     )
 
-    expect(oauthManager.buildOAuthURL('google', 'state_123')).toBe(
+    // Act
+    const url = oauthManager.buildOAuthURL('google', 'state_123')
+
+    // Assert
+    expect(url).toBe(
       'http://localhost:4991/oauth/start?provider=google&state=state_123',
     )
   })
 
-  test('builds the OAuth start URL from the production web-app origin', () => {
+  test('builds the OAuth start URL from the production Dashboard origin', () => {
+    // Arrange
     const oauthManager = new OAuthManager(
       createWindowManagerMock('https://corelive.app') as never,
       null,
     )
 
-    expect(oauthManager.buildOAuthURL('google', 'state_456')).toBe(
+    // Act
+    const url = oauthManager.buildOAuthURL('google', 'state_456')
+
+    // Assert
+    expect(url).toBe(
       'https://corelive.app/oauth/start?provider=google&state=state_456',
     )
   })

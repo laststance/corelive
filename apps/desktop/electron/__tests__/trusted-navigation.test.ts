@@ -1,13 +1,15 @@
 import { describe, expect, test } from 'vitest'
 
 import {
-  isTrustedAppNavigation,
+  isTrustedDashboardNavigation,
   isTrustedClerkHandshake,
-} from '../utils/isTrustedAppNavigation'
+} from '../utils/isTrustedDashboardNavigation'
 
 describe('preload document navigation boundary', () => {
   test.each([
     ['https://corelive.app/settings', 'https://corelive.app', true],
+    ['https://www.corelive.app/settings', 'https://corelive.app', true],
+    ['blob:https://www.corelive.app/fixture', 'https://corelive.app', false],
     ['https://www.corelive.app/login-shell', 'https://corelive.app', true],
     ['https://corelive.app/home', 'https://www.corelive.app', true],
     ['http://localhost:4991/home', 'http://localhost:4991', true],
@@ -24,7 +26,7 @@ describe('preload document navigation boundary', () => {
     (destination, configured, allowed) => {
       // Arrange: each row identifies a real app document or an untrusted replacement.
       // Act
-      const permitted = isTrustedAppNavigation(destination, configured)
+      const permitted = isTrustedDashboardNavigation(destination, configured)
       // Assert
       expect(permitted).toBe(allowed)
     },

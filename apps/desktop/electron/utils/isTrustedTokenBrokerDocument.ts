@@ -1,4 +1,4 @@
-import { isTrustedAppNavigation } from './isTrustedAppNavigation'
+import { isTrustedDashboardNavigation } from './isTrustedDashboardNavigation'
 
 export const TOKEN_BROKER_PATH = '/desktop-auth'
 // Clerk's installed backend uses these during its bounded session handshake.
@@ -27,7 +27,7 @@ export function isTrustedTokenBrokerDocument(
   try {
     const parsed = new URL(url)
     return (
-      isTrustedAppNavigation(url, origin) &&
+      isTrustedDashboardNavigation(url, origin) &&
       parsed.pathname === TOKEN_BROKER_PATH &&
       !parsed.hash &&
       [...parsed.searchParams.keys()].every((key) =>

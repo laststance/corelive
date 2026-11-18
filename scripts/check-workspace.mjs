@@ -34,7 +34,7 @@ for (const file of files) {
     file.startsWith('apps/web/') &&
     /(?:@\/electron\/|(?:\.\.\/)+electron\/)/.test(source)
   )
-    errors.push(`Native source reference in Web: ${file}`)
+    errors.push(`Native source reference in Dashboard: ${file}`)
   if (
     file.startsWith('packages/desktop-contract/src/') &&
     /(?:from|import\()\s*['"](?:electron|node:|fs['"]|path['"]|(?:\.\.\/)+apps\/)/.test(

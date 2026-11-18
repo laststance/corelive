@@ -651,7 +651,7 @@ export class OfflineEditorController {
 
   /**
    * Drops the finished first-upload progress once Settings has shown it, so the DA4 line
-   * "<N> keeps are on your dashboard" appears once.
+   * "<N> keeps are on your Dashboard" appears once.
    * @example controller.acknowledgeFirstUpload()
    */
   acknowledgeFirstUpload(): void {

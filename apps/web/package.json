@@ -1,5 +1,5 @@
 {
-  "name": "@corelive/web",
+  "name": "@corelive/dashboard",
   "private": true,
   "type": "module",
   "dependencies": {
@@ -118,7 +118,7 @@
     "test:db": "cross-env RUN_DB_INTEGRATION_TESTS=1 vitest run",
     "test:watch": "vitest --watch",
     "test:ui": "vitest --ui",
-    "coverage:unit:web": "vitest run --coverage",
+    "coverage:unit:dashboard": "vitest run --coverage",
     "theme:generate": "tsx scripts/generate-theme-css.ts",
     "theme:check": "tsx scripts/generate-theme-css.ts --check",
     "db:generate": "drizzle-kit generate",

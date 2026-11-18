@@ -34,8 +34,8 @@ checksummed envelope, atomic rename, file and directory flush and its own
 then dropped from `device.json`, so a crash can leave it in both files but never in
 neither. Export includes the archive, and an existing v2 file migrates by simply having
 its old records moved on the first roll. A Mac that was never attached (or is detached) keeps and edits without creating any
-outbox entry: whether a completion still has to reach the dashboard is derived from the
-completion itself (not cancelled before it was uploaded, and the dashboard copy is older
+outbox entry: whether a completion still has to reach the Dashboard is derived from the
+completion itself (not cancelled before it was uploaded, and the Dashboard copy is older
 than its revision), so a local-only history archives like any other. When an account
 is attached, the sync loop derives the next batch from the workspace and the archive and
 freezes each operation's payload into the outbox in the same commit that marks it in flight;
@@ -86,7 +86,7 @@ holds the fixture it built and the earlier runs' garbage, not the worker):
 The cold parse of the keep-path file is about 70 ms (attached) and 6 ms (local-only) at
 36,500; the archive is not read on open unless an account is attached. `--drain` times the
 first upload of the 36,500-completion local-only workspace through the real sync loop
-(batches of 100, the dashboard's limit) against an in-process fake dashboard: 85 s
+(batches of 100, the Dashboard's limit) against an in-process fake dashboard: 85 s
 (430 keeps/s). A real dashboard adds one network round trip per 100 keeps.
 
 Measure it on your own Mac with `pnpm benchmark:offline` (see
@@ -100,9 +100,9 @@ given `--max-p95-ms` is exceeded by either.
    needs a connection; offline the page says so and nothing opens).
 2. On a Mac that was never attached, the first sign-in asks **Connect this Mac**
    (or **Not now**). Nothing is bound or sent until you connect.
-3. After Connect, the keeps and categories on this Mac upload to the dashboard.
+3. After Connect, the keeps and categories on this Mac upload to the Dashboard.
    Settings shows the progress and then a one-time "keeps are on your
-   dashboard" line.
+   Dashboard" line.
 4. **Sign out** ends the session on this Mac and works offline. Unsent changes
    stay in the outbox for the bound account and resume when that account signs in
    again. Signing in as a different account never sends anything: Account says
@@ -200,11 +200,11 @@ waiting records; closing Details returns to the same editing session.
   terminally cancelled record offers **Restore writing**; completing it again is
   a new deliberate action with a new identity.
   A move or time correction whose category, title and time already equal the
-  dashboard's current record (for example after a category delete moved the
-  records on both sides) is accepted without asking, unless the dashboard has a
+  Dashboard's current record (for example after a category delete moved the
+  records on both sides) is accepted without asking, unless the Dashboard has a
   newer edit of that record; a different target still asks.
 - Category creation, rename, recolor, move and delete work offline in the
-  editor picker and in Settings. A change made on the dashboard side that
+  editor picker and in Settings. A change made on the Dashboard side that
   collides with one made here becomes a row on the Sync details page
   (Settings ▸ Account ▸ Sync details); the editor itself never shows conflict
   copy.
@@ -259,7 +259,7 @@ visible to the older build.
    recovery copies labelled **From an older CoreLive version**. The v2 workspace
    is never overwritten, nothing from the file is sent, and each change imports
    once. Entries the older build already retired without text are listed in
-   History as **Kept on the dashboard only**.
+   History as **Kept on the Dashboard only**.
 
 ## Migration from the earlier per-account workspaces
 
@@ -317,13 +317,13 @@ names, emails, cookie values or tokens.
 | <a id="category-sync-rejected"></a>`CATEGORY_SYNC_REJECTED`               | The server answered a non-401 4xx (for example `BAD_REQUEST`) to `category.syncApply` or `completed.sync*`. The operations stay in the outbox. | Not retried automatically. Sync details shows `Couldn't apply a change. It was kept on this Mac.` with **Try again**, which re-sends once.                                                                                                       | Press **Try again** on Sync details.                                           |
 | <a id="signin-page-unreachable"></a>`SIGNIN_PAGE_UNREACHABLE`             | The login window failed to load (`did-fail-load`) or did not finish in 20 s. `net.isOnline()` reports an interface, not reachability.          | Closes the window. Account shows `Couldn't reach the sign-in page. Your writing is saved on this Mac.` with **Try again**.                                                                                                                       | Check the connection, then **Try again**.                                      |
 | <a id="auth-identity-mismatch"></a>`AUTH_IDENTITY_MISMATCH`               | The account id in a renderer payload differs from the verified one.                                                                            | The payload is ignored and logged; the verified identity wins.                                                                                                                                                                                   | Nothing.                                                                       |
-| <a id="outcome-applied"></a>`applied` / `adopted`                         | The dashboard accepted the operation (`adopted` matched an existing category by name path).                                                    | The operation retires and the binding's base updates.                                                                                                                                                                                            | Nothing.                                                                       |
-| <a id="outcome-name-taken"></a>`name-taken`                               | The dashboard already has a category with that name.                                                                                           | The local name stays; the field is marked declined. Sync details: **Choose another name** or `Keep "<dashboard name>"`.                                                                                                                          | Pick one on Sync details.                                                      |
-| <a id="outcome-conflict"></a>`conflict`                                   | Both sides changed the same field.                                                                                                             | The dashboard value is applied. Sync details: `Use "<Mac value>"` or `Keep "<dashboard value>"`.                                                                                                                                                 | Pick one on Sync details.                                                      |
-| <a id="outcome-invalid-parent"></a>`invalid-parent`                       | The chosen parent no longer fits on the dashboard.                                                                                             | Local reverts to the dashboard parent. Informational: `Changed back to match the dashboard.`                                                                                                                                                     | Nothing.                                                                       |
-| <a id="outcome-forbidden"></a>`forbidden`                                 | The dashboard refused the edit (for example the default category).                                                                             | Local reverts to the dashboard value. Informational row.                                                                                                                                                                                         | Nothing.                                                                       |
+| <a id="outcome-applied"></a>`applied` / `adopted`                         | The Dashboard accepted the operation (`adopted` matched an existing category by name path).                                                    | The operation retires and the binding's base updates.                                                                                                                                                                                            | Nothing.                                                                       |
+| <a id="outcome-name-taken"></a>`name-taken`                               | The Dashboard already has a category with that name.                                                                                           | The local name stays; the field is marked declined. Sync details: **Choose another name** or `Keep "<dashboard name>"`.                                                                                                                          | Pick one on Sync details.                                                      |
+| <a id="outcome-conflict"></a>`conflict`                                   | Both sides changed the same field.                                                                                                             | The Dashboard value is applied. Sync details: `Use "<Mac value>"` or `Keep "<dashboard value>"`.                                                                                                                                                 | Pick one on Sync details.                                                      |
+| <a id="outcome-invalid-parent"></a>`invalid-parent`                       | The chosen parent no longer fits on the Dashboard.                                                                                             | Local reverts to the Dashboard parent. Informational: `Changed back to match the Dashboard.`                                                                                                                                                     | Nothing.                                                                       |
+| <a id="outcome-forbidden"></a>`forbidden`                                 | The Dashboard refused the edit (for example the default category).                                                                             | Local reverts to the Dashboard value. Informational row.                                                                                                                                                                                         | Nothing.                                                                       |
 | <a id="outcome-digest-mismatch"></a>`digest-mismatch`                     | A stored receipt did not match the resent payload.                                                                                             | The change is kept on this Mac and marked declined. Sync details: `Couldn't apply a change. It was kept on this Mac.` with **Try again** (re-derives under a new operation id).                                                                  | **Try again**.                                                                 |
-| <a id="outcome-delete-blocked"></a>`delete-blocked` (EA8)                 | A delete was refused because a child's name collides at the top level (`child-name-taken`).                                                    | The local delete stays applied and the writing stays in its destination. Sync details: `Couldn't remove "<name>" on the dashboard.` with **Rename "<child>"** or **Keep it on the dashboard**.                                                   | Choose on Sync details.                                                        |
+| <a id="outcome-delete-blocked"></a>`delete-blocked` (EA8)                 | A delete was refused because a child's name collides at the top level (`child-name-taken`).                                                    | The local delete stays applied and the writing stays in its destination. Sync details: `Couldn't remove "<name>" on the Dashboard.` with **Rename "<child>"** or **Keep it on the Dashboard**.                                                   | Choose on Sync details.                                                        |
 | <a id="outcome-transport"></a>Network, timeout, 5xx, 401                  | Transport failure. Every retry is safe: receipts replay by `(userId, operationId)`.                                                            | Operations stay queued with bounded backoff. The editor shows `Offline · … pending` or `Sign in to sync completions`.                                                                                                                            | Reconnect or sign in again.                                                    |
 
 ## Recipes

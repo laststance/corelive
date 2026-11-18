@@ -42,7 +42,7 @@ import { selectUploads } from './completionUpload'
 
 type CategoryReceipt = Extract<SyncOutcome, { kind: 'category' }>
 
-/** Unanswered receipt lookups after which an operation shows as "Waiting for the dashboard" (EA4). */
+/** Unanswered receipt lookups after which an operation shows as "Waiting for the Dashboard" (EA4). */
 export const UNCERTAIN_QUERY_LIMIT = 3
 
 /**
@@ -483,7 +483,7 @@ function applyAdopted(
   const reverse = serverToLocalMap(binding)
   const holder = reverse.get(receipt.serverId)
   if (holder && holder !== operation.localId) {
-    // The dashboard category is already bound to another local one: this create was a duplicate.
+    // The Dashboard category is already bound to another local one: this create was a duplicate.
     dropCategoryOperations(state, operation.localId)
     retireIntoCategory(state, operation.localId, holder, context.nextId)
     return
@@ -609,7 +609,7 @@ function applyApplied(
     }
     case 'delete': {
       // The server promoted the children to roots with the delete. Its move of the records is not
-      // predicted here: the next completion pass relocates them and the dashboard accepts a move it
+      // predicted here: the next completion pass relocates them and the Dashboard accepts a move it
       // already made (completionSync mutateSyncIdentity), so another device's choice is never masked.
       for (const base of Object.values(binding.base))
         if (base.parentLocalId === operation.localId) base.parentLocalId = null
@@ -619,7 +619,7 @@ function applyApplied(
   }
 }
 
-/** `invalid-parent` / `forbidden`: revert to the dashboard's value if unchanged since freeze (EA5). */
+/** `invalid-parent` / `forbidden`: revert to the Dashboard's value if unchanged since freeze (EA5). */
 function revertRefused(
   state: OfflineWorkspace,
   binding: AccountBinding,

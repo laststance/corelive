@@ -65,5 +65,5 @@
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
-  "description": "Shared UI primitives, theme system and local-day utilities used by both the web app and the desktop renderer."
+  "description": "Shared UI primitives, theme system and local-day utilities used by CoreLive Dashboard and the desktop renderer."
 }

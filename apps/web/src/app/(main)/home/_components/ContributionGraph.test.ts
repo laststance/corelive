@@ -1,6 +1,9 @@
-import { describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 
-import { calculateHeatmapLayout } from './ContributionGraph'
+import {
+  calculateHeatmapLayout,
+  getHeatmapWeekCount,
+} from './ContributionGraph'
 
 /**
  * The Activity heatmap shows a trailing one year, which lays out as 53 Sunday-
@@ -10,6 +13,8 @@ import { calculateHeatmapLayout } from './ContributionGraph'
  * DESIGN.md "Heatmap Cathedral D6" cell-size lock (12px min, 32px max).
  */
 const WEEKS_IN_TRAILING_YEAR = 53
+
+afterEach(() => vi.unstubAllEnvs())
 
 describe('Activity heatmap sizing', () => {
   test('fits the whole year inside the card at desktop content width, so no horizontal scrollbar appears', () => {
@@ -88,4 +93,19 @@ describe('Activity heatmap sizing', () => {
     expect(layout.rectSize).toBe(12)
     expect(layout.width).toBe(770)
   })
+})
+
+test('a Sunday one local week later starts a second column even after a short day', () => {
+  // Arrange
+  vi.stubEnv('TZ', 'America/New_York')
+  const start = new Date(2026, 2, 8, 0)
+  const end = new Date(2026, 2, 15, 0)
+  expect(start.getTimezoneOffset()).toBe(300)
+  expect(end.getTimezoneOffset()).toBe(240)
+
+  // Act
+  const columns = getHeatmapWeekCount(start, end)
+
+  // Assert
+  expect(columns).toBe(2)
 })

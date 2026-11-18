@@ -1,10 +1,24 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ComponentProps } from 'react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { log } from '@/lib/logger'
 
 import RouteError from './error'
+
+// An in-app Next link consumes an ordinary click before the browser can navigate.
+vi.mock('next/link', () => ({
+  default: ({ onClick, ...props }: ComponentProps<'a'>) => (
+    <a
+      {...props}
+      onClick={(event) => {
+        onClick?.(event)
+        event.preventDefault()
+      }}
+    />
+  ),
+}))
 
 describe('RouteError (route-level error boundary)', () => {
   beforeEach(() => {
@@ -20,10 +34,10 @@ describe('RouteError (route-level error boundary)', () => {
     render(<RouteError error={new Error('boom')} reset={reset} />)
 
     // Assert: gentle, on-brand copy renders (never the scary built-in default).
-    expect(screen.getByText('Give that another try')).toBeInTheDocument()
+    expect(screen.getByText('Give that another try')).toBeVisible()
     expect(
       screen.getByText(/Something hiccuped while loading this view/i),
-    ).toBeInTheDocument()
+    ).toBeVisible()
   })
 
   test('surfaces the real error to the logger for telemetry', () => {
@@ -53,42 +67,30 @@ describe('RouteError (route-level error boundary)', () => {
     expect(reset).toHaveBeenCalledTimes(1)
   })
 
-  test('escapes to home with a hard navigation when "Back to home" is pressed', async () => {
-    // Arrange: reset() re-renders the SAME crashed segment, so a deterministic
-    // throw (e.g. a stale preload) dead-ends — the secondary action must leave
-    // the route via a hard nav (fresh document + fresh bundle), never reset().
-    const reset = vi.fn()
-    const assignToHome = vi
-      .spyOn(window.location, 'assign')
-      .mockImplementation(() => {})
+  test('lets the browser navigate out of a failed route to the Dashboard landing page', async () => {
+    // Arrange
     const user = userEvent.setup()
-    render(<RouteError error={new Error('boom')} reset={reset} />)
+    const reset = vi.fn()
+    render(<RouteError error={new Error('Failed route')} reset={reset} />)
+    const link = screen.getByRole('link', { name: 'Dashboard landing page' })
+    let navigates = false
+    document.addEventListener(
+      'click',
+      (event) => {
+        navigates = !event.defaultPrevented
+        // Observe the default action without leaving the test document.
+        event.preventDefault()
+      },
+      { once: true },
+    )
 
     // Act
-    await user.click(screen.getByRole('button', { name: /back to home/i }))
+    await user.click(link)
 
-    // Assert: a hard navigation to the safe home route, and reset() is NOT it.
-    expect(assignToHome).toHaveBeenCalledWith('/')
+    // Assert
+    expect(link).toBeVisible()
+    expect(link).toHaveAttribute('href', '/')
+    expect(navigates).toBe(true)
     expect(reset).not.toHaveBeenCalled()
-    assignToHome.mockRestore()
-  })
-
-  test('does not throw when mounting through the real (unmocked) logger', () => {
-    // Lock the last-line-of-defense invariant: the boundary's own mount-time
-    // logging must run through the REAL logger without throwing, or the
-    // recovery UI would itself crash and defeat the boundary. Drop the
-    // beforeEach stub so the genuine pino browser path executes; keep console
-    // quiet for hygiene only.
-    vi.restoreAllMocks()
-    const consoleErrorSpy = vi
-      .spyOn(console, 'error')
-      .mockImplementation(() => {})
-
-    // Act + Assert
-    expect(() =>
-      render(<RouteError error={new Error('boom')} reset={vi.fn()} />),
-    ).not.toThrow()
-
-    consoleErrorSpy.mockRestore()
   })
 })

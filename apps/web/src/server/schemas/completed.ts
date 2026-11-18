@@ -1,4 +1,7 @@
+import { CompletedJournalSearchSchema } from '@corelive/desktop-contract/journal-search'
 import { z } from 'zod'
+
+export { CompletedJournalSearchSchema }
 
 /**
  * Optional IANA timezone the client reports (e.g. `'Asia/Tokyo'`) so the
@@ -62,10 +65,11 @@ const HeatmapDaySchema = z.object({
 /**
  * Response schema for the heatmap endpoint.
  * @example
- * { data: [...], streaks: { current: 12, longest: 28 }, total: 89 }
+ * { data: [...], streaks: { current: 12, longest: 28 }, total: 89, throughDate: "2026-03-24" }
  */
 export const HeatmapResponseSchema = z.object({
   data: z.array(HeatmapDaySchema),
+  throughDate: z.string(),
   streaks: z.object({
     current: z.number().int(),
     longest: z.number().int(),
@@ -148,7 +152,7 @@ export const DayDetailResponseSchema = z.object({
 
 /**
  * Input schema for the permanent completion journal (`completed.journal`).
- * Offset pagination plus optional period/category predicates for the home
+ * Offset pagination plus optional search, period, and category predicates for the home
  * Completed Tasks filters. Periods use a half-open `[from, before)` interval so
  * adjacent calendar presets cannot overlap at midnight.
  * @example
@@ -162,6 +166,7 @@ export const CompletedJournalInputSchema = z
     includeSubcategories: z.boolean().default(true),
     completedFrom: z.date().optional(),
     completedBefore: z.date().optional(),
+    search: CompletedJournalSearchSchema.optional(),
   })
   .superRefine(({ completedFrom, completedBefore }, context) => {
     // Reject empty/reversed windows before they can reach the raw SQL path.

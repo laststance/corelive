@@ -11,7 +11,7 @@ import type { TokenBroker } from './TokenBroker'
 import type { WorkspaceView } from './workspace-worker-protocol'
 import type { WorkspaceWorkerClient } from './WorkspaceWorkerClient'
 
-/** The dashboard accepts at most 100 operations per `completed.syncApply` request. */
+/** The Dashboard accepts at most 100 operations per `completed.syncApply` request. */
 const COMPLETION_BATCH_SIZE = 100
 
 /** Batches sent per pass; a backlog continues in a follow-up pass after a 20 ms pause. */
@@ -309,7 +309,7 @@ export class SyncLoop {
 
   /**
    * Looks up uncertain category receipts before any refresh or replay (EA4).
-   * A lookup that finds nothing is counted; three of them surface "Waiting for the dashboard".
+   * A lookup that finds nothing is counted; three of them surface "Waiting for the Dashboard".
    * @returns True while some category operation is still uncertain after the lookup.
    * @example const uncertain = await this.recoverCategoryReceipts(context, transport, signal)
    */

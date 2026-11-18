@@ -31,7 +31,7 @@ function isUsableTimeZone(timeZone: string): boolean {
 
 /**
  * Resolves the zone the browser will put in its heatmap query key, best guess first:
- * the cookie `HomeContent` persists (exact after one visit) → Vercel geo header →
+ * the cookie {@link DashboardContent} persists (exact after one visit) → Vercel geo header →
  * the server's own zone (equals the browser's on localhost dev).
  * A wrong guess only makes the heatmap slice miss hydration and fetch client-side.
  * @returns An `Intl`-valid IANA zone name.

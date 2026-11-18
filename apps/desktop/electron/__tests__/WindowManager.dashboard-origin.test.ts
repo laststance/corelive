@@ -1,7 +1,7 @@
 /**
- * @fileoverview WindowManager.getWebAppOrigin resolution tests.
+ * @fileoverview WindowManager.getDashboardOrigin resolution tests.
  *
- * The sentinel: the native OAuth flow targets whatever `getWebAppOrigin()`
+ * The sentinel: the native OAuth flow targets whatever `getDashboardOrigin()`
  * returns, and with the main window retired there is no window URL left to read
  * — so this getter is the SOLE source of the system-browser sign-in origin. It
  * must resolve to the dev origin when a server URL is configured, and degrade to
@@ -12,13 +12,13 @@
  * Triggered when: `pnpm test:electron` (Vitest, node env).
  *
  * @example
- *   pnpm test:electron -- WindowManager.web-app-origin
+ *   pnpm test:electron WindowManager.dashboard-origin
  */
 import { describe, expect, test, vi } from 'vitest'
 
 import { WindowManager } from '../WindowManager'
 
-// getWebAppOrigin constructs no window — these mocks exist only so importing
+// getDashboardOrigin constructs no window — these mocks exist only so importing
 // WindowManager (which imports `electron` + the logger at module load) resolves
 // in the node test env. The getter itself touches none of them.
 vi.mock('electron', () => ({
@@ -38,15 +38,15 @@ vi.mock('../logger', () => ({
   log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }))
 
-describe('WindowManager.getWebAppOrigin', () => {
+describe('WindowManager.getDashboardOrigin', () => {
   test('defaults to the production origin when no server URL is configured', () => {
     // Arrange: no server URL (the packaged app passes null — it points at prod).
     const windowManager = new WindowManager(null)
 
     // Act
-    const origin = windowManager.getWebAppOrigin()
+    const origin = windowManager.getDashboardOrigin()
 
-    // Assert: OAuth targets the production web app.
+    // Assert: OAuth targets the production Dashboard.
     expect(origin).toBe('https://corelive.app')
   })
 
@@ -55,7 +55,7 @@ describe('WindowManager.getWebAppOrigin', () => {
     const windowManager = new WindowManager('http://localhost:4991/home')
 
     // Act
-    const origin = windowManager.getWebAppOrigin()
+    const origin = windowManager.getDashboardOrigin()
 
     // Assert: just the origin (scheme + host + port) — the /home path is dropped,
     // so OAuth URL building appends its own path to a clean origin.
@@ -67,7 +67,7 @@ describe('WindowManager.getWebAppOrigin', () => {
     const windowManager = new WindowManager('not a url')
 
     // Act
-    const origin = windowManager.getWebAppOrigin()
+    const origin = windowManager.getDashboardOrigin()
 
     // Assert: degrades to prod rather than throwing or returning a bad origin.
     expect(origin).toBe('https://corelive.app')

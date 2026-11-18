@@ -21,8 +21,8 @@ import {
 import { typedHandle } from '../ipc/typedHandle'
 import { typedSend } from '../ipc/typedSend'
 import { log } from '../logger'
-import { isTrustedAppNavigation } from '../utils/isTrustedAppNavigation'
-import { openWebAppInBrowser } from '../utils/openWebAppInBrowser'
+import { isTrustedDashboardNavigation } from '../utils/isTrustedDashboardNavigation'
+import { openDashboardInBrowser } from '../utils/openDashboardInBrowser'
 import type { WindowManager } from '../WindowManager'
 
 import {
@@ -68,13 +68,13 @@ export function isTrustedAuthSender(
   event: IpcMainInvokeEvent,
   windows: WindowManager,
 ): boolean {
-  const origin = windows.getWebAppOrigin()
+  const origin = windows.getDashboardOrigin()
   return (
     isCurrentWindowFrame(event, windows.getLoginWindow(), (url) =>
-      isTrustedAppNavigation(url, origin),
+      isTrustedDashboardNavigation(url, origin),
     ) &&
     event.senderFrame !== null &&
-    isTrustedAppNavigation(event.senderFrame.origin, origin)
+    isTrustedDashboardNavigation(event.senderFrame.origin, origin)
   )
 }
 
@@ -420,7 +420,7 @@ export class OfflineEditorIPC {
     typedHandle('settings-window-account-open-dashboard', (event) => {
       this.assertSettings(event)
       // The address comes from the configured server URL only, never from the renderer (EA16).
-      openWebAppInBrowser(this.windows.getWebAppOrigin(), '/home')
+      openDashboardInBrowser(this.windows.getDashboardOrigin(), '/home')
       return true
     })
   }

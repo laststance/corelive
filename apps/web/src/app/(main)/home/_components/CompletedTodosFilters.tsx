@@ -42,6 +42,7 @@ interface CompletedTodosFiltersProps {
   period: CompletedPeriod
   categoryId: number | null
   includeSubcategories?: boolean
+  hasSearch?: boolean
   onIncludeSubcategoriesChange?: (include: boolean) => void
   customDateRange?: DateRange
   onPeriodChange: (period: CompletedPeriod) => void
@@ -76,6 +77,7 @@ export function CompletedTodosFilters({
   period,
   categoryId,
   includeSubcategories = true,
+  hasSearch = false,
   onIncludeSubcategoriesChange,
   customDateRange,
   onPeriodChange,
@@ -98,7 +100,7 @@ export function CompletedTodosFilters({
     selectedCategory !== undefined &&
     (selectedCategory.parentId ?? null) === null &&
     categories.some((category) => category.parentId === categoryId)
-  const isFiltered = period !== 'all' || categoryId !== null
+  const isFiltered = period !== 'all' || categoryId !== null || hasSearch
   const isMorePeriodSelected = MORE_PERIOD_OPTIONS.some(
     (periodOption) => periodOption === period,
   )
@@ -254,7 +256,11 @@ export function CompletedTodosFilters({
           className="min-h-11 min-w-40 max-w-full"
           aria-label="Filter wins by category"
         >
-          <SelectValue />
+          <SelectValue>
+            {categoryId !== null && selectedCategory === undefined
+              ? 'Selected category'
+              : undefined}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent align="start">
           <SelectItem value={ALL_CATEGORIES_VALUE}>All categories</SelectItem>

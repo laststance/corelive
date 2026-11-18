@@ -55,6 +55,19 @@ describe('login page post-sign-in destination', () => {
     expect(signInProps.current).toEqual({ forceRedirectUrl: '/skill-tree' })
   })
 
+  test('preserves the journal destination for a signed-out visitor following an empty search link', () => {
+    // Arrange
+    visitLogin('?redirect_url=%2Fhome%3Ffilter%3Dcompleted')
+
+    // Act
+    render(<LoginPage />)
+
+    // Assert
+    expect(signInProps.current).toEqual({
+      forceRedirectUrl: '/home?filter=completed',
+    })
+  })
+
   test('still lands on /home when no redirect_url was given', () => {
     // Arrange
     visitLogin('')

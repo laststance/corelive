@@ -7,7 +7,7 @@ import '@/globals.css'
 
 import { installHomeFixture } from './homeFixture'
 
-/** Views the fixture renders; the list is shared with `--help` in `qa-web.ts`. */
+/** Views the fixture renders; the list is shared with `--help` in `qa-dashboard.ts`. */
 const VIEWS = ['home', 'appearance'] as const
 type View = (typeof VIEWS)[number]
 
@@ -19,7 +19,7 @@ const query = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 createRoot(document.getElementById('root')!).render(
   <ThemeProvider attribute="data-theme" defaultTheme="system" enableSystem>
     <QueryClientProvider client={query}>
-      {view === 'home' && installHomeFixture(parameters)}
+      {view === 'home' && installHomeFixture(parameters).element}
       {view === 'appearance' && (
         <main className="mx-auto max-w-2xl space-y-12 px-4 py-6 sm:px-6">
           <AppearanceSettings />

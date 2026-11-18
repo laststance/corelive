@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./journal-search": "./src/journal-search.ts",
     "./ipc": "./src/ipc.ts",
     "./electron-api": "./src/electron-api.ts",
     "./client": "./src/client.ts",
