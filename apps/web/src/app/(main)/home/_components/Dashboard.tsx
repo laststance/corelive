@@ -35,6 +35,8 @@ export const Dashboard = function Dashboard() {
   })
 
   const activity = useHeatmapData()
+  const activityRefreshUnavailable =
+    !activity.isCurrentDay || activity.isError || activity.isPaused
 
   // Completions arrive from the desktop app through sync, so keep Home fresh.
   useDashboardFreshness()
@@ -67,13 +69,13 @@ export const Dashboard = function Dashboard() {
             <YearInReviewModal dataByDate={activity.dataByDate} />
             <RecentActivityCard
               dataByDate={activity.dataByDate}
-              isRefreshUnavailable={activity.isError || activity.isPaused}
+              isRefreshUnavailable={activityRefreshUnavailable}
             />
           </>
         ) : null}
         <SundayDigestCard
           dataByDate={activity.dataByDate}
-          hidden={!activity.hasData || activity.isError || activity.isPaused}
+          hidden={activityRefreshUnavailable}
         />
       </Suspense>
 

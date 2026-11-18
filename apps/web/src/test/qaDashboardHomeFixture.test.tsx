@@ -128,8 +128,33 @@ test('the heatmap limits buckets, totals, and streaks to the requested local day
     ['2026-11-18', 2],
   ])
   expect(oneDay.total).toBe(2)
+  expect(oneDay).toMatchObject({ throughDate: '2026-11-18' })
   expect(oneDay.streaks).toEqual({ current: 1, longest: 1 })
   expect(year.total).toBe(16)
+})
+
+test('early morning activity keeps both of today’s completions at or before the current time', async () => {
+  // Arrange
+  vi.setSystemTime(new Date(2026, 10, 18, 8))
+  fixture = installHomeFixture(new URLSearchParams())
+  const client = createClient()
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+
+  // Act
+  const [heatmap, day, journal] = await Promise.all([
+    client.completed.heatmap({ days: 1, timezone }),
+    client.completed.dayDetail({ date: '2026-11-18', timezone }),
+    client.completed.journal({ limit: 2 }),
+  ])
+
+  // Assert
+  expect(heatmap.total).toBe(2)
+  expect(day.count).toBe(2)
+  expect(day.tasks.map(({ completedAt }) => completedAt)).toEqual([
+    new Date(2026, 10, 18, 8),
+    new Date(2026, 10, 18, 8),
+  ])
+  expect(journal.entries).toEqual(day.tasks)
 })
 
 test('day detail uses UTC by default and shows Auckland entries on their local date when requested', async () => {
@@ -352,6 +377,11 @@ test('restarting the fixture restores browser globals and starts a fresh scenari
   const fetch = window.fetch
   const controls = Object.getOwnPropertyDescriptor(window, '__homeFixture')
   const historyMethods = [window.history.pushState, window.history.replaceState]
+  const pushState = Object.getOwnPropertyDescriptor(window.history, 'pushState')
+  const replaceState = Object.getOwnPropertyDescriptor(
+    window.history,
+    'replaceState',
+  )
   const client = createClient()
   fixture = installHomeFixture(new URLSearchParams())
   expect((await client.completed.journal({})).total).toBe(16)
@@ -364,6 +394,12 @@ test('restarting the fixture restores browser globals and starts a fresh scenari
   expect([window.history.pushState, window.history.replaceState]).toEqual(
     historyMethods,
   )
+  expect(Object.getOwnPropertyDescriptor(window.history, 'pushState')).toEqual(
+    pushState,
+  )
+  expect(
+    Object.getOwnPropertyDescriptor(window.history, 'replaceState'),
+  ).toEqual(replaceState)
   expect(Object.getOwnPropertyDescriptor(window, '__homeFixture')).toEqual(
     controls,
   )
@@ -375,6 +411,58 @@ test('restarting the fixture restores browser globals and starts a fresh scenari
     ),
   ).toEqual([0, 0])
 })
+
+test.each([
+  {
+    target: window.history,
+    key: 'replaceState',
+    value: window.history.replaceState,
+  },
+  { target: window, key: 'fetch', value: window.fetch },
+])(
+  'a rejected $key override leaves no fixture globals and the next install works',
+  async ({ target, key, value }) => {
+    // Arrange
+    const { history } = window
+    const original = Object.getOwnPropertyDescriptor(target, key)
+    Object.defineProperty(target, key, {
+      configurable: true,
+      value,
+      writable: false,
+    })
+    const pushState = Object.getOwnPropertyDescriptor(history, 'pushState')
+    const replaceState = Object.getOwnPropertyDescriptor(
+      history,
+      'replaceState',
+    )
+    const fetch = Object.getOwnPropertyDescriptor(window, 'fetch')
+    const controls = Object.getOwnPropertyDescriptor(window, '__homeFixture')
+
+    try {
+      // Act
+      const install = () => installHomeFixture(new URLSearchParams())
+
+      // Assert
+      expect(install).toThrow(TypeError)
+      expect(Object.getOwnPropertyDescriptor(history, 'pushState')).toEqual(
+        pushState,
+      )
+      expect(Object.getOwnPropertyDescriptor(history, 'replaceState')).toEqual(
+        replaceState,
+      )
+      expect(Object.getOwnPropertyDescriptor(window, 'fetch')).toEqual(fetch)
+      expect(Object.getOwnPropertyDescriptor(window, '__homeFixture')).toEqual(
+        controls,
+      )
+    } finally {
+      if (original) Object.defineProperty(target, key, original)
+      else Reflect.deleteProperty(target, key)
+    }
+
+    fixture = installHomeFixture(new URLSearchParams())
+    expect((await createClient().completed.journal({})).total).toBe(16)
+  },
+)
 
 test('rejecting an overlapping fixture leaves the current delete controls usable', async () => {
   // Arrange

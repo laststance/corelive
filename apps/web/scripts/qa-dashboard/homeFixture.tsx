@@ -78,7 +78,7 @@ function toDeleteMode(value: string | null): DeleteMode {
  * Called by `main.tsx` before the first render.
  * @param parameters - The page's query string (`delete=` picks the delete behavior).
  * @returns The Home element, current pending delete count, and teardown for its browser globals.
- * @throws If the same window already has an active Home fixture.
+ * @throws If the window already has an active fixture or a browser global cannot be overridden.
  * @example
  * const { element, uninstall } = installHomeFixture(new URLSearchParams('delete=pending'))
  */
@@ -176,15 +176,7 @@ export function installHomeFixture(parameters: URLSearchParams): {
   }
   const handler = new RPCHandler(router)
   const realFetch = window.fetch
-  const previousControl = Object.getOwnPropertyDescriptor(
-    window,
-    '__homeFixture',
-  )
-  Object.defineProperty(window, '__homeFixture', {
-    configurable: true,
-    value: { release: resumeDeleteWaiters },
-  })
-  window.fetch = async (input, init) => {
+  const fixtureFetch: typeof realFetch = async (input, init) => {
     const request = new Request(input, init)
     // Only the app's own oRPC endpoint is faked; everything else is a real request.
     if (!new URL(request.url).pathname.startsWith(ORPC_PREFIX))
@@ -194,7 +186,29 @@ export function installHomeFixture(parameters: URLSearchParams): {
     })
     return matched ? response : new Response('Not found', { status: 404 })
   }
+  const previousGlobals = ['fetch', '__homeFixture'].map((key) => ({
+    key,
+    descriptor: Object.getOwnPropertyDescriptor(window, key),
+  }))
+  // Install history first so a failed fallback never changes fetch or the delete controls.
   const restoreHistory = installFixtureHistoryNotifications()
+  const restoreGlobals = (): void => {
+    restoreHistory?.()
+    for (const { key, descriptor } of previousGlobals) {
+      if (descriptor) Object.defineProperty(window, key, descriptor)
+      else Reflect.deleteProperty(window, key)
+    }
+  }
+  try {
+    Object.defineProperty(window, '__homeFixture', {
+      configurable: true,
+      value: { release: resumeDeleteWaiters },
+    })
+    window.fetch = fixtureFetch
+  } catch (error) {
+    restoreGlobals()
+    throw error
+  }
   installedHomeWindows.add(window)
   return {
     get pendingDeleteCount() {
@@ -212,13 +226,9 @@ export function installHomeFixture(parameters: URLSearchParams): {
       if (!installed) return
       installed = false
       resumeDeleteWaiters()
-      restoreHistory?.()
+      // Vitest's window accessor keeps the assigned fetch value separately from its descriptor.
       window.fetch = realFetch
-      if (previousControl) {
-        Object.defineProperty(window, '__homeFixture', previousControl)
-      } else {
-        Reflect.deleteProperty(window, '__homeFixture')
-      }
+      restoreGlobals()
       installedHomeWindows.delete(window)
     },
   }

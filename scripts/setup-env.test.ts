@@ -74,6 +74,39 @@ describe('workspace environment setup', () => {
       'DESKTOP_EXISTING=fixture\n',
     )
   })
+  test('routes complete quoted values to their workspace across line breaks', () => {
+    // Arrange
+    writeFileSync(
+      path.join(root, '.env'),
+      [
+        '# Local settings',
+        'export WIN_CSC_LINK = "fixture certificate',
+        'SECOND_LINE=still part of the certificate',
+        'certificate end" # signing',
+        "DASHBOARD_MESSAGE='first line",
+        'GH_TOKEN=part of the message',
+        "last line'",
+        'WIN_CSC_KEY_PASSWORD=fixture-password',
+        '',
+      ].join('\r\n'),
+    )
+
+    // Act
+    const result = spawnSync(process.execPath, ['scripts/setup-env.mjs'], {
+      cwd: root,
+      encoding: 'utf8',
+    })
+
+    // Assert
+    expect(result.status).toBe(0)
+    expect(readFileSync(path.join(root, 'apps/desktop/.env'), 'utf8')).toBe(
+      'export WIN_CSC_LINK = "fixture certificate\r\nSECOND_LINE=still part of the certificate\r\ncertificate end" # signing\r\nWIN_CSC_KEY_PASSWORD=fixture-password\r\n',
+    )
+    expect(readFileSync(path.join(root, 'apps/web/.env'), 'utf8')).toBe(
+      "# Local settings\r\nDASHBOARD_MESSAGE='first line\r\nGH_TOKEN=part of the message\r\nlast line'\r\n",
+    )
+    expect(result.stdout + result.stderr).toBe('')
+  })
   test('does not create misleading empty app configuration when the root env is absent', () => {
     // Arrange: the isolated checkout has no root .env.
     // Act
@@ -82,6 +115,26 @@ describe('workspace environment setup', () => {
     })
     // Assert
     expect(result.status).toBe(0)
+    expect(existsSync(path.join(root, 'apps/web/.env'))).toBe(false)
+    expect(existsSync(path.join(root, 'apps/desktop/.env'))).toBe(false)
+  })
+  test('keeps both app files uncreated when a quoted signing value is unfinished', () => {
+    // Arrange
+    writeFileSync(
+      path.join(root, '.env'),
+      'PORT=3000\nWIN_CSC_LINK="fixture certificate\ncertificate tail\n',
+    )
+
+    // Act
+    const result = spawnSync(process.execPath, ['scripts/setup-env.mjs'], {
+      cwd: root,
+      encoding: 'utf8',
+    })
+
+    // Assert
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain('Unterminated quoted value in root .env')
+    expect(result.stderr).not.toContain('fixture certificate')
     expect(existsSync(path.join(root, 'apps/web/.env'))).toBe(false)
     expect(existsSync(path.join(root, 'apps/desktop/.env'))).toBe(false)
   })

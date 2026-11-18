@@ -88,12 +88,13 @@ Each concurrent Vitest suite uses its own filesystem module cache to avoid
 clearing another suite's transformed modules.
 
 For a fresh checkout, copy `.env.example` to `apps/web/.env` and provide the Dashboard
-configuration. For an existing root `.env`, the setup helper below copies it
-without overwriting app files. It routes the Apple signing settings, Windows certificate
-link and password (`WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD`), and `GH_TOKEN`
-from the root file to desktop only. If
-`apps/desktop/.env` already exists, add any missing signing settings such as
-`APPLE_KEYCHAIN_PROFILE` to that file.
+configuration. If you have a root `.env`, `pnpm setup:env` creates each missing
+app file. It sends Apple signing settings, `WIN_CSC_LINK`,
+`WIN_CSC_KEY_PASSWORD`, and `GH_TOKEN` to `apps/desktop/.env`.
+Existing app files are preserved. When upgrading an older checkout, first verify
+that Desktop has the signing settings it needs, including any multiline values.
+Copy any missing settings there, then remove those signing entries from
+`apps/web/.env`.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -102,8 +103,7 @@ pnpm exec playwright-cli install-browser chromium
 pnpm dev
 ```
 
-Dashboard configuration lives in `apps/web/.env`; the root env helper copies an existing
-root `.env` without overwriting app configuration. Generated assets come from
+Generated assets come from
 `assets/` and are written to each app by its prebuild hook. Desktop packaging uses
 `apps/desktop/.env` and emits `apps/desktop/dist/`.
 

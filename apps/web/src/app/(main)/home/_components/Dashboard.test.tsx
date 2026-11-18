@@ -14,6 +14,7 @@ import {
 } from '@testing-library/react'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
+import { getLocalTodayIsoDate } from '@/lib/getLocalTodayIsoDate'
 import { orpc } from '@/lib/orpc/client-query'
 
 import { Dashboard } from './Dashboard'
@@ -41,7 +42,10 @@ const EMPTY_HEATMAP = {
 }
 
 beforeEach(() => {
-  heatmap.mockReset().mockResolvedValue(EMPTY_HEATMAP)
+  heatmap.mockReset().mockImplementation(async () => ({
+    ...EMPTY_HEATMAP,
+    throughDate: getLocalTodayIsoDate(),
+  }))
 })
 afterEach(() => {
   cleanup()
@@ -137,6 +141,7 @@ test.each(['failed', 'paused'])(
       data: [{ date: '2026-10-01', count: 1, categories: [] }],
       total: 1,
       streaks: { current: 0, longest: 1 },
+      throughDate: getLocalTodayIsoDate(),
     })
     if (initialState === 'paused') onlineManager.setOnline(false)
     else heatmap.mockRejectedValueOnce(new Error('network down'))
@@ -270,5 +275,82 @@ test('a Sunday recap dismissed without storage stays dismissed after a failed re
     expect(screen.getByText('No completions in the last year')).toBeVisible(),
   )
   expect(screen.queryByText('a quiet sunday recap')).toBeNull()
+  client.clear()
+})
+
+test('an activity response started before midnight cannot confirm an empty new period', async () => {
+  // Arrange
+  vi.setSystemTime(new Date(2026, 9, 1, 23, 59))
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
+    new DOMRect(0, 0, 640, 160),
+  )
+  const oldSnapshot = {
+    data: [{ date: '2026-09-25', count: 1, categories: [] }],
+    total: 1,
+    streaks: { current: 0, longest: 1 },
+    throughDate: '2026-10-01',
+  }
+  const delayedRefresh = Promise.withResolvers<typeof oldSnapshot>()
+  heatmap
+    .mockResolvedValueOnce(oldSnapshot)
+    .mockReturnValue(delayedRefresh.promise)
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+  })
+  render(
+    <QueryClientProvider client={client}>
+      <Dashboard />
+    </QueryClientProvider>,
+  )
+  expect(await screen.findByText('Daily completions')).toBeVisible()
+  fireEvent(window, new Event('focus'))
+  await waitFor(() => expect(heatmap).toHaveBeenCalledTimes(2))
+
+  // Act — resume on the following day while the previous day's request is still in flight.
+  vi.setSystemTime(new Date(2026, 9, 2, 0, 1))
+  fireEvent(window, new Event('focus'))
+
+  // Assert
+  expect(await screen.findByText('Oct 2, 2026')).toBeVisible()
+  expect(screen.queryByText('No completions in this period.')).toBeNull()
+  expect(
+    screen.getByText('Recent activity is showing the last loaded data.'),
+  ).toBeVisible()
+
+  // Act — receiving it today does not change the day that the response covers.
+  await act(async () =>
+    delayedRefresh.resolve({
+      ...oldSnapshot,
+      data: [],
+      total: 0,
+    }),
+  )
+  await waitFor(() =>
+    expect(
+      screen.getByRole('heading', { name: 'Activity' }).parentElement,
+    ).toHaveTextContent('0 completed'),
+  )
+
+  // Assert
+  expect(screen.queryByText('No completions in this period.')).toBeNull()
+  expect(screen.queryByText('No completions in the last year')).toBeNull()
+  expect(
+    screen.getByText('Recent activity is showing the last loaded data.'),
+  ).toBeVisible()
+
+  // Act
+  heatmap.mockResolvedValue({ ...EMPTY_HEATMAP, throughDate: '2026-10-02' })
+  await act(async () => {
+    await client.invalidateQueries({ queryKey: orpc.completed.heatmap.key() })
+  })
+
+  // Assert
+  expect(
+    await screen.findByText('No completions in this period.'),
+  ).toBeVisible()
+  expect(screen.getByText('No completions in the last year')).toBeVisible()
+  expect(
+    screen.queryByText('Recent activity is showing the last loaded data.'),
+  ).toBeNull()
   client.clear()
 })

@@ -149,6 +149,7 @@ export const ContributionGraph = function ContributionGraph({
     dataByDate,
     total,
     hasData,
+    isCurrentDay,
     isLoading,
     isError,
     isPaused,
@@ -158,6 +159,7 @@ export const ContributionGraph = function ContributionGraph({
   const activityHeadingRef = useRef<HTMLHeadingElement>(null)
   const today = useLocalDayKey()
   const showHeatmap = hasData && total > 0
+  const showSnapshotNotice = hasData && !isCurrentDay && !isError && !isPaused
   const containerRef = useRef<HTMLDivElement>(null)
   const containerWidth = useObservedElementWidth(containerRef, showHeatmap)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
@@ -313,7 +315,7 @@ export const ContributionGraph = function ContributionGraph({
             <h2 ref={activityHeadingRef} tabIndex={-1} className="type-h3">
               Activity
             </h2>
-            {hasData && (total > 0 || isError || isPaused) ? (
+            {hasData && (total > 0 || !isCurrentDay || isError || isPaused) ? (
               <Badge variant="secondary">{total} completed</Badge>
             ) : null}
           </div>
@@ -350,7 +352,12 @@ export const ContributionGraph = function ContributionGraph({
             </Button>
           </CardContent>
         ) : null}
-        {hasData && !isError && !isPaused && total === 0 ? (
+        {showSnapshotNotice ? (
+          <CardContent role="status" className="text-sm text-muted-foreground">
+            Activity is showing the last loaded data.
+          </CardContent>
+        ) : null}
+        {hasData && isCurrentDay && !isError && !isPaused && total === 0 ? (
           <CardContent className="flex flex-wrap items-center justify-between gap-4 border-t pt-5">
             <div className="space-y-1">
               <p className="text-sm font-medium">

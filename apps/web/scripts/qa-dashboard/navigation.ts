@@ -23,6 +23,7 @@ function subscribe(onChange: () => void) {
 /**
  * Makes the fixture's subscribers observe History API writes in Happy DOM.
  * The Home fixture installs this fallback only when native Navigation events are unavailable.
+ * @throws If a history method cannot be overridden, after restoring the original descriptors.
  * @example const restoreHistory = installFixtureHistoryNotifications()
  */
 export function installFixtureHistoryNotifications(): (() => void) | undefined {
@@ -30,25 +31,32 @@ export function installFixtureHistoryNotifications(): (() => void) | undefined {
 
   const history = window.history
   const methods = ['pushState', 'replaceState'] as const
-  const previous = methods.map((method) => {
-    const descriptor = Object.getOwnPropertyDescriptor(history, method)
-    const original = history[method]
-    history[method] = function (
-      this: History,
-      ...args: Parameters<History['pushState']>
-    ): void {
-      original.apply(this, args)
-      window.dispatchEvent(new Event(HISTORY_CHANGE))
-    }
-    return { method, descriptor }
-  })
-
-  return (): void => {
+  const previous = methods.map((method) => ({
+    method,
+    descriptor: Object.getOwnPropertyDescriptor(history, method),
+  }))
+  const restore = (): void => {
     for (const { method, descriptor } of previous) {
       if (descriptor) Object.defineProperty(history, method, descriptor)
       else Reflect.deleteProperty(history, method)
     }
   }
+  try {
+    for (const method of methods) {
+      const original = history[method]
+      history[method] = function (
+        this: History,
+        ...args: Parameters<History['pushState']>
+      ): void {
+        original.apply(this, args)
+        window.dispatchEvent(new Event(HISTORY_CHANGE))
+      }
+    }
+  } catch (error) {
+    restore()
+    throw error
+  }
+  return restore
 }
 
 /**

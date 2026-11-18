@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import {
   calculateHeatmapLayout,
@@ -13,6 +13,8 @@ import {
  * DESIGN.md "Heatmap Cathedral D6" cell-size lock (12px min, 32px max).
  */
 const WEEKS_IN_TRAILING_YEAR = 53
+
+afterEach(() => vi.unstubAllEnvs())
 
 describe('Activity heatmap sizing', () => {
   test('fits the whole year inside the card at desktop content width, so no horizontal scrollbar appears', () => {
@@ -94,9 +96,12 @@ describe('Activity heatmap sizing', () => {
 })
 
 test('a Sunday one local week later starts a second column even after a short day', () => {
-  // Arrange — this week includes the spring clock change in America/New_York.
-  const start = new Date(2026, 2, 8, 12)
+  // Arrange
+  vi.stubEnv('TZ', 'America/New_York')
+  const start = new Date(2026, 2, 8, 0)
   const end = new Date(2026, 2, 15, 0)
+  expect(start.getTimezoneOffset()).toBe(300)
+  expect(end.getTimezoneOffset()).toBe(240)
 
   // Act
   const columns = getHeatmapWeekCount(start, end)

@@ -1,7 +1,6 @@
 import { stripJournalSearchLineBreaks } from '@corelive/desktop-contract/journal-search'
 import { ORPCError, os } from '@orpc/server'
 
-import { getLocalTodayIsoDate } from '@/lib/getLocalTodayIsoDate'
 import { shiftIsoDate } from '@/lib/shiftIsoDate'
 import { toLocalDayKey } from '@/lib/toLocalDayKey'
 import type { CategoryWithCount } from '@/server/schemas/category'
@@ -46,19 +45,23 @@ export function createActivityFixture(
   categories: ReadonlyMap<number, CategoryWithCount>,
   parameters: URLSearchParams,
 ) {
-  const seedToday = getLocalTodayIsoDate()
+  const seededAt = new Date()
+  const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const seedToday = toLocalDayKey(seededAt, browserZone)
   const mode = parameters.get('activity')
   let failNextHeatmap = mode === 'retry'
   const records = mode === 'empty' || parameters.has('delete') ? [] : sessions
   const datedEntries = records.map<DatedCompletion>(
     ([daysAgo, categoryId, title], index) => {
       const date = shiftIsoDate(seedToday, -daysAgo)
+      const morning = new Date(date + 'T09:00:00')
       return {
         categoryId,
         source: 'completed',
         id: index + 1,
         title,
-        completedAt: new Date(date + 'T09:00:00'),
+        // Keep today's sample visible even when the fixture opens before 09:00.
+        completedAt: morning > seededAt ? seededAt : morning,
       }
     },
   )
@@ -119,6 +122,7 @@ export function createActivityFixture(
       })
       return {
         data,
+        throughDate: today,
         total: data.reduce((total, day) => total + day.count, 0),
         streaks: calculateStreaks(
           [...days.keys()],

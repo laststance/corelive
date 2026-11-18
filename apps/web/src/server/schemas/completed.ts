@@ -65,10 +65,11 @@ const HeatmapDaySchema = z.object({
 /**
  * Response schema for the heatmap endpoint.
  * @example
- * { data: [...], streaks: { current: 12, longest: 28 }, total: 89 }
+ * { data: [...], streaks: { current: 12, longest: 28 }, total: 89, throughDate: "2026-03-24" }
  */
 export const HeatmapResponseSchema = z.object({
   data: z.array(HeatmapDaySchema),
+  throughDate: z.string(),
   streaks: z.object({
     current: z.number().int(),
     longest: z.number().int(),

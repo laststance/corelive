@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
+import { useLocalDayKey } from '@/hooks/useLocalDayKey'
 import { HOME_HEATMAP_DAYS } from '@/lib/constants/home'
 import { orpc } from '@/lib/orpc/client-query'
 
@@ -49,6 +50,7 @@ export type HeatmapDay = {
  */
 export function useHeatmapData(days: number = HOME_HEATMAP_DAYS) {
   const isClerkQueryReady = useClerkQueryReady()
+  const today = useLocalDayKey()
   // Report the browser's IANA zone so the server buckets completions by the
   // user's LOCAL calendar day (L3) — keeping heatmap data aligned with the
   // locally-rendered grid. Stable per session, so the query key stays stable;
@@ -80,6 +82,8 @@ export function useHeatmapData(days: number = HOME_HEATMAP_DAYS) {
     streaks: data?.streaks ?? { current: 0, longest: 0 },
     total: data?.total ?? 0,
     hasData: data !== undefined,
+    // Compare coverage, not arrival time, since a response may cross midnight.
+    isCurrentDay: data?.throughDate === today,
     isLoading,
     isError,
     isPaused,

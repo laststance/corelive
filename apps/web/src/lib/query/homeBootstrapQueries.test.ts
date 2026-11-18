@@ -42,6 +42,7 @@ describe('home bootstrap query keys', () => {
       data: [],
       streaks: { current: 0, longest: 0 },
       total: 3,
+      throughDate: '2026-07-19',
     })
 
     // Assert
@@ -53,6 +54,7 @@ describe('home bootstrap query keys', () => {
       data: [],
       streaks: { current: 0, longest: 0 },
       total: 3,
+      throughDate: '2026-07-19',
     })
   })
 

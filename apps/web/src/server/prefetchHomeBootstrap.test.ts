@@ -199,6 +199,7 @@ describeIfDb('prefetchHomeBootstrap', () => {
         ],
       },
       heatmap: {
+        throughDate: '2026-07-19',
         data: [
           {
             date: '2026-07-18',

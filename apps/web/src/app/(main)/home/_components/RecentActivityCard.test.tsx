@@ -180,10 +180,12 @@ test('adjacent rest days have separate tap targets in a narrow 30-day chart', as
   const next = screen
     .getByLabelText('Rest day, Sep 3, 2026')
     .querySelector('rect')!
-  const width = Number(first.getAttribute('width'))
-  expect(width).toBeGreaterThan(0)
-  expect(width).toBeLessThan(10)
-  expect(Number(first.getAttribute('x')) + width).toBeCloseTo(
-    Number(next.getAttribute('x')),
-  )
+  const firstWidth = Number(first.getAttribute('width'))
+  const nextWidth = Number(next.getAttribute('width'))
+  expect(firstWidth).toBeGreaterThan(0)
+  expect(firstWidth).toBeLessThan(10)
+  expect(nextWidth).toBeGreaterThan(0)
+  const firstEnd = Number(first.getAttribute('x')) + firstWidth
+  const nextStart = Number(next.getAttribute('x'))
+  expect(nextStart - firstEnd).toBeCloseTo(0)
 })

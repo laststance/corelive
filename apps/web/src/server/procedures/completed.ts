@@ -40,9 +40,10 @@ import { fetchCompletedEntries } from '../utils/completedAggregation'
  * - data: Array of daily entries with count and category breakdown
  * - streaks: Current and longest consecutive-day streaks
  * - total: Total completed tasks within the displayed local-day window
+ * - throughDate: Inclusive local end date of the snapshot
  * @example
  * getHeatmap({ days: 365, timezone: 'Asia/Tokyo' })
- * // => { data: [{ date: "2026-03-24", count: 5, categories: [...] }], streaks: { current: 3, longest: 12 }, total: 89 }
+ * // => { data: [{ date: "2026-03-24", count: 5, categories: [...] }], streaks: { current: 3, longest: 12 }, total: 89, throughDate: "2026-03-24" }
  */
 export const getHeatmap = authMiddleware
   .input(HeatmapInputSchema)
@@ -58,7 +59,8 @@ export const getHeatmap = authMiddleware
       // Bucket completions by the user's LOCAL calendar day (L3). The window
       // edges and "today" are local-day keys; `shiftIsoDate` is tz-neutral
       // calendar-string math, so it stays correct on local keys.
-      const todayLocalKey = toLocalDayKey(new Date(), zone)
+      const endDate = new Date()
+      const todayLocalKey = toLocalDayKey(endDate, zone)
       // `days` local calendar days ending today = today + (days - 1) prior.
       const startLocalKey = shiftIsoDate(todayLocalKey, -(days - 1))
 
@@ -71,13 +73,9 @@ export const getHeatmap = authMiddleware
       const startDate = new Date(
         `${shiftIsoDate(startLocalKey, -1)}T00:00:00.000Z`,
       )
-      const endDate = new Date()
-
       const entries = await fetchCompletedEntries(user.id, startDate, endDate)
 
-      // Per-day rollup keyed by local-day string. Mirrors the previous shape
-      // so the API contract (HeatmapResponseSchema) is unchanged — `Completed`
-      // rows contribute counts alongside lifecycle Todos.
+      // Both Completed rows and lifecycle Todos contribute to each local day.
       const dayMap = new Map<
         string,
         {
@@ -136,6 +134,7 @@ export const getHeatmap = authMiddleware
         data,
         streaks,
         total: totalInWindow,
+        throughDate: todayLocalKey,
       }
     } catch (error) {
       log.error('Error in getHeatmap:', error)
