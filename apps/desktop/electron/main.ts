@@ -69,9 +69,9 @@ import { applyShortcutRebind } from './utils/applyShortcutRebind'
 import { resolveRemoteDebuggingPort } from './utils/debugMode'
 import { isSameAccelerator } from './utils/isSameAccelerator'
 import {
-  isTrustedAppNavigation,
+  isTrustedDashboardNavigation,
   isTrustedClerkHandshake,
-} from './utils/isTrustedAppNavigation'
+} from './utils/isTrustedDashboardNavigation'
 import { loadUiohook } from './utils/loadUiohook'
 import { openConfigFile } from './utils/openConfigFile'
 import {
@@ -363,7 +363,7 @@ async function setActiveUser(
     throw new Error('Invalid user payload: clerkId is required')
   }
 
-  // Store user info (no database sync needed - handled by web app)
+  // Store user info (no database sync needed - handled by Dashboard)
   activeUser = {
     clerkId: userPayload.clerkId,
     emailAddresses: userPayload.emailAddresses || [],
@@ -669,7 +669,7 @@ async function createWindow(): Promise<void> {
    * Order matters here due to dependencies between managers.
    */
   const criticalInit = async (): Promise<{
-    serverUrl: string
+    dashboardUrl: string
   }> => {
     // Initialize configuration manager
     configManager = new ConfigManager()
@@ -688,12 +688,14 @@ async function createWindow(): Promise<void> {
     // Initialize window state manager
     windowStateManager = new WindowStateManager(configManager)
 
-    // Development uses the local Next.js server; packaged builds use the web app.
-    const serverUrl = isDev ? 'http://localhost:4991' : 'https://corelive.app'
+    // Development uses the local Next.js server; packaged builds use the Dashboard.
+    const dashboardUrl = isDev
+      ? 'http://localhost:4991'
+      : 'https://corelive.app'
 
     // Initialize window manager with server URL and managers
     windowManager = new WindowManager(
-      serverUrl,
+      dashboardUrl,
       configManager,
       windowStateManager,
     )
@@ -709,7 +711,7 @@ async function createWindow(): Promise<void> {
     await offlineEditor.controller.initialize()
     windowManager.openStartupPanel()
 
-    return { serverUrl }
+    return { dashboardUrl }
   }
 
   // Deferred initialization - happens after the startup panel is opened
@@ -757,7 +759,7 @@ async function createWindow(): Promise<void> {
     }
   }
 
-  // Run critical initialization directly. Its return value (serverUrl) is no
+  // Run critical initialization directly. Its return value (dashboardUrl) is no
   // longer consumed here now that the Electron main window is retired (T18);
   // criticalInit still wires up the renderer origin internally.
   await criticalInit()
@@ -1633,12 +1635,12 @@ function isNavigationAllowed(
   }
   // Redirect events include iframe requests; Clerk's isolated frames do not receive preload APIs.
   if (isMainFrame === false) return true
-  const appOrigin =
-    windowManager?.getWebAppOrigin() ??
+  const dashboardOrigin =
+    windowManager?.getDashboardOrigin() ??
     (isDev ? 'http://localhost:4991' : 'https://corelive.app')
   return (
-    isTrustedAppNavigation(navigationUrl, appOrigin) ||
-    isTrustedClerkHandshake(navigationUrl, appOrigin)
+    isTrustedDashboardNavigation(navigationUrl, dashboardOrigin) ||
+    isTrustedClerkHandshake(navigationUrl, dashboardOrigin)
   )
 }
 

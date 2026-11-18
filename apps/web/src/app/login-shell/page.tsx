@@ -1,4 +1,8 @@
+import type { Metadata } from 'next'
+
 import { LoginShell } from '@/components/login-shell/LoginShell'
+
+export const metadata: Metadata = { title: { absolute: 'Sign in | CoreLive' } }
 
 /**
  * `/login-shell` — the page the Electron login window loads; a plain browser tab

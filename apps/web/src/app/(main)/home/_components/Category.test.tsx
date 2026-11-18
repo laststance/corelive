@@ -43,6 +43,10 @@ const CATEGORIES: CategoryWithCount[] = [
     _count: { todos: 0 },
   },
 ]
+vi.mock('next/navigation', () => ({
+  usePathname: () => window.location.pathname,
+  useSearchParams: () => new URLSearchParams(window.location.search),
+}))
 vi.mock('@tanstack/react-query', () => ({
   useQuery: () => ({ data: { categories: CATEGORIES } }),
 }))
@@ -65,18 +69,24 @@ vi.mock('@/hooks/useSelectedCategory', () => ({
 
 afterEach(() => {
   cleanup()
+  window.history.replaceState(null, '', '/')
   vi.clearAllMocks()
 })
 
-test('sidebar keeps children visible inside their parent and selects their actual writing category', () => {
+test('sidebar links from Skill Tree open the child journal and preserve its search', () => {
   // Arrange
+  window.history.replaceState(
+    null,
+    '',
+    '/skill-tree?date=2026-10-01&search=Release',
+  )
   render(
     <SidebarProvider>
       <Category onOpenManageAction={vi.fn()} />
     </SidebarProvider>,
   )
   const subcategories = screen.getByRole('list', { name: 'Work subcategories' })
-  const child = within(subcategories).getByRole('button', {
+  const child = within(subcategories).getByRole('link', {
     name: 'Work / CoreLive',
   })
   // Act
@@ -84,7 +94,41 @@ test('sidebar keeps children visible inside their parent and selects their actua
   // Assert
   expect(child).toBeVisible()
   expect(select).toHaveBeenCalledExactlyOnceWith(2)
-  expect(screen.getByRole('button', { name: 'Work' })).toBeVisible()
+  expect(child).toHaveAttribute(
+    'href',
+    '/home?date=2026-10-01&search=Release&category=2#journal',
+  )
+  expect(screen.getByRole('link', { name: 'Work' })).toBeVisible()
+})
+
+test('sidebar highlights the category from the current journal URL and clears the highlight when it is removed', () => {
+  // Arrange
+  window.history.replaceState(null, '', '/home?category=2#journal')
+  const sidebar = (
+    <SidebarProvider>
+      <Category onOpenManageAction={vi.fn()} />
+    </SidebarProvider>
+  )
+  const { rerender } = render(sidebar)
+  const child = screen.getByRole('link', { name: 'Work / CoreLive' })
+  expect(child).toHaveAttribute('aria-current', 'location')
+  expect(screen.getByRole('link', { name: 'Work' })).not.toHaveAttribute(
+    'aria-current',
+  )
+
+  // Act
+  window.history.replaceState(null, '', '/home#journal')
+  rerender(
+    <SidebarProvider>
+      <Category onOpenManageAction={vi.fn()} />
+    </SidebarProvider>,
+  )
+
+  // Assert
+  expect(child).not.toHaveAttribute('aria-current')
+  expect(screen.getByRole('link', { name: 'Work' })).not.toHaveAttribute(
+    'aria-current',
+  )
 })
 
 test('sidebar category creation does not submit Japanese input while composition is active', async () => {

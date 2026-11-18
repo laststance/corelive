@@ -2,7 +2,10 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { Plus, Settings } from 'lucide-react'
+import Link from 'next/link'
+import { usePathname, useSearchParams } from 'next/navigation'
 import {
+  Suspense,
   useState,
   type ChangeEvent,
   type KeyboardEvent,
@@ -52,23 +55,33 @@ import {
   type CategoryWithCount,
 } from '@/server/schemas/category'
 
+interface CategoryProps {
+  onOpenManageAction: () => void
+}
+
 /**
  * Category section for the app Sidebar.
- * Displays user categories with color dots and pending todo counts.
- * Auto-selects the default (General) category when none is selected.
- * Uses shadcn Sidebar primitives (SidebarMenu, SidebarMenuBadge, etc.).
+ * The shared Dashboard sidebar uses it to open filtered journals and manage categories.
  *
- * @param onOpenManageAction - Opens the category management dialog (Next.js: `*Action` suffix for callable props)
+ * @param props - The callback that opens category management from the sidebar.
  *
  * @example
  * <Category onOpenManageAction={() => setManageOpen(true)} />
  */
-export const Category = function Category({
-  onOpenManageAction,
-}: {
-  onOpenManageAction: () => void
-}) {
+export function Category(props: CategoryProps) {
+  return (
+    <Suspense>
+      <CategoryContent {...props} />
+    </Suspense>
+  )
+}
+
+function CategoryContent({ onOpenManageAction }: CategoryProps) {
   const { setOpenMobile, isMobile } = useSidebar()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const activeCategory =
+    pathname === '/home' ? searchParams.get('category') : null
   const [selectedCategoryId, setSelectedCategoryId] = useSelectedCategory()
   const { createMutation } = useCategoryMutations()
   const isClerkQueryReady = useClerkQueryReady()
@@ -101,7 +114,7 @@ export const Category = function Category({
     ? newColor
     : (selectedParent?.color ?? 'blue')
 
-  // Auto-select the default (General) category when none is selected
+  // Keep the stored writing preference separate from the explicit journal filter.
   useAutoSelectDefaultCategory(
     selectedCategoryId,
     setSelectedCategoryId,
@@ -111,11 +124,21 @@ export const Category = function Category({
   // Cross-tab sync for categories
   useCategorySync()
 
-  /**
-   * Handles selecting a category and closing mobile sidebar.
-   * @param categoryId - Category ID to select.
-   */
-  const handleSelect = (categoryId: number): void => {
+  const handleSelect = (
+    event: MouseEvent<HTMLAnchorElement>,
+    categoryId: number,
+  ): void => {
+    // Leave the current view alone when the link opens in another tab or window.
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey
+    )
+      return
+
     setSelectedCategoryId(categoryId)
     if (isMobile) {
       setOpenMobile(false)
@@ -161,13 +184,6 @@ export const Category = function Category({
       event.keyCode !== 229
     )
       handleCreateCategory()
-  }
-
-  const handleCategoryClick = (event: MouseEvent<HTMLButtonElement>): void => {
-    const categoryId = Number(event.currentTarget.dataset.categoryId)
-    if (Number.isInteger(categoryId)) {
-      handleSelect(categoryId)
-    }
   }
 
   return (
@@ -269,7 +285,7 @@ export const Category = function Category({
       </Popover>
       <SidebarGroupContent>
         <SidebarMenu>
-          {/* The hierarchy stays expanded so every writing destination remains one click away. */}
+          {/* Keep subcategories visible so every journal filter is one click away. */}
           {roots.map((category) => {
             const children = hierarchy.ordered.filter(
               (child) => child.parentId === category.id,
@@ -278,8 +294,9 @@ export const Category = function Category({
               <SidebarMenuItem key={category.id}>
                 <CategorySidebarRow
                   category={category}
-                  selectedId={selectedCategoryId}
-                  onClick={handleCategoryClick}
+                  activeCategory={activeCategory}
+                  searchParams={searchParams}
+                  onSelect={handleSelect}
                   path={hierarchy.paths.get(category.id) ?? category.name}
                 />
                 {children.length > 0 ? (
@@ -288,8 +305,9 @@ export const Category = function Category({
                       <SidebarMenuItem key={child.id}>
                         <CategorySidebarRow
                           category={child}
-                          selectedId={selectedCategoryId}
-                          onClick={handleCategoryClick}
+                          activeCategory={activeCategory}
+                          searchParams={searchParams}
+                          onSelect={handleSelect}
                           path={hierarchy.paths.get(child.id) ?? child.name}
                         />
                       </SidebarMenuItem>
@@ -319,39 +337,59 @@ export const Category = function Category({
 }
 
 /**
- * Renders the same writing-category control at either sidebar level.
- *
+ * Links an available category to its journal view at either level of the sidebar.
  * @param path - Full accessible name distinguishes same-named subcategories.
  * @example
- * <CategorySidebarRow category={category} selectedId={selectedId} onClick={handleClick} path="Work / CoreLive" />
+ * <CategorySidebarRow category={category} activeCategory="2" searchParams={searchParams} onSelect={handleSelect} path="Work / CoreLive" />
  */
 function CategorySidebarRow({
   category,
-  selectedId,
-  onClick,
+  activeCategory,
+  searchParams,
+  onSelect,
   path,
 }: {
   category: CategoryWithCount
-  selectedId: number | null
-  onClick: (event: MouseEvent<HTMLButtonElement>) => void
+  activeCategory: string | null
+  searchParams: URLSearchParams
+  onSelect: (event: MouseEvent<HTMLAnchorElement>, id: number) => void
   path: string
 }) {
+  const isConfirmed = category.id > 0
+  const isActive = isConfirmed && activeCategory === String(category.id)
+  const params = new URLSearchParams(searchParams)
+  params.set('category', String(category.id))
+  const content = (
+    <>
+      <span
+        aria-hidden
+        className={`size-2 shrink-0 rounded-full ${getColorDotClass(category.color)}`}
+      />
+      <span className="truncate">{category.name}</span>
+    </>
+  )
+
   return (
     <>
       <SidebarMenuButton
+        asChild={isConfirmed}
         className="min-h-11"
-        isActive={selectedId === category.id}
-        data-category-id={category.id}
-        onClick={onClick}
+        isActive={isActive}
         aria-label={path}
         title={path}
-        disabled={category.id <= 0}
+        disabled={isConfirmed ? undefined : true}
       >
-        <span
-          aria-hidden
-          className={`size-2 shrink-0 rounded-full ${getColorDotClass(category.color)}`}
-        />
-        <span className="truncate">{category.name}</span>
+        {isConfirmed ? (
+          <Link
+            href={`/home?${params.toString()}#journal`}
+            aria-current={isActive ? 'location' : undefined}
+            onClick={(event) => onSelect(event, category.id)}
+          >
+            {content}
+          </Link>
+        ) : (
+          content
+        )}
       </SidebarMenuButton>
       {category._count.todos > 0 ? (
         <SidebarMenuBadge>{category._count.todos}</SidebarMenuBadge>

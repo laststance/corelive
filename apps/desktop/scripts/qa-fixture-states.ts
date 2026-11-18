@@ -99,7 +99,7 @@ export const SETTINGS_FIXTURE_STATES: readonly SettingsStateSpec[] = [
   {
     name: 'account-never-attached',
     description: 'Account A: never attached; Sign in is the one action',
-    readyText: 'Sign in to also see it on the dashboard',
+    readyText: 'Sign in to also see it on the Dashboard',
     account: {},
   },
   {
@@ -133,7 +133,7 @@ export const SETTINGS_FIXTURE_STATES: readonly SettingsStateSpec[] = [
   {
     name: 'connect-uploading',
     description: 'First upload progress after Connect this Mac',
-    readyText: 'to your dashboard',
+    readyText: 'to your Dashboard',
     account: { ...ATTACHED, firstUpload: { state: 'uploading', count: 3 } },
   },
   {
@@ -188,7 +188,7 @@ export const SETTINGS_FIXTURE_STATES: readonly SettingsStateSpec[] = [
   {
     name: 'sync-details-rows',
     description: 'Sync details with one row of every type',
-    readyText: 'Waiting for the dashboard to confirm a change',
+    readyText: 'Waiting for the Dashboard to confirm a change',
     account: { ...ATTACHED, needsALookCount: 8 },
     rows: [
       {
@@ -263,7 +263,7 @@ export const SETTINGS_FIXTURE_STATES: readonly SettingsStateSpec[] = [
   },
   {
     name: 'category-refusal',
-    description: 'A category change the dashboard refused, kept on this Mac',
+    description: 'A category change the Dashboard refused, kept on this Mac',
     readyText: "Couldn't apply a change. It was kept on this Mac.",
     account: { ...ATTACHED, needsALookCount: 1 },
     rows: [

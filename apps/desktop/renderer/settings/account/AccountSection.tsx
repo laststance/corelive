@@ -64,7 +64,7 @@ export function AccountSection({
   const account = snapshot.account
   const [ui, setUi] = useState<Ui>({ kind: 'idle' })
   const [now, setNow] = useState(() => Date.now())
-  // The "keeps are on your dashboard" line appears once: main drops it after this copy is taken.
+  // The "keeps are on your Dashboard" line appears once: main drops it after this copy is taken.
   const [uploadDone, setUploadDone] = useState<number | null>(null)
   const signInRef = useRef<HTMLButtonElement>(null)
   const signOutRef = useRef<HTMLButtonElement>(null)
@@ -220,7 +220,7 @@ export function AccountSection({
       data-primary="true"
       onClick={() => void api.account.openDashboard()}
     >
-      Open dashboard
+      Open Dashboard
     </Button>
   )
   const signOutButton = (primary: boolean) => (
@@ -267,9 +267,9 @@ export function AccountSection({
   const statusLine = ((): string => {
     const upload = account.firstUpload
     if (upload?.state === 'uploading' && upload.count > 0)
-      return `Sending ${keepsPhrase(upload.count)} to your dashboard…`
+      return `Sending ${keepsPhrase(upload.count)} to your Dashboard…`
     if (uploadDone !== null && uploadDone > 0)
-      return `${keepsPhrase(uploadDone)} ${uploadDone === 1 ? 'is' : 'are'} on your dashboard`
+      return `${keepsPhrase(uploadDone)} ${uploadDone === 1 ? 'is' : 'are'} on your Dashboard`
     const checked =
       account.lastSyncedAt === null
         ? null
@@ -289,7 +289,7 @@ export function AccountSection({
           <MiddleTruncate
             text={account.pendingConnect.displayEmail || 'your account'}
           />
-          ? Your keeps and categories on this Mac will appear on the dashboard.
+          ? Your keeps and categories on this Mac will appear on the Dashboard.
           Your writing stays on this Mac.
         </p>
         <div className="flex flex-wrap gap-2">
@@ -366,7 +366,7 @@ export function AccountSection({
       <>
         <p>
           Your writing is saved on this Mac. Sign in to also see it on the
-          dashboard.
+          Dashboard.
         </p>
         <div className="flex flex-wrap gap-2">{signInButton}</div>
       </>

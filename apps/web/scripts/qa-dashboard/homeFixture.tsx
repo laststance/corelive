@@ -2,13 +2,15 @@ import { ORPCError, os } from '@orpc/server'
 import { RPCHandler } from '@orpc/server/fetch'
 import { z } from 'zod'
 
-import { CompletedTodos } from '@/app/(main)/home/_components/CompletedTodos'
+import { DashboardContent } from '@/app/(main)/home/_components/DashboardContent'
 import { AppSidebar } from '@/components/AppSidebar'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import {
   CATEGORY_DELETE_NOT_FOUND_REASON,
   type CategoryWithCount,
 } from '@/server/schemas/category'
+
+import { createActivityFixture } from './activityFixture'
 
 /** Synthetic user id shared by every seeded category; never a real account. */
 const SYNTHETIC_USER_ID = 1
@@ -69,8 +71,8 @@ function toDeleteMode(value: string | null): DeleteMode {
 }
 
 /**
- * Routes the browser's `/api/orpc` calls to an in-page fake router and renders Home's
- * sidebar and Completed card, so the `?view=home` QA page needs no sign-in or database.
+ * Routes the browser's `/api/orpc` calls to an in-page fake router and renders the Dashboard
+ * with its sidebar, activity and journal, so the `?view=home` QA page needs no sign-in or database.
  * Called by `main.tsx` before the first render.
  * @param parameters - The page's query string (`delete=` picks the delete behavior).
  * @returns The Home fixture element to render inside the shared providers.
@@ -130,14 +132,7 @@ export function installHomeFixture(
           }
         }),
     },
-    completed: {
-      journal: os.handler(() => ({ entries: [], total: 0, hasMore: false })),
-      heatmap: os.handler(() => ({
-        data: [],
-        streaks: { current: 0, longest: 0 },
-        total: 0,
-      })),
-    },
+    completed: createActivityFixture(categories, parameters),
   }
   const handler = new RPCHandler(router)
   const realFetch = window.fetch.bind(window)
@@ -163,9 +158,7 @@ export function installHomeFixture(
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <main className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
-          <CompletedTodos categories={categories} />
-        </main>
+        <DashboardContent />
       </SidebarInset>
     </SidebarProvider>
   )

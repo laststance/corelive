@@ -235,7 +235,7 @@ export const getDayDetail = authMiddleware
   })
 
 /**
- * Returns the filtered, newest-first unified completion journal page when Home loads, scrolls, or changes its Warm Preset Bar.
+ * Returns the newest-first completion journal page when Home loads, scrolls, or changes its search or filters.
  * SQL applies normalized Todo/Completed predicates before pagination and count so the rows and total cannot drift.
  *
  * @param input.limit - Page size (1-100, default 20)
@@ -243,6 +243,7 @@ export const getDayDetail = authMiddleware
  * @param input.categoryId - Optional authenticated-user category ID.
  * @param input.completedFrom - Optional inclusive completion timestamp.
  * @param input.completedBefore - Optional exclusive completion timestamp.
+ * @param input.search - Optional literal substring of the task title, case-insensitive.
  * @returns `{ entries, total, hasMore, nextOffset }` — entries newest-first,
  *   each tagged with its `source` ('todo' | 'completed')
  * @example
@@ -261,6 +262,7 @@ export const getJournal = authMiddleware
         includeSubcategories,
         completedFrom,
         completedBefore,
+        search,
       } = input
       const { user } = context
 
@@ -319,6 +321,10 @@ export const getJournal = authMiddleware
         completedBefore === undefined
           ? sql``
           : sql`AND m.completed_at < ${completedBefore.toISOString()}`
+      // A substring function treats punctuation like % and _ as literal text.
+      const searchFilter = search
+        ? sql`AND strpos(lower(m.title), lower(${search})) > 0`
+        : sql``
 
       // One statement gives page and count the same snapshot even when another window moves a category.
       const { rows } = await db.execute<JournalRow>(sql`
@@ -330,6 +336,7 @@ export const getJournal = authMiddleware
           INNER JOIN "Category" c ON c.id = m.category_id AND c."userId" = ${user.id}
           LEFT JOIN "Category" p ON p.id = c."parentId" AND p."userId" = c."userId"
           WHERE TRUE ${categoryFilter} ${completedFromFilter} ${completedBeforeFilter}
+            ${searchFilter}
         ), page AS (
           SELECT * FROM scoped
           ORDER BY completed_at DESC, source ASC, id ASC

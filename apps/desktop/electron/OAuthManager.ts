@@ -147,7 +147,7 @@ export class OAuthManager {
   }
 
   /**
-   * Builds the OAuth start URL using the currently loaded web app origin.
+   * Builds the OAuth start URL for the configured Dashboard origin.
    *
    * Using the same origin as the BrowserWindow keeps Clerk environment
    * selection aligned in both development and production. This prevents
@@ -156,7 +156,8 @@ export class OAuthManager {
    *
    * @param provider - OAuth provider selected in the Electron login screen.
    * @param state - State parameter for CSRF protection
-   * @returns Application URL that starts browser OAuth on the matching environment.
+   * @returns Dashboard URL that starts browser OAuth in the configured environment.
+   * @example oauthManager.buildOAuthURL('google', state)
    */
   buildOAuthURL(provider: string, state: string): string {
     const params = new URLSearchParams({
@@ -164,28 +165,7 @@ export class OAuthManager {
       state,
     })
 
-    return `${this.getWebAppOrigin()}${OAUTH_START_PATH}?${params.toString()}`
-  }
-
-  /**
-   * Resolves the web app origin from the current BrowserWindow URL.
-   *
-   * @returns
-   * - The current app origin, such as `http://localhost:4991` in development.
-   * - The production origin fallback when no window URL is available.
-   * @example
-   * // Dev BrowserWindow URL: http://localhost:4991/login
-   * // => 'http://localhost:4991'
-   * @example
-   * // Production BrowserWindow URL: https://corelive.app/home
-   * // => 'https://corelive.app'
-   */
-  private getWebAppOrigin(): string {
-    // Origin is window-agnostic — delegate to WindowManager, which derives it
-    // from the configured server URL. The main window was retired, so reading a
-    // live window URL is no longer viable (and during a cold OAuth callback a
-    // panel may not even exist yet).
-    return this.windowManager.getWebAppOrigin()
+    return `${this.windowManager.getDashboardOrigin()}${OAUTH_START_PATH}?${params.toString()}`
   }
 
   /**

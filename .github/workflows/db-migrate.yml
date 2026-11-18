@@ -77,7 +77,7 @@ jobs:
       # drizzle-kit has no `migrate status`. `check` validates the committed migration
       # folder (journal, snapshots, no collisions) without touching the database.
       - name: Check migration files
-        run: pnpm --filter @corelive/web exec drizzle-kit check
+        run: pnpm --filter @corelive/dashboard exec drizzle-kit check
 
       # `check` compares the migration folder with itself, not with src/db/schema.ts. A schema change
       # pushed without `pnpm db:generate` would apply nothing and still pass every step below, while
@@ -110,7 +110,7 @@ jobs:
           DRIZZLE_ALLOW_REMOTE: '1'
         run: |
           echo "🚀 Deploying migrations to production database..."
-          pnpm --filter @corelive/web exec drizzle-kit migrate
+          pnpm --filter @corelive/dashboard exec drizzle-kit migrate
           echo "✅ Migrations deployed successfully!"
 
       # Read-only: after the migrator, the newest recorded migration must equal the newest file in the

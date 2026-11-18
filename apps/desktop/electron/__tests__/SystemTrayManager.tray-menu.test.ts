@@ -53,7 +53,7 @@ function createManager(): {
     restoreFromTray,
     openSettings,
     toggleLiveEditor,
-    getWebAppOrigin: vi.fn(() => 'https://corelive.app'),
+    getDashboardOrigin: vi.fn(() => 'https://corelive.app'),
   } as unknown as WindowManager
   const manager = new SystemTrayManager(stubWindowManager)
   // Mirror createTray's side effect so updateTrayMenu's `if (this.tray)` guard
@@ -107,7 +107,7 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
     expect(toggleLiveEditor).toHaveBeenCalledTimes(1)
   })
 
-  test('opens the full app in the browser — never a native window — from its tray item', () => {
+  test('opens Dashboard in the browser from its tray item', () => {
     // Arrange
     const { manager, restoreFromTray } = createManager()
 
@@ -115,12 +115,11 @@ describe('SystemTrayManager tray menu — LiveEditor toggle + live hotkeys', () 
     manager.updateTrayMenu()
     const browserItem = findItem(
       lastBuiltTemplate(),
-      'Open full app in browser ↗',
+      'Open Dashboard in browser ↗',
     )
     ;(browserItem?.click as () => void)?.()
 
-    // Assert: the retired main window has no tray entry; the full app is the
-    // web app, opened externally at corelive.app/home.
+    // Assert: the tray sends the user to the Dashboard URL in the browser.
     expect(browserItem).toBeDefined()
     expect(findItem(lastBuiltTemplate(), 'Show TODO App')).toBeUndefined()
     expect(vi.mocked(shell.openExternal)).toHaveBeenCalledWith(

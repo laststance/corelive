@@ -20,7 +20,7 @@ const lines = (contents ?? '').split('\n')
 const signing = lines.filter((line) => signingKey.test(line.trimStart()))
 if (contents !== null)
   try {
-    // Web receives only its configuration; signing credentials stay in the desktop workspace.
+    // Dashboard receives only its configuration; signing credentials stay in the desktop workspace.
     await writeFile(
       path.join(root, 'apps/web/.env'),
       lines.filter((line) => !signingKey.test(line.trimStart())).join('\n'),

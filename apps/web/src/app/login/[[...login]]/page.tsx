@@ -9,14 +9,14 @@ import {
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
 
 /** Default post-auth destination when no same-origin redirect_url is present. */
-const POST_LOGIN_HOME_PATH = '/home'
+const POST_LOGIN_DASHBOARD_PATH = '/home'
 
 /** In-app path shape: one leading slash and no second one (`//host` is a URL, not a path). */
 const SINGLE_SLASH_ROOTED_PATH = /^\/(?!\/)/
 
 /**
  * Resolves the post-login navigation target from the proxy-provided redirect_url
- * query param, falling back to home. Only same-origin absolute URLs or relative
+ * query param, falling back to the Dashboard. Only same-origin absolute URLs or relative
  * paths are accepted so open redirects cannot leave the app.
  *
  * @param search - `window.location.search` (or equivalent query string)
@@ -31,13 +31,13 @@ const SINGLE_SLASH_ROOTED_PATH = /^\/(?!\/)/
 function resolvePostLoginPath(search: string, origin: string): string {
   const redirectUrlParam = new URLSearchParams(search).get('redirect_url')
   if (!redirectUrlParam) {
-    return POST_LOGIN_HOME_PATH
+    return POST_LOGIN_DASHBOARD_PATH
   }
 
   try {
     const redirectUrl = new URL(redirectUrlParam, origin)
     if (redirectUrl.origin !== origin) {
-      return POST_LOGIN_HOME_PATH
+      return POST_LOGIN_DASHBOARD_PATH
     }
 
     // A same-origin URL can still resolve to a protocol-relative PATH:
@@ -45,12 +45,12 @@ function resolvePostLoginPath(search: string, origin: string): string {
     // which `window.location.replace` then reads as a scheme-relative URL and
     // follows off-site. Only a single-slash-rooted path may leave this function.
     if (!SINGLE_SLASH_ROOTED_PATH.test(redirectUrl.pathname)) {
-      return POST_LOGIN_HOME_PATH
+      return POST_LOGIN_DASHBOARD_PATH
     }
 
     return `${redirectUrl.pathname}${redirectUrl.search}${redirectUrl.hash}`
   } catch {
-    return POST_LOGIN_HOME_PATH
+    return POST_LOGIN_DASHBOARD_PATH
   }
 }
 

@@ -19,7 +19,7 @@ import { log } from './logger'
 import type { NotificationManager } from './NotificationManager'
 import type { OAuthManager } from './OAuthManager'
 import { claimDefaultProtocolClient } from './utils/claimDefaultProtocolClient'
-import { openWebAppInBrowser } from './utils/openWebAppInBrowser'
+import { openDashboardInBrowser } from './utils/openDashboardInBrowser'
 import type { WindowManager } from './WindowManager'
 
 // ============================================================================
@@ -438,19 +438,18 @@ export class DeepLinkManager {
   }
 
   /**
-   * Open a task-app path in the user's browser (T15). Deep links now route to
-   * the web app — the full task UI is web-only after main retirement, so a
-   * `corelive://` link surfaces the task / create / view / search there instead
-   * of pushing IPC at a main renderer that no longer exists.
-   * @param appPath - Leading-slash task-app path; the leading slash plus the
-   *   fixed origin in `openWebAppInBrowser` keep the URL on-origin, so an
-   *   attacker-crafted deep link cannot redirect off corelive.app.
-   * @returns Nothing; `openWebAppInBrowser` logs and swallows browser failures.
+   * Opens Dashboard when a `corelive://` link targets a task, view or search.
+   * @param dashboardPath - Leading-slash Dashboard path validated by
+   *   {@link openDashboardInBrowser}.
+   * @returns Nothing; {@link openDashboardInBrowser} logs browser failures.
    * @example
    * this.openInBrowser('/home?focus=42') // opens https://corelive.app/home?focus=42
    */
-  private openInBrowser(appPath: string): void {
-    openWebAppInBrowser(this.windowManager.getWebAppOrigin(), appPath)
+  private openInBrowser(dashboardPath: string): void {
+    openDashboardInBrowser(
+      this.windowManager.getDashboardOrigin(),
+      dashboardPath,
+    )
   }
 
   /**

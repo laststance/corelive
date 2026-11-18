@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { COMPLETED_JOURNAL_SEARCH_MAX_LENGTH } from '@/lib/constants/completed'
+
 /**
  * Optional IANA timezone the client reports (e.g. `'Asia/Tokyo'`) so the
  * server can bucket completions by the user's *local* calendar day instead
@@ -147,8 +149,19 @@ export const DayDetailResponseSchema = z.object({
 })
 
 /**
+ * Validates the search term at both the Home URL and RPC boundaries. PostgreSQL
+ * text values cannot contain null characters.
+ * @example CompletedJournalSearchSchema.parse('  Ship release  ') // => 'Ship release'
+ */
+export const CompletedJournalSearchSchema = z
+  .string()
+  .trim()
+  .max(COMPLETED_JOURNAL_SEARCH_MAX_LENGTH)
+  .refine((value) => !value.includes('\0'))
+
+/**
  * Input schema for the permanent completion journal (`completed.journal`).
- * Offset pagination plus optional period/category predicates for the home
+ * Offset pagination plus optional search, period, and category predicates for the home
  * Completed Tasks filters. Periods use a half-open `[from, before)` interval so
  * adjacent calendar presets cannot overlap at midnight.
  * @example
@@ -162,6 +175,7 @@ export const CompletedJournalInputSchema = z
     includeSubcategories: z.boolean().default(true),
     completedFrom: z.date().optional(),
     completedBefore: z.date().optional(),
+    search: CompletedJournalSearchSchema.optional(),
   })
   .superRefine(({ completedFrom, completedBefore }, context) => {
     // Reject empty/reversed windows before they can reach the raw SQL path.

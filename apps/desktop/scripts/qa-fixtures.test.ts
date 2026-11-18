@@ -414,12 +414,12 @@ describe('--screenshots', () => {
   })
 })
 
-describe('qa:web CLI contract (DX4)', () => {
+describe('qa:dashboard CLI contract (DX4)', () => {
   test('--help exits 0 and names the JSON first line', () => {
     // Arrange + Act
     const result = spawnSync(
       process.execPath,
-      ['--import', 'tsx', 'scripts/qa-web.ts', '--help'],
+      ['--import', 'tsx', 'scripts/qa-dashboard.ts', '--help'],
       { cwd: join(root, 'apps/web'), encoding: 'utf8', timeout: 60_000 },
     )
 

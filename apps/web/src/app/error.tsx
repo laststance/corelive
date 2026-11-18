@@ -40,7 +40,7 @@ interface RouteErrorProps {
  * @param props - Next.js error-boundary props
  * @param props.error - The caught error (digest is set for server errors)
  * @param props.reset - Retries rendering the crashed segment
- * @returns A reassuring card with a "Try again" retry plus a "Back to home"
+ * @returns A reassuring card with a "Try again" retry plus a "Back to sign-in page"
  *   hard-navigation escape (reset() alone dead-ends on deterministic throws —
  *   e.g. a stale preload — so the secondary action leaves the broken route and
  *   reloads a fresh bundle)
@@ -56,8 +56,8 @@ const RouteError = function RouteError({
     log.error('Page boundary caught a client error:', error)
   }, [error])
 
-  // Hard nav to home — stable ref so the memo'd Button never re-renders for it.
-  const goHome = (): void => {
+  // Reload the public landing page so users can recover from a failed route.
+  const goToLandingPage = (): void => {
     window.location.assign('/')
   }
 
@@ -80,9 +80,9 @@ const RouteError = function RouteError({
                deterministic throw just re-throws. A hard nav to "/" leaves the
                broken route entirely and reloads a fresh bundle (fixes a stale
                Electron preload that reset() never could). */}
-          <Button variant="outline" onClick={goHome} className="gap-2">
+          <Button variant="outline" onClick={goToLandingPage} className="gap-2">
             <House className="h-4 w-4" />
-            Back to home
+            Back to sign-in page
           </Button>
         </CardContent>
       </Card>

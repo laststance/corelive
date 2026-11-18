@@ -16,7 +16,7 @@
     "scripts/electron-builder.mjs",
     "apps/desktop/scripts/finalize-mac-release-artifacts.js",
     // Loaded by the isolated Vite harness through HTML and explicit aliases.
-    "apps/web/scripts/qa-web/*.{ts,tsx}",
+    "apps/web/scripts/qa-dashboard/*.{ts,tsx}",
     // Run by .github/workflows/db-migrate.yml around `drizzle-kit migrate`, not by a package script.
     "apps/web/scripts/baseline-drizzle-migrations.mjs",
     "apps/web/src/components/ui/**/*.tsx",

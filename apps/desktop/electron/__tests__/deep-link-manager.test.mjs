@@ -25,7 +25,7 @@ const mockApp = {
 }
 
 const mockShell = {
-  // openWebAppInBrowser awaits `.catch` on the result, so the mock must be thenable.
+  // openDashboardInBrowser awaits `.catch` on the result, so the mock must be thenable.
   openExternal: vi.fn(async () => Promise.resolve()),
 }
 
@@ -67,8 +67,8 @@ describe('DeepLinkManager', () => {
       hasMainWindow: vi.fn(() => true),
       getMainWindow: vi.fn(() => mockWindow), // Return the same instance every time
       restoreFromTray: vi.fn(),
-      // Post-retirement deep links open the web app in the browser (T15).
-      getWebAppOrigin: vi.fn(() => 'https://corelive.app'),
+      // Post-retirement deep links open the Dashboard in the browser (T15).
+      getDashboardOrigin: vi.fn(() => 'https://corelive.app'),
     }
 
     mockNotificationManager = {
@@ -169,7 +169,7 @@ describe('DeepLinkManager', () => {
       // Act
       await deepLinkManager.handleTaskAction('/123', {})
 
-      // Assert: the task surfaces in the web app, not a (now-gone) main renderer.
+      // Assert: the task surfaces in the Dashboard, not a (now-gone) main renderer.
       expect(mockShell.openExternal).toHaveBeenCalledWith(
         'https://corelive.app/home?focus=123',
       )
@@ -270,7 +270,7 @@ describe('DeepLinkManager', () => {
       // Act
       await deepLinkManager.handleViewAction('/completed', { filter: 'recent' })
 
-      // Assert: the view opens in the web app at the matching route.
+      // Assert: the view opens in the Dashboard at the matching route.
       expect(mockShell.openExternal).toHaveBeenCalledWith(
         'https://corelive.app/completed?filter=recent',
       )
@@ -291,7 +291,7 @@ describe('DeepLinkManager', () => {
         filter: 'pending',
       })
 
-      // Assert: search runs in the web app, not a (now-gone) main renderer.
+      // Assert: search runs in the Dashboard, not a (now-gone) main renderer.
       expect(mockShell.openExternal).toHaveBeenCalledWith(
         'https://corelive.app/home?search=important&filter=pending',
       )

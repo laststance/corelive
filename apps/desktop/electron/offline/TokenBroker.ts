@@ -9,9 +9,9 @@ import { z } from 'zod'
 
 import { typedSend } from '../ipc/typedSend'
 import {
-  isTrustedAppNavigation,
+  isTrustedDashboardNavigation,
   isTrustedClerkHandshake,
-} from '../utils/isTrustedAppNavigation'
+} from '../utils/isTrustedDashboardNavigation'
 import {
   isTrustedTokenBrokerDocument,
   TOKEN_BROKER_PATH,
@@ -264,7 +264,7 @@ export class TokenBroker {
       event.sender === window.webContents &&
       frame !== null &&
       frame === window.webContents.mainFrame &&
-      isTrustedAppNavigation(frame.origin, this.options.origin) &&
+      isTrustedDashboardNavigation(frame.origin, this.options.origin) &&
       this.isBrokerDocument(frame.url)
     )
   }

@@ -63,6 +63,11 @@ const CATEGORIES: CategoryWithCount[] = [
   },
 ]
 
+vi.mock('next/navigation', () => ({
+  usePathname: () => '/home',
+  useSearchParams: () => new URLSearchParams(),
+}))
+
 vi.mock('@tanstack/react-query', () => ({
   useQuery: () => ({ data: { categories: currentCategories.rows } }),
 }))

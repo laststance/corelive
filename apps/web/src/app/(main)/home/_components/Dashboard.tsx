@@ -3,12 +3,7 @@ import { useIsRestoring, useQuery } from '@tanstack/react-query'
 import { Suspense } from 'react'
 
 import { Grid } from '@/components/grid'
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { Card, CardDescription, CardHeader } from '@/components/ui/card'
 import { useMounted } from '@/hooks/use-mounted'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { useHeatmapData } from '@/hooks/useHeatmapData'
@@ -16,19 +11,16 @@ import { orpc } from '@/lib/orpc/client-query'
 
 import { CompletedTodos } from './CompletedTodos'
 import { ContributionGraph } from './ContributionGraph'
+import { RecentActivityCard } from './RecentActivityCard'
 import { SundayDigestCard } from './SundayDigestCard'
 import { useDashboardFreshness } from './useDashboardFreshness'
-import { WeeklySummaryCard } from './WeeklySummaryCard'
 import { YearInReviewModal } from './YearInReviewModal'
 
 /**
- * Read-only completion dashboard for Home — heatmap, weekly/Sunday digests and
- * the permanent win journal. Mounted by {@link HomeContent}; every card reads
- * the `completed.*` procedures, so check-offs synced from the desktop app are
- * the only thing that fills it.
+ * Shows the annual heatmap, recent activity, Sunday recap, and journal in
+ * {@link DashboardContent}. The activity views share one completion snapshot.
  *
- * @returns The Home dashboard grid, or a loading state until Clerk + the query
- *   persister have settled.
+ * @returns The dashboard or a loading state while Clerk and query restoration settle.
  * @example
  * <Dashboard />
  */
@@ -37,18 +29,12 @@ export const Dashboard = function Dashboard() {
   const isClerkQueryReady = useClerkQueryReady()
   const isMounted = useMounted()
 
-  // Categories drive the journal's filter dropdown only — no mutation path
-  // reads them here anymore.
   const { data: categoryData } = useQuery({
     ...orpc.category.list.queryOptions({}),
     enabled: isClerkQueryReady,
   })
 
-  // Heatmap data shared with WeeklySummaryCard + SundayDigestCard (React Query
-  // dedupes the underlying request with ContributionGraph's own call, so the
-  // extra consumers add no network round-trips).
-  const { dataByDate: heatmapByDate, isLoading: heatmapLoading } =
-    useHeatmapData()
+  const activity = useHeatmapData()
 
   // Completions arrive from the desktop app through sync, so keep Home fresh.
   useDashboardFreshness()
@@ -64,48 +50,35 @@ export const Dashboard = function Dashboard() {
   }
 
   return (
-    <Grid className="grid-cols-1 content-start gap-6 lg:grid-cols-2">
-      {/* Activity heatmap spans both columns so the centerpiece gets the full
-           content width DESIGN.md mandates. */}
-      <div className="lg:col-span-2">
-        {/* Suspense required because ContributionGraph + YearInReviewModal read
-             URL params via Next.js 16's useSearchParams. */}
-        <Suspense
-          fallback={
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  Activity
-                </CardTitle>
-                <CardDescription>Loading activity data...</CardDescription>
-              </CardHeader>
-            </Card>
-          }
-        >
-          <ContributionGraph />
-          <YearInReviewModal
-            dataByDate={heatmapByDate}
-            isLoading={heatmapLoading}
-            isRestoring={isRestoring}
-          />
-        </Suspense>
-      </div>
+    <Grid className="min-w-0 grid-cols-1 content-start gap-6">
+      <Suspense
+        fallback={
+          <Card aria-busy>
+            <CardHeader>
+              <h2 className="type-h3">Activity</h2>
+              <CardDescription role="status">Loading activity…</CardDescription>
+            </CardHeader>
+          </Card>
+        }
+      >
+        <ContributionGraph activity={activity} />
+        {activity.hasData ? (
+          <>
+            <YearInReviewModal dataByDate={activity.dataByDate} />
+            {activity.total > 0 ? (
+              <RecentActivityCard dataByDate={activity.dataByDate} />
+            ) : null}
+            {!activity.isError ? (
+              <SundayDigestCard dataByDate={activity.dataByDate} />
+            ) : null}
+          </>
+        ) : null}
+      </Suspense>
 
-      <div className="space-y-6">
-        <WeeklySummaryCard
-          dataByDate={heatmapByDate}
-          isLoading={heatmapLoading}
-        />
-
-        <SundayDigestCard
-          dataByDate={heatmapByDate}
-          isLoading={heatmapLoading}
-        />
-      </div>
-
-      <div className="space-y-6">
-        <CompletedTodos categories={categoryData?.categories ?? []} />
-      </div>
+      <CompletedTodos
+        categories={categoryData?.categories}
+        isActivityLoading={activity.isLoading}
+      />
     </Grid>
   )
 }

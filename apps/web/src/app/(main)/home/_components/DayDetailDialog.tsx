@@ -1,8 +1,8 @@
 'use client'
 
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, ImageDown } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { match } from 'ts-pattern'
 
 import { Button } from '@/components/ui/button'
@@ -172,7 +172,7 @@ function getDayCategoryTotals(
 }
 
 /**
- * Day-detail dialog opened by clicking a Heatmap cell. Renders the day's
+ * Day-detail dialog opened from {@link ContributionGraph} or recent activity. Renders the day's
  * level band (paper → terracotta), italic state name, voice line, and a
  * compact list of the day's completed tasks. The cathedral-lit halo (soft
  * `--primary`-tinted box-shadow ring) only appears on full days (intensity 4); today
@@ -190,12 +190,8 @@ export const DayDetailDialog = function DayDetailDialog({
 }: DayDetailDialogProps) {
   const isClerkQueryReady = useClerkQueryReady()
   const [isSaving, setIsSaving] = useState(false)
-  // `placeholderData: keepPreviousData` so that pressing j/k or the < >
-  // chevrons doesn't flash the header back to "rest day" while the next
-  // day's query is in flight. The previous day's count + state band hold
-  // until the new data lands — TanStack Query v5 marks the result as
-  // `isPlaceholderData` so we can still gate the task list separately.
-  const { data, isLoading, isPlaceholderData } = useQuery({
+  const previousFocusRef = useRef<HTMLElement | null>(null)
+  const { data, isError, isFetching, isPaused, refetch } = useQuery({
     ...orpc.completed.dayDetail.queryOptions({
       input: {
         date: date ?? '1970-01-01',
@@ -205,12 +201,29 @@ export const DayDetailDialog = function DayDetailDialog({
       },
     }),
     enabled: isClerkQueryReady && date !== null,
-    placeholderData: keepPreviousData,
   })
 
   const isOpen = date !== null
-  const dayCount = data?.count ?? 0
-  const state = getDayState(dayCount)
+  // Only a response for the selected query key can establish a rest day.
+  const state = data ? getDayState(data.count) : null
+  const description = match({ isPaused, isError })
+    .with({ isPaused: true }, () =>
+      data
+        ? 'Offline. Showing the last loaded entries.'
+        : 'Connect to the internet to load this day.',
+    )
+    .with({ isError: true }, () =>
+      data
+        ? 'Day details could not refresh. Showing the last loaded entries.'
+        : 'Day details could not load.',
+    )
+    .otherwise(
+      () =>
+        state?.voice ??
+        (isClerkQueryReady
+          ? 'Loading day details…'
+          : 'Waiting for your session…'),
+    )
   const isToday = date !== null && date === getLocalTodayIsoDate()
 
   /**
@@ -220,16 +233,13 @@ export const DayDetailDialog = function DayDetailDialog({
    * (each of which would append its own off-screen card).
    */
   const handleShare = async (): Promise<void> => {
-    if (!date || dayCount === 0 || isSaving) return
+    if (!date || !data?.count || isSaving) return
     setIsSaving(true)
     try {
-      const topCategoryName = data?.tasks
-        ? getTopCategoryName(data.tasks)
-        : null
       const dataUrl = await exportDayAsImage({
         isoDate: date,
-        totalCompleted: dayCount,
-        topCategoryName,
+        totalCompleted: data.count,
+        topCategoryName: getTopCategoryName(data.tasks),
       })
       const anchor = document.createElement('a')
       anchor.href = dataUrl
@@ -264,9 +274,23 @@ export const DayDetailDialog = function DayDetailDialog({
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent
+        onOpenAutoFocus={() => {
+          // The controlled day dialog can open from either chart or a direct URL.
+          const previous = document.activeElement
+          previousFocusRef.current =
+            previous instanceof HTMLElement && previous !== document.body
+              ? previous
+              : null
+        }}
+        onCloseAutoFocus={(event) => {
+          const previous = previousFocusRef.current
+          if (!previous?.isConnected) return
+          event.preventDefault()
+          previous.focus({ preventScroll: true })
+        }}
         className={cn(
           'max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md',
-          state.isCathedralLit && 'cathedral-lit',
+          state?.isCathedralLit && 'cathedral-lit',
         )}
       >
         {date && (
@@ -275,13 +299,13 @@ export const DayDetailDialog = function DayDetailDialog({
               <div className="flex items-center gap-3">
                 <span
                   aria-hidden
-                  className="size-9 rounded-md border border-border"
-                  style={{ backgroundColor: state.bandToken }}
+                  className="size-9 rounded-md border border-border bg-muted"
+                  style={{ backgroundColor: state?.bandToken }}
                 />
 
                 <div className="flex flex-col items-start gap-0.5">
                   <DialogTitle className="text-2xl italic text-foreground">
-                    {state.name}
+                    {state?.name ?? 'Day details'}
                   </DialogTitle>
                   <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
                     {formatDate(date)}
@@ -294,12 +318,7 @@ export const DayDetailDialog = function DayDetailDialog({
                     size="icon"
                     className="size-8"
                     onClick={handleShare}
-                    disabled={
-                      isSaving ||
-                      dayCount === 0 ||
-                      isLoading ||
-                      isPlaceholderData
-                    }
+                    disabled={isSaving || !data?.count}
                     aria-label="Save as image"
                   >
                     <ImageDown />
@@ -328,28 +347,41 @@ export const DayDetailDialog = function DayDetailDialog({
                   )}
                 </div>
               </div>
-              <DialogDescription className="pt-1 text-sm italic text-muted-foreground">
-                {state.voice}
+              <DialogDescription
+                aria-live="polite"
+                className="pt-1 text-sm italic text-muted-foreground"
+              >
+                {description}
               </DialogDescription>
             </DialogHeader>
 
-            {isLoading || isPlaceholderData ? (
-              <p className="text-sm text-muted-foreground">…</p>
-            ) : dayCount === 0 ? (
+            {isError && !isPaused && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="justify-self-start"
+                disabled={!isClerkQueryReady || isFetching}
+                onClick={() => void refetch()}
+              >
+                {isFetching ? 'Retrying…' : 'Retry day details'}
+              </Button>
+            )}
+            {data?.count === 0 && (
               <p className="text-sm italic text-muted-foreground">
                 {isToday
                   ? 'today is still open — there is no shape to it yet.'
                   : 'no tasks landed on this day. rest is a choice, not a void.'}
               </p>
-            ) : (
+            )}
+            {data && data.count > 0 && (
               <div className="space-y-3">
                 <CategoryTotals
                   key={date}
-                  categories={getDayCategoryTotals(data?.tasks ?? [])}
+                  categories={getDayCategoryTotals(data.tasks)}
                   label="Categories on this day"
                 />
                 <ul className="space-y-1.5">
-                  {data?.tasks.map((task) => (
+                  {data.tasks.map((task) => (
                     <li
                       key={`${task.source}-${task.id}`}
                       className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2"
@@ -381,7 +413,7 @@ export const DayDetailDialog = function DayDetailDialog({
               </div>
             )}
 
-            {isToday && dayCount > 0 && (
+            {isToday && data && data.count > 0 && (
               <p className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-muted-foreground">
                 <span
                   aria-hidden

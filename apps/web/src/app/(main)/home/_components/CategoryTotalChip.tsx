@@ -10,11 +10,13 @@ import { cn } from '@/lib/utils'
  */
 export function CategoryTotalChip({
   category,
+  periodTotal,
   expanded = false,
   controls,
   onToggle,
 }: {
   category: { name: string; color: string; count: number }
+  periodTotal?: number
   expanded?: boolean
   controls?: string
   onToggle?: () => void
@@ -29,7 +31,12 @@ export function CategoryTotalChip({
         )}
       />
       <span className="break-words text-foreground">{category.name}</span>
-      <span className="font-mono tabular-nums text-muted-foreground">
+      <span
+        className={cn(
+          'font-mono tabular-nums text-muted-foreground',
+          periodTotal && 'ml-auto',
+        )}
+      >
         {category.count}
       </span>
       {onToggle ? (
@@ -40,8 +47,9 @@ export function CategoryTotalChip({
       ) : null}
     </>
   )
-  const chipClass =
-    'inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-xs'
+  const chipClass = periodTotal
+    ? 'flex w-full items-center gap-2 text-left text-sm'
+    : 'inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-xs'
   return (
     <li className="max-w-full">
       {onToggle ? (
@@ -61,6 +69,20 @@ export function CategoryTotalChip({
       ) : (
         <span className={chipClass}>{content}</span>
       )}
+      {periodTotal ? (
+        <div
+          aria-hidden="true"
+          className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted"
+        >
+          <div
+            className={cn(
+              'h-full rounded-full',
+              getColorDotClass(category.color),
+            )}
+            style={{ width: `${(category.count / periodTotal) * 100}%` }}
+          />
+        </div>
+      ) : null}
     </li>
   )
 }

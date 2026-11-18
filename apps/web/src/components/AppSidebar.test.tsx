@@ -12,7 +12,6 @@ vi.mock('@clerk/nextjs', () => ({
 }))
 vi.mock('next/navigation', () => ({
   usePathname: () => '/home',
-  useRouter: () => ({ push: vi.fn() }),
 }))
 vi.mock('@/app/(main)/home/_components/Category', () => ({
   Category: () => null,
@@ -31,7 +30,7 @@ vi.mock('@/components/auth/ElectronLoginForm', () => ({
 }))
 
 describe('AppSidebar', () => {
-  test('keeps Home and Skill Tree reachable and offers no LiveEditor entry', () => {
+  test('links to Dashboard, Journal, Skill Tree and Settings', () => {
     // Arrange
     render(
       <SidebarProvider>
@@ -40,12 +39,18 @@ describe('AppSidebar', () => {
     )
 
     // Act
-    const home = screen.getByRole('link', { name: /Home/i })
-    const skillTree = screen.getByRole('link', { name: /Skill Tree/i })
+    const dashboard = screen.getByRole('link', { name: 'Dashboard' })
+    const journal = screen.getByRole('link', { name: 'Journal' })
+    const skillTree = screen.getByRole('link', { name: 'Skill Tree' })
+    const settings = screen.getByRole('link', { name: 'Settings' })
 
     // Assert
-    expect(home).toHaveAttribute('href', '/home')
+    expect(dashboard).toHaveAttribute('href', '/home')
+    expect(dashboard).toHaveAttribute('aria-current', 'page')
+    expect(dashboard).toBeVisible()
+    expect(journal).toHaveAttribute('href', '/home#journal')
     expect(skillTree).toHaveAttribute('href', '/skill-tree')
+    expect(settings).toHaveAttribute('href', '/settings')
     expect(screen.queryByRole('link', { name: /LiveEditor/i })).toBeNull()
   })
 })

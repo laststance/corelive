@@ -1,5 +1,5 @@
 // D6 boundary: the desktop-only editor modules moved out of `@corelive/live-editor` into
-// `apps/desktop/renderer/editor/`. The web app may import only what stays in the shared package.
+// `apps/desktop/renderer/editor/`. Dashboard may import only what stays in the shared package.
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'

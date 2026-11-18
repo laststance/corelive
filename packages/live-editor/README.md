@@ -1,6 +1,6 @@
 # @corelive/live-editor
 
-Shared UI primitives, the theme system and local-day utilities used by both the web app and the desktop renderer.
+Shared UI primitives, the theme system and local-day utilities used by CoreLive Dashboard and the desktop renderer.
 
 - `./ui/*` shadcn primitives, plus the host-agnostic `./ui/ThemeSelector` (takes a `persistence` adapter: next-themes on the web, the preload on the desktop)
 - `./themes`, `./themes/preview`, `./themes/axis`, `./theme-transition`, `./styles/*` the theme registry and generated CSS

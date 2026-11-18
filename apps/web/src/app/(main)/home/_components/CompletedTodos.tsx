@@ -1,6 +1,7 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { CheckCircle2, Download } from 'lucide-react'
-import { useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { Suspense, useMemo, useRef, useState } from 'react'
 import type { DateRange } from 'react-day-picker'
 import { match } from 'ts-pattern'
 
@@ -13,14 +14,16 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { useCycleEffect } from '@/hooks/use-cycle-effect'
-import { useUpdateEffect } from '@/hooks/use-update-effect'
+import { useInitialEffect } from '@/hooks/use-initial-effect'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { useLocalDayKey } from '@/hooks/useLocalDayKey'
 import {
   COMPLETED_JOURNAL_INITIAL_OFFSET,
   COMPLETED_JOURNAL_PAGE_SIZE,
+  COMPLETED_JOURNAL_SEARCH_MAX_LENGTH,
 } from '@/lib/constants/completed'
 import { LOCAL_DAY_QUERY_ANCHOR_TIME } from '@/lib/constants/date'
 import { MAC_DOWNLOAD_URL } from '@/lib/constants/macDownload'
@@ -30,7 +33,10 @@ import {
   type CompletedPeriod,
   resolveCompletedJournalDateRange,
 } from '@/lib/utils/resolveCompletedJournalDateRange'
-import type { DayDetailTask } from '@/server/schemas/completed'
+import {
+  CompletedJournalSearchSchema,
+  type DayDetailTask,
+} from '@/server/schemas/completed'
 
 import { CompletedJournalRow } from './CompletedJournalRow'
 import {
@@ -39,8 +45,10 @@ import {
 } from './CompletedTodosFilters'
 
 interface CompletedTodosProps {
-  /** Categories already loaded by Dashboard, reused without coupling to its active-category selection. */
-  categories: readonly CompletedFilterCategory[]
+  /** Dashboard categories, or undefined until the category list is available. */
+  categories: readonly CompletedFilterCategory[] | undefined
+  /** Whether activity cards above the journal can still shift its position. */
+  isActivityLoading?: boolean
 }
 
 interface GroupedEntries {
@@ -49,33 +57,116 @@ interface GroupedEntries {
 
 interface CompletedTodosFilterState {
   period: CompletedPeriod
-  categoryId: number | null
-  includeSubcategories: boolean
   customDateRange?: DateRange
 }
 
 const INITIAL_COMPLETED_TODOS_FILTERS: CompletedTodosFilterState = {
   period: 'all',
-  categoryId: null,
-  includeSubcategories: true,
 }
 
+// Category IDs are PostgreSQL serial values.
+const MAX_CATEGORY_ID = 2_147_483_647
+
 /**
- * Renders the permanent win journal with an independent Warm Preset Bar whenever Home shows the Completed Tasks panel.
+ * Renders the searchable completion journal on Home and bounds its URL-dependent content.
  * @param props - Loaded categories for the filter bar.
  * @returns The stable Completed Tasks card across loading, error, empty, filtered-empty, and populated states.
  * @example
  * <CompletedTodos categories={categories} />
  */
-export const CompletedTodos = function CompletedTodos({
+export function CompletedTodos(props: CompletedTodosProps) {
+  return (
+    <Suspense
+      fallback={
+        <Card aria-busy="true">
+          <CardHeader>
+            <CardTitle>Completion journal</CardTitle>
+            <CardDescription>Loading completed tasks…</CardDescription>
+          </CardHeader>
+        </Card>
+      }
+    >
+      <CompletedTodosContent {...props} />
+    </Suspense>
+  )
+}
+
+function CompletedTodosContent({
   categories,
+  isActivityLoading = false,
 }: CompletedTodosProps) {
+  const journalRef = useRef<HTMLDivElement>(null)
+  const initialScrollOffset = useRef<number | null>(null)
   const observerRef = useRef<HTMLDivElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const isClerkQueryReady = useClerkQueryReady()
+  const searchParams = useSearchParams()
+  const search =
+    CompletedJournalSearchSchema.safeParse(searchParams.get('search')).data ??
+    ''
+  const requestedCategory = searchParams.get('category')
+  const requestedCategoryId = Number(requestedCategory)
+  const isValidCategoryId =
+    requestedCategoryId > 0 &&
+    requestedCategoryId <= MAX_CATEGORY_ID &&
+    Number.isInteger(requestedCategoryId) &&
+    String(requestedCategoryId) === requestedCategory
+  // Honor valid links before the catalog loads, then resolve against confirmed categories.
+  const availableCategories = categories?.filter(({ id }) => id > 0) ?? []
+  const categoryId =
+    isValidCategoryId &&
+    (categories === undefined ||
+      availableCategories.some(({ id }) => id === requestedCategoryId))
+      ? requestedCategoryId
+      : null
+  const [draft, setDraft] = useState({ search, value: search })
+  // Keep the input in sync with links and Back/Forward while typing stays local.
+  if (draft.search !== search) {
+    setDraft({ search, value: search })
+  }
   const [filters, setFilters] = useState<CompletedTodosFilterState>(
     INITIAL_COMPLETED_TODOS_FILTERS,
   )
-  const { categoryId, customDateRange, period, includeSubcategories } = filters
+  const { customDateRange, period } = filters
+  const [directOnlyCategoryId, setDirectOnlyCategoryId] = useState<
+    number | null
+  >(null)
+  // Moving to a different category restores the default scope, including via Back/Forward.
+  if (directOnlyCategoryId !== null && directOnlyCategoryId !== categoryId) {
+    setDirectOnlyCategoryId(null)
+  }
+  const includeSubcategories = directOnlyCategoryId === null
+
+  // Next can consume the fragment while Dashboard still shows its loading state.
+  useInitialEffect(() => {
+    const { hash } = window.location
+    const isSearchLink = !hash && !!search && !searchParams.has('date')
+    const journal = journalRef.current
+    if (journal && (hash === '#journal' || isSearchLink)) {
+      journal.scrollIntoView()
+      journal.focus({ preventScroll: true })
+      if (isActivityLoading) initialScrollOffset.current = window.scrollY
+    }
+  })
+
+  // Activity cards can push the journal out of view after the first jump.
+  useCycleEffect(() => {
+    if (isActivityLoading) return
+
+    const scrollOffset = initialScrollOffset.current
+    initialScrollOffset.current = null
+    const journal = journalRef.current
+    if (
+      scrollOffset === null ||
+      scrollOffset !== window.scrollY ||
+      !journal ||
+      document.activeElement !== journal
+    )
+      return
+
+    journal.scrollIntoView()
+  }, [isActivityLoading])
+
   const localDayKey = useLocalDayKey()
   // The Date instances must stay stable between unrelated renders because they
   // participate in oRPC's generated infinite-query key. Local-day changes
@@ -89,21 +180,7 @@ export const CompletedTodos = function CompletedTodos({
       ),
     [customDateRange, localDayKey, period],
   )
-  const isFiltered = period !== 'all' || categoryId !== null
-
-  // A category may be deleted/renamed from the sidebar while this independent
-  // filter is active; deleted IDs fall back to All instead of leaving a blank Select.
-  useUpdateEffect(() => {
-    if (
-      categoryId !== null &&
-      !categories.some((category) => category.id === categoryId)
-    ) {
-      setFilters((currentFilters) => ({
-        ...currentFilters,
-        categoryId: null,
-      }))
-    }
-  }, [categories, categoryId])
+  const isFiltered = period !== 'all' || categoryId !== null || search !== ''
 
   // Infinite scroll over the merged journal feed, with predicates applied by
   // the server before both pagination and total calculation.
@@ -120,6 +197,7 @@ export const CompletedTodos = function CompletedTodos({
       input: (pageParam) => ({
         ...getUnfilteredCompletedJournalInput(pageParam),
         ...(categoryId === null ? {} : { categoryId, includeSubcategories }),
+        ...(search === '' ? {} : { search }),
         ...dateRange,
       }),
       initialPageParam: COMPLETED_JOURNAL_INITIAL_OFFSET,
@@ -175,16 +253,40 @@ export const CompletedTodos = function CompletedTodos({
     }
 
     return (): void => observer.disconnect()
-  }, [fetchNextPage, hasNextPage, isFetchingNextPage])
+  }, [categoryId, fetchNextPage, hasNextPage, isFetchingNextPage, search])
 
-  /**
-   * Restores the journal's original full-history view from either Clear affordance.
-   * @returns Nothing after resetting both independent filter dimensions.
-   * @example
-   * clearFilters()
-   */
+  const updateJournalUrl = (changes: {
+    search?: string
+    category?: string
+  }): void => {
+    const url = new URL(window.location.href)
+    // Apply only the given filters so other Dashboard state stays in the URL.
+    for (const [filter, value] of Object.entries(changes)) {
+      if (value) {
+        url.searchParams.set(filter, value)
+      } else {
+        url.searchParams.delete(filter)
+      }
+    }
+    if (url.href !== window.location.href) {
+      window.history.pushState(null, '', url)
+    }
+  }
+
+  const applySearch = (value: string): void => {
+    const parsed = CompletedJournalSearchSchema.safeParse(value)
+    if (!parsed.success) return
+
+    updateJournalUrl({ search: parsed.data })
+    setDraft({ search, value: parsed.data })
+  }
+
   const clearFilters = (): void => {
     setFilters(INITIAL_COMPLETED_TODOS_FILTERS)
+    setDirectOnlyCategoryId(null)
+    updateJournalUrl({ search: '', category: '' })
+    setDraft({ search, value: '' })
+    searchInputRef.current?.focus()
   }
 
   const total = data?.pages[0]?.total ?? 0
@@ -211,8 +313,14 @@ export const CompletedTodos = function CompletedTodos({
         {isFiltered ? (
           <>
             <div className="space-y-1">
-              <p className="text-foreground">No wins in this view yet</p>
-              <p className="text-sm">Your full history is still here.</p>
+              <p className="text-foreground">
+                {search ? 'No matching wins' : 'No wins in this view yet'}
+              </p>
+              <p className="text-sm">
+                {search
+                  ? 'Try a different search.'
+                  : 'Your full history is still here.'}
+              </p>
             </div>
             <Button type="button" variant="outline" onClick={clearFilters}>
               Clear filters
@@ -243,7 +351,10 @@ export const CompletedTodos = function CompletedTodos({
       </div>
     ))
     .otherwise(() => (
-      <div className="-mr-2 h-full space-y-4 overflow-y-auto pr-2">
+      <div
+        key={`${categoryId ?? 'all'}:${search}`}
+        className="-mr-2 h-full space-y-4 overflow-y-auto pr-2"
+      >
         {sortedDates.map((date, dateIndex) => {
           const entriesForDate = groupedEntries[date]
           return (
@@ -283,17 +394,23 @@ export const CompletedTodos = function CompletedTodos({
 
   return (
     <Card
-      className="flex h-full flex-col"
+      ref={journalRef}
+      id="journal"
+      tabIndex={-1}
+      className="flex h-full scroll-mt-6 flex-col"
       role="region"
-      aria-labelledby="completed-tasks-heading"
+      aria-labelledby="completion-journal-heading"
       aria-busy={isFetching}
     >
       <CardHeader className="shrink-0">
         <CardTitle className="flex items-center justify-between gap-3">
-          <div id="completed-tasks-heading" className="flex items-center gap-2">
+          <h2
+            id="completion-journal-heading"
+            className="flex items-center gap-2"
+          >
             <CheckCircle2 className="size-5" aria-hidden="true" />
-            Completed Tasks
-          </div>
+            Completion journal
+          </h2>
           <Badge
             variant="secondary"
             className="flex items-center gap-1"
@@ -304,17 +421,41 @@ export const CompletedTodos = function CompletedTodos({
           </Badge>
         </CardTitle>
         <CardDescription>Your wins, newest first</CardDescription>
+        <form
+          role="search"
+          aria-label="Completed tasks"
+          className="flex items-center gap-2 pt-2"
+          onSubmit={(event) => {
+            event.preventDefault()
+            applySearch(draft.value)
+          }}
+        >
+          <Input
+            ref={searchInputRef}
+            type="search"
+            aria-label="Search completed tasks"
+            placeholder="Search completed tasks"
+            autoComplete="off"
+            maxLength={COMPLETED_JOURNAL_SEARCH_MAX_LENGTH}
+            className="min-h-11"
+            value={draft.value}
+            onChange={(event) =>
+              setDraft({ search, value: event.target.value })
+            }
+          />
+          <Button type="submit" variant="outline" className="min-h-11">
+            Search
+          </Button>
+        </form>
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
           <CompletedTodosFilters
-            categories={categories}
+            categories={availableCategories}
             period={period}
             categoryId={categoryId}
             includeSubcategories={includeSubcategories}
+            hasSearch={search !== ''}
             onIncludeSubcategoriesChange={(include) =>
-              setFilters((current) => ({
-                ...current,
-                includeSubcategories: include,
-              }))
+              setDirectOnlyCategoryId(include ? null : categoryId)
             }
             customDateRange={customDateRange}
             onPeriodChange={(nextPeriod) =>
@@ -324,11 +465,7 @@ export const CompletedTodos = function CompletedTodos({
               }))
             }
             onCategoryChange={(nextCategoryId) =>
-              setFilters((currentFilters) => ({
-                ...currentFilters,
-                categoryId: nextCategoryId,
-                includeSubcategories: true,
-              }))
+              updateJournalUrl({ category: nextCategoryId?.toString() ?? '' })
             }
             onCustomDateRangeChange={(nextCustomDateRange) =>
               setFilters((currentFilters) => ({

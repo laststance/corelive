@@ -44,7 +44,7 @@ status (2, 3, 4, 5, 6). If Chromium is missing: `pnpm exec playwright-cli instal
 | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `pnpm qa:offline-editor --fixture <name>` | `local-only` (default), `signed-out` (detached: save line only), `session-expired` (DA2 sign-in prompt), `attached`, `recovery`; `all` with `--screenshots`                                                                                                                                                    |
 | `pnpm qa:settings` (`?state=<name>`)      | `account-never-attached` (default), `account-attached`, `account-signed-out`, `account-other-account`, `connect-confirm`, `connect-uploading`, `signout-confirm`, `signout-running`, `signout-residual`, `signin-offline`, `signin-unreachable`, `sync-details-empty`, `sync-details-rows`, `category-refusal` |
-| `pnpm qa:web` (`?view=<name>`)            | `home` (default), `appearance` (the web dashboard Appearance)                                                                                                                                                                                                                                                  |
+| `pnpm qa:dashboard` (`?view=<name>`)      | `home` (default), `appearance` (Dashboard Appearance)                                                                                                                                                                                                                                                          |
 | `pnpm benchmark:offline`                  | Workspace write latency; see the [offline guide](offline-liveeditor.md#recipes)                                                                                                                                                                                                                                |
 
 Each takes `--help` (exit 0, no build needed) and prints one JSON line
@@ -52,7 +52,7 @@ Each takes `--help` (exit 0, no build needed) and prints one JSON line
 once it is serving. A timed cold and warm run of the two commands is recorded in
 each PR (`/usr/bin/time -p`; target: 5 minutes at most).
 
-Use the web app and an isolated, headless Playwright CLI session for routine
+Use Dashboard and an isolated, headless Playwright CLI session for routine
 development and renderer QA. The CLI is a development tool, not a login E2E suite.
 Do not repeatedly authenticate real accounts to test local rendering, IPC contracts,
 or error handling. Development Clerk results do not prove Production Clerk behavior.
@@ -87,7 +87,7 @@ private compiler APIs together. Keep the hook in dependency installation inputs.
 Each concurrent Vitest suite uses its own filesystem module cache to avoid
 clearing another suite's transformed modules.
 
-For a fresh checkout, copy `.env.example` to `apps/web/.env` and provide the Web
+For a fresh checkout, copy `.env.example` to `apps/web/.env` and provide the Dashboard
 configuration. For an existing root `.env`, the setup helper below copies it
 without overwriting app files and keeps signing credentials in desktop only.
 
@@ -98,7 +98,7 @@ pnpm exec playwright-cli install-browser chromium
 pnpm dev
 ```
 
-Web configuration lives in `apps/web/.env`; the root env helper copies an existing
+Dashboard configuration lives in `apps/web/.env`; the root env helper copies an existing
 root `.env` without overwriting app configuration. Generated assets come from
 `assets/` and are written to each app by its prebuild hook. Desktop packaging uses
 `apps/desktop/.env` and emits `apps/desktop/dist/`.
@@ -175,7 +175,7 @@ pnpm qa:offline-editor --fixture attached      # prints the JSON first line
 pnpm qa:browser open http://127.0.0.1:<port>   # the "url" field
 
 pnpm qa:settings                               # then ...?state=signout-confirm
-pnpm qa:web                                    # then ...?view=appearance
+pnpm qa:dashboard                              # then ...?view=appearance
 ```
 
 The offline fixture serves the built renderer and the real workspace worker against
@@ -184,10 +184,11 @@ save failure, delayed acknowledgement, sync state and preference changes.
 `pnpm qa:settings` serves the built bundled `settings.html`
 (`corelive-editor://app/settings.html` in the app) with a stubbed
 `window.settingsAPI` under a `connect-src 'none'` policy, so it can make no network
-request. `pnpm qa:web` serves the web Home sidebar and Completed card against an
-in-page fake oRPC router, and the web `/settings` Appearance section. None launches
-Electron, reads an owner profile, authenticates, or sends completion records to
-production. The web Vite server disables env-file loading. All listen only on
+request. `pnpm qa:dashboard` renders the Dashboard against a synthetic completion history. Open
+`?view=home&activity=empty` for an empty account or `?view=home&activity=retry`
+to retry a failed heatmap request. Use `?view=appearance` for Appearance settings. These fixtures run without launching
+Electron, reading an owner profile, authenticating or sending completion records to
+production. The Dashboard fixture server disables env-file loading. All listen only on
 loopback and are outside production bundle entries. Stop each server with SIGTERM
 (Ctrl-C); the offline helper closes its worker and deletes its temporary workspace.
 Save videos and screenshots under the ignored `.gstack/` directory; fixture

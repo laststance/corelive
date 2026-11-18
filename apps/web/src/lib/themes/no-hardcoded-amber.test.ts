@@ -172,7 +172,7 @@ function formatHits(hits: AmberHit[]): string {
         `THEME_AMBER_LITERAL ${hit.path}:${hit.line} ${hit.literal}\n  ${hit.fix}`,
     )
     .join('\n')
-  return `${body}\nWarm Cathedral amber belongs only in its base.css :root[data-theme='cathedral-*'] blocks (DESIGN.md#theme-system).\nRerun: pnpm --filter @corelive/web exec vitest run src/lib/themes/no-hardcoded-amber.test.ts`
+  return `${body}\nWarm Cathedral amber belongs only in its base.css :root[data-theme='cathedral-*'] blocks (DESIGN.md#theme-system).\nRerun: pnpm --filter @corelive/dashboard exec vitest run src/lib/themes/no-hardcoded-amber.test.ts`
 }
 
 /** Collects every in-scope hand-authored file, repo-relative. */

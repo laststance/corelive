@@ -23,7 +23,7 @@ import type { WindowManager } from '../WindowManager'
 function createWindowManagerStub(): WindowManager {
   return {
     toggleLiveEditor: vi.fn(() => true),
-    getWebAppOrigin: vi.fn(() => 'https://corelive.app'),
+    getDashboardOrigin: vi.fn(() => 'https://corelive.app'),
   } as unknown as WindowManager
 }
 

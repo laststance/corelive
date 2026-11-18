@@ -20,7 +20,7 @@ const port = process.env.PORT || 4991
  * 4. Handles graceful shutdown
  */
 
-let nextProcess = null
+let dashboardProcess = null
 let electronProcess = null
 let buildProcess = null
 
@@ -36,9 +36,9 @@ function cleanup() {
     electronProcess = null
   }
 
-  if (nextProcess) {
-    nextProcess.kill('SIGTERM')
-    nextProcess = null
+  if (dashboardProcess) {
+    dashboardProcess.kill('SIGTERM')
+    dashboardProcess = null
   }
 
   process.exit(0)
@@ -82,30 +82,27 @@ async function startDevelopment() {
     // eslint-disable-next-line no-console
     console.log('✅ Electron build complete')
 
-    // Start Next.js development server
-
-    nextProcess = spawn('pnpm', ['--filter', '@corelive/web', 'dev'], {
-      stdio: 'pipe',
-      shell: true,
-      env: {
-        ...process.env,
-        NODE_ENV: 'development',
-        PORT: port.toString(),
+    dashboardProcess = spawn(
+      'pnpm',
+      ['--filter', '@corelive/dashboard', 'dev'],
+      {
+        stdio: 'pipe',
+        shell: true,
+        env: {
+          ...process.env,
+          NODE_ENV: 'development',
+          PORT: port.toString(),
+        },
       },
+    )
+
+    dashboardProcess.stdout.resume()
+
+    dashboardProcess.stderr.on('data', (data) => {
+      console.error(`📦 Dashboard server error: ${data.toString().trim()}`)
     })
 
-    // Handle Next.js output
-    nextProcess.stdout.on('data', (data) => {
-      const output = data.toString()
-      if (output.includes('Ready') || output.includes('compiled')) {
-      }
-    })
-
-    nextProcess.stderr.on('data', (data) => {
-      console.error(`📦 Next.js Error: ${data.toString().trim()}`)
-    })
-
-    nextProcess.on('exit', (code) => {
+    dashboardProcess.on('exit', (code) => {
       if (code !== 0 && code !== null) {
         console.error(`📦 Next.js process exited with code ${code}`)
         cleanup()

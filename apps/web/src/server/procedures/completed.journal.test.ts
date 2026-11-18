@@ -299,13 +299,80 @@ describeIfDb('completed.journal (permanent win journal)', () => {
     expect(secondPage.nextOffset).toBeUndefined()
   })
 
-  test('filters both completion sources by a half-open period and category before pagination', async () => {
+  test('searches the account’s full journal across both sources and paginates only case-insensitive literal matches', async () => {
+    // Arrange
+    const clerkId = freshClerkId()
+    await seedCompletedRowAt(
+      clerkId,
+      'Imported RELEASE_50% milestone',
+      new Date('2024-05-14T09:00:00.000Z'),
+    )
+    await seedTodoCompletionAt(
+      clerkId,
+      'Finish release_50% update',
+      new Date('2026-05-14T09:00:00.000Z'),
+    )
+    await seedCompletedRowAt(
+      clerkId,
+      'Imported release 50% milestone',
+      new Date('2026-05-14T10:00:00.000Z'),
+    )
+    await seedTodoCompletionAt(
+      clerkId,
+      'Finish release_500 update',
+      new Date('2026-05-14T11:00:00.000Z'),
+    )
+    await seedCompletedRowAt(
+      freshClerkId(),
+      'Another account’s release_50%',
+      new Date('2026-05-14T12:00:00.000Z'),
+    )
+
+    // Act
+    const context = authContext(clerkId)
+    const search = '  Release_50%  '
+    const firstPage = await call(getJournal, { search, limit: 1 }, context)
+    const secondPage = await call(
+      getJournal,
+      { search, limit: 1, offset: 1 },
+      context,
+    )
+    const emptyPage = await call(
+      getJournal,
+      { search: 'Unknown milestone' },
+      context,
+    )
+
+    // Assert
+    expect(firstPage).toMatchObject({
+      entries: [{ title: 'Finish release_50% update', source: 'todo' }],
+      total: 2,
+      hasMore: true,
+      nextOffset: 1,
+    })
+    expect(secondPage).toMatchObject({
+      entries: [
+        { title: 'Imported RELEASE_50% milestone', source: 'completed' },
+      ],
+      total: 2,
+      hasMore: false,
+      nextOffset: undefined,
+    })
+    expect(emptyPage).toEqual({
+      entries: [],
+      total: 0,
+      hasMore: false,
+      nextOffset: undefined,
+    })
+  })
+
+  test('combines title search with a half-open period and category before pagination', async () => {
     // Arrange — create the real user/default category through the import path,
     // then add a second category with rows on each date boundary and source.
     const clerkId = freshClerkId()
     await seedCompletedRowAt(
       clerkId,
-      'outside before period',
+      'focus before period',
       new Date('2026-05-31T23:59:59.999Z'),
     )
     const user = requireRow(
@@ -348,9 +415,15 @@ describeIfDb('completed.journal (permanent win journal)', () => {
         userId: user.id,
       },
       {
-        title: 'other category inside period',
+        title: 'focus other category inside period',
         completedAt: new Date('2026-06-20T08:00:00.000Z'),
         categoryId: generalCategory.id,
+        userId: user.id,
+      },
+      {
+        title: 'unrelated win',
+        completedAt: new Date('2026-06-20T08:00:00.000Z'),
+        categoryId: focusCategory.id,
         userId: user.id,
       },
       {
@@ -376,6 +449,7 @@ describeIfDb('completed.journal (permanent win journal)', () => {
         categoryId: focusCategory.id,
         completedFrom: new Date('2026-06-01T00:00:00.000Z'),
         completedBefore: new Date('2026-07-01T00:00:00.000Z'),
+        search: 'focus',
       },
       authContext(clerkId),
     )

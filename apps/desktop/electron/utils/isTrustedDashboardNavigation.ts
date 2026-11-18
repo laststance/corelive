@@ -1,17 +1,17 @@
-/** Keeps preload-equipped windows on the configured app origin and its canonical production alias.
+/** Keeps preload-equipped windows on the configured Dashboard origin and its canonical production alias.
  * The main process checks renderer-initiated navigation and redirects before another document can load.
  * @param navigationUrl - Full destination requested by the renderer or server redirect.
- * @param appOrigin - Origin configured by {@link WindowManager} for this run.
+ * @param dashboardOrigin - Origin configured by {@link WindowManager} for this run.
  * @returns Whether this document may retain the native preload bridge.
- * @example isTrustedAppNavigation('https://www.corelive.app/settings', 'https://corelive.app') // true
+ * @example isTrustedDashboardNavigation('https://www.corelive.app/settings', 'https://corelive.app') // true
  */
-export function isTrustedAppNavigation(
+export function isTrustedDashboardNavigation(
   navigationUrl: string,
-  appOrigin: string,
+  dashboardOrigin: string,
 ): boolean {
   try {
     const destination = new URL(navigationUrl)
-    const configured = new URL(appOrigin)
+    const configured = new URL(dashboardOrigin)
     if (destination.username || destination.password) return false
     if (
       destination.origin === configured.origin &&
@@ -33,7 +33,7 @@ export function isTrustedAppNavigation(
   }
 }
 
-/** Allows only Clerk's session-refresh endpoint with a return to this run's app origin.
+/** Allows only Clerk's session-refresh endpoint with a return to this run's Dashboard origin.
  * {@link setupSecurity} permits this document redirect while {@link exposeTrustedBridge} withholds native APIs.
  * The production Frontend API host is verified from the public Clerk key on corelive.app.
  * @returns Whether this main-frame redirect is a bounded Clerk handshake.
@@ -41,11 +41,11 @@ export function isTrustedAppNavigation(
  */
 export function isTrustedClerkHandshake(
   navigationUrl: string,
-  appOrigin: string,
+  dashboardOrigin: string,
 ): boolean {
   try {
     const destination = new URL(navigationUrl)
-    const configured = new URL(appOrigin)
+    const configured = new URL(dashboardOrigin)
     if (
       destination.protocol !== 'https:' ||
       destination.username ||
@@ -69,7 +69,7 @@ export function isTrustedClerkHandshake(
     return Boolean(
       trustedFrontend &&
       returnUrl &&
-      isTrustedAppNavigation(returnUrl, appOrigin),
+      isTrustedDashboardNavigation(returnUrl, dashboardOrigin),
     )
   } catch {
     return false

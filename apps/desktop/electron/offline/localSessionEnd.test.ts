@@ -64,7 +64,10 @@ describe('ending the local session at sign-out', () => {
     const fake = createFakeSession(productionCookies)
 
     // Act
-    await endLocalSession({ session: fake.session, appOrigin: production })
+    await endLocalSession({
+      session: fake.session,
+      dashboardOrigin: production,
+    })
 
     // Assert
     expect(
@@ -82,7 +85,7 @@ describe('ending the local session at sign-out', () => {
     // Act
     const result = await endLocalSession({
       session: fake.session,
-      appOrigin: production,
+      dashboardOrigin: production,
     })
 
     // Assert
@@ -124,7 +127,7 @@ describe('ending the local session at sign-out', () => {
     // Act
     const result = await endLocalSession({
       session: fake.session,
-      appOrigin: 'http://localhost:4991',
+      dashboardOrigin: 'http://localhost:4991',
     })
 
     // Assert
@@ -156,13 +159,13 @@ describe('ending the local session at sign-out', () => {
     // Act
     const first = await endLocalSession({
       session: stuck.session,
-      appOrigin: production,
+      dashboardOrigin: production,
       log: (line) => logs.push(line),
     })
     const healthy = createFakeSession(stuck.remaining())
     const second = await endLocalSession({
       session: healthy.session,
-      appOrigin: production,
+      dashboardOrigin: production,
     })
 
     // Assert

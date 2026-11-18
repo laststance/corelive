@@ -3,20 +3,21 @@ import { fileURLToPath } from 'node:url'
 
 import { createServer } from 'vite'
 
-/** Views served by `qa-web/main.tsx`; keep in sync with its `VIEWS`. */
+/** Views served by `qa-dashboard/main.tsx`; keep in sync with its `VIEWS`. */
 const VIEWS = ['home', 'appearance'] as const
 
-const HELP = `pnpm qa:web — isolated headless web fixture (no Clerk, no account API, no native window).
+const HELP = `pnpm qa:dashboard — isolated headless Dashboard fixture (no Clerk, no account API, no native window).
 
-Usage: pnpm qa:web [--help]
+Usage: pnpm qa:dashboard [--help]
 
 Views (select with ?view=<name> on the printed URL):
-  home        Home sidebar and Completed card against an in-page fake oRPC router (default)
-  appearance  The web /settings Appearance section (dashboard theme picker)
+  home        Dashboard and category sidebar against an in-page fake oRPC router (default)
+              Add &activity=empty for an empty account or &activity=retry for one failed heatmap request.
+  appearance  The Dashboard Appearance settings (/settings)
 
 Stdout: one JSON line {"url","pid","views"} once the server listens. Diagnostics go to stderr.
 Desktop Settings has its own fixture: pnpm qa:settings.
-Example: pnpm qa:web, then pnpm qa:browser open "<url>?view=appearance"
+Example: pnpm qa:dashboard, then pnpm qa:browser open "<url>?view=appearance"
 `
 
 const args = process.argv.slice(2)
@@ -27,13 +28,13 @@ if (args.includes('--help') || args.includes('-h')) {
 }
 if (args.length > 0) {
   process.stderr.write(
-    `qa:web: unknown argument "${args[0]}" (ARGUMENT_UNKNOWN). Fix: pnpm qa:web --help\n`,
+    `qa:dashboard: unknown argument "${args[0]}" (ARGUMENT_UNKNOWN). Fix: pnpm qa:dashboard --help\n`,
   )
   process.exit(2)
 }
 
 // Test-only entry, outside Next's app tree; no real auth, native windows or account API.
-const directory = fileURLToPath(new URL('./qa-web', import.meta.url))
+const directory = fileURLToPath(new URL('./qa-dashboard', import.meta.url))
 const server = await createServer({
   configFile: false,
   envDir: false,

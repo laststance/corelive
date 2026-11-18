@@ -14,15 +14,15 @@ vi.mock('electron', () => ({
 
 // The browser handoff is an OS side effect; capture the call so tests can
 // assert Cmd+N never uses it.
-vi.mock('../utils/openWebAppInBrowser', () => ({
-  openWebAppInBrowser: vi.fn(),
+vi.mock('../utils/openDashboardInBrowser', () => ({
+  openDashboardInBrowser: vi.fn(),
 }))
 
 import type { ConfigManager } from '../ConfigManager'
 import type { NotificationManager } from '../NotificationManager'
 import { ShortcutManager } from '../ShortcutManager'
 import type { ShortcutOpenSoundController } from '../ShortcutOpenSoundPlayer'
-import { openWebAppInBrowser } from '../utils/openWebAppInBrowser'
+import { openDashboardInBrowser } from '../utils/openDashboardInBrowser'
 import type { WindowManager } from '../WindowManager'
 
 /**
@@ -77,7 +77,7 @@ function createWindowManager(
       toggleLiveEditor,
       restoreFromTray,
       showLiveEditor,
-      getWebAppOrigin: vi.fn(() => 'https://corelive.app'),
+      getDashboardOrigin: vi.fn(() => 'https://corelive.app'),
     } as unknown as WindowManager,
   }
 }
@@ -277,7 +277,7 @@ describe('ShortcutManager new-task shortcut', () => {
 
     // Assert
     expect(harness.showLiveEditor).toHaveBeenCalledTimes(1)
-    expect(openWebAppInBrowser).not.toHaveBeenCalled()
+    expect(openDashboardInBrowser).not.toHaveBeenCalled()
     expect(notificationManager.showNotification).toHaveBeenCalledWith(
       'New Task',
       'Opening LiveEditor',

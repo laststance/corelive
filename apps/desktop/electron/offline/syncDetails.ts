@@ -176,7 +176,7 @@ export function needsALookCount(state: OfflineWorkspace): number {
  * - `use-mac-value` (conflict): restores the Mac's value as a new local edit; the merge derives
  *   the operation with `expected` = the current dashboard value (C24).
  * - `keep-dashboard-value`: clears the marker and queues nothing (name-taken also resets the
- *   local name to the dashboard's).
+ *   local name to the Dashboard's).
  * - `choose-another-name`: renames locally through the shared validator (DA8) and retries.
  *   For a blocked delete it renames the blocking child so the delete can retry (EA8).
  * - `try-again`: digest-mismatch re-derives under a new operationId; parked re-sends once.
@@ -300,7 +300,7 @@ function blockingChild(
 }
 
 /**
- * EA8 "Keep it on the dashboard": re-adds the server category locally, empty, under a new local id.
+ * EA8 "Keep it on the Dashboard": re-adds the server category locally, empty, under a new local id.
  * The local delete's destination move stays for old records.
  *
  * @example keepOnDashboard(state, deletedLocalId, ctx)
@@ -339,7 +339,7 @@ function keepOnDashboard(
     ...base,
     parentLocalId: parentExists ? base.parentLocalId : null,
   }
-  // Children the dashboard still keeps under it return under the re-added category.
+  // Children the Dashboard still keeps under it return under the re-added category.
   for (const child of state.categories) {
     const childBase = binding.base[child.id]
     if (childBase?.parentLocalId === deletedLocalId) {

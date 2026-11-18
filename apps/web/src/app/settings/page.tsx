@@ -6,8 +6,8 @@ import * as React from 'react'
 /**
  * Settings Page
  *
- * The web dashboard keeps only Appearance (#216 D5). Desktop preferences live in the bundled
- * Settings window, which no longer loads this route.
+ * The Dashboard settings page controls Appearance. CoreLive for Mac has its own
+ * Settings window.
  *
  * @module app/settings/page
  */
@@ -16,7 +16,7 @@ import { SettingsBackButton } from '@/components/settings/SettingsBackButton'
 
 export const metadata: Metadata = {
   title: 'Settings',
-  description: 'CoreLive dashboard settings',
+  description: 'Customize the appearance of CoreLive Dashboard.',
 }
 
 /**

@@ -5,7 +5,7 @@
  * its sign-in affordance is decided by CAPABILITY (`useShowElectronOAuth`), not
  * a call-time `?.`. The web renderer ships via Vercel independently of the
  * packaged app, so an OLDER install whose frozen preload predates the oauth
- * bridge loads this same shell — it must degrade to the web-app fallback rather
+ * bridge loads this same shell — it must degrade to the Dashboard fallback rather
  * than render dead buttons, and a plain browser tab must never see the card.
  *
  * Triggered when: `pnpm test` (Vitest, happy-dom).
@@ -166,7 +166,7 @@ describe('LoginShell', () => {
     expect(screen.getByTestId('oauth-buttons')).toBeInTheDocument()
   })
 
-  test('points to the web app instead of dead buttons when a frozen preload has no oauth bridge', () => {
+  test('points to the Dashboard instead of dead buttons when a frozen preload has no oauth bridge', () => {
     // Arrange: preload skew — an installed app's frozen preload exposes
     // electronAPI without the oauth bridge.
     exposeElectronAPI({})
@@ -175,9 +175,9 @@ describe('LoginShell', () => {
     render(<LoginShell />)
 
     // Assert: NO OAuth buttons (they'd be dead without the bridge), and the
-    // skew-safe fallback guides the user to the web app instead.
+    // skew-safe fallback guides the user to the Dashboard instead.
     expect(screen.queryByTestId('oauth-buttons')).not.toBeInTheDocument()
-    expect(screen.getByText(/web app/i)).toBeInTheDocument()
+    expect(screen.getByText(/CoreLive Dashboard/i)).toBeInTheDocument()
   })
 
   test('greets the signed-out user with the north-star invitation, not a sign-in demand', () => {

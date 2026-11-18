@@ -18,9 +18,11 @@ import { CategoryTotalChip } from './CategoryTotalChip'
 export function CategoryTotals({
   categories,
   label,
+  periodTotal,
 }: {
   categories: readonly RootCategoryTotal[]
   label: string
+  periodTotal?: number
 }) {
   const [openCategoryId, setOpenCategoryId] = useState<number | null>(null)
   const regionId = useId()
@@ -29,11 +31,17 @@ export function CategoryTotals({
   )
   return (
     <div className="space-y-2">
-      <ul aria-label={label} className="flex flex-wrap items-start gap-1.5">
+      <ul
+        aria-label={label}
+        className={
+          periodTotal ? 'grid gap-3' : 'flex flex-wrap items-start gap-1.5'
+        }
+      >
         {categories.map((category) => (
           <CategoryTotalChip
             key={category.id}
             category={category}
+            periodTotal={periodTotal}
             expanded={opened?.id === category.id}
             controls={`${regionId}-${category.id}`}
             onToggle={

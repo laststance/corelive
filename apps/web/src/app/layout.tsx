@@ -8,10 +8,11 @@ import { ApplicationProviders } from '@/providers/ApplicationProviders'
 
 export const metadata: Metadata = {
   title: {
-    template: '%s | CoreLive',
-    default: 'CoreLive',
+    template: '%s | CoreLive Dashboard',
+    default: 'CoreLive Dashboard',
   },
-  description: 'CoreLive convert your leafy tasks to solid engagement.',
+  description:
+    'Revisit your completed tasks and see how your activity adds up over the year.',
 }
 
 interface RootLayoutProps {

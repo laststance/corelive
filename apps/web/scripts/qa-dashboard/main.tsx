@@ -7,7 +7,7 @@ import '@/globals.css'
 
 import { installHomeFixture } from './homeFixture'
 
-/** Views the fixture renders; the list is shared with `--help` in `qa-web.ts`. */
+/** Views the fixture renders; the list is shared with `--help` in `qa-dashboard.ts`. */
 const VIEWS = ['home', 'appearance'] as const
 type View = (typeof VIEWS)[number]
 
