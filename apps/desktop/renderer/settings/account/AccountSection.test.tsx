@@ -256,8 +256,13 @@ test('an acknowledged upload stays dismissed when Settings reopens before the cl
   const menu = screen.getByRole('combobox', {
     name: 'Current settings section',
   })
+
+  // Act
   await user.selectOptions(menu, 'Account')
+
+  // Assert
   expect(screen.getByText('7 keeps are on your dashboard')).toBeVisible()
+  expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalledOnce()
 
   // Act
   act(() => fake.hideWindow())
