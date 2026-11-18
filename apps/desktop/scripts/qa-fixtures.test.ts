@@ -114,7 +114,7 @@ describe('qa:offline-editor CLI contract', () => {
 })
 
 describe('qa:settings CLI contract', () => {
-  test('--help lists all 14 states from the one shared list', () => {
+  test('--help lists all 15 settings states', () => {
     // Arrange + Act
     const result = runDesktopScript('scripts/qa-settings.ts', ['--help'], {
       QA_FIXTURE_DIST: join(scratch, 'no-build'),
@@ -122,7 +122,7 @@ describe('qa:settings CLI contract', () => {
 
     // Assert
     expect(result.status).toBe(0)
-    expect(SETTINGS_FIXTURE_STATES).toHaveLength(14)
+    expect(SETTINGS_FIXTURE_STATES).toHaveLength(15)
     for (const state of SETTINGS_FIXTURE_STATES)
       expect(result.stdout).toContain(state.name)
   })
@@ -200,7 +200,7 @@ describe.skipIf(!existsSync(builtSettings))(
       }
     }
 
-    test('every state name renders its ready text and an unknown one renders the alert and the error object', async () => {
+    test('the fixture opens on Application, renders each named state and reports unknown states', async () => {
       // Arrange
       const require = createRequire(import.meta.url)
       const playwright = createRequire(
@@ -215,8 +215,21 @@ describe.skipIf(!existsSync(builtSettings))(
           outside.push(request.url())
       })
       try {
+        // Act
+        await page.goto(server.first.url)
+
+        // Assert
+        await page
+          .getByRole('switch', { name: 'Hide App Icon' })
+          .waitFor({ state: 'visible', timeout: 10_000 })
+        expect(
+          await page
+            .getByRole('combobox', { name: 'Current settings section' })
+            .inputValue(),
+        ).toBe('Application')
+
         // Act + Assert: each state shows its ready text
-        expect(server.first.states).toHaveLength(14)
+        expect(server.first.states).toHaveLength(15)
         for (const state of SETTINGS_FIXTURE_STATES) {
           await page.goto(`${server.first.url}?state=${state.name}`)
           await page
@@ -237,7 +250,7 @@ describe.skipIf(!existsSync(builtSettings))(
         // Assert
         await alert.waitFor({ state: 'visible' })
         expect(await alert.textContent()).toContain(
-          'Unknown fixture state "nope". Valid: account-never-attached',
+          'Unknown fixture state "nope". Valid: application',
         )
         expect(error).toEqual({
           code: 'FIXTURE_STATE_UNKNOWN',
@@ -263,6 +276,7 @@ interface PlaywrightCore {
 }
 interface LocatorLike {
   first: () => LocatorLike
+  inputValue: () => Promise<string>
   waitFor: (options?: { state?: 'visible'; timeout?: number }) => Promise<void>
   textContent: () => Promise<string | null>
 }
@@ -273,7 +287,10 @@ interface PageLike {
   ) => void
   goto: (url: string) => Promise<unknown>
   getByText: (text: string) => LocatorLike
-  getByRole: (role: 'alert') => LocatorLike
+  getByRole: (
+    role: 'alert' | 'combobox' | 'switch',
+    options?: { name: string },
+  ) => LocatorLike
   evaluate: <T>(callback: () => T) => Promise<T>
 }
 

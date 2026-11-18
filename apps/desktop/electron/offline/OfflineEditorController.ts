@@ -395,7 +395,7 @@ export class OfflineEditorController {
         this.registryState?.pendingConnect?.accountId !== pending.accountId
       )
         return false
-      this.firstUpload = { state: 'uploading', count: total }
+      this.firstUpload = total > 0 ? { state: 'uploading', count: total } : null
       this.pendingEmail = pending.displayEmail || null
       this.registryState = await this.registry.update({
         attachedAccountId: pending.accountId,

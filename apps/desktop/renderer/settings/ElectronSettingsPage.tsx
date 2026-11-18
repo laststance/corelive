@@ -1,3 +1,4 @@
+import { useCycleEffect } from '@corelive/live-editor/hooks/use-cycle-effect'
 import { Button } from '@corelive/live-editor/ui/button'
 import { Label } from '@corelive/live-editor/ui/label'
 import { ThemeSelector } from '@corelive/live-editor/ui/ThemeSelector'
@@ -16,6 +17,11 @@ import {
   PanelToggle,
   VISIBLE_ON_ALL_WORKSPACES_SETTING,
 } from './PanelToggle'
+import {
+  SettingsNavigation,
+  type SettingsSectionName,
+} from './SettingsNavigation'
+import { useSettings } from './SettingsProvider'
 import { SettingsSection } from './SettingsSection'
 import { ShortcutOpeningSoundSetting } from './ShortcutOpeningSoundSetting'
 import { TodayEmberSetting } from './TodayEmberSetting'
@@ -56,26 +62,41 @@ const saveStartAtLogin = async (enabled: boolean): Promise<boolean> =>
 /**
  * The bundled Settings window's page (#216 D5, DA1).
  *
- * Sections, in order: LiveEditor, Appearance, Shortcuts & Sound, Application, Categories,
- * Updates, Account (last). The Sync details page is a second view in the same window, reached
- * from Account; the Settings sections stay mounted (hidden) behind it so nothing reloads on
- * Back. Every control talks to main through `window.settingsAPI`; there is no Redux, no next-themes
- * and no network. Mounted by `renderer/settings/main.tsx` inside {@link SettingsProvider}.
+ * Opens with Application so Dock, menu bar and startup preferences are immediately visible.
+ * Account is last. Opening Sync details keeps the sections mounted so Back can restore focus
+ * without reloading preferences. Controls use the local preload bridge.
+ * Mounted inside {@link SettingsProvider} by the bundled Settings entry point.
  *
  * @returns The single-column Settings page.
  * @example
  * <SettingsProvider api={api}><ElectronSettingsPage /></SettingsProvider>
  */
 export const ElectronSettingsPage = function ElectronSettingsPage() {
+  const { api } = useSettings()
   const themePersistence = useThemePersistence()
   const [isResettingPopoverSize, startResetSizeTransition] = useTransition()
-  const [view, setView] = useState<'settings' | 'sync-details'>('settings')
+  const [view, setView] = useState<SettingsSectionName | 'sync-details'>(
+    'Application',
+  )
   const accountHeadingRef = useRef<HTMLHeadingElement>(null)
 
-  /** Back to Settings returns focus to the Account heading, where the link lives (DA14). */
+  useCycleEffect(
+    () =>
+      api.onHidden(() => {
+        setView('Application')
+        window.scrollTo(0, 0)
+      }),
+    [api],
+  )
+
+  /** Back restores the Account heading unless an account action already restored focus. */
   const showSettings = (): void => {
-    setView('settings')
-    requestAnimationFrame(() => accountHeadingRef.current?.focus())
+    setView('Account')
+    requestAnimationFrame(() => {
+      // Removing the Back button leaves focus on the body until another control takes it.
+      if (document.activeElement === document.body)
+        accountHeadingRef.current?.focus()
+    })
   }
 
   /** Resets the Settings popover to 360×380 via IPC. */
@@ -91,30 +112,13 @@ export const ElectronSettingsPage = function ElectronSettingsPage() {
   return (
     <>
       {view === 'sync-details' && <SyncDetailsPage onBack={showSettings} />}
-      <div hidden={view !== 'settings'}>
+      <SettingsNavigation
+        section={view === 'sync-details' ? null : view}
+        onSelect={setView}
+      >
         <LiveEditorSettings>
           {({ opacity, shortcuts, config }) => (
             <>
-              <SettingsSection label="LiveEditor">
-                <LiveEditorStatusSetting />
-                <TodayEmberSetting />
-                <LiveEditorAppearance />
-                {opacity}
-                <PanelToggle
-                  setting={LIVE_EDITOR_PIN_SETTING}
-                  label="Keep on top"
-                  description="Pin LiveEditor above your other windows so it stays visible."
-                />
-              </SettingsSection>
-              <SettingsSection label="Appearance">
-                <ThemeSelector persistence={themePersistence} />
-              </SettingsSection>
-              <SettingsSection label="Shortcuts & Sound">
-                {shortcuts}
-                <ShortcutOpeningSoundSetting />
-              </SettingsSection>
-
-              {/* APPLICATION — dock, menu bar and login presence, Spaces, and the window size. */}
               <SettingsSection label="Application">
                 <NativeSwitchRow
                   id="hide-app-icon"
@@ -172,6 +176,25 @@ export const ElectronSettingsPage = function ElectronSettingsPage() {
                 {config}
               </SettingsSection>
 
+              <SettingsSection label="LiveEditor">
+                <LiveEditorStatusSetting />
+                <TodayEmberSetting />
+                <LiveEditorAppearance />
+                {opacity}
+                <PanelToggle
+                  setting={LIVE_EDITOR_PIN_SETTING}
+                  label="Keep on top"
+                  description="Pin LiveEditor above your other windows so it stays visible."
+                />
+              </SettingsSection>
+              <SettingsSection label="Appearance">
+                <ThemeSelector persistence={themePersistence} />
+              </SettingsSection>
+              <SettingsSection label="Shortcuts & Sound">
+                {shortcuts}
+                <ShortcutOpeningSoundSetting />
+              </SettingsSection>
+
               <SettingsSection label="Categories">
                 <OfflineCategoryManagement />
               </SettingsSection>
@@ -198,7 +221,7 @@ export const ElectronSettingsPage = function ElectronSettingsPage() {
             </>
           )}
         </LiveEditorSettings>
-      </div>
+      </SettingsNavigation>
     </>
   )
 }

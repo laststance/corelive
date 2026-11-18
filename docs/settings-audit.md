@@ -1,9 +1,9 @@
 # Settings usage audit
 
 Audited 2026-09-06 against CoreLive 0.22.0, including main through `1d546c9e`.
-The status-visibility row and section layout below were updated on 2026-10-22,
-and the Clear finished lines row on 2026-11-02 (keep mode strikes finished lines);
-the other findings retain the original audit's scope.
+The status-visibility row was updated on 2026-10-22 and the Clear finished lines row
+on 2026-11-02 (keep mode strikes finished lines). The desktop section order reflects
+the menu adopted on 2026-11-18. The other findings retain the original audit's scope.
 A setting is active only when its value reaches application behavior; saving,
 exporting, displaying a toggle, or auditioning an otherwise unused sound does
 not establish a task-operation consumer.
@@ -37,8 +37,8 @@ not establish a task-operation consumer.
 The desktop Settings window is bundled (`corelive-editor://app/settings.html`,
 2026-11-03, #216) and reads and writes every row above through the sandboxed
 `window.settingsAPI` preload; it never loads the web `/settings` page. Its
-sections are Appearance, LiveEditor, Shortcuts & Sound, Application, Updates,
-Categories and, last, Account. Appearance and LiveEditor preferences persist in
+pinned section menu opens on Application. The menu lists Application, LiveEditor, Appearance, Shortcuts & Sound, Categories,
+Updates and, last, Account. Appearance and LiveEditor preferences persist in
 the device workspace (`preferences`), and the theme is applied from the same
 snapshot. The web `/settings` page keeps only Appearance (the dashboard theme).
 The desktop-only toggles, such as Today Ember, are not on the web.
@@ -52,8 +52,8 @@ The desktop-only toggles, such as Today Ember, are not on the web.
 | Sync details              | {@link syncDetails} rows and the History list                            |
 
 The web `/settings` page contains only Appearance. The bundled desktop
-Settings window contains LiveEditor (with its native controls), Appearance,
-Shortcuts & Sound, Application, Categories, Updates and Account. The strikethrough description names its
+Settings window contains Application, LiveEditor (with its native controls),
+Appearance, Shortcuts & Sound, Categories, Updates and Account. The strikethrough description names its
 actual scope: completed history, rather than all editor/task surfaces.
 The native status toggle hides only the routine save/sync footer; Details and
 eligible Undo remain in the header, with save-failure recovery in Details. See the

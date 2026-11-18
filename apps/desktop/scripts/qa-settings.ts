@@ -94,6 +94,7 @@ if (!spec) {
     platform: 'darwin',
     snapshot: async () => ({ phase:'ready', generation:1, preferences: structuredClone(stored), categories:[GENERAL], account }),
     onChanged: (listener) => { listeners.add(listener); return () => listeners.delete(listener); },
+    onHidden: (listener) => { window.addEventListener('settings-window-hidden', listener); return () => window.removeEventListener('settings-window-hidden', listener); },
     preferences: { patch: async (_generation, command) => {
       if (command.expectedRevision !== stored.revision) return { ok:false, reason:'revision-conflict' };
       Object.assign(stored.settings, command.patch);
@@ -144,20 +145,28 @@ if (!spec) {
       setShortcutSecondary: async () => true,
     },
   };
-  // Click the scripted buttons once the bundled page has rendered them.
-  const findButton = async (source) => {
-    const pattern = new RegExp(source);
+  // Drive the same visible section menu and controls as the bundled Settings window.
+  const waitForControl = async (find) => {
     for (let attempt = 0; attempt < 160; attempt++) {
-      const button = [...document.querySelectorAll('button')].find((candidate) => !candidate.disabled && pattern.test((candidate.textContent ?? '').trim()));
-      if (button) return button;
+      const control = find();
+      if (control) return control;
       await sleep(50);
     }
     return null;
   };
   window.addEventListener('load', async () => {
+    if (name !== 'application') {
+      const menu = await waitForControl(() => document.querySelector('select[aria-label="Current settings section"]'));
+      if (!menu) return;
+      menu.value = 'Account';
+      menu.dispatchEvent(new Event('change', { bubbles: true }));
+    }
     for (const source of spec.drive ?? []) {
-      const button = await findButton(source);
-      if (!button) break;
+      const pattern = new RegExp(source);
+      const button = await waitForControl(() => [...document.querySelectorAll('button')].find(
+        (candidate) => candidate.checkVisibility() && !candidate.disabled && pattern.test((candidate.textContent ?? '').trim()),
+      ));
+      if (!button) return;
       button.click();
       await sleep(150);
     }

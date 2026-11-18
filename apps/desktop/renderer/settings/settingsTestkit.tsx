@@ -82,6 +82,7 @@ export function createFakeSettingsApi(options: FakeSettingsOptions = {}) {
   let account: AccountStatus = { ...NEVER_ATTACHED_ACCOUNT, ...options.account }
   let syncDetails = options.syncDetails ?? EMPTY_SYNC_DETAILS
   const listeners = new Set<() => void>()
+  const hiddenListeners = new Set<() => void>()
   const snapshot = (): SettingsSnapshot =>
     options.phase === 'opening'
       ? { phase: 'opening', generation: 1, account }
@@ -102,6 +103,12 @@ export function createFakeSettingsApi(options: FakeSettingsOptions = {}) {
         listeners.delete(listener)
       }
     }),
+    onHidden: (listener: () => void) => {
+      hiddenListeners.add(listener)
+      return (): void => {
+        hiddenListeners.delete(listener)
+      }
+    },
     preferences: {
       patch: vi.fn(async (_generation, command) => {
         if (command.expectedRevision !== stored.revision)
@@ -190,6 +197,9 @@ export function createFakeSettingsApi(options: FakeSettingsOptions = {}) {
   } satisfies SettingsWindowAPI
   return {
     api,
+    hideWindow(): void {
+      for (const listener of hiddenListeners) listener()
+    },
     /** The preferences main would have persisted. */
     stored,
     /** Replaces the account status and notifies like a main-side change. */

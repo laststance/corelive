@@ -40,6 +40,7 @@ import {
   LOGIN_WINDOW_BACKGROUND_DARK,
   LOGIN_WINDOW_BACKGROUND_LIGHT,
 } from './constants'
+import { typedSend } from './ipc/typedSend'
 import { log } from './logger'
 import {
   isLocalEditorDocument,
@@ -1326,6 +1327,16 @@ export class WindowManager {
           'settingsPopover.height': height,
         })
       }, SETTINGS_POPOVER_RESIZE_DEBOUNCE_MS)
+    })
+
+    // A native hide ends this Settings visit. Occlusion or resize-related focus changes do not.
+    const settings = this.settingsWindow
+    settings.on('hide', () => {
+      if (
+        !settings.isDestroyed() &&
+        isLocalSettingsDocument(settings.webContents.getURL())
+      )
+        typedSend(settings.webContents, 'settings-window-hidden')
     })
 
     // Auto-hide on blur (popover behavior). Skip while the user is dragging a

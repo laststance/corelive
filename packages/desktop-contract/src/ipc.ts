@@ -395,6 +395,7 @@ export interface IPCEventChannels {
   'offline-editor-flush': OfflineFlushRequest
   'offline-editor-shown': void
   'settings-window-changed': void
+  'settings-window-hidden': void
   'offline-auth-request': OfflineAuthRequest
   // Sent by {@link OAuthManager}; received in preload-shared/auth-oauth-bridge.ts.
   'oauth-error': { error: string }

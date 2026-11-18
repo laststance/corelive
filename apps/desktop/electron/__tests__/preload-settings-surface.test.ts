@@ -43,6 +43,7 @@ test('the bundled Settings document receives exactly the named capability groups
     'floatingPanels',
     'liveEditor',
     'onChanged',
+    'onHidden',
     'platform',
     'preferences',
     'settings',

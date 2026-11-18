@@ -485,11 +485,11 @@ Verification is deterministic: a fix counts when its `applied_text` is in the cu
 
 <!-- autoplan-accepted:design -->
 
-- DA1 (Settings order): the bundled Settings window shows these sections in order:
-  1. LiveEditor
-  2. Appearance
-  3. Shortcuts & Sound
-  4. Application
+- DA1 (Settings order): the bundled Settings window opens on Application. Its pinned menu switches between these sections in order:
+  1. Application (Dock icon, menu bar, startup and window behavior)
+  2. LiveEditor
+  3. Appearance
+  4. Shortcuts & Sound
   5. Categories
   6. Updates
   7. Account (last)
@@ -604,7 +604,7 @@ Verification is deterministic: a fix counts when its `applied_text` is in the cu
   - The first and only stdout line, `{"fixture","url","pid","data"}`, is printed after the worker has opened the workspace and the server listens. Diagnostics go to stderr.
   - Tests: `--help` with no build exits 0 and creates no temp directory; an unknown fixture exits 2 with that message; a missing build exits 3.
 - DX2 (`pnpm qa:settings`, desktop, `apps/desktop/scripts/qa-settings.ts`): the same CLI convention as DX1 (`--help`, build preflight with `FIXTURE_BUILD_MISSING`, a JSON first line `{"url","pid","states":[…]}`, diagnostics on stderr).
-  - The page selects a state with `?state=<name>`. The names cover every DA15 state: `account-never-attached` (default), `account-attached`, `account-signed-out`, `account-other-account`, `connect-confirm`, `connect-uploading`, `signout-confirm`, `signout-running`, `signout-residual`, `signin-offline`, `signin-unreachable`, `sync-details-empty`, `sync-details-rows`, `category-refusal`.
+  - The page opens in the `application` state by default. Use `?state=<name>` for a DA15 state: `account-never-attached`, `account-attached`, `account-signed-out`, `account-other-account`, `connect-confirm`, `connect-uploading`, `signout-confirm`, `signout-running`, `signout-residual`, `signin-offline`, `signin-unreachable`, `sync-details-empty`, `sync-details-rows`, `category-refusal`.
   - An unknown state renders a `role="alert"` message `Unknown fixture state "<x>". Valid: …` and sets `window.__settingsFixture.error = { code: 'FIXTURE_STATE_UNKNOWN', valid }`.
   - Tests: each state name renders; an unknown name renders the alert and the error object.
 - DX3 (`--screenshots <dir>`, verify and exit, in both desktop fixtures):

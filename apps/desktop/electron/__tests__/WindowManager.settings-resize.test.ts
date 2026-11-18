@@ -31,7 +31,7 @@ interface MockBrowserWindow {
   getSize: Spy
   setBounds: Spy
   hide: Spy
-  webContents: { on: Spy }
+  webContents: { on: Spy; isDestroyed: Spy; getURL: Spy; send: Spy }
 }
 
 /** Captured window plus its constructor options. */
@@ -62,7 +62,12 @@ vi.mock('electron', () => ({
         if (!handlers[event]) handlers[event] = []
         handlers[event].push(handler)
       }),
-      webContents: { on: vi.fn() },
+      webContents: {
+        on: vi.fn(),
+        isDestroyed: vi.fn(() => false),
+        getURL: vi.fn(() => 'corelive-editor://app/settings.html'),
+        send: vi.fn(),
+      },
     }
     capturedWindows.push({ win, options, handlers })
     return win
@@ -347,6 +352,30 @@ describe('createSettingsWindow — resize persistence (debounce)', () => {
     // Assert: only one update despite five events
     expect(update).toHaveBeenCalledTimes(1)
   })
+})
+
+test('only hiding the native Settings window ends the current Settings visit', () => {
+  // Arrange
+  const windowManager = new WindowManager(SERVER_URL)
+  windowManager.createSettingsWindow()
+  const captured = capturedWindows[0]
+  if (!captured) throw new Error('Expected a settings window to be created')
+
+  // Act
+  fireEvent(captured, 'will-resize')
+  fireEvent(captured, 'blur')
+
+  // Assert
+  expect(captured.win.hide).not.toHaveBeenCalled()
+  expect(captured.win.webContents.send).not.toHaveBeenCalled()
+
+  // Act
+  fireEvent(captured, 'hide')
+
+  // Assert
+  expect(captured.win.webContents.send).toHaveBeenCalledExactlyOnceWith(
+    'settings-window-hidden',
+  )
 })
 
 describe('createSettingsWindow — blur-during-resize guard', () => {
