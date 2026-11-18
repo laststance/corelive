@@ -59,10 +59,10 @@ function readDashboardSettings(env: NodeJS.ProcessEnv = {}): unknown {
 }
 
 describe('workspace environment setup', () => {
-  test('keeps signing credentials out of Dashboard configuration and restricts file access', () => {
+  test('separates signing settings and preserves a UTF-8 BOM in the original file only', () => {
     // Arrange
     const contents =
-      'CLERK_SECRET_KEY=fixture-server-key\nAPPLE_ID=fixture-apple\nWIN_CSC_LINK=fixture-cert\nWIN_CSC_KEY_PASSWORD=fixture-signing-password\nexport GH_TOKEN = fixture-token\n'
+      '\uFEFFCLERK_SECRET_KEY=fixture-server-key\nAPPLE_ID=fixture-apple\nWIN_CSC_LINK=fixture-cert\nWIN_CSC_KEY_PASSWORD=fixture-signing-password\nexport GH_TOKEN = fixture-token\n'
     writeFileSync(path.join(root, '.env'), contents)
     // Act
     const result = spawnSync(process.execPath, ['scripts/setup-env.mjs'], {

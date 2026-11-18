@@ -129,7 +129,10 @@ function assertDashboardFormat(contents) {
   }
 }
 
-const { dashboard, signing } = splitWorkspaceSettings(contents ?? '')
+// A UTF-8 byte order mark belongs to the source file encoding, not its first key.
+const { dashboard, signing } = splitWorkspaceSettings(
+  (contents ?? '').replace(/^\uFEFF/, ''),
+)
 if (contents !== null && !dashboardExists) {
   assertDashboardFormat(dashboard)
   await mkdir(path.dirname(dashboardFile), { recursive: true })
