@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import '@testing-library/jest-dom/vitest'
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, test, vi } from 'vitest'
 
@@ -218,6 +218,39 @@ test('acknowledges the first upload notice only after Account is opened', async 
     screen.getByRole('combobox', { name: 'Current settings section' }),
     'Account',
   )
+
+  // Assert
+  expect(screen.getByText('7 keeps are on your dashboard')).toBeVisible()
+  await waitFor(() =>
+    expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalledOnce(),
+  )
+})
+
+test('preserves an upload notice that arrives while Sync details covers Account', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  const { fake } = await renderWithSettings(<ElectronSettingsPage />, {
+    account: { state: 'attached', needsALookCount: 2 },
+  })
+  await user.selectOptions(
+    screen.getByRole('combobox', { name: 'Current settings section' }),
+    'Account',
+  )
+  await user.click(
+    screen.getByRole('button', { name: '2 changes need a look' }),
+  )
+
+  // Act
+  await act(async () => {
+    fake.setAccount({ firstUpload: { state: 'done', count: 7 } })
+  })
+
+  // Assert
+  expect(screen.getByRole('heading', { name: 'Needs a look' })).toBeVisible()
+  expect(fake.api.account.acknowledgeFirstUpload).not.toHaveBeenCalled()
+
+  // Act
+  await user.click(screen.getByRole('button', { name: /Back to Settings/ }))
 
   // Assert
   expect(screen.getByText('7 keeps are on your dashboard')).toBeVisible()
