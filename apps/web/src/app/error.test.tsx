@@ -1,10 +1,24 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ComponentProps } from 'react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { log } from '@/lib/logger'
 
 import RouteError from './error'
+
+// An in-app Next link consumes an ordinary click before the browser can navigate.
+vi.mock('next/link', () => ({
+  default: ({ onClick, ...props }: ComponentProps<'a'>) => (
+    <a
+      {...props}
+      onClick={(event) => {
+        onClick?.(event)
+        event.preventDefault()
+      }}
+    />
+  ),
+}))
 
 describe('RouteError (route-level error boundary)', () => {
   beforeEach(() => {
@@ -56,14 +70,15 @@ describe('RouteError (route-level error boundary)', () => {
   test('lets the browser navigate out of a failed route to the Dashboard landing page', async () => {
     // Arrange
     const user = userEvent.setup()
-    render(<RouteError error={new Error('Failed route')} reset={vi.fn()} />)
+    const reset = vi.fn()
+    render(<RouteError error={new Error('Failed route')} reset={reset} />)
     const link = screen.getByRole('link', { name: 'Dashboard landing page' })
     let navigates = false
     document.addEventListener(
       'click',
       (event) => {
         navigates = !event.defaultPrevented
-        // jsdom has no document navigation; observe the default action before stopping it.
+        // Observe the default action without leaving the test document.
         event.preventDefault()
       },
       { once: true },
@@ -76,5 +91,6 @@ describe('RouteError (route-level error boundary)', () => {
     expect(link).toBeVisible()
     expect(link).toHaveAttribute('href', '/')
     expect(navigates).toBe(true)
+    expect(reset).not.toHaveBeenCalled()
   })
 })

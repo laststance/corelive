@@ -541,7 +541,8 @@ test('a category removed while the journal is open falls back to all categories 
 test('clearing a legacy filter lets the visitor scroll past the cached first journal page', async () => {
   // Arrange
   window.history.replaceState(null, '', '/home?filter=pending')
-  const observe = vi.fn<(enterViewport: () => void) => void>()
+  const observe =
+    vi.fn<(notifyVisibility: (...states: boolean[]) => void) => void>()
   vi.stubGlobal(
     'IntersectionObserver',
     class {
@@ -554,7 +555,11 @@ test('clearing a legacy filter lets the visitor scroll past the cached first jou
         ) => void,
       ) {}
       observe(target: Element): void {
-        observe(() => this.notify([{ isIntersecting: true, target }]))
+        observe((...states) =>
+          this.notify(
+            states.map((isIntersecting) => ({ isIntersecting, target })),
+          ),
+        )
       }
       disconnect(): void {}
     },
@@ -595,7 +600,10 @@ test('clearing a legacy filter lets the visitor scroll past the cached first jou
   // Act
   await user.click(screen.getByRole('button', { name: 'Clear' }))
   expect(await screen.findByText('Cached journal entry 1')).toBeVisible()
-  await act(async () => observe.mock.lastCall?.[0]())
+  const notifyVisibility = observe.mock.lastCall![0]
+  await act(async () => notifyVisibility(true, false))
+  expect(journal).not.toHaveBeenCalled()
+  await act(async () => notifyVisibility(false, true))
 
   // Assert
   expect(await screen.findByText('Next journal page')).toBeVisible()
@@ -603,6 +611,79 @@ test('clearing a legacy filter lets the visitor scroll past the cached first jou
     { limit: 10, offset: 10 },
     expect.anything(),
   )
+  client.clear()
+})
+
+test('a failed next page keeps the current wins visible and waits for a manual retry before loading more', async () => {
+  // Arrange
+  window.history.replaceState(null, '', '/home?search=Release')
+  vi.stubGlobal(
+    'IntersectionObserver',
+    class {
+      constructor(
+        private readonly notify: (
+          entries: { isIntersecting: boolean; target: Element }[],
+        ) => void,
+      ) {}
+      observe(target: Element): void {
+        // A sentinel still in view emits an initial intersection each time it is observed.
+        this.notify([{ isIntersecting: true, target }])
+      }
+      disconnect(): void {}
+    },
+  )
+  const firstPage: DayDetailTask[] = Array.from({ length: 10 }, (_, index) => ({
+    source: 'completed',
+    id: index + 1,
+    title: `Release ${index + 1}`,
+    completedAt: new Date('2026-10-01T09:00:00Z'),
+    category: null,
+  }))
+  const failedPage = Promise.withResolvers<never>()
+  journal
+    .mockResolvedValueOnce({ entries: firstPage, total: 11, nextOffset: 10 })
+    .mockReturnValueOnce(failedPage.promise)
+    .mockResolvedValue({
+      entries: [{ ...firstPage[0]!, id: 11, title: 'Release 11' }],
+      total: 11,
+    })
+  const user = userEvent.setup()
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  render(
+    <QueryClientProvider client={client}>
+      <CompletedTodos categories={CATEGORIES} />
+    </QueryClientProvider>,
+  )
+  await waitFor(() => expect(journal).toHaveBeenCalledTimes(2))
+
+  // Act
+  await act(async () => failedPage.reject(new Error('network down')))
+
+  // Assert
+  const retry = await screen.findByRole('button', {
+    name: 'Retry loading more',
+  })
+  expect(screen.getByText('More wins could not load.')).toBeVisible()
+  expect(screen.getByText('Release 1')).toBeVisible()
+  expect(screen.queryByText('Release 11')).toBeNull()
+  expect(journal).toHaveBeenCalledTimes(2)
+
+  // Act
+  await user.click(retry)
+
+  // Assert
+  expect(await screen.findByText('Release 11')).toBeVisible()
+  expect(screen.getByText('Release 1')).toBeVisible()
+  expect(
+    screen.queryByRole('button', { name: 'Retry loading more' }),
+  ).toBeNull()
+  expect(journal.mock.calls.map(([input]) => input)).toEqual([
+    { limit: 10, offset: 0, search: 'Release' },
+    { limit: 10, offset: 10, search: 'Release' },
+    { limit: 10, offset: 10, search: 'Release' },
+  ])
   client.clear()
 })
 

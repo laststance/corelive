@@ -299,17 +299,17 @@ describeIfDb('completed.journal (permanent win journal)', () => {
     expect(secondPage.nextOffset).toBeUndefined()
   })
 
-  test('searches the account’s full journal across both sources and paginates only case-insensitive literal matches', async () => {
+  test('paginates literal search matches across both sources even when stored titles contain line breaks', async () => {
     // Arrange
     const clerkId = freshClerkId()
     await seedCompletedRowAt(
       clerkId,
-      'Imported RELEASE_50% milestone',
+      'Imported RELE\r\nASE_50% milestone',
       new Date('2024-05-14T09:00:00.000Z'),
     )
     await seedTodoCompletionAt(
       clerkId,
-      'Finish release_50% update',
+      'Finish rele\rase_50% update',
       new Date('2026-05-14T09:00:00.000Z'),
     )
     await seedCompletedRowAt(
@@ -330,11 +330,14 @@ describeIfDb('completed.journal (permanent win journal)', () => {
 
     // Act
     const context = authContext(clerkId)
-    const search = '  Release_50%  '
-    const firstPage = await call(getJournal, { search, limit: 1 }, context)
+    const firstPage = await call(
+      getJournal,
+      { search: '  Rele\nase_50%  ', limit: 1 },
+      context,
+    )
     const secondPage = await call(
       getJournal,
-      { search, limit: 1, offset: 1 },
+      { search: 'Release_50%', limit: 1, offset: 1 },
       context,
     )
     const emptyPage = await call(
@@ -345,14 +348,14 @@ describeIfDb('completed.journal (permanent win journal)', () => {
 
     // Assert
     expect(firstPage).toMatchObject({
-      entries: [{ title: 'Finish release_50% update', source: 'todo' }],
+      entries: [{ title: 'Finish rele\rase_50% update', source: 'todo' }],
       total: 2,
       hasMore: true,
       nextOffset: 1,
     })
     expect(secondPage).toMatchObject({
       entries: [
-        { title: 'Imported RELEASE_50% milestone', source: 'completed' },
+        { title: 'Imported RELE\r\nASE_50% milestone', source: 'completed' },
       ],
       total: 2,
       hasMore: false,

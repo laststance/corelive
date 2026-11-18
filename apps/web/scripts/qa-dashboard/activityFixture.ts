@@ -1,3 +1,4 @@
+import { stripJournalSearchLineBreaks } from '@corelive/desktop-contract/journal-search'
 import { ORPCError, os } from '@orpc/server'
 
 import { getLocalTodayIsoDate } from '@/lib/getLocalTodayIsoDate'
@@ -25,7 +26,7 @@ const sessions = [
   [17, 1, 'Test the new ink'],
   [23, 2, 'Find the original field guide'],
   [29, 1, 'Draw thumbnail layouts'],
-  [47, 2, 'Review the archive'],
+  [47, 2, 'Review the\r\n archive'],
   [88, 1, 'Start a sketchbook'],
 ] as const
 
@@ -114,13 +115,14 @@ export function createActivityFixture(
       .input(DayDetailInputSchema)
       .handler(({ input }) => dayDetail(input.date)),
     journal: os.input(CompletedJournalInputSchema).handler(({ input }) => {
+      const search = input.search?.toLowerCase()
       const entries = datedEntries.filter(
         ({ categoryId, completedAt, title }) =>
           (!input.categoryId || input.categoryId === categoryId) &&
           (!input.completedFrom || completedAt >= input.completedFrom) &&
           (!input.completedBefore || completedAt < input.completedBefore) &&
-          (!input.search ||
-            title.toLowerCase().includes(input.search.toLowerCase())),
+          (!search ||
+            stripJournalSearchLineBreaks(title).toLowerCase().includes(search)),
       )
       const end = input.offset + input.limit
       const hasMore = end < entries.length

@@ -123,6 +123,23 @@ test('a missing destination leaves Reading and its completions in place', async 
   expect((await client.completed.journal({ categoryId: 2 })).total).toBe(7)
 })
 
+test('single-line searches find fixture entries with line breaks in their original titles', async () => {
+  // Arrange
+  fixture = installHomeFixture(new URLSearchParams())
+  const client = createClient()
+
+  // Act
+  const result = await client.completed.journal({
+    search: 'review the archive',
+  })
+
+  // Assert
+  expect(result.total).toBe(1)
+  expect(result.entries.map(({ title }) => title)).toEqual([
+    'Review the\r\n archive',
+  ])
+})
+
 test('the Journal link preserves search, category, and the active QA modes', async () => {
   // Arrange
   window.history.replaceState(
@@ -222,18 +239,17 @@ test('restarting the fixture restores browser globals and starts a fresh scenari
 test('uninstalling cancels both pending deletes and restores fetch', async () => {
   // Arrange
   const originalFetch = window.fetch
-  fixture = installHomeFixture(new URLSearchParams('delete=pending'))
-  const dispatch = vi.fn(window.fetch)
-  window.fetch = dispatch
+  const home = installHomeFixture(new URLSearchParams('delete=pending'))
+  fixture = home
   const client = createClient()
   const requests = Promise.allSettled([
     client.category.delete({ id: 2, targetCategoryId: 1 }),
     client.category.delete({ id: 2, targetCategoryId: 1 }),
   ])
-  await waitFor(() => expect(dispatch).toHaveBeenCalledTimes(2))
+  await waitFor(() => expect(home.pendingDeleteCount).toBe(2))
 
   // Act
-  fixture.uninstall()
+  home.uninstall()
   fixture = undefined
 
   // Assert
@@ -248,20 +264,20 @@ test('uninstalling cancels both pending deletes and restores fetch', async () =>
       reason: expect.objectContaining({ code: 'CLIENT_CLOSED_REQUEST' }),
     },
   ])
+  expect(home.pendingDeleteCount).toBe(0)
 })
 
 test('releasing pending deletes removes Reading once and settles both requests', async () => {
   // Arrange
-  fixture = installHomeFixture(new URLSearchParams('delete=pending'))
+  const home = installHomeFixture(new URLSearchParams('delete=pending'))
+  fixture = home
   const browser: Window & { __homeFixture?: { release: () => void } } = window
-  const dispatch = vi.fn(window.fetch)
-  window.fetch = dispatch
   const client = createClient()
   const requests = Promise.allSettled([
     client.category.delete({ id: 2, targetCategoryId: 1 }),
     client.category.delete({ id: 2, targetCategoryId: 1 }),
   ])
-  await waitFor(() => expect(dispatch).toHaveBeenCalledTimes(2))
+  await waitFor(() => expect(home.pendingDeleteCount).toBe(2))
   expect(
     (await client.category.list()).categories.map(({ name }) => name),
   ).toEqual(['General', 'Reading'])
@@ -275,6 +291,7 @@ test('releasing pending deletes removes Reading once and settles both requests',
     status: 'fulfilled',
     value: { success: true, movedToCategoryId: 1, promotedCategoryIds: [] },
   })
+  expect(home.pendingDeleteCount).toBe(0)
   expect(outcomes).toContainEqual({
     status: 'rejected',
     reason: expect.objectContaining({ code: 'NOT_FOUND' }),

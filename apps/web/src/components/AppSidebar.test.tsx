@@ -15,6 +15,8 @@ const navigation = vi.hoisted(() => ({
   useSearchParams: vi.fn(() => new URLSearchParams()),
 }))
 vi.mock('next/navigation', () => navigation)
+// Sidebar tests inspect the rendered destinations without mounting a Next router.
+vi.mock('next/link', () => ({ default: 'a' }))
 vi.mock('@/app/(main)/home/_components/Category', () => ({
   Category: () => null,
 }))

@@ -19,7 +19,7 @@ import {
   CompletedJournalSearchSchema,
   isCompletedJournalFilterSupported,
 } from '@corelive/desktop-contract/journal-search'
-import type { App } from 'electron'
+import type { App, MessageBoxOptions } from 'electron'
 import { app as electronApp, dialog } from 'electron'
 
 import { log } from './logger'
@@ -449,19 +449,35 @@ export class DeepLinkManager {
 
     // A response to an opened link must remain readable with OS notifications disabled.
     if (message !== undefined) {
-      await dialog.showMessageBox({
-        type: 'info',
-        title: 'Dashboard search',
-        message,
-        buttons: ['OK'],
-      })
+      await this.showSearchGuidance(message)
       return
     }
     const search = new URLSearchParams()
     if (parsed.data) search.set('search', parsed.data)
     if (filter) search.set('filter', filter)
 
-    this.openInBrowser(`/home?${search.toString()}`)
+    const query = search.toString()
+    this.openInBrowser(`/home${query ? `?${query}` : ''}#journal`)
+  }
+
+  /**
+   * Presents guidance for a rejected search in the visible editor when one is open.
+   * @example await this.showSearchGuidance('Choose the completed or all filter.')
+   */
+  private async showSearchGuidance(message: string): Promise<void> {
+    const options: MessageBoxOptions = {
+      type: 'info',
+      title: 'Dashboard search',
+      message,
+      buttons: ['OK'],
+    }
+    const editor = this.windowManager.getLiveEditorWindow()
+    // The LiveEditor can still be opening, or sign-in can be showing in its place.
+    if (editor && !editor.isDestroyed() && editor.isVisible()) {
+      await dialog.showMessageBox(editor, options)
+    } else {
+      await dialog.showMessageBox(options)
+    }
   }
 
   /**

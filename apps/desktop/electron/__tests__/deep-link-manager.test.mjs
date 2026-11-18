@@ -70,6 +70,7 @@ describe('DeepLinkManager', () => {
       hasMainWindow: vi.fn(() => true),
       getMainWindow: vi.fn(() => mockWindow), // Return the same instance every time
       restoreFromTray: vi.fn(),
+      getLiveEditorWindow: vi.fn(() => null),
       // Post-retirement deep links open the Dashboard in the browser (T15).
       getDashboardOrigin: vi.fn(() => 'https://corelive.app'),
     }
@@ -294,8 +295,43 @@ describe('DeepLinkManager', () => {
 
       // Assert
       expect(mockShell.openExternal).toHaveBeenCalledWith(
-        'https://corelive.app/home?search=R%26D+notes&filter=completed',
+        'https://corelive.app/home?search=R%26D+notes&filter=completed#journal',
       )
+    })
+
+    test.each([
+      ['corelive://search', 'https://corelive.app/home#journal'],
+      [
+        'corelive://search?query=+%0D%0A+&filter=completed',
+        'https://corelive.app/home?filter=completed#journal',
+      ],
+    ])('opens the journal for an empty search link %s', async (url, target) => {
+      // Arrange
+      const open = mockShell.openExternal
+
+      // Act
+      await deepLinkManager.handleDeepLink(url)
+
+      // Assert
+      expect(open).toHaveBeenCalledWith(target)
+    })
+
+    test('attaches rejected-search guidance to the visible LiveEditor', async () => {
+      // Arrange
+      const editor = { isVisible: () => true, isDestroyed: () => false }
+      mockWindowManager.getLiveEditorWindow.mockReturnValue(editor)
+
+      // Act
+      await deepLinkManager.handleDeepLink('corelive://search?filter=pending')
+
+      // Assert
+      expect(mockDialog.showMessageBox).toHaveBeenCalledWith(editor, {
+        type: 'info',
+        title: 'Dashboard search',
+        message:
+          'Dashboard searches completed tasks. Open LiveEditor on your Mac for pending tasks.',
+        buttons: ['OK'],
+      })
     })
 
     test.each([

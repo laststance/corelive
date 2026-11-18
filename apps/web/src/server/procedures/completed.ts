@@ -1,3 +1,4 @@
+import { JOURNAL_SEARCH_LINE_BREAKS } from '@corelive/desktop-contract/journal-search'
 import { ORPCError } from '@orpc/server'
 import { sql } from 'drizzle-orm'
 
@@ -321,9 +322,12 @@ export const getJournal = authMiddleware
         completedBefore === undefined
           ? sql``
           : sql`AND m.completed_at < ${completedBefore.toISOString()}`
-      // A substring function treats punctuation like % and _ as literal text.
+      // Match the single-line input against stored titles while keeping % and _ literal.
       const searchFilter = search
-        ? sql`AND strpos(lower(m.title), lower(${search})) > 0`
+        ? sql`AND strpos(
+            lower(translate(m.title, ${JOURNAL_SEARCH_LINE_BREAKS}, '')),
+            lower(${search})
+          ) > 0`
         : sql``
 
       // One statement gives page and count the same snapshot even when another window moves a category.

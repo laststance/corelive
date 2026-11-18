@@ -122,8 +122,9 @@ describe('SundayDigestCard', () => {
     render(<SundayDigestCard dataByDate={data} now={LOCAL_SUNDAY} />)
 
     // Assert
-    expect(screen.getByText(/brightest day/i)).toBeVisible()
-    expect(screen.getByText('6 things')).toBeVisible()
+    const brightestDay = screen.getByText('brightest day:', { exact: true })
+    expect(brightestDay).toBeVisible()
+    expect(brightestDay).toHaveTextContent('brightest day: Wed, May 6 6 things')
   })
 
   test('uses the singular "1 thing" for a one-item brightest day', () => {

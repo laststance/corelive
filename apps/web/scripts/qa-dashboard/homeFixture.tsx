@@ -75,12 +75,13 @@ function toDeleteMode(value: string | null): DeleteMode {
  * with its sidebar, activity and journal, so the `?view=home` QA page needs no sign-in or database.
  * Called by `main.tsx` before the first render.
  * @param parameters - The page's query string (`delete=` picks the delete behavior).
- * @returns The Home element and the teardown for its browser globals.
+ * @returns The Home element, current pending delete count, and teardown for its browser globals.
  * @example
  * const { element, uninstall } = installHomeFixture(new URLSearchParams('delete=pending'))
  */
 export function installHomeFixture(parameters: URLSearchParams): {
   element: React.JSX.Element
+  readonly pendingDeleteCount: number
   uninstall: () => void
 } {
   const deleteMode = toDeleteMode(parameters.get('delete'))
@@ -188,6 +189,9 @@ export function installHomeFixture(parameters: URLSearchParams): {
     value: { release: resumeDeleteWaiters },
   })
   return {
+    get pendingDeleteCount() {
+      return pendingDeletes.size
+    },
     element: (
       <SidebarProvider>
         <AppSidebar />

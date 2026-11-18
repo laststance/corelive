@@ -227,11 +227,11 @@ function CompletedTodosContent({
     data,
     fetchNextPage,
     hasNextPage,
-    isFetching,
+    fetchStatus,
+    isFetchNextPageError,
     isFetchingNextPage,
     isLoading,
     isError,
-    isPaused,
     refetch,
   } = useInfiniteQuery({
     ...orpc.completed.journal.infiniteOptions({
@@ -278,14 +278,21 @@ function CompletedTodosContent({
     return dateB - dateA
   })
 
-  // Intersection Observer advances only the currently-filtered result set.
+  // A failed next page waits for manual retry; other in-flight or paused requests keep their place.
+  const canObserveNextPage =
+    canLoadJournal &&
+    hasNextPage &&
+    !isFetchNextPageError &&
+    fetchStatus === 'idle'
+
   useCycleEffect(() => {
     const target = observerRef.current
-    if (!canLoadJournal || !target || !hasNextPage || isFetchingNextPage) return
+    if (!canObserveNextPage || !target) return
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0]?.isIntersecting) {
-          fetchNextPage()
+        // This observer tracks one sentinel. A batch can include both entry and exit.
+        if (entries.at(-1)?.isIntersecting) {
+          void fetchNextPage({ cancelRefetch: false })
         }
       },
       { threshold: 0.1 },
@@ -294,14 +301,7 @@ function CompletedTodosContent({
     observer.observe(target)
 
     return (): void => observer.disconnect()
-  }, [
-    canLoadJournal,
-    categoryId,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    search,
-  ])
+  }, [canObserveNextPage, categoryId, fetchNextPage, search])
 
   const updateJournalUrl = (changes: {
     search?: string
@@ -342,7 +342,7 @@ function CompletedTodosContent({
   const journalContent = match({
     invalidSearch,
     unsupportedFilter,
-    waitingForConnection: isPaused && data === undefined,
+    waitingForConnection: fetchStatus === 'paused' && data === undefined,
     hasEntries: allEntries.length > 0,
     // A failed background refetch keeps the already-loaded history on screen;
     // the error block is only for "nothing loaded at all".
@@ -459,6 +459,21 @@ function CompletedTodosContent({
           </div>
         ) : null}
 
+        {isFetchNextPageError && !isFetchingNextPage ? (
+          <div className="flex items-center justify-center gap-3 py-4">
+            <p role="status" className="text-sm text-muted-foreground">
+              More wins could not load.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void fetchNextPage({ cancelRefetch: false })}
+            >
+              Retry loading more
+            </Button>
+          </div>
+        ) : null}
+
         {/* Intersection observer target */}
         {hasNextPage ? <div ref={observerRef} className="h-1" /> : null}
 
@@ -478,7 +493,7 @@ function CompletedTodosContent({
       className="flex h-full scroll-mt-6 flex-col"
       role="region"
       aria-labelledby="completion-journal-heading"
-      aria-busy={isFetching}
+      aria-busy={fetchStatus === 'fetching'}
     >
       <CardHeader className="shrink-0">
         <CardTitle className="flex items-center justify-between gap-3">
