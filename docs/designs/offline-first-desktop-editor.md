@@ -485,11 +485,11 @@ Verification is deterministic: a fix counts when its `applied_text` is in the cu
 
 <!-- autoplan-accepted:design -->
 
-- DA1 (Settings order): the bundled Settings window shows these sections in order:
-  1. LiveEditor
-  2. Appearance
-  3. Shortcuts & Sound
-  4. Application
+- DA1 (Settings order): the bundled Settings window opens on Application. Its pinned menu switches between these sections in order:
+  1. Application (Dock icon, menu bar, startup and window behavior)
+  2. LiveEditor
+  3. Appearance
+  4. Shortcuts & Sound
   5. Categories
   6. Updates
   7. Account (last)

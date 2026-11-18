@@ -13,25 +13,33 @@ afterEach(() => {
   delete document.documentElement.dataset.theme
 })
 
-test('shows the Settings sections in the DA1 order, each labelled for assistive technology', async () => {
+test('opens Settings with Application and the Dock icon switch first, with Account last', async () => {
   // Arrange / Act
   await renderWithSettings(<ElectronSettingsPage />)
 
   // Assert
-  const headings = screen
-    .getAllByRole('heading', { level: 2 })
-    .map((heading) => heading.textContent)
-  expect(headings).toEqual([
+  const menu = screen.getByRole('combobox', {
+    name: 'Current settings section',
+  })
+  expect(menu).toHaveValue('Application')
+  expect(
+    within(menu)
+      .getAllByRole('option')
+      .map((option) => option.textContent),
+  ).toEqual([
+    'Application',
     'LiveEditor',
     'Appearance',
     'Shortcuts & Sound',
-    'Application',
     'Categories',
     'Updates',
     'Account',
   ])
-  for (const region of screen.getAllByRole('region'))
-    expect(region).toHaveAccessibleName()
+  const application = screen.getByRole('region', { name: 'Application' })
+  expect(within(application).getAllByRole('switch')[0]).toHaveAccessibleName(
+    'Hide App Icon',
+  )
+  expect(screen.getAllByRole('region')).toEqual([application])
 })
 
 test('renders without any network request, so Settings works offline', async () => {
@@ -116,6 +124,10 @@ test('saves Show Today Ember to the device workspace', async () => {
   const { fake } = await renderWithSettings(<ElectronSettingsPage />)
 
   // Act
+  await user.selectOptions(
+    screen.getByRole('combobox', { name: 'Current settings section' }),
+    'LiveEditor',
+  )
   await user.click(screen.getByRole('switch', { name: 'Show Today Ember' }))
 
   // Assert
@@ -144,6 +156,10 @@ test('opens Sync details from Account, hides the Settings sections behind it, an
   })
 
   // Act
+  await user.selectOptions(
+    screen.getByRole('combobox', { name: 'Current settings section' }),
+    'Account',
+  )
   await user.click(
     screen.getByRole('button', { name: '2 changes need a look' }),
   )
@@ -158,8 +174,54 @@ test('opens Sync details from Account, hides the Settings sections behind it, an
   await user.click(screen.getByRole('button', { name: /Back to Settings/ }))
 
   // Assert
-  expect(screen.getByRole('heading', { name: 'Application' })).toBeVisible()
+  expect(
+    screen.getByRole('combobox', { name: 'Current settings section' }),
+  ).toHaveValue('Account')
   await waitFor(() =>
     expect(screen.getByRole('heading', { name: 'Account' })).toHaveFocus(),
+  )
+})
+
+test('keeps the Dock switch value when returning from another section', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  await renderWithSettings(<ElectronSettingsPage />)
+  const menu = screen.getByRole('combobox', {
+    name: 'Current settings section',
+  })
+
+  // Act
+  await user.click(screen.getByRole('switch', { name: 'Hide App Icon' }))
+  await user.selectOptions(menu, 'Categories')
+
+  // Assert
+  expect(screen.getByRole('region', { name: 'Categories' })).toBeVisible()
+  expect(screen.queryByRole('switch', { name: 'Hide App Icon' })).toBeNull()
+
+  // Act
+  await user.selectOptions(menu, 'Application')
+
+  // Assert
+  expect(screen.getByRole('switch', { name: 'Hide App Icon' })).toBeChecked()
+})
+
+test('acknowledges the first upload notice only after Account is opened', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  const { fake } = await renderWithSettings(<ElectronSettingsPage />, {
+    account: { state: 'attached', firstUpload: { state: 'done', count: 7 } },
+  })
+  expect(fake.api.account.acknowledgeFirstUpload).not.toHaveBeenCalled()
+
+  // Act
+  await user.selectOptions(
+    screen.getByRole('combobox', { name: 'Current settings section' }),
+    'Account',
+  )
+
+  // Assert
+  expect(screen.getByText('7 keeps are on your dashboard')).toBeVisible()
+  await waitFor(() =>
+    expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalledOnce(),
   )
 })

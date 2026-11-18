@@ -37,8 +37,8 @@ not establish a task-operation consumer.
 The desktop Settings window is bundled (`corelive-editor://app/settings.html`,
 2026-11-03, #216) and reads and writes every row above through the sandboxed
 `window.settingsAPI` preload; it never loads the web `/settings` page. Its
-sections are Appearance, LiveEditor, Shortcuts & Sound, Application, Updates,
-Categories and, last, Account. Appearance and LiveEditor preferences persist in
+pinned section menu opens on Application. The menu lists Application, LiveEditor, Appearance, Shortcuts & Sound, Categories,
+Updates and, last, Account. Appearance and LiveEditor preferences persist in
 the device workspace (`preferences`), and the theme is applied from the same
 snapshot. The web `/settings` page keeps only Appearance (the dashboard theme).
 The desktop-only toggles, such as Today Ember, are not on the web.

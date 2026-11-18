@@ -3,6 +3,7 @@ import { useCycleEffect } from '@corelive/live-editor/hooks/use-cycle-effect'
 import { Button } from '@corelive/live-editor/ui/button'
 import { useRef, useState, type ReactNode, type RefObject } from 'react'
 
+import { useSettingsSectionVisible } from '../SettingsNavigation'
 import { useSettings } from '../SettingsProvider'
 import { SettingsSection } from '../SettingsSection'
 
@@ -61,6 +62,7 @@ export function AccountSection({
   headingRef,
 }: AccountSectionProps) {
   const { api, snapshot, refresh } = useSettings()
+  const visible = useSettingsSectionVisible('Account')
   const account = snapshot.account
   const [ui, setUi] = useState<Ui>({ kind: 'idle' })
   const [now, setNow] = useState(() => Date.now())
@@ -87,8 +89,9 @@ export function AccountSection({
   // Tell main the completion line was taken, so reopening Settings does not repeat it.
   const uploadState = account.firstUpload?.state
   useCycleEffect(() => {
-    if (uploadState === 'done') void api.account.acknowledgeFirstUpload()
-  }, [api, uploadState])
+    if (visible && uploadState === 'done')
+      void api.account.acknowledgeFirstUpload()
+  }, [api, uploadState, visible])
 
   // Focus returns (DA14): after the login window closes -> heading; after sign-out -> Sign in.
   useCycleEffect(() => {

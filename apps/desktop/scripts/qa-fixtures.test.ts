@@ -114,7 +114,7 @@ describe('qa:offline-editor CLI contract', () => {
 })
 
 describe('qa:settings CLI contract', () => {
-  test('--help lists all 14 states from the one shared list', () => {
+  test('--help lists all 15 states from the one shared list', () => {
     // Arrange + Act
     const result = runDesktopScript('scripts/qa-settings.ts', ['--help'], {
       QA_FIXTURE_DIST: join(scratch, 'no-build'),
@@ -122,7 +122,7 @@ describe('qa:settings CLI contract', () => {
 
     // Assert
     expect(result.status).toBe(0)
-    expect(SETTINGS_FIXTURE_STATES).toHaveLength(14)
+    expect(SETTINGS_FIXTURE_STATES).toHaveLength(15)
     for (const state of SETTINGS_FIXTURE_STATES)
       expect(result.stdout).toContain(state.name)
   })
@@ -216,7 +216,7 @@ describe.skipIf(!existsSync(builtSettings))(
       })
       try {
         // Act + Assert: each state shows its ready text
-        expect(server.first.states).toHaveLength(14)
+        expect(server.first.states).toHaveLength(15)
         for (const state of SETTINGS_FIXTURE_STATES) {
           await page.goto(`${server.first.url}?state=${state.name}`)
           await page
@@ -237,7 +237,7 @@ describe.skipIf(!existsSync(builtSettings))(
         // Assert
         await alert.waitFor({ state: 'visible' })
         expect(await alert.textContent()).toContain(
-          'Unknown fixture state "nope". Valid: account-never-attached',
+          'Unknown fixture state "nope". Valid: application',
         )
         expect(error).toEqual({
           code: 'FIXTURE_STATE_UNKNOWN',
