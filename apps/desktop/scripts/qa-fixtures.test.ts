@@ -215,8 +215,10 @@ describe.skipIf(!existsSync(builtSettings))(
           outside.push(request.url())
       })
       try {
-        // Opening the printed URL must show the same first control as the app.
+        // Act
         await page.goto(server.first.url)
+
+        // Assert
         await page
           .getByRole('switch', { name: 'Hide App Icon' })
           .waitFor({ state: 'visible', timeout: 10_000 })

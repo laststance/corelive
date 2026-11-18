@@ -366,6 +366,7 @@ test('only hiding the native Settings window ends the current Settings visit', (
   fireEvent(captured, 'blur')
 
   // Assert
+  expect(captured.win.hide).not.toHaveBeenCalled()
   expect(captured.win.webContents.send).not.toHaveBeenCalled()
 
   // Act

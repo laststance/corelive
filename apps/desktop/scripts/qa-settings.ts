@@ -166,7 +166,7 @@ if (!spec) {
       const button = await waitForControl(() => [...document.querySelectorAll('button')].find(
         (candidate) => candidate.checkVisibility() && !candidate.disabled && pattern.test((candidate.textContent ?? '').trim()),
       ));
-      if (!button) break;
+      if (!button) return;
       button.click();
       await sleep(150);
     }

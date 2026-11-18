@@ -66,16 +66,14 @@ export function AccountSection({
   const account = snapshot.account
   const [ui, setUi] = useState<Ui>({ kind: 'idle' })
   const [now, setNow] = useState(() => Date.now())
-  // The "keeps are on your dashboard" line appears once: main drops it after this copy is taken.
+  // Keep the displayed line for this visit after main clears its pending notice.
   const [uploadDone, setUploadDone] = useState<number | null>(null)
+  const acknowledgedUpload = useRef<number | null>(null)
   const signInRef = useRef<HTMLButtonElement>(null)
   const signOutRef = useRef<HTMLButtonElement>(null)
   const cancelRef = useRef<HTMLButtonElement>(null)
   const pendingFocus = useRef<FocusTarget | null>(null)
   const previousSignIn = useRef(account.signIn)
-
-  if (account.firstUpload?.state === 'done' && uploadDone === null)
-    setUploadDone(account.firstUpload.count)
 
   // A sign-in that re-attached this Mac retires the sign-out notes for good; main pushes the state.
   if (account.state === 'attached' && SIGN_OUT_NOTES.has(ui.kind))
@@ -86,12 +84,28 @@ export function AccountSection({
     return (): void => clearInterval(timer)
   }, [])
 
-  // Tell main the completion line was taken, so reopening Settings does not repeat it.
-  const uploadState = account.firstUpload?.state
+  useCycleEffect(() => api.onHidden(() => setUploadDone(null)), [api])
+
+  const uploadCount =
+    account.firstUpload?.state === 'done' ? account.firstUpload.count : null
+  const showAccountStatus =
+    visible &&
+    account.state === 'attached' &&
+    !account.pendingConnect &&
+    account.signIn !== 'in-progress'
   useCycleEffect(() => {
-    if (visible && uploadState === 'done')
+    // A stale snapshot can outlive a window hide while main broadcasts the acknowledgement.
+    if (uploadCount === null) acknowledgedUpload.current = null
+    else if (showAccountStatus && acknowledgedUpload.current !== uploadCount) {
+      if (uploadDone !== uploadCount) {
+        setUploadDone(uploadCount)
+        return
+      }
+      // The completion line is now in the visible Account pane.
+      acknowledgedUpload.current = uploadCount
       void api.account.acknowledgeFirstUpload()
-  }, [api, uploadState, visible])
+    }
+  }, [api, showAccountStatus, uploadCount, uploadDone])
 
   // Focus returns (DA14): after the login window closes -> heading; after sign-out -> Sign in.
   useCycleEffect(() => {

@@ -210,6 +210,64 @@ test('Connect this Mac sends the connect request, then shows progress and the on
   expect(screen.getByText('12 keeps are on your dashboard')).toBeVisible()
 })
 
+test('the first-upload notice lasts through section changes and disappears on the next Settings visit', async () => {
+  // Arrange
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+  const { fake } = await renderWithSettings(<ElectronSettingsPage />, {
+    account: { ...ATTACHED, firstUpload: { state: 'done', count: 7 } },
+  })
+  const menu = screen.getByRole('combobox', {
+    name: 'Current settings section',
+  })
+  fake.api.account.acknowledgeFirstUpload.mockImplementation(async () => {
+    fake.setAccount({ firstUpload: null })
+  })
+
+  // Act
+  await user.selectOptions(menu, 'Account')
+
+  // Assert
+  expect(screen.getByText('7 keeps are on your dashboard')).toBeVisible()
+  expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalledOnce()
+
+  // Act
+  await user.selectOptions(menu, 'Application')
+  await user.selectOptions(menu, 'Account')
+
+  // Assert
+  expect(screen.getByText('7 keeps are on your dashboard')).toBeVisible()
+
+  // Act
+  act(() => fake.hideWindow())
+  await user.selectOptions(menu, 'Account')
+
+  // Assert
+  expect(screen.queryByText('7 keeps are on your dashboard')).toBeNull()
+  expect(screen.getByText('Up to date · checked 5 minutes ago')).toBeVisible()
+  expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalledOnce()
+})
+
+test('an acknowledged upload stays dismissed when Settings reopens before the cleared snapshot arrives', async () => {
+  // Arrange
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+  const { fake } = await renderWithSettings(<ElectronSettingsPage />, {
+    account: { ...ATTACHED, firstUpload: { state: 'done', count: 7 } },
+  })
+  const menu = screen.getByRole('combobox', {
+    name: 'Current settings section',
+  })
+  await user.selectOptions(menu, 'Account')
+  expect(screen.getByText('7 keeps are on your dashboard')).toBeVisible()
+
+  // Act
+  act(() => fake.hideWindow())
+  await user.selectOptions(menu, 'Account')
+
+  // Assert
+  expect(screen.queryByText('7 keeps are on your dashboard')).toBeNull()
+  expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalledOnce()
+})
+
 test('Open dashboard asks main to open it without supplying an address', async () => {
   // Arrange
   const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
@@ -338,7 +396,11 @@ test('returning to Account focuses Sign in when sign-out completed in another se
 
   // Assert
   expect(menu).toHaveFocus()
+
+  // Act
   await user.selectOptions(menu, 'Account')
+
+  // Assert
   expect(screen.getByRole('button', { name: 'Sign in' })).toHaveFocus()
 })
 
@@ -359,7 +421,11 @@ test('returning to Account focuses its heading when the sign-in window closed in
 
   // Assert
   expect(menu).toHaveFocus()
+
+  // Act
   await user.selectOptions(menu, 'Account')
+
+  // Assert
   expect(screen.getByRole('heading', { name: 'Account' })).toHaveFocus()
 })
 

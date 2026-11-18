@@ -188,6 +188,44 @@ test('opens Sync details from Account, hides the Settings sections behind it, an
   )
 })
 
+test('Back to Settings keeps focus on Sign in after sign-out completes in Sync details', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  const { fake } = await renderWithSettings(<ElectronSettingsPage />, {
+    account: { state: 'attached' },
+  })
+  let finishSignOut!: () => void
+  fake.api.account.signOut.mockImplementation(
+    async () =>
+      new Promise((resolve) => {
+        finishSignOut = (): void => resolve({ status: 'signed-out' })
+      }),
+  )
+  await user.selectOptions(
+    screen.getByRole('combobox', { name: 'Current settings section' }),
+    'Account',
+  )
+  await user.click(screen.getByRole('button', { name: 'Sign out' }))
+  await user.click(
+    within(screen.getByRole('group', { name: 'Confirm sign out' })).getByRole(
+      'button',
+      { name: 'Sign out' },
+    ),
+  )
+  await user.click(screen.getByRole('button', { name: 'Sync details' }))
+  await act(async () => {
+    fake.setAccount({ state: 'signed-out' })
+    finishSignOut()
+  })
+
+  // Act
+  await user.click(screen.getByRole('button', { name: /Back to Settings/ }))
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+
+  // Assert
+  expect(screen.getByRole('button', { name: 'Sign in' })).toHaveFocus()
+})
+
 test('keeps the Dock switch value when returning from another section', async () => {
   // Arrange
   const user = userEvent.setup()

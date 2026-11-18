@@ -4,9 +4,9 @@ The owner selected the section menu after comparing five working layouts at the 
 
 ## Implementation
 
-Switching sections preserves pending edits. Back from Sync details returns focus to the Account heading. When the native Settings window hides, the renderer receives a `window.settingsAPI.onHidden` notification and resets to the top of Application for the next visit.
+Switching sections preserves pending edits. Back from Sync details returns focus to the Account heading unless an account action has already restored focus, for example to Sign in after sign-out. When the native Settings window hides, the renderer receives a `window.settingsAPI.onHidden` notification and resets to the top of Application for the next visit.
 
-If another window covers Settings, the selected section stays selected. Account acknowledges the first-upload notice and restores pending focus only when both the Account pane and the document are visible.
+If another window covers Settings, the selected section stays selected. Account acknowledges the first-upload notice and restores pending focus only when both the Account pane and the document are visible. A displayed upload notice remains available during the visit and clears when Settings is hidden.
 
 ## Comparison
 

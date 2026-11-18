@@ -89,10 +89,14 @@ export const ElectronSettingsPage = function ElectronSettingsPage() {
     [api],
   )
 
-  /** Back to Settings returns focus to the Account heading, where the link lives (DA14). */
+  /** Back restores the Account heading unless an account action already restored focus. */
   const showSettings = (): void => {
     setView('Account')
-    requestAnimationFrame(() => accountHeadingRef.current?.focus())
+    requestAnimationFrame(() => {
+      // Removing the Back button leaves focus on the body until another control takes it.
+      if (document.activeElement === document.body)
+        accountHeadingRef.current?.focus()
+    })
   }
 
   /** Resets the Settings popover to 360×380 via IPC. */
