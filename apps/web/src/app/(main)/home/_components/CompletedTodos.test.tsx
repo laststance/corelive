@@ -57,6 +57,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   window.history.replaceState(null, '', '/')
+  journal.mockReset()
   vi.clearAllMocks()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
@@ -171,6 +172,8 @@ test('reopens a journal search from its URL and Clear resets search, category, a
 
 test.each([
   '/home#journal',
+  '/home?filter=completed',
+  '/home?filter=all',
   '/home?search=Release&date=',
   '/home?search=Release&date=2026-02-30',
   '/home?search=Release&filter=completed',
@@ -614,8 +617,12 @@ test('clearing a legacy filter lets the visitor scroll past the cached first jou
   client.clear()
 })
 
-test('a failed next page keeps the current wins visible and waits for a manual retry before loading more', async () => {
-  // Arrange
+/**
+ * Opens a journal with its second page in the viewport and unavailable. Pagination
+ * tests control subsequent RPC responses for refreshes, retries, and navigation.
+ * @example const { client, retry, user } = await openJournalWithFailedPage()
+ */
+async function openJournalWithFailedPage() {
   window.history.replaceState(null, '', '/home?search=Release')
   vi.stubGlobal(
     'IntersectionObserver',
@@ -639,29 +646,24 @@ test('a failed next page keeps the current wins visible and waits for a manual r
     completedAt: new Date('2026-10-01T09:00:00Z'),
     category: null,
   }))
-  const failedPage = Promise.withResolvers<never>()
+  const first = { entries: firstPage, total: 11, nextOffset: 10 }
+  const last = {
+    entries: [{ ...firstPage[0]!, id: 11, title: 'Release 11' }],
+    total: 11,
+  }
   journal
-    .mockResolvedValueOnce({ entries: firstPage, total: 11, nextOffset: 10 })
-    .mockReturnValueOnce(failedPage.promise)
-    .mockResolvedValue({
-      entries: [{ ...firstPage[0]!, id: 11, title: 'Release 11' }],
-      total: 11,
-    })
+    .mockResolvedValueOnce(first)
+    .mockRejectedValueOnce(new Error('network down'))
+    .mockResolvedValue(last)
   const user = userEvent.setup()
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+    defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   })
   render(
     <QueryClientProvider client={client}>
       <CompletedTodos categories={CATEGORIES} />
     </QueryClientProvider>,
   )
-  await waitFor(() => expect(journal).toHaveBeenCalledTimes(2))
-
-  // Act
-  await act(async () => failedPage.reject(new Error('network down')))
-
-  // Assert
   const retry = await screen.findByRole('button', {
     name: 'Retry loading more',
   })
@@ -669,20 +671,125 @@ test('a failed next page keeps the current wins visible and waits for a manual r
   expect(screen.getByText('Release 1')).toBeVisible()
   expect(screen.queryByText('Release 11')).toBeNull()
   expect(journal).toHaveBeenCalledTimes(2)
+  return { user, client, first, last, retry }
+}
+
+test.each(['successful', 'failed'])(
+  'a %s refresh preserves the failed next page until a keyboard retry succeeds',
+  async (refresh) => {
+    // Arrange
+    const { client, user, first, last, retry } =
+      await openJournalWithFailedPage()
+    const refreshResponse = Promise.withResolvers<typeof first>()
+    const failedRetry = Promise.withResolvers<never>()
+    const finalRetry = Promise.withResolvers<typeof last>()
+    journal
+      .mockReturnValueOnce(refreshResponse.promise)
+      .mockReturnValueOnce(failedRetry.promise)
+      .mockReturnValueOnce(finalRetry.promise)
+    const searchbox = screen.getByRole('searchbox', {
+      name: 'Search completed tasks',
+    })
+    retry.focus()
+
+    // Act — syncing new work refreshes the pages that are already loaded.
+    await act(async () => {
+      void client.invalidateQueries()
+    })
+
+    // Assert
+    expect(retry).toHaveFocus()
+    await waitFor(() => expect(retry).toHaveAttribute('aria-disabled', 'true'))
+    await user.keyboard('{Enter}')
+    expect(journal).toHaveBeenCalledTimes(3)
+    await act(async () => {
+      if (refresh === 'successful') refreshResponse.resolve(first)
+      else refreshResponse.reject(new Error('refresh unavailable'))
+    })
+    await waitFor(() =>
+      expect(retry).not.toHaveAttribute('aria-disabled', 'true'),
+    )
+    expect(retry).toHaveFocus()
+    expect(journal).toHaveBeenCalledTimes(3)
+
+    // Act — repeated Enter presses during one attempt must not send another page request.
+    await user.keyboard('{Enter}{Enter}')
+    expect(retry).toHaveFocus()
+    await waitFor(() => expect(retry).toHaveAttribute('aria-disabled', 'true'))
+    await act(async () =>
+      failedRetry.reject(new Error('page still unavailable')),
+    )
+
+    // Assert
+    await waitFor(() =>
+      expect(retry).not.toHaveAttribute('aria-disabled', 'true'),
+    )
+    expect(retry).toHaveFocus()
+    expect(journal).toHaveBeenCalledTimes(4)
+
+    // Act
+    await user.keyboard('{Enter}')
+    if (refresh === 'failed') searchbox.focus()
+    await act(async () => finalRetry.resolve(last))
+
+    // Assert
+    expect(await screen.findByText('Release 11')).toBeVisible()
+    expect(screen.getByText('Release 1')).toBeVisible()
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: 'Retry loading more' }),
+      ).toBeNull(),
+    )
+    if (refresh === 'successful')
+      expect(document.activeElement).toHaveTextContent(/^Release 11/)
+    else expect(searchbox).toHaveFocus()
+    expect(journal.mock.calls.map(([input]) => input)).toEqual([
+      { limit: 10, offset: 0, search: 'Release' },
+      { limit: 10, offset: 10, search: 'Release' },
+      { limit: 10, offset: 0, search: 'Release' },
+      { limit: 10, offset: 10, search: 'Release' },
+      { limit: 10, offset: 10, search: 'Release' },
+    ])
+    client.clear()
+  },
+)
+
+test('a failed journal page belongs to its search when navigating away and back', async () => {
+  // Arrange
+  const { client, user, first } = await openJournalWithFailedPage()
+  journal
+    .mockResolvedValueOnce(first)
+    .mockResolvedValueOnce({ entries: [], total: 0 })
+  await act(async () => {
+    await client.invalidateQueries()
+  })
+  const searchbox = screen.getByRole('searchbox', {
+    name: 'Search completed tasks',
+  })
 
   // Act
-  await user.click(retry)
+  await user.clear(searchbox)
+  await user.type(searchbox, 'Draft{Enter}')
 
   // Assert
-  expect(await screen.findByText('Release 11')).toBeVisible()
-  expect(screen.getByText('Release 1')).toBeVisible()
+  expect(await screen.findByText('No matching wins')).toBeVisible()
   expect(
     screen.queryByRole('button', { name: 'Retry loading more' }),
   ).toBeNull()
+
+  // Act
+  window.history.back()
+
+  // Assert
+  expect(
+    await screen.findByRole('button', { name: 'Retry loading more' }),
+  ).toBeVisible()
+  expect(screen.getByText('Release 1')).toBeVisible()
   expect(journal.mock.calls.map(([input]) => input)).toEqual([
     { limit: 10, offset: 0, search: 'Release' },
     { limit: 10, offset: 10, search: 'Release' },
-    { limit: 10, offset: 10, search: 'Release' },
+    { limit: 10, offset: 0, search: 'Release' },
+    { limit: 10, offset: 0, search: 'Draft' },
   ])
   client.clear()
 })

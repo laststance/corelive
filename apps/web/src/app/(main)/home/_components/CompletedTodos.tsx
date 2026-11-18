@@ -1,5 +1,4 @@
 import { isCompletedJournalFilterSupported } from '@corelive/desktop-contract/journal-search'
-import { useInfiniteQuery } from '@tanstack/react-query'
 import { CheckCircle2, Download } from 'lucide-react'
 import { useSearchParams } from 'next/navigation'
 import { Suspense, useMemo, useRef, useState } from 'react'
@@ -22,14 +21,11 @@ import { useInitialEffect } from '@/hooks/use-initial-effect'
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { useLocalDayKey } from '@/hooks/useLocalDayKey'
 import {
-  COMPLETED_JOURNAL_INITIAL_OFFSET,
   COMPLETED_JOURNAL_PAGE_SIZE,
   COMPLETED_JOURNAL_SEARCH_MAX_LENGTH,
 } from '@/lib/constants/completed'
 import { LOCAL_DAY_QUERY_ANCHOR_TIME } from '@/lib/constants/date'
 import { MAC_DOWNLOAD_URL } from '@/lib/constants/macDownload'
-import { orpc } from '@/lib/orpc/client-query'
-import { getUnfilteredCompletedJournalInput } from '@/lib/utils/getUnfilteredCompletedJournalInput'
 import {
   type CompletedPeriod,
   resolveCompletedJournalDateRange,
@@ -45,6 +41,7 @@ import {
   CompletedTodosFilters,
   type CompletedFilterCategory,
 } from './CompletedTodosFilters'
+import { useJournalPagination } from './useJournalPagination'
 
 interface CompletedTodosProps {
   /** Dashboard categories, or undefined until the category list is available. */
@@ -141,7 +138,6 @@ function CompletedTodosContent({
 }: CompletedTodosProps) {
   const journalRef = useRef<HTMLDivElement>(null)
   const initialScrollOffset = useRef<number | null>(null)
-  const observerRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const isClerkQueryReady = useClerkQueryReady()
   const searchParams = useSearchParams()
@@ -179,7 +175,7 @@ function CompletedTodosContent({
       date: searchParams.get('date'),
     }).success
     const isSearchLink =
-      !hash && (!!search || unsupportedFilter) && !opensDayDetail
+      !hash && (!!search || taskFilter !== null) && !opensDayDetail
     const journal = journalRef.current
     if (journal && (hash === '#journal' || isSearchLink)) {
       journal.scrollIntoView()
@@ -221,34 +217,30 @@ function CompletedTodosContent({
   )
   const isFiltered = period !== 'all' || categoryId !== null || search !== ''
 
-  // Infinite scroll over the merged journal feed, with predicates applied by
-  // the server before both pagination and total calculation.
   const {
-    data,
-    fetchNextPage,
-    hasNextPage,
-    fetchStatus,
-    isFetchNextPageError,
-    isFetchingNextPage,
-    isLoading,
-    isError,
-    refetch,
-  } = useInfiniteQuery({
-    ...orpc.completed.journal.infiniteOptions({
-      input: (pageParam) => ({
-        ...getUnfilteredCompletedJournalInput(pageParam),
-        ...(categoryId === null ? {} : { categoryId, includeSubcategories }),
-        ...(search === '' ? {} : { search }),
-        ...dateRange,
-      }),
-      initialPageParam: COMPLETED_JOURNAL_INITIAL_OFFSET,
-      getNextPageParam: (lastPage) => lastPage.nextOffset,
-    }),
-    // Same pre-auth fetch guard as every sibling Home query: if a future
-    // mount path renders this panel before Clerk hydrates, the stale-refetch
-    // fires unauthenticated — hydrated/persisted journal data still displays.
-    enabled: isClerkQueryReady && canLoadJournal,
-  })
+    query: {
+      data,
+      hasNextPage,
+      fetchStatus,
+      isFetchingNextPage,
+      isLoading,
+      isError,
+      refetch,
+    },
+    viewKey,
+    retryButtonRef,
+    observerRef,
+    requestNextPage,
+    needsRetry,
+  } = useJournalPagination(
+    {
+      ...(categoryId === null ? {} : { categoryId, includeSubcategories }),
+      ...(search === '' ? {} : { search }),
+      ...dateRange,
+    },
+    isClerkQueryReady && canLoadJournal,
+    journalRef,
+  )
 
   // Flatten journal entries across all loaded pages (already newest-first).
   const allEntries: DayDetailTask[] =
@@ -277,31 +269,6 @@ function CompletedTodosContent({
     const dateB = groupedEntries[b]?.[0]?.completedAt.getTime() ?? 0
     return dateB - dateA
   })
-
-  // A failed next page waits for manual retry; other in-flight or paused requests keep their place.
-  const canObserveNextPage =
-    canLoadJournal &&
-    hasNextPage &&
-    !isFetchNextPageError &&
-    fetchStatus === 'idle'
-
-  useCycleEffect(() => {
-    const target = observerRef.current
-    if (!canObserveNextPage || !target) return
-    const observer = new IntersectionObserver(
-      (entries) => {
-        // This observer tracks one sentinel. A batch can include both entry and exit.
-        if (entries.at(-1)?.isIntersecting) {
-          void fetchNextPage({ cancelRefetch: false })
-        }
-      },
-      { threshold: 0.1 },
-    )
-
-    observer.observe(target)
-
-    return (): void => observer.disconnect()
-  }, [canObserveNextPage, categoryId, fetchNextPage, search])
 
   const updateJournalUrl = (changes: {
     search?: string
@@ -430,7 +397,7 @@ function CompletedTodosContent({
     ))
     .otherwise(() => (
       <div
-        key={`${categoryId ?? 'all'}:${search}`}
+        key={viewKey}
         className="-mr-2 h-full space-y-4 overflow-y-auto pr-2"
       >
         {sortedDates.map((date, dateIndex) => {
@@ -459,15 +426,19 @@ function CompletedTodosContent({
           </div>
         ) : null}
 
-        {isFetchNextPageError && !isFetchingNextPage ? (
+        {needsRetry ? (
           <div className="flex items-center justify-center gap-3 py-4">
             <p role="status" className="text-sm text-muted-foreground">
-              More wins could not load.
+              {isFetchingNextPage
+                ? 'Loading more wins…'
+                : 'More wins could not load.'}
             </p>
             <Button
               type="button"
               variant="outline"
-              onClick={() => void fetchNextPage({ cancelRefetch: false })}
+              ref={retryButtonRef}
+              aria-disabled={fetchStatus !== 'idle'}
+              onClick={requestNextPage}
             >
               Retry loading more
             </Button>

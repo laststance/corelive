@@ -300,7 +300,10 @@ describe('DeepLinkManager', () => {
     })
 
     test.each([
-      ['corelive://search', 'https://corelive.app/home#journal'],
+      [
+        'corelive://search',
+        'https://corelive.app/home?filter=completed#journal',
+      ],
       [
         'corelive://search?query=+%0D%0A+&filter=completed',
         'https://corelive.app/home?filter=completed#journal',

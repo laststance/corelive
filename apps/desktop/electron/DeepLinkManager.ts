@@ -454,10 +454,10 @@ export class DeepLinkManager {
     }
     const search = new URLSearchParams()
     if (parsed.data) search.set('search', parsed.data)
-    if (filter) search.set('filter', filter)
+    // The proxy can carry a query through sign-in even when the browser omits the fragment.
+    if (filter || !parsed.data) search.set('filter', filter ?? 'completed')
 
-    const query = search.toString()
-    this.openInBrowser(`/home${query ? `?${query}` : ''}#journal`)
+    this.openInBrowser(`/home?${search}#journal`)
   }
 
   /**
