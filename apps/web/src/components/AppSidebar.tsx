@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { Suspense, useState } from 'react'
+import { Suspense, useState, type MouseEventHandler } from 'react'
 
 import { Category } from '@/app/(main)/home/_components/Category'
 import { CategoryManageDialog } from '@/app/(main)/home/_components/CategoryManageDialog'
@@ -52,7 +52,7 @@ function JournalMenuLink({
   onClick,
 }: {
   href?: string
-  onClick: () => void
+  onClick: MouseEventHandler<HTMLAnchorElement>
 }) {
   return (
     <SidebarMenuButton asChild>
@@ -68,7 +68,11 @@ function JournalMenuLink({
  * Preserves journal filters from the current Dashboard URL once the router is ready.
  * @example <FilteredJournalMenuLink onClick={closeMobileSidebar} />
  */
-function FilteredJournalMenuLink({ onClick }: { onClick: () => void }) {
+function FilteredJournalMenuLink({
+  onClick,
+}: {
+  onClick: MouseEventHandler<HTMLAnchorElement>
+}) {
   const searchParams = useSearchParams()
   const journalParams = new URLSearchParams()
   // Opening the journal closes day detail while retaining its search and category.
@@ -99,7 +103,16 @@ export const AppSidebar = function AppSidebar() {
   const email = user?.emailAddresses?.[0]?.emailAddress
   const displayName = user?.firstName || email || 'Account'
 
-  const closeMobileSidebar = (): void => {
+  const closeMobileSidebar: MouseEventHandler<HTMLAnchorElement> = (event) => {
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.altKey ||
+      event.shiftKey
+    )
+      return
     setOpenMobile(false)
   }
   const handleOpenCategoryManager = (): void => {

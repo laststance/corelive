@@ -13,11 +13,9 @@ export function isTrustedDashboardNavigation(
     const destination = new URL(navigationUrl)
     const configured = new URL(dashboardOrigin)
     if (destination.username || destination.password) return false
-    if (
-      destination.origin === configured.origin &&
-      ['http:', 'https:'].includes(destination.protocol)
-    )
-      return true
+    // Every trusted Dashboard document, including the production alias, uses HTTP(S).
+    if (!['http:', 'https:'].includes(destination.protocol)) return false
+    if (destination.origin === configured.origin) return true
     // Vercel redirects the bare production hostname to www; no other origin is trusted.
     const productionOrigins = [
       'https://corelive.app',

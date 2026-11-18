@@ -325,8 +325,8 @@ export const getJournal = authMiddleware
       // Match the single-line input against stored titles while keeping % and _ literal.
       const searchFilter = search
         ? sql`AND strpos(
-            lower(translate(m.title, ${JOURNAL_SEARCH_LINE_BREAKS}, '')),
-            lower(${search})
+            replace(lower(translate(m.title, ${JOURNAL_SEARCH_LINE_BREAKS}, '')), 'ς', 'σ'),
+            replace(lower(${search}), 'ς', 'σ')
           ) > 0`
         : sql``
 

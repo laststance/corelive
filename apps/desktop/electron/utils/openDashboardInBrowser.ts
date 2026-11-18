@@ -3,48 +3,44 @@ import { shell } from 'electron'
 import { log } from '../logger'
 
 /**
- * Opens a Dashboard path in the user's default browser. The tray menu, deep
- * links and Account settings call it when the user opens synced activity.
- * @param origin - Dashboard origin from {@link WindowManager.getDashboardOrigin} (dev: `http://localhost:4991`, prod: `https://corelive.app`).
- * @param dashboardPath - Leading-slash path to open (e.g. `/home`).
- * @returns Nothing; refuses (logs, no-op) a non-absolute path or a non-http(s) result, otherwise logs and swallows `shell` failures so a missing/blocked browser never crashes the main process.
+ * Opens a Dashboard path in the default browser for tray, deep-link and Settings actions.
+ * Checks the leading slash and the resulting HTTP(S) URL before handing it to the OS.
+ * @param origin - Dashboard origin configured by {@link WindowManager.getDashboardOrigin}.
+ * @param dashboardPath - Path beginning with a slash, including any query and fragment.
+ * @returns True when the OS accepts the URL. Logs a failure and returns false otherwise.
  * @example
- * openDashboardInBrowser('https://corelive.app', '/home') // opens https://corelive.app/home
- * openDashboardInBrowser('https://corelive.app', 'home')  // refused (not leading-slash) — no browser opened
+ * const opened = await openDashboardInBrowser('https://corelive.app', '/home')
  */
-export function openDashboardInBrowser(
+export async function openDashboardInBrowser(
   origin: string,
   dashboardPath: string,
-): void {
-  // dashboardPath MUST be an on-origin absolute path. A value not starting with "/"
-  // (e.g. "@evil.com/...") would re-interpret the authority once concatenated,
-  // so reject it before it can ever reach the system browser.
+): Promise<boolean> {
+  // A leading slash keeps the caller's path separate from the configured authority.
   if (!dashboardPath.startsWith('/')) {
     log.error(
       `Refusing to open a non-absolute Dashboard path: ${dashboardPath}`,
     )
-    return
+    return false
   }
-  // This is the shared chokepoint for tray/menu/notification/shortcut AND the
-  // deep-link flow, whose dashboardPath is built from an untrusted `corelive://` URL
-  // (already percent-encoded upstream in T15). Defense-in-depth at the OS-handoff
-  // sink: parse the final URL and refuse anything that isn't http(s). The opened
-  // string stays exactly `${origin}${dashboardPath}`, so callers' URLs are unchanged.
   const targetUrl = `${origin}${dashboardPath}`
   let parsedUrl: URL
   try {
     parsedUrl = new URL(targetUrl)
   } catch (error) {
     log.error('Refusing to open a malformed Dashboard URL:', error)
-    return
+    return false
   }
   if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
     log.error(
       `Refusing to open a non-http(s) Dashboard URL: ${parsedUrl.protocol}`,
     )
-    return
+    return false
   }
-  shell.openExternal(targetUrl).catch((error) => {
+  try {
+    await shell.openExternal(targetUrl)
+    return true
+  } catch (error) {
     log.error('Failed to open Dashboard in the browser:', error)
-  })
+    return false
+  }
 }

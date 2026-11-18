@@ -1,18 +1,53 @@
 import { useSyncExternalStore } from 'react'
 
+const HISTORY_CHANGE = 'qa-fixture-history-change'
+
 function getBrowserNavigation(): EventTarget | undefined {
   const browser: Window & { navigation?: EventTarget } = window
   return browser.navigation
 }
 
-/** Mirrors Next's search-param notifications for native history writes in headless Chromium. */
+/** Mirrors Next's search-param notifications for native history writes. */
 function subscribe(onChange: () => void) {
   const navigation = getBrowserNavigation()
   navigation?.addEventListener('currententrychange', onChange)
   window.addEventListener('popstate', onChange)
+  window.addEventListener(HISTORY_CHANGE, onChange)
   return (): void => {
     navigation?.removeEventListener('currententrychange', onChange)
     window.removeEventListener('popstate', onChange)
+    window.removeEventListener(HISTORY_CHANGE, onChange)
+  }
+}
+
+/**
+ * Makes the fixture's subscribers observe History API writes in Happy DOM.
+ * The Home fixture installs this fallback only when native Navigation events are unavailable.
+ * @example const restoreHistory = installFixtureHistoryNotifications()
+ */
+export function installFixtureHistoryNotifications(): (() => void) | undefined {
+  if (getBrowserNavigation()) return undefined
+
+  const history = window.history
+  const methods = ['pushState', 'replaceState'] as const
+  const previous = methods.map((method) => {
+    const descriptor = Object.getOwnPropertyDescriptor(history, method)
+    const original = history[method]
+    history[method] = function (
+      this: History,
+      ...args: Parameters<History['pushState']>
+    ): void {
+      original.apply(this, args)
+      window.dispatchEvent(new Event(HISTORY_CHANGE))
+    }
+    return { method, descriptor }
+  })
+
+  return (): void => {
+    for (const { method, descriptor } of previous) {
+      if (descriptor) Object.defineProperty(history, method, descriptor)
+      else Reflect.deleteProperty(history, method)
+    }
   }
 }
 
@@ -24,9 +59,6 @@ function subscribe(onChange: () => void) {
 export function navigateFixtureHome(destination: URL): void {
   if (destination.href !== window.location.href) {
     window.history.pushState(null, '', destination)
-    // Happy DOM lacks Chromium's currententrychange event for history writes.
-    if (!getBrowserNavigation())
-      window.dispatchEvent(new PopStateEvent('popstate'))
   }
   if (destination.hash === '#journal') {
     const journal = document.getElementById('journal')

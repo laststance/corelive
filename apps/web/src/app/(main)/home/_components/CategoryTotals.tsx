@@ -29,6 +29,51 @@ export function CategoryTotals({
   const opened = categories.find(
     (category) => category.id === openCategoryId && category.children?.length,
   )
+  const renderBreakdown = (category: RootCategoryTotal) =>
+    category.children?.length ? (
+      <div
+        key={category.id}
+        id={`${regionId}-${category.id}`}
+        hidden={opened?.id !== category.id}
+        role="region"
+        aria-label={`${category.name} breakdown`}
+        className={cn(
+          'border-l border-border pl-3 text-xs',
+          periodTotal && 'mt-2',
+        )}
+      >
+        <ul className="space-y-2">
+          {(category.directCount ?? 0) > 0 ? (
+            <li className="flex items-center justify-between gap-3">
+              <span className="wrap-anywhere min-w-0 text-muted-foreground">
+                Directly in {category.name}
+              </span>
+              <span className="font-mono tabular-nums">
+                {category.directCount}
+              </span>
+            </li>
+          ) : null}
+          {category.children.map((child) => (
+            <li
+              key={child.id}
+              className="flex items-center justify-between gap-3"
+            >
+              <span className="inline-flex min-w-0 items-center gap-1.5">
+                <span
+                  aria-hidden
+                  className={cn(
+                    'size-1.5 shrink-0 rounded-full',
+                    getColorDotClass(child.color),
+                  )}
+                />
+                <span className="wrap-anywhere min-w-0">{child.name}</span>
+              </span>
+              <span className="font-mono tabular-nums">{child.count}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    ) : null
   return (
     <div className="space-y-2">
       <ul
@@ -54,52 +99,12 @@ export function CategoryTotals({
                     )
                 : undefined
             }
-          />
+          >
+            {periodTotal ? renderBreakdown(category) : null}
+          </CategoryTotalChip>
         ))}
       </ul>
-      {categories.map((category) =>
-        category.children?.length ? (
-          <div
-            key={category.id}
-            id={`${regionId}-${category.id}`}
-            hidden={opened?.id !== category.id}
-            role="region"
-            aria-label={`${category.name} breakdown`}
-            className="border-l border-border pl-3 text-xs"
-          >
-            <ul className="space-y-2">
-              {(category.directCount ?? 0) > 0 ? (
-                <li className="flex items-center justify-between gap-3">
-                  <span className="wrap-anywhere min-w-0 text-muted-foreground">
-                    Directly in {category.name}
-                  </span>
-                  <span className="font-mono tabular-nums">
-                    {category.directCount}
-                  </span>
-                </li>
-              ) : null}
-              {category.children.map((child) => (
-                <li
-                  key={child.id}
-                  className="flex items-center justify-between gap-3"
-                >
-                  <span className="inline-flex min-w-0 items-center gap-1.5">
-                    <span
-                      aria-hidden
-                      className={cn(
-                        'size-1.5 shrink-0 rounded-full',
-                        getColorDotClass(child.color),
-                      )}
-                    />
-                    <span className="wrap-anywhere min-w-0">{child.name}</span>
-                  </span>
-                  <span className="font-mono tabular-nums">{child.count}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null,
-      )}
+      {!periodTotal && categories.map(renderBreakdown)}
     </div>
   )
 }

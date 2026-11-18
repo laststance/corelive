@@ -9,7 +9,10 @@ import { useLocalDayKey } from '@/hooks/useLocalDayKey'
 import { buildDateSyncUrl } from '@/lib/buildDateSyncUrl'
 
 import { CategoryTotals } from './CategoryTotals'
-import { DailyCompletionsChart } from './DailyCompletionsChart'
+import {
+  ActivityDaySelector,
+  DailyCompletionsChart,
+} from './DailyCompletionsChart'
 import {
   formatActivityDate,
   getRecentActivity,
@@ -26,7 +29,9 @@ const PERIODS = [7, 30] as const satisfies readonly ActivityPeriod[]
  */
 export function RecentActivityCard({
   dataByDate,
+  isRefreshUnavailable = false,
 }: {
+  isRefreshUnavailable?: boolean
   dataByDate: ReadonlyMap<string, HeatmapDay>
 }) {
   const today = useLocalDayKey()
@@ -93,13 +98,23 @@ export function RecentActivityCard({
           </div>
         </dl>
 
-        {total === 0 ? (
-          <p className="border-t pt-4 text-sm text-muted-foreground">
-            No completions in this period.
+        {isRefreshUnavailable ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            Recent activity is showing the last loaded data.
           </p>
-        ) : (
-          <div className="@min-[40rem]/recent-activity:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] grid min-w-0 gap-6 border-t pt-5">
-            <DailyCompletionsChart days={days} onOpenDay={openDay} />
+        ) : null}
+        <div className="@min-[40rem]/recent-activity:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] grid min-w-0 gap-6 border-t pt-5">
+          <div className="min-w-0 space-y-3">
+            {total > 0 ? (
+              <DailyCompletionsChart days={days} onOpenDay={openDay} />
+            ) : !isRefreshUnavailable ? (
+              <p className="text-sm text-muted-foreground">
+                No completions in this period.
+              </p>
+            ) : null}
+            <ActivityDaySelector days={days} onOpenDay={openDay} />
+          </div>
+          {total > 0 ? (
             <section className="@min-[40rem]/recent-activity:border-t-0 @min-[40rem]/recent-activity:border-l @min-[40rem]/recent-activity:pt-0 @min-[40rem]/recent-activity:pl-6 min-w-0 space-y-3 border-t pt-5">
               <h3 className="text-sm font-medium">Category breakdown</h3>
               <CategoryTotals
@@ -108,8 +123,8 @@ export function RecentActivityCard({
                 periodTotal={total}
               />
             </section>
-          </div>
-        )}
+          ) : null}
+        </div>
       </CardContent>
     </Card>
   )

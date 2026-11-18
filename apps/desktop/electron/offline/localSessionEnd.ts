@@ -25,7 +25,7 @@ type SignOutStorage =
   'cookies' | 'localstorage' | 'indexdb' | 'serviceworkers' | 'cachestorage'
 
 /** Storage kinds cleared for both origins (D3 step 4, C3). */
-export const SIGN_OUT_STORAGES: SignOutStorage[] = [
+const SIGN_OUT_STORAGES: SignOutStorage[] = [
   'cookies',
   'localstorage',
   'indexdb',

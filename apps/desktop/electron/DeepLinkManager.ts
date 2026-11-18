@@ -50,6 +50,38 @@ interface ExampleUrls {
   openView: string
 }
 
+/**
+ * Resolves a decoded search link to a journal path or an explanation for the caller.
+ * {@link DeepLinkManager.handleSearchAction} uses it before opening the browser.
+ * @example resolveDashboardSearch({ query: 'notes' }) // => { path: '/home?search=notes&filter=completed#journal' }
+ */
+function resolveDashboardSearch(
+  params: Record<string, string>,
+): { path: string } | { message: string } {
+  const parsed = CompletedJournalSearchSchema.safeParse(params.query ?? '')
+  if (!parsed.success) {
+    const message = parsed.error.issues.some(
+      (issue) => issue.code === 'too_big',
+    )
+      ? `Shorten your search to ${COMPLETED_JOURNAL_SEARCH_MAX_LENGTH} characters or fewer.`
+      : 'Use plain text without null characters.'
+    return { message }
+  }
+  const { filter } = params
+  if (!isCompletedJournalFilterSupported(filter)) {
+    const message =
+      filter === 'pending'
+        ? 'Dashboard searches completed tasks. Open LiveEditor on your Mac for pending tasks.'
+        : 'Choose the completed or all filter to search the Dashboard journal.'
+    return { message }
+  }
+  const search = new URLSearchParams()
+  if (parsed.data) search.set('search', parsed.data)
+  // The query survives a sign-in redirect even when the browser omits the fragment.
+  search.set('filter', filter ?? 'completed')
+  return { path: `/home?${search}#journal` }
+}
+
 // ============================================================================
 // Deep Link Manager Class
 // ============================================================================
@@ -306,8 +338,7 @@ export class DeepLinkManager {
         return true
 
       case 'search':
-        await this.handleSearchAction(params)
-        return true
+        return this.handleSearchAction(params)
 
       default:
         log.warn(`Unknown deep link action: ${action}`)
@@ -389,7 +420,7 @@ export class DeepLinkManager {
     // `deep-link-focus-task` route (`/home?focus=<id>`). `taskId` is
     // percent-encoded because it arrives from the (untrusted) deep-link path,
     // unlike the renderer's trusted DB id.
-    this.openInBrowser(`/home?focus=${encodeURIComponent(taskId)}`)
+    await this.openInBrowser(`/home?focus=${encodeURIComponent(taskId)}`)
   }
 
   /**
@@ -423,45 +454,34 @@ export class DeepLinkManager {
     const view = path.replace('/', '') || params.view || 'home'
     const query = new URLSearchParams(params).toString()
 
-    this.openInBrowser(`/${view}${query ? `?${query}` : ''}`)
+    await this.openInBrowser(`/${view}${query ? `?${query}` : ''}`)
   }
 
   /**
    * Opens a Dashboard journal search when the app receives a search deep link.
    * @param params - Decoded query text and optional completion filter.
+   * @returns True after opening the search or explaining an unsupported request, false if the browser failed to open.
    * @example
    * await manager.handleSearchAction({ query: 'reading', filter: 'completed' })
    */
-  async handleSearchAction(params: Record<string, string>): Promise<void> {
-    const parsed = CompletedJournalSearchSchema.safeParse(params.query ?? '')
-    const { filter } = params
-    let message: string | undefined
-    if (!parsed.success) {
-      message = parsed.error.issues.some((issue) => issue.code === 'too_big')
-        ? `Shorten your search to ${COMPLETED_JOURNAL_SEARCH_MAX_LENGTH} characters or fewer.`
-        : 'Use plain text without null characters.'
-    } else if (!isCompletedJournalFilterSupported(filter)) {
-      message =
-        filter === 'pending'
-          ? 'Dashboard searches completed tasks. Open LiveEditor on your Mac for pending tasks.'
-          : 'Choose the completed or all filter to search the Dashboard journal.'
+  async handleSearchAction(params: Record<string, string>): Promise<boolean> {
+    const result = resolveDashboardSearch(params)
+    // Guidance responds directly to the opened link, even with OS notifications disabled.
+    if ('message' in result) {
+      await this.showSearchGuidance(result.message)
+      return true
     }
-
-    // A response to an opened link must remain readable with OS notifications disabled.
-    if (message !== undefined) {
-      await this.showSearchGuidance(message)
-      return
+    const opened = await this.openInBrowser(result.path)
+    if (!opened) {
+      await this.showSearchGuidance(
+        'The Dashboard could not open in your default browser. Open your browser and try the search link again.',
+      )
     }
-    const search = new URLSearchParams()
-    if (parsed.data) search.set('search', parsed.data)
-    // The proxy can carry a query through sign-in even when the browser omits the fragment.
-    if (filter || !parsed.data) search.set('filter', filter ?? 'completed')
-
-    this.openInBrowser(`/home?${search}#journal`)
+    return opened
   }
 
   /**
-   * Presents guidance for a rejected search in the visible editor when one is open.
+   * Explains a rejected search or browser launch failure, using the visible editor when available.
    * @example await this.showSearchGuidance('Choose the completed or all filter.')
    */
   private async showSearchGuidance(message: string): Promise<void> {
@@ -484,12 +504,12 @@ export class DeepLinkManager {
    * Opens Dashboard when a `corelive://` link targets a task, view or search.
    * @param dashboardPath - Leading-slash Dashboard path validated by
    *   {@link openDashboardInBrowser}.
-   * @returns Nothing; {@link openDashboardInBrowser} logs browser failures.
+   * @returns Whether {@link openDashboardInBrowser} handed the URL to the default browser.
    * @example
    * this.openInBrowser('/home?focus=42') // opens https://corelive.app/home?focus=42
    */
-  private openInBrowser(dashboardPath: string): void {
-    openDashboardInBrowser(
+  private async openInBrowser(dashboardPath: string): Promise<boolean> {
+    return openDashboardInBrowser(
       this.windowManager.getDashboardOrigin(),
       dashboardPath,
     )

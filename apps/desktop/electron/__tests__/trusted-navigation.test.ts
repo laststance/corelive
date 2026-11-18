@@ -8,6 +8,8 @@ import {
 describe('preload document navigation boundary', () => {
   test.each([
     ['https://corelive.app/settings', 'https://corelive.app', true],
+    ['https://www.corelive.app/settings', 'https://corelive.app', true],
+    ['blob:https://www.corelive.app/fixture', 'https://corelive.app', false],
     ['https://www.corelive.app/login-shell', 'https://corelive.app', true],
     ['https://corelive.app/home', 'https://www.corelive.app', true],
     ['http://localhost:4991/home', 'http://localhost:4991', true],

@@ -3,11 +3,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { openDashboardInBrowser } from '../utils/openDashboardInBrowser'
 
-// vitest hoists vi.mock above the imports, so `shell.openExternal` is a spy by
-// the time openDashboardInBrowser resolves it. openExternal must be thenable — the
-// helper `.catch`es the result.
 vi.mock('electron', () => ({
-  shell: { openExternal: vi.fn(async () => true) },
+  shell: { openExternal: vi.fn(async () => undefined) },
 }))
 
 vi.mock('../logger', () => ({
@@ -23,31 +20,40 @@ describe('openDashboardInBrowser', () => {
     vi.restoreAllMocks()
   })
 
-  test('opens an absolute path on an http(s) origin in the external browser', () => {
+  test('opens an absolute path on an http(s) origin in the external browser', async () => {
     // Arrange + Act: a normal tray/menu/deep-link call.
-    openDashboardInBrowser('https://corelive.app', '/home?focus=42')
+    const opened = await openDashboardInBrowser(
+      'https://corelive.app',
+      '/home?focus=42',
+    )
 
     // Assert: the exact origin+path is handed to the system browser, unchanged.
+    expect(opened).toBe(true)
     expect(shell.openExternal).toHaveBeenCalledTimes(1)
     expect(shell.openExternal).toHaveBeenCalledWith(
       'https://corelive.app/home?focus=42',
     )
   })
 
-  test('refuses a path that is not leading-slash, so the authority cannot be hijacked', () => {
+  test('refuses a path that is not leading-slash, so the authority cannot be hijacked', async () => {
     // Arrange + Act: a path missing its leading slash would re-interpret the host
     // (e.g. corelive.app@evil.com) once concatenated onto the origin.
-    openDashboardInBrowser('https://corelive.app', '@evil.com/phish')
+    const opened = await openDashboardInBrowser(
+      'https://corelive.app',
+      '@evil.com/phish',
+    )
 
     // Assert: nothing is opened.
+    expect(opened).toBe(false)
     expect(shell.openExternal).not.toHaveBeenCalled()
   })
 
-  test('refuses to open a URL whose protocol is not http(s)', () => {
+  test('refuses to open a URL whose protocol is not http(s)', async () => {
     // Arrange + Act: a non-http(s) origin must never reach the OS-handoff sink.
-    openDashboardInBrowser('file://host', '/home')
+    const opened = await openDashboardInBrowser('file://host', '/home')
 
     // Assert: the file: URL is rejected before shell.openExternal.
+    expect(opened).toBe(false)
     expect(shell.openExternal).not.toHaveBeenCalled()
   })
 })

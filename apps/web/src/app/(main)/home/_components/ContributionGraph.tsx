@@ -1,6 +1,7 @@
 'use client'
 
 import HeatMap, { type HeatMapValue } from '@uiw/react-heat-map'
+import { differenceInCalendarDays } from 'date-fns'
 import { useSearchParams } from 'next/navigation'
 import * as React from 'react'
 import { useRef, useState } from 'react'
@@ -40,7 +41,6 @@ import { DayDetailInputSchema } from '@/server/schemas/completed'
 import { DayDetailDialog } from './DayDetailDialog'
 
 /** Milliseconds in a single day. */
-const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000
 
 /** Number of days displayed in a week column. */
 const DAYS_IN_WEEK = 7
@@ -547,9 +547,8 @@ function getAlignedHeatmapStartDate(endDate: Date): Date {
  * @example
  * getHeatmapWeekCount(new Date('2025-04-06T00:00:00'), new Date('2026-04-08T00:00:00')) // => 53
  */
-function getHeatmapWeekCount(startDate: Date, endDate: Date): number {
-  const totalDayCount =
-    Math.floor((endDate.getTime() - startDate.getTime()) / ONE_DAY_IN_MS) + 1
+export function getHeatmapWeekCount(startDate: Date, endDate: Date): number {
+  const totalDayCount = differenceInCalendarDays(endDate, startDate) + 1
 
   return Math.ceil(totalDayCount / DAYS_IN_WEEK)
 }

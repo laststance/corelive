@@ -10,6 +10,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
@@ -75,6 +76,14 @@ test('refreshes the activity heatmap every 15 seconds while Home stays open', as
 
   // Assert
   expect(heatmap).toHaveBeenCalledTimes(2)
+
+  // Act
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(15_000)
+  })
+
+  // Assert
+  expect(heatmap).toHaveBeenCalledTimes(3)
   client.clear()
 })
 
@@ -106,6 +115,13 @@ test('retrying a failed activity request shows an empty year only after the retr
     await screen.findByText('No completions in the last year'),
   ).toBeVisible()
   expect(heatmap).toHaveBeenCalledTimes(2)
+  expect(screen.getByRole('combobox', { name: 'Day to view' })).toBeVisible()
+  const activityCard = screen
+    .getByRole('heading', { name: 'Activity' })
+    .closest<HTMLElement>('[data-slot="card"]')!
+  expect(
+    within(activityCard).getByRole('link', { name: /Get Mac app/ }),
+  ).toBeVisible()
   expect(
     screen.getByRole('region', { name: 'Completion journal' }),
   ).toBeVisible()
@@ -193,6 +209,10 @@ test('an offline refresh marks a cached empty year until activity is up to date'
     ),
   ).toBeVisible()
   expect(screen.queryByText('No completions in the last year')).toBeNull()
+  expect(screen.queryByText('No completions in this period.')).toBeNull()
+  expect(
+    screen.getByText('Recent activity is showing the last loaded data.'),
+  ).toBeVisible()
   expect(
     screen.getByRole('heading', { name: 'Activity' }).parentElement,
   ).toHaveTextContent('0 completed')
@@ -239,6 +259,10 @@ test('a Sunday recap dismissed without storage stays dismissed after a failed re
       'Activity could not refresh. Showing the last loaded data.',
     ),
   ).toBeVisible()
+  expect(
+    screen.getByText('Recent activity is showing the last loaded data.'),
+  ).toBeVisible()
+  expect(screen.queryByText('No completions in this period.')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: 'Retry activity' }))
 
   // Assert

@@ -27,10 +27,10 @@ beforeEach(() => {
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
 describe('workspace environment setup', () => {
-  test('keeps signing credentials out of Web configuration and restricts file access', () => {
+  test('keeps signing credentials out of Dashboard configuration and restricts file access', () => {
     // Arrange
     const contents =
-      'CLERK_SECRET_KEY=fixture-server-key\nAPPLE_ID=fixture-apple\nexport GH_TOKEN = fixture-token\n'
+      'CLERK_SECRET_KEY=fixture-server-key\nAPPLE_ID=fixture-apple\nWIN_CSC_LINK=fixture-cert\nWIN_CSC_KEY_PASSWORD=fixture-signing-password\nexport GH_TOKEN = fixture-token\n'
     writeFileSync(path.join(root, '.env'), contents)
     // Act
     const result = spawnSync(process.execPath, ['scripts/setup-env.mjs'], {
@@ -43,7 +43,7 @@ describe('workspace environment setup', () => {
       'CLERK_SECRET_KEY=fixture-server-key\n',
     )
     expect(readFileSync(path.join(root, 'apps/desktop/.env'), 'utf8')).toBe(
-      'APPLE_ID=fixture-apple\nexport GH_TOKEN = fixture-token\n',
+      'APPLE_ID=fixture-apple\nWIN_CSC_LINK=fixture-cert\nWIN_CSC_KEY_PASSWORD=fixture-signing-password\nexport GH_TOKEN = fixture-token\n',
     )
     expect(statSync(path.join(root, 'apps/web/.env')).mode & 0o777).toBe(0o600)
     expect(readFileSync(path.join(root, '.env'), 'utf8')).toBe(contents)

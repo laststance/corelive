@@ -27,8 +27,7 @@ const mockApp = {
 const mockDialog = { showMessageBox: vi.fn(async () => ({ response: 0 })) }
 
 const mockShell = {
-  // openDashboardInBrowser awaits `.catch` on the result, so the mock must be thenable.
-  openExternal: vi.fn(async () => Promise.resolve()),
+  openExternal: vi.fn(async () => undefined),
 }
 
 // Mock modules using vi.doMock for better CommonJS support
@@ -288,7 +287,7 @@ describe('DeepLinkManager', () => {
 
     test('opens a decoded search as one Dashboard journal query', async () => {
       // Arrange
-      const url = 'corelive://search?query=+R%26D%0A+notes+&filter=completed'
+      const url = 'corelive://search?query=+R%26D%0A+notes+'
 
       // Act
       await deepLinkManager.handleDeepLink(url)
@@ -297,6 +296,7 @@ describe('DeepLinkManager', () => {
       expect(mockShell.openExternal).toHaveBeenCalledWith(
         'https://corelive.app/home?search=R%26D+notes&filter=completed#journal',
       )
+      expect(mockDialog.showMessageBox).not.toHaveBeenCalled()
     })
 
     test.each([
@@ -333,6 +333,33 @@ describe('DeepLinkManager', () => {
         title: 'Dashboard search',
         message:
           'Dashboard searches completed tasks. Open LiveEditor on your Mac for pending tasks.',
+        buttons: ['OK'],
+      })
+      expect(mockShell.openExternal).not.toHaveBeenCalled()
+    })
+
+    test('explains a failed browser launch for a valid search even when notifications are unavailable', async () => {
+      // Arrange
+      deepLinkManager.setNotificationManager(null)
+      mockShell.openExternal.mockRejectedValueOnce(
+        new Error('Browser unavailable'),
+      )
+
+      // Act
+      const opened = await deepLinkManager.handleDeepLink(
+        'corelive://search?query=Release&filter=all',
+      )
+
+      // Assert
+      expect(opened).toBe(false)
+      expect(mockShell.openExternal).toHaveBeenCalledExactlyOnceWith(
+        'https://corelive.app/home?search=Release&filter=all#journal',
+      )
+      expect(mockDialog.showMessageBox).toHaveBeenCalledExactlyOnceWith({
+        type: 'info',
+        title: 'Dashboard search',
+        message:
+          'The Dashboard could not open in your default browser. Open your browser and try the search link again.',
         buttons: ['OK'],
       })
     })

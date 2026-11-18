@@ -93,6 +93,12 @@ test('a quiet 7-day window can switch to show older completions', () => {
   expect(screen.queryByText('Daily completions')).toBeNull()
 
   // Act
+  fireEvent.click(screen.getByRole('button', { name: 'View day' }))
+
+  // Assert
+  expect(window.location.search).toBe('?date=2026-10-01')
+
+  // Act
   fireEvent.click(screen.getByRole('button', { name: '30 days' }))
 
   // Assert
@@ -147,4 +153,37 @@ test('clicking a rest-day marker selects its zero-completion date', async () => 
   expect(
     screen.getByRole('option', { name: 'Oct 1, 2026 · Rest day' }),
   ).toBeVisible()
+})
+
+test('adjacent rest days have separate tap targets in a narrow 30-day chart', async () => {
+  // Arrange — a 320px viewport leaves 238px inside the mobile card.
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
+    new DOMRect(0, 0, 238, 160),
+  )
+  render(
+    <RecentActivityCard
+      dataByDate={
+        new Map([
+          ['2026-10-01', { date: '2026-10-01', count: 1, categories: [] }],
+        ])
+      }
+    />,
+  )
+
+  // Act
+  fireEvent.click(screen.getByRole('button', { name: '30 days' }))
+
+  // Assert
+  const first = (
+    await screen.findByLabelText('Rest day, Sep 2, 2026')
+  ).querySelector('rect')!
+  const next = screen
+    .getByLabelText('Rest day, Sep 3, 2026')
+    .querySelector('rect')!
+  const width = Number(first.getAttribute('width'))
+  expect(width).toBeGreaterThan(0)
+  expect(width).toBeLessThan(10)
+  expect(Number(first.getAttribute('x')) + width).toBeCloseTo(
+    Number(next.getAttribute('x')),
+  )
 })

@@ -723,7 +723,7 @@ describe('local delete and its dashboard outcomes (D4, EA8)', () => {
     })
   })
 
-  test('Keep it on the Dashboard re-adds the blocked category empty under a new local id', async () => {
+  test('keeping a category on the Dashboard restores it empty on this Mac after a blocked deletion', async () => {
     // Arrange
     const fx = await deleteParentFixture()
     await fx.command({

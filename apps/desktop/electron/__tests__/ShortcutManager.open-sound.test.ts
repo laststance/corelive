@@ -1,8 +1,10 @@
 import type { ShortcutOpenSoundSelection } from '@corelive/desktop-contract/constants'
+import { shell } from 'electron'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 vi.mock('electron', () => ({
   app: { on: vi.fn(), removeListener: vi.fn() },
+  shell: { openExternal: vi.fn(async () => undefined) },
   BrowserWindow: { getFocusedWindow: vi.fn(() => null) },
   globalShortcut: {
     isRegistered: vi.fn(() => false),
@@ -12,17 +14,10 @@ vi.mock('electron', () => ({
   },
 }))
 
-// The browser handoff is an OS side effect; capture the call so tests can
-// assert Cmd+N never uses it.
-vi.mock('../utils/openDashboardInBrowser', () => ({
-  openDashboardInBrowser: vi.fn(),
-}))
-
 import type { ConfigManager } from '../ConfigManager'
 import type { NotificationManager } from '../NotificationManager'
 import { ShortcutManager } from '../ShortcutManager'
 import type { ShortcutOpenSoundController } from '../ShortcutOpenSoundPlayer'
-import { openDashboardInBrowser } from '../utils/openDashboardInBrowser'
 import type { WindowManager } from '../WindowManager'
 
 /**
@@ -277,7 +272,7 @@ describe('ShortcutManager new-task shortcut', () => {
 
     // Assert
     expect(harness.showLiveEditor).toHaveBeenCalledTimes(1)
-    expect(openDashboardInBrowser).not.toHaveBeenCalled()
+    expect(shell.openExternal).not.toHaveBeenCalled()
     expect(notificationManager.showNotification).toHaveBeenCalledWith(
       'New Task',
       'Opening LiveEditor',

@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -32,6 +33,7 @@ afterEach(() => {
   fixture?.uninstall()
   fixture = undefined
   window.history.replaceState(null, '', '/')
+  vi.unstubAllEnvs()
   vi.useRealTimers()
 })
 
@@ -52,8 +54,6 @@ test('the last seven days show eight completions and opening today reveals an en
 
   // Act
   fireEvent.click(viewDay)
-  // Happy DOM lacks Chromium's currententrychange event for history writes.
-  fireEvent.popState(window)
 
   // Assert
   const completed = screen.getByText('Completed', {
@@ -84,8 +84,14 @@ test('deleting Reading moves its seven completions into General without changing
   const [list, journal, day, heatmap] = await Promise.all([
     client.category.list(),
     client.completed.journal({ categoryId: 1 }),
-    client.completed.dayDetail({ date: '2026-11-18' }),
-    client.completed.heatmap({ days: 365 }),
+    client.completed.dayDetail({
+      date: '2026-11-18',
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    }),
+    client.completed.heatmap({
+      days: 365,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    }),
   ])
   expect(
     list.categories.map(({ name, recordCount }) => [name, recordCount]),
@@ -105,6 +111,80 @@ test('deleting Reading moves its seven completions into General without changing
   expect(heatmap.data[0]?.categories).toEqual([
     { id: 1, name: 'General', color: 'blue', count: 2, parent: null },
   ])
+})
+
+test('the heatmap limits buckets, totals, and streaks to the requested local days', async () => {
+  // Arrange
+  fixture = installHomeFixture(new URLSearchParams())
+  const client = createClient()
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+
+  // Act
+  const oneDay = await client.completed.heatmap({ days: 1, timezone })
+  const year = await client.completed.heatmap({ days: 365, timezone })
+
+  // Assert
+  expect(oneDay.data.map(({ date, count }) => [date, count])).toEqual([
+    ['2026-11-18', 2],
+  ])
+  expect(oneDay.total).toBe(2)
+  expect(oneDay.streaks).toEqual({ current: 1, longest: 1 })
+  expect(year.total).toBe(16)
+})
+
+test('day detail uses UTC by default and shows Auckland entries on their local date when requested', async () => {
+  // Arrange
+  vi.stubEnv('TZ', 'Pacific/Auckland')
+  vi.setSystemTime(new Date('2026-11-17T23:00:00.000Z'))
+  fixture = installHomeFixture(new URLSearchParams())
+  const client = createClient()
+
+  // Act
+  const local = await client.completed.dayDetail({
+    date: '2026-11-18',
+    timezone: 'Pacific/Auckland',
+  })
+  const utc = await client.completed.dayDetail({ date: '2026-11-18' })
+  const invalidZone = await client.completed.dayDetail({
+    date: '2026-11-18',
+    timezone: 'Invalid/Zone',
+  })
+  const previousUtcDay = await client.completed.dayDetail({
+    date: '2026-11-17',
+  })
+
+  // Assert
+  expect(local.count).toBe(2)
+  expect(utc.count).toBe(0)
+  expect(invalidZone.count).toBe(0)
+  expect(previousUtcDay.tasks.map(({ title }) => title)).toEqual([
+    'Sketch the first spread',
+    'Read the chapter on color',
+  ])
+})
+
+test('invalid heatmap input leaves the simulated failure available for a valid request', async () => {
+  // Arrange
+  fixture = installHomeFixture(new URLSearchParams('activity=retry'))
+  const client = createClient()
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+
+  // Act and assert each request against the fixture's one-shot failure.
+  await expect(
+    client.completed.heatmap({ days: 0, timezone }),
+  ).rejects.toMatchObject({
+    code: 'BAD_REQUEST',
+  })
+  await expect(
+    client.completed.heatmap({ days: 1, timezone }),
+  ).rejects.toMatchObject({
+    code: 'INTERNAL_SERVER_ERROR',
+  })
+  await expect(
+    client.completed.heatmap({ days: 1, timezone }),
+  ).resolves.toMatchObject({
+    total: 2,
+  })
 })
 
 test('a missing destination leaves Reading and its completions in place', async () => {
@@ -140,6 +220,24 @@ test('single-line searches find fixture entries with line breaks in their origin
   ])
 })
 
+test.each(['ΛΌΓΟΣ', 'λόγοσ'])(
+  'journal search %s finds the title with a final sigma',
+  async (search) => {
+    // Arrange
+    fixture = installHomeFixture(new URLSearchParams())
+    const client = createClient()
+
+    // Act
+    const result = await client.completed.journal({ search })
+
+    // Assert
+    expect(result.total).toBe(1)
+    expect(result.entries.map(({ title }) => title)).toEqual([
+      'Copy the word λόγος',
+    ])
+  },
+)
+
 test('the Journal link preserves search, category, and the active QA modes', async () => {
   // Arrange
   window.history.replaceState(
@@ -165,6 +263,44 @@ test('the Journal link preserves search, category, and the active QA modes', asy
     'href',
     '/home?search=Release&category=2&activity=empty&delete=pending#journal',
   )
+  expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute(
+    'href',
+    '/settings?activity=empty&delete=pending&view=appearance',
+  )
+  expect(screen.getByRole('link', { name: 'Skill Tree' })).toHaveAttribute(
+    'href',
+    '/skill-tree?activity=empty&delete=pending&view=skill-tree',
+  )
+})
+
+test('journal results follow direct History API writes in the current page', async () => {
+  // Arrange
+  fixture = installHomeFixture(new URLSearchParams())
+  const query = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  render(
+    <QueryClientProvider client={query}>{fixture.element}</QueryClientProvider>,
+  )
+  const journal = screen.getByRole('region', { name: 'Completion journal' })
+  expect(
+    await within(journal).findByText('Sketch the first spread'),
+  ).toBeVisible()
+  act(() => {
+    window.history.pushState(null, '', '/?search=review+the+archive')
+  })
+  expect(await within(journal).findByText('Review the archive')).toBeVisible()
+
+  // Act
+  act(() => {
+    window.history.replaceState(null, '', '/?search=revise')
+  })
+
+  // Assert
+  expect(
+    await within(journal).findByText('Revise the cover illustration'),
+  ).toBeVisible()
+  expect(within(journal).queryByText('Review the archive')).toBeNull()
 })
 
 test.each([
@@ -215,6 +351,7 @@ test('restarting the fixture restores browser globals and starts a fresh scenari
   // Arrange
   const fetch = window.fetch
   const controls = Object.getOwnPropertyDescriptor(window, '__homeFixture')
+  const historyMethods = [window.history.pushState, window.history.replaceState]
   const client = createClient()
   fixture = installHomeFixture(new URLSearchParams())
   expect((await client.completed.journal({})).total).toBe(16)
@@ -224,6 +361,9 @@ test('restarting the fixture restores browser globals and starts a fresh scenari
 
   // Assert
   expect(window.fetch).toBe(fetch)
+  expect([window.history.pushState, window.history.replaceState]).toEqual(
+    historyMethods,
+  )
   expect(Object.getOwnPropertyDescriptor(window, '__homeFixture')).toEqual(
     controls,
   )
@@ -234,6 +374,33 @@ test('restarting the fixture restores browser globals and starts a fresh scenari
       ({ recordCount }) => recordCount,
     ),
   ).toEqual([0, 0])
+})
+
+test('rejecting an overlapping fixture leaves the current delete controls usable', async () => {
+  // Arrange
+  const home = installHomeFixture(new URLSearchParams('delete=pending'))
+  fixture = home
+  const client = createClient()
+  const fetch = window.fetch
+  const controls = Object.getOwnPropertyDescriptor(window, '__homeFixture')
+  const browser: Window & { __homeFixture?: { release: () => void } } = window
+  const deletion = Promise.allSettled([
+    client.category.delete({ id: 2, targetCategoryId: 1 }),
+  ])
+  await waitFor(() => expect(home.pendingDeleteCount).toBe(1))
+
+  // Act and assert the second install, then use the original controls.
+  expect(() => installHomeFixture(new URLSearchParams())).toThrow(
+    'The Home QA fixture is already installed in this window',
+  )
+  expect(window.fetch).toBe(fetch)
+  expect(Object.getOwnPropertyDescriptor(window, '__homeFixture')).toEqual(
+    controls,
+  )
+  browser.__homeFixture?.release()
+  expect(await deletion).toMatchObject([
+    { status: 'fulfilled', value: { success: true } },
+  ])
 })
 
 test('uninstalling cancels both pending deletes and restores fetch', async () => {

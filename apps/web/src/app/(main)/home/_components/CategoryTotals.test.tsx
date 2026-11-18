@@ -105,3 +105,32 @@ test('removing an opened parent does not leave a stale child breakdown', () => {
   expect(screen.getByText('General')).toBeVisible()
   expect(screen.queryByText('CoreLive')).toBeNull()
 })
+
+test('the period breakdown follows its expanded category before the next row', () => {
+  // Arrange
+  render(
+    <CategoryTotals
+      categories={TOTALS}
+      label="Completed by category"
+      periodTotal={7}
+    />,
+  )
+  const button = screen.getByRole('button', {
+    name: 'Work: 6 entries, show breakdown',
+  })
+  button.focus()
+
+  // Act
+  fireEvent.click(button)
+
+  // Assert
+  const panel = screen.getByRole('region', { name: 'Work breakdown' })
+  expect(button).toHaveFocus()
+  expect(button).toHaveAttribute('aria-controls', panel.id)
+  const rows = screen.getByRole('list', {
+    name: 'Completed by category',
+  }).children
+  expect(rows[0]).toContainElement(button)
+  expect(rows[0]).toContainElement(panel)
+  expect(rows[1]).toHaveTextContent('General')
+})

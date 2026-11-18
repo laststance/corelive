@@ -5,7 +5,8 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  ReferenceDot,
+  useXAxisScale,
+  useYAxisScale,
   XAxis,
   YAxis,
 } from 'recharts'
@@ -24,27 +25,62 @@ const CHART_CONFIG = {
   count: { label: 'Completed' },
 } satisfies ChartConfig
 
+type DayControlsProps = {
+  days: ActivityDay[]
+  onOpenDay: (date: string) => void
+}
+
+/**
+ * Gives each rest day its own pointer target spanning its categorical band.
+ * {@link DailyCompletionsChart} mounts the markers inside the measured chart.
+ * @example <RestDayMarkers days={days} onOpenDay={openDay} />
+ */
+function RestDayMarkers({ days, onOpenDay }: DayControlsProps) {
+  const x = useXAxisScale()
+  const baseline = useYAxisScale()?.(0)
+  if (!x || baseline === undefined) return null
+
+  return days
+    .filter(({ count }) => count === 0)
+    .map(({ date }) => {
+      const start = x(date, { position: 'start' })
+      const end = x(date, { position: 'end' })
+      if (start === undefined || end === undefined) return null
+      const width = end - start
+      return (
+        <g
+          key={date}
+          className="cursor-pointer"
+          aria-label={`Rest day, ${formatActivityDate(date, 'full')}`}
+          onClick={() => onOpenDay(date)}
+        >
+          {/* Adjacent days share an edge. Extra vertical space makes a narrow day easier to tap. */}
+          <rect
+            x={start}
+            y={baseline - 18}
+            width={width}
+            height={24}
+            fill="transparent"
+          />
+          <circle
+            cx={start + width / 2}
+            cy={baseline}
+            r={Math.min(3, width / 2)}
+            fill="var(--muted-foreground)"
+            pointerEvents="none"
+          />
+        </g>
+      )
+    })
+}
+
 /**
  * Plots one bar per local day. The paired native select exposes the same
  * dates and counts and opens the same detail dialog from the keyboard.
  * @example
  * <DailyCompletionsChart days={activity.days} onOpenDay={openDay} />
  */
-export function DailyCompletionsChart({
-  days,
-  onOpenDay,
-}: {
-  days: ActivityDay[]
-  onOpenDay: (date: string) => void
-}) {
-  const selectId = useId()
-
-  const handleDaySubmit = (event: FormEvent<HTMLFormElement>): void => {
-    event.preventDefault()
-    const day = new FormData(event.currentTarget).get('day')
-    if (typeof day === 'string') onOpenDay(day)
-  }
-
+export function DailyCompletionsChart({ days, onOpenDay }: DayControlsProps) {
   return (
     <figure className="min-w-0 space-y-3">
       <figcaption className="text-sm font-medium">Daily completions</figcaption>
@@ -104,48 +140,49 @@ export function DailyCompletionsChart({
             }}
             isAnimationActive={false}
           />
-          {/* A zero-height bar has no pointer target. Mark its day on the baseline. */}
-          {days
-            .filter((day) => day.count === 0)
-            .map(({ date }) => (
-              <ReferenceDot
-                key={date}
-                x={date}
-                y={0}
-                r={3}
-                fill="var(--muted-foreground)"
-                stroke="transparent"
-                strokeWidth={4}
-                className="cursor-pointer"
-                aria-label={`Rest day, ${formatActivityDate(date, 'full')}`}
-                onClick={() => onOpenDay(date)}
-              />
-            ))}
+          <RestDayMarkers days={days} onOpenDay={onOpenDay} />
         </BarChart>
       </ChartContainer>
-      <form
-        onSubmit={handleDaySubmit}
-        className="flex flex-wrap items-center gap-2"
-      >
-        <label htmlFor={selectId} className="sr-only">
-          Day to view
-        </label>
-        <select
-          id={selectId}
-          name="day"
-          className="min-h-9 max-w-full cursor-pointer rounded-md border bg-card px-2 text-sm focus-visible:outline-2 focus-visible:outline-ring"
-        >
-          {[...days].reverse().map(({ date, count }) => (
-            <option key={date} value={date}>
-              {formatActivityDate(date, 'full')} ·{' '}
-              {count === 0 ? 'Rest day' : `${count} completed`}
-            </option>
-          ))}
-        </select>
-        <Button size="sm" variant="outline" type="submit" className="min-h-9">
-          View day
-        </Button>
-      </form>
     </figure>
+  )
+}
+
+/**
+ * Opens details for any day in the selected period, including an entirely quiet period.
+ * @example <ActivityDaySelector days={days} onOpenDay={openDay} />
+ */
+export function ActivityDaySelector({ days, onOpenDay }: DayControlsProps) {
+  const selectId = useId()
+
+  const handleDaySubmit = (event: FormEvent<HTMLFormElement>): void => {
+    event.preventDefault()
+    const day = new FormData(event.currentTarget).get('day')
+    if (typeof day === 'string') onOpenDay(day)
+  }
+
+  return (
+    <form
+      onSubmit={handleDaySubmit}
+      className="flex flex-wrap items-center gap-2"
+    >
+      <label htmlFor={selectId} className="sr-only">
+        Day to view
+      </label>
+      <select
+        id={selectId}
+        name="day"
+        className="min-h-9 max-w-full cursor-pointer rounded-md border bg-card px-2 text-sm focus-visible:outline-2 focus-visible:outline-ring"
+      >
+        {[...days].reverse().map(({ date, count }) => (
+          <option key={date} value={date}>
+            {formatActivityDate(date, 'full')} ·{' '}
+            {count === 0 ? 'Rest day' : `${count} completed`}
+          </option>
+        ))}
+      </select>
+      <Button size="sm" variant="outline" type="submit" className="min-h-9">
+        View day
+      </Button>
+    </form>
   )
 }

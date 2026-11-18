@@ -195,15 +195,18 @@ test('a failed day can be retried and only its confirmed zero count shows a rest
     tasks: [],
     categories: [],
   })
+  // Act
   render(<DayDetailDialog date="2026-05-12" onOpenChange={vi.fn()} />, {
     wrapper: QueryWrapper,
   })
 
-  // Act
+  // Assert
   const retry = await screen.findByRole('button', { name: 'Retry day details' })
   expect(screen.getByText('Day details could not load.')).toBeVisible()
   expect(screen.queryByText('rest day')).toBeNull()
   expect(screen.getByRole('button', { name: 'Save as image' })).toBeDisabled()
+
+  // Act
   fireEvent.click(retry)
 
   // Assert

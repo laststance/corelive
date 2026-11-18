@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'vitest'
 
-import { calculateHeatmapLayout } from './ContributionGraph'
+import {
+  calculateHeatmapLayout,
+  getHeatmapWeekCount,
+} from './ContributionGraph'
 
 /**
  * The Activity heatmap shows a trailing one year, which lays out as 53 Sunday-
@@ -88,4 +91,16 @@ describe('Activity heatmap sizing', () => {
     expect(layout.rectSize).toBe(12)
     expect(layout.width).toBe(770)
   })
+})
+
+test('a Sunday one local week later starts a second column even after a short day', () => {
+  // Arrange — this week includes the spring clock change in America/New_York.
+  const start = new Date(2026, 2, 8, 12)
+  const end = new Date(2026, 2, 15, 0)
+
+  // Act
+  const columns = getHeatmapWeekCount(start, end)
+
+  // Assert
+  expect(columns).toBe(2)
 })

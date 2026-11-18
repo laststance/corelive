@@ -1,4 +1,5 @@
 import { ChevronDown } from 'lucide-react'
+import type { ReactNode } from 'react'
 
 import { getColorDotClass } from '@/lib/category-colors'
 import { cn } from '@/lib/utils'
@@ -10,11 +11,13 @@ import { cn } from '@/lib/utils'
  */
 export function CategoryTotalChip({
   category,
+  children,
   periodTotal,
   expanded = false,
   controls,
   onToggle,
 }: {
+  children?: ReactNode
   category: { name: string; color: string; count: number }
   periodTotal?: number
   expanded?: boolean
@@ -85,6 +88,7 @@ export function CategoryTotalChip({
           />
         </div>
       ) : null}
+      {children}
     </li>
   )
 }

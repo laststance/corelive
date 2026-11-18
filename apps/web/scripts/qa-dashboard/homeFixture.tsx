@@ -11,12 +11,14 @@ import {
 } from '@/server/schemas/category'
 
 import { createActivityFixture } from './activityFixture'
+import { installFixtureHistoryNotifications } from './navigation'
 
 /** Synthetic user id shared by every seeded category; never a real account. */
 const SYNTHETIC_USER_ID = 1
 
 /** oRPC endpoint prefix the browser client posts to (`create-client.ts`). */
 const ORPC_PREFIX = '/api/orpc'
+const installedHomeWindows = new WeakSet<Window>()
 
 /**
  * How the fake `category.delete` answers, chosen with `?delete=` so headless QA can
@@ -76,6 +78,7 @@ function toDeleteMode(value: string | null): DeleteMode {
  * Called by `main.tsx` before the first render.
  * @param parameters - The page's query string (`delete=` picks the delete behavior).
  * @returns The Home element, current pending delete count, and teardown for its browser globals.
+ * @throws If the same window already has an active Home fixture.
  * @example
  * const { element, uninstall } = installHomeFixture(new URLSearchParams('delete=pending'))
  */
@@ -84,6 +87,9 @@ export function installHomeFixture(parameters: URLSearchParams): {
   readonly pendingDeleteCount: number
   uninstall: () => void
 } {
+  if (installedHomeWindows.has(window)) {
+    throw new Error('The Home QA fixture is already installed in this window')
+  }
   const deleteMode = toDeleteMode(parameters.get('delete'))
   const general = seedCategory(1, 'General', true)
   const reading = seedCategory(2, 'Reading', false)
@@ -174,6 +180,10 @@ export function installHomeFixture(parameters: URLSearchParams): {
     window,
     '__homeFixture',
   )
+  Object.defineProperty(window, '__homeFixture', {
+    configurable: true,
+    value: { release: resumeDeleteWaiters },
+  })
   window.fetch = async (input, init) => {
     const request = new Request(input, init)
     // Only the app's own oRPC endpoint is faked; everything else is a real request.
@@ -184,10 +194,8 @@ export function installHomeFixture(parameters: URLSearchParams): {
     })
     return matched ? response : new Response('Not found', { status: 404 })
   }
-  Object.defineProperty(window, '__homeFixture', {
-    configurable: true,
-    value: { release: resumeDeleteWaiters },
-  })
+  const restoreHistory = installFixtureHistoryNotifications()
+  installedHomeWindows.add(window)
   return {
     get pendingDeleteCount() {
       return pendingDeletes.size
@@ -204,12 +212,14 @@ export function installHomeFixture(parameters: URLSearchParams): {
       if (!installed) return
       installed = false
       resumeDeleteWaiters()
+      restoreHistory?.()
       window.fetch = realFetch
       if (previousControl) {
         Object.defineProperty(window, '__homeFixture', previousControl)
       } else {
         Reflect.deleteProperty(window, '__homeFixture')
       }
+      installedHomeWindows.delete(window)
     },
   }
 }

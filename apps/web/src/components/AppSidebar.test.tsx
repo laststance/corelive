@@ -1,7 +1,7 @@
-import { render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
-import { SidebarProvider } from '@/components/ui/sidebar'
+import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
 
 import { AppSidebar } from './AppSidebar'
 
@@ -34,6 +34,7 @@ vi.mock('@/components/auth/ElectronLoginForm', () => ({
 }))
 
 describe('AppSidebar', () => {
+  afterEach(() => vi.restoreAllMocks())
   beforeEach(() => {
     navigation.usePathname.mockReset()
     navigation.useSearchParams.mockReset()
@@ -62,6 +63,33 @@ describe('AppSidebar', () => {
     expect(settings).toHaveAttribute('href', '/settings')
     expect(screen.queryByRole('link', { name: /LiveEditor/i })).toBeNull()
   })
+  test('opening Journal in another tab leaves the mobile sidebar open until a normal navigation', async () => {
+    // Arrange
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(375)
+    render(
+      <SidebarProvider>
+        <SidebarTrigger />
+        <AppSidebar />
+      </SidebarProvider>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle Sidebar' }))
+    const link = await screen.findByRole('link', { name: 'Journal' })
+
+    // Act
+    fireEvent.click(link, { metaKey: true })
+
+    // Assert
+    expect(screen.getByRole('dialog', { name: 'Sidebar' })).toBeVisible()
+
+    // Act
+    fireEvent.click(link)
+
+    // Assert
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Sidebar' })).toBeNull(),
+    )
+  })
+
   test.each([
     [
       '/home',

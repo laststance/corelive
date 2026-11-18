@@ -81,7 +81,6 @@ function readJournalLink(
   const search = parsedSearch.success ? parsedSearch.data : rawSearch
   const taskFilter = searchParams.get('filter')
   const unsupportedFilter = !isCompletedJournalFilterSupported(taskFilter)
-  const canLoadJournal = parsedSearch.success && !unsupportedFilter
   const requestedCategory = searchParams.get('category')
   const requestedCategoryId = Number(requestedCategory)
   const isValidCategoryId =
@@ -91,17 +90,20 @@ function readJournalLink(
     String(requestedCategoryId) === requestedCategory
   // Honor valid links before the catalog loads, then resolve against confirmed categories.
   const availableCategories = categories?.filter(({ id }) => id > 0) ?? []
-  const categoryId =
-    isValidCategoryId &&
-    (categories === undefined ||
-      availableCategories.some(({ id }) => id === requestedCategoryId))
-      ? requestedCategoryId
-      : null
+  const categoryId = isValidCategoryId ? requestedCategoryId : null
+  const unavailableCategory =
+    requestedCategory !== null &&
+    (categoryId === null ||
+      (categories !== undefined &&
+        !availableCategories.some(({ id }) => id === categoryId)))
+  const canLoadJournal =
+    parsedSearch.success && !unsupportedFilter && !unavailableCategory
   return {
     search,
     invalidSearch: !parsedSearch.success,
     taskFilter,
     unsupportedFilter,
+    unavailableCategory,
     canLoadJournal,
     availableCategories,
     categoryId,
@@ -146,6 +148,7 @@ function CompletedTodosContent({
     invalidSearch,
     taskFilter,
     unsupportedFilter,
+    unavailableCategory,
     canLoadJournal,
     availableCategories,
     categoryId,
@@ -242,6 +245,21 @@ function CompletedTodosContent({
     journalRef,
   )
 
+  const [retryingView, setRetryingView] = useState<string | null>(null)
+  const retryInitialPage = async (button: HTMLButtonElement): Promise<void> => {
+    if (fetchStatus !== 'idle') return
+    setRetryingView(viewKey)
+    try {
+      const result = await refetch({ cancelRefetch: false })
+      // Keep the reader's place if they moved elsewhere while the request was pending.
+      if (result.isSuccess && document.activeElement === button) {
+        journalRef.current?.focus({ preventScroll: true })
+      }
+    } finally {
+      setRetryingView((pending) => (pending === viewKey ? null : pending))
+    }
+  }
+
   // Flatten journal entries across all loaded pages (already newest-first).
   const allEntries: DayDetailTask[] =
     data?.pages.flatMap((page) =>
@@ -309,11 +327,12 @@ function CompletedTodosContent({
   const journalContent = match({
     invalidSearch,
     unsupportedFilter,
+    unavailableCategory,
     waitingForConnection: fetchStatus === 'paused' && data === undefined,
     hasEntries: allEntries.length > 0,
     // A failed background refetch keeps the already-loaded history on screen;
     // the error block is only for "nothing loaded at all".
-    isError: isError && data === undefined,
+    isError: (isError && data === undefined) || retryingView === viewKey,
     isLoading,
   })
     .with({ unsupportedFilter: true }, () => (
@@ -334,6 +353,30 @@ function CompletedTodosContent({
         characters of plain text, or clear filters.
       </p>
     ))
+    .with({ unavailableCategory: true }, () => (
+      <p role="status" className="p-8 text-center text-muted-foreground">
+        This category is unavailable. Choose another category or clear filters.
+      </p>
+    ))
+    .with({ isError: true }, () => (
+      <div className="flex h-full min-h-40 flex-col items-center justify-center gap-4 p-8 text-center text-muted-foreground">
+        <p role="status">
+          {fetchStatus === 'paused'
+            ? 'The journal will retry when you’re back online.'
+            : fetchStatus === 'fetching'
+              ? 'Retrying journal…'
+              : 'The journal could not load.'}
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          aria-disabled={fetchStatus !== 'idle'}
+          onClick={(event) => void retryInitialPage(event.currentTarget)}
+        >
+          Retry journal
+        </Button>
+      </div>
+    ))
     .with({ waitingForConnection: true }, () => (
       <p role="status" className="p-8 text-center text-muted-foreground">
         The journal will load when you’re back online.
@@ -342,14 +385,6 @@ function CompletedTodosContent({
     .with({ isLoading: true }, () => (
       <div className="flex h-full min-h-40 items-center justify-center p-8 text-muted-foreground">
         Loading...
-      </div>
-    ))
-    .with({ isError: true }, () => (
-      <div className="flex h-full min-h-40 flex-col items-center justify-center gap-4 p-8 text-center text-muted-foreground">
-        <p role="status">The journal could not load.</p>
-        <Button type="button" variant="outline" onClick={() => void refetch()}>
-          Retry journal
-        </Button>
       </div>
     ))
     .with({ hasEntries: false }, () => (
@@ -525,7 +560,9 @@ function CompletedTodosContent({
             period={period}
             categoryId={categoryId}
             includeSubcategories={includeSubcategories}
-            hasSearch={search !== '' || unsupportedFilter}
+            hasSearch={
+              search !== '' || unsupportedFilter || unavailableCategory
+            }
             onIncludeSubcategoriesChange={(include) =>
               setDirectOnlyCategoryId(include ? null : categoryId)
             }

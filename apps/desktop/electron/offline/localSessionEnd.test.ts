@@ -3,7 +3,6 @@ import { describe, expect, test, vi } from 'vitest'
 import {
   deriveSweepScope,
   endLocalSession,
-  SIGN_OUT_STORAGES,
   type SessionCookie,
   type SessionLike,
 } from './localSessionEnd'
@@ -73,8 +72,26 @@ describe('ending the local session at sign-out', () => {
     expect(
       fake.clearStorageData.mock.calls.map(([options]) => options),
     ).toEqual([
-      { origin: 'https://corelive.app', storages: SIGN_OUT_STORAGES },
-      { origin: 'https://clerk.corelive.app', storages: SIGN_OUT_STORAGES },
+      {
+        origin: 'https://corelive.app',
+        storages: [
+          'cookies',
+          'localstorage',
+          'indexdb',
+          'serviceworkers',
+          'cachestorage',
+        ],
+      },
+      {
+        origin: 'https://clerk.corelive.app',
+        storages: [
+          'cookies',
+          'localstorage',
+          'indexdb',
+          'serviceworkers',
+          'cachestorage',
+        ],
+      },
     ])
   })
 

@@ -346,8 +346,10 @@ test.each([
 test('a failed journal search retries the same term and category', async () => {
   // Arrange
   window.history.replaceState(null, '', '/home?category=2&search=Release')
+  const retryRequest = Promise.withResolvers<never>()
   journal
     .mockRejectedValueOnce(new Error('network down'))
+    .mockReturnValueOnce(retryRequest.promise)
     .mockResolvedValueOnce({ entries: [], total: 0 })
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -361,26 +363,42 @@ test('a failed journal search retries the same term and category', async () => {
   expect(await screen.findByText('The journal could not load.')).toBeVisible()
 
   // Act
-  await user.click(screen.getByRole('button', { name: 'Retry journal' }))
+  const retry = screen.getByRole('button', { name: 'Retry journal' })
+  retry.focus()
+  await user.keyboard('{Enter}{Enter}')
+
+  // Assert
+  expect(retry).toHaveFocus()
+  expect(retry).toHaveAttribute('aria-disabled', 'true')
+  expect(journal).toHaveBeenCalledTimes(2)
+
+  // Act
+  await act(async () => retryRequest.reject(new Error('offline again')))
+
+  // Assert
+  await waitFor(() =>
+    expect(retry).not.toHaveAttribute('aria-disabled', 'true'),
+  )
+  expect(retry).toHaveFocus()
+
+  // Act
+  await user.keyboard('{Enter}')
 
   // Assert
   expect(await screen.findByText('No matching wins')).toBeVisible()
-  expect(journal.mock.calls.map(([input]) => input)).toEqual([
-    {
+  expect(
+    screen.getByRole('region', { name: 'Completion journal' }),
+  ).toHaveFocus()
+  expect(journal).toHaveBeenCalledTimes(3)
+  for (const [input] of journal.mock.calls) {
+    expect(input).toEqual({
       limit: 10,
       offset: 0,
       categoryId: 2,
       includeSubcategories: true,
       search: 'Release',
-    },
-    {
-      limit: 10,
-      offset: 0,
-      categoryId: 2,
-      includeSubcategories: true,
-      search: 'Release',
-    },
-  ])
+    })
+  }
   client.clear()
 })
 
@@ -502,7 +520,7 @@ test('a category link filters the first journal page before the category list is
   client.clear()
 })
 
-test('a category removed while the journal is open falls back to all categories and keeps the search', async () => {
+test('a removed category keeps other categories out of the journal until the user changes the filter', async () => {
   // Arrange
   window.history.replaceState(
     null,
@@ -532,12 +550,20 @@ test('a category removed while the journal is open falls back to all categories 
   )
 
   // Assert
-  expect(category).toHaveTextContent('All categories')
-  expect(await screen.findByText('No matching wins')).toBeVisible()
-  expect(journal).toHaveBeenLastCalledWith(
-    { limit: 10, offset: 0, search: 'Release' },
-    expect.anything(),
-  )
+  expect(
+    screen.getByText(
+      'This category is unavailable. Choose another category or clear filters.',
+    ),
+  ).toBeVisible()
+  expect(screen.queryByText('No matching wins')).toBeNull()
+  expect(journal).toHaveBeenCalledTimes(1)
+
+  // Act
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Clear' }))
+
+  // Assert
+  expect(await screen.findByText('Your year starts here')).toBeVisible()
+  expect(window.location.search).toBe('')
   client.clear()
 })
 

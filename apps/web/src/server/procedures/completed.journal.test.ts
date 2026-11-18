@@ -369,6 +369,31 @@ describeIfDb('completed.journal (permanent win journal)', () => {
     })
   })
 
+  test('matches Greek sigma and final sigma without changing the returned title', async () => {
+    // Arrange
+    const owner = freshClerkId()
+    await seedCompletedRowAt(owner, 'κόσμος', new Date('2026-05-14T09:00:00Z'))
+    await seedTodoCompletionAt(
+      owner,
+      'κόσμοσ',
+      new Date('2026-05-15T09:00:00Z'),
+    )
+
+    // Act
+    const result = await call(
+      getJournal,
+      { search: 'κόσμοΣ' },
+      authContext(owner),
+    )
+
+    // Assert
+    expect(result.total).toBe(2)
+    expect(result.entries.map((entry) => entry.title)).toEqual([
+      'κόσμοσ',
+      'κόσμος',
+    ])
+  })
+
   test('combines title search with a half-open period and category before pagination', async () => {
     // Arrange — create the real user/default category through the import path,
     // then add a second category with rows on each date boundary and source.

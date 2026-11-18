@@ -15,7 +15,7 @@ const contents = await readFile(source, 'utf8').catch((error) => {
   throw error
 })
 const signingKey =
-  /^(?:export\s+)?(?:APPLE_ID|APPLE_APP_SPECIFIC_PASSWORD|APPLE_TEAM_ID|APPLE_KEYCHAIN_PROFILE|GH_TOKEN)\s*=/
+  /^(?:export\s+)?(?:APPLE_ID|APPLE_APP_SPECIFIC_PASSWORD|APPLE_TEAM_ID|APPLE_KEYCHAIN_PROFILE|WIN_CSC_LINK|WIN_CSC_KEY_PASSWORD|GH_TOKEN)\s*=/
 const lines = (contents ?? '').split('\n')
 const signing = lines.filter((line) => signingKey.test(line.trimStart()))
 if (contents !== null)

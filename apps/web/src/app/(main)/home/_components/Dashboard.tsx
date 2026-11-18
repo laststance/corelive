@@ -65,9 +65,10 @@ export const Dashboard = function Dashboard() {
         {activity.hasData ? (
           <>
             <YearInReviewModal dataByDate={activity.dataByDate} />
-            {activity.total > 0 ? (
-              <RecentActivityCard dataByDate={activity.dataByDate} />
-            ) : null}
+            <RecentActivityCard
+              dataByDate={activity.dataByDate}
+              isRefreshUnavailable={activity.isError || activity.isPaused}
+            />
           </>
         ) : null}
         <SundayDigestCard

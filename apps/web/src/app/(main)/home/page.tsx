@@ -8,8 +8,8 @@ import './page.css'
 
 /**
  * The Dashboard route at /home. Prefetches its critical data through one
- * `home.bootstrap` call and hydrates it into the client query cache, so first
- * paint after hydration needs zero `/api/orpc` requests (Issue #153).
+ * `home.bootstrap` call. A successful prefetch serves matching client query
+ * keys from the hydrated cache. A failed prefetch falls back to client requests.
  */
 const DashboardPage = async function DashboardPage() {
   const dehydratedHomeState = await prefetchHomeBootstrap()

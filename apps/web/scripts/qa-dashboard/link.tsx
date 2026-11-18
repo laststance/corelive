@@ -25,6 +25,11 @@ export default function FixtureLink({
       destination.searchParams.set(key, value)
     }
   }
+  if (destination.pathname === '/settings')
+    destination.searchParams.set('view', 'appearance')
+  // The existing unsupported-view screen explains this fixture's scope.
+  if (destination.pathname === '/skill-tree')
+    destination.searchParams.set('view', 'skill-tree')
   const { pathname } = window.location
   const staysInHome =
     (pathname === '/' || pathname === '/home') &&

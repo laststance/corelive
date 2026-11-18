@@ -262,7 +262,7 @@ test('a digest-mismatch row says the change was kept on this Mac and Try again r
   )
 })
 
-test('a blocked delete offers Rename "<child>" and Keep it on the Dashboard', async () => {
+test('a blocked category deletion lets the user rename the remaining child', async () => {
   // Arrange
   const user = userEvent.setup()
   const { fake } = await renderWithSettings(
@@ -293,7 +293,7 @@ test('a blocked delete offers Rename "<child>" and Keep it on the Dashboard', as
   )
 })
 
-test('Keep it on the Dashboard sends keep-dashboard-value for a blocked delete', async () => {
+test('requests to keep the category on the Dashboard after a blocked deletion', async () => {
   // Arrange
   const user = userEvent.setup()
   const { fake } = await renderWithSettings(
