@@ -13,7 +13,7 @@ if (api?.version === 1) {
     <>
       <ThemeTransition />
       <SettingsProvider api={api}>
-        <main className="mx-auto max-w-2xl space-y-12 px-4 pb-12 pt-4">
+        <main className="mx-auto max-w-2xl px-4 pb-12">
           <ElectronSettingsPage />
         </main>
       </SettingsProvider>

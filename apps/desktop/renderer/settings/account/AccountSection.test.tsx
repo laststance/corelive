@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event'
 import { useRef } from 'react'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
+import { ElectronSettingsPage } from '../ElectronSettingsPage'
 import { renderWithSettings } from '../settingsTestkit'
 
 import { AccountSection } from './AccountSection'
@@ -209,6 +210,121 @@ test('Connect this Mac sends the connect request, then shows progress and the on
   expect(screen.getByText('12 keeps are on your Dashboard')).toBeVisible()
 })
 
+test('the first-upload notice lasts through section changes and disappears on the next Settings visit', async () => {
+  // Arrange
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+  const { fake } = await renderWithSettings(<ElectronSettingsPage />, {
+    account: { ...ATTACHED, firstUpload: { state: 'done', count: 7 } },
+  })
+  const menu = screen.getByRole('combobox', {
+    name: 'Current settings section',
+  })
+  fake.api.account.acknowledgeFirstUpload.mockImplementation(async () => {
+    fake.setAccount({ firstUpload: null })
+  })
+  expect(menu).toHaveValue('Application')
+  expect(fake.api.account.acknowledgeFirstUpload).not.toHaveBeenCalled()
+
+  // Act
+  await user.selectOptions(menu, 'Account')
+
+  // Assert
+  expect(screen.getByText('7 keeps are on your Dashboard')).toBeVisible()
+  expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalledOnce()
+
+  // Act
+  await user.selectOptions(menu, 'Application')
+  await user.selectOptions(menu, 'Account')
+
+  // Assert
+  expect(screen.getByText('7 keeps are on your Dashboard')).toBeVisible()
+
+  // Act
+  act(() => fake.hideWindow())
+  await user.selectOptions(menu, 'Account')
+
+  // Assert
+  expect(screen.queryByText('7 keeps are on your Dashboard')).toBeNull()
+  expect(screen.getByText('Up to date · checked 5 minutes ago')).toBeVisible()
+  expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalledOnce()
+})
+
+test('an acknowledged upload stays dismissed when Settings reopens before the cleared snapshot arrives', async () => {
+  // Arrange
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+  const { fake } = await renderWithSettings(<ElectronSettingsPage />, {
+    account: { ...ATTACHED, firstUpload: { state: 'done', count: 7 } },
+  })
+  const menu = screen.getByRole('combobox', {
+    name: 'Current settings section',
+  })
+
+  // Act
+  await user.selectOptions(menu, 'Account')
+
+  // Assert
+  expect(screen.getByText('7 keeps are on your Dashboard')).toBeVisible()
+  expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalledOnce()
+
+  // Act
+  act(() => fake.hideWindow())
+  await user.selectOptions(menu, 'Account')
+
+  // Assert
+  expect(screen.queryByText('7 keeps are on your Dashboard')).toBeNull()
+  expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalledOnce()
+})
+
+test('Account retries a failed upload acknowledgement on its next visit without duplicating pending requests', async () => {
+  // Arrange
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+  const { fake } = await renderWithSettings(<ElectronSettingsPage />, {
+    account: { ...ATTACHED, firstUpload: { state: 'done', count: 7 } },
+  })
+  const menu = screen.getByRole('combobox', {
+    name: 'Current settings section',
+  })
+  let failFirstAttempt!: () => void
+  const acknowledge = fake.api.account.acknowledgeFirstUpload
+  acknowledge.mockImplementationOnce(
+    async () =>
+      new Promise<never>((_, reject) => {
+        failFirstAttempt = (): void => reject(new Error('IPC unavailable'))
+      }),
+  )
+
+  // Act
+  await user.selectOptions(menu, 'Account')
+  await user.selectOptions(menu, 'Application')
+  await user.selectOptions(menu, 'Account')
+
+  // Assert
+  expect(acknowledge).toHaveBeenCalledOnce()
+
+  // Act
+  await act(async () => failFirstAttempt())
+
+  // Assert
+  expect(screen.getByText('7 keeps are on your Dashboard')).toBeVisible()
+  expect(acknowledge).toHaveBeenCalledOnce()
+
+  // Act
+  act(() => fake.hideWindow())
+  await user.selectOptions(menu, 'Account')
+
+  // Assert
+  expect(screen.getByText('7 keeps are on your Dashboard')).toBeVisible()
+  expect(acknowledge).toHaveBeenCalledTimes(2)
+
+  // Act
+  act(() => fake.hideWindow())
+  await user.selectOptions(menu, 'Account')
+
+  // Assert
+  expect(screen.queryByText('7 keeps are on your Dashboard')).toBeNull()
+  expect(acknowledge).toHaveBeenCalledTimes(2)
+})
+
 test('Open Dashboard asks main to open it without supplying an address', async () => {
   // Arrange
   const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
@@ -301,6 +417,73 @@ test('signing out shows a disabled "Signing out…" while it runs, then state C 
   expect(
     screen.getByText(/This Mac syncs with/).closest('p'),
   ).toHaveTextContent('This Mac syncs with raphtalia@example.com.')
+})
+
+test('returning to Account focuses Sign in when sign-out completed in another section', async () => {
+  // Arrange
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+  const { fake } = await renderWithSettings(<ElectronSettingsPage />, {
+    account: ATTACHED,
+  })
+  const menu = screen.getByRole('combobox', {
+    name: 'Current settings section',
+  })
+  await user.selectOptions(menu, 'Account')
+  let finishSignOut!: () => void
+  fake.api.account.signOut.mockImplementation(
+    async () =>
+      new Promise((resolve) => {
+        finishSignOut = (): void => resolve({ status: 'signed-out' })
+      }),
+  )
+  await user.click(screen.getByRole('button', { name: 'Sign out' }))
+  await user.click(
+    within(screen.getByRole('group', { name: 'Confirm sign out' })).getByRole(
+      'button',
+      { name: 'Sign out' },
+    ),
+  )
+
+  // Act
+  await user.selectOptions(menu, 'Application')
+  await act(async () => {
+    fake.setAccount({ state: 'signed-out' })
+    finishSignOut()
+  })
+
+  // Assert
+  expect(menu).toHaveFocus()
+
+  // Act
+  await user.selectOptions(menu, 'Account')
+
+  // Assert
+  expect(screen.getByRole('button', { name: 'Sign in' })).toHaveFocus()
+})
+
+test('returning to Account focuses its heading when the sign-in window closed in another section', async () => {
+  // Arrange
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+  const { fake } = await renderWithSettings(<ElectronSettingsPage />, {
+    account: { signIn: 'in-progress' },
+  })
+  const menu = screen.getByRole('combobox', {
+    name: 'Current settings section',
+  })
+  await user.selectOptions(menu, 'Account')
+  await user.selectOptions(menu, 'Application')
+
+  // Act
+  await act(async () => fake.setAccount({ signIn: 'idle' }))
+
+  // Assert
+  expect(menu).toHaveFocus()
+
+  // Act
+  await user.selectOptions(menu, 'Account')
+
+  // Assert
+  expect(screen.getByRole('heading', { name: 'Account' })).toHaveFocus()
 })
 
 test('a residual sign-in cookie shows the cleanup note instead of plain success, and Clear again completes it', async () => {

@@ -735,6 +735,25 @@ test('a payload account that differs from the verified identity is ignored and l
   expect(syncCalls(fixture.transport)).toBe(0)
 })
 
+test('connecting a Mac with no pending keeps shows no first-upload notice', async () => {
+  // Arrange
+  const fixture = await createFixture()
+  await fixture.controller.initialize()
+  await fixture.controller.authenticated('account-a')
+
+  // Act
+  await fixture.controller.connect()
+
+  // Assert
+  expect(fixture.controller.accountStatus().firstUpload).toBeNull()
+  await vi.waitFor(() =>
+    expect(fixture.controller.getSnapshot()).toMatchObject({
+      sync: { state: 'synced', waitingCount: 0 },
+    }),
+  )
+  expect(fixture.controller.accountStatus().firstUpload).toBeNull()
+})
+
 test('Connect this Mac binds the account, uploads and reports the Mac as synced', async () => {
   // Arrange
   const fixture = await createFixture()
@@ -754,6 +773,7 @@ test('Connect this Mac binds the account, uploads and reports the Mac as synced'
   )
   expect(fixture.transport.apply).toHaveBeenCalledOnce()
   expect(fixture.controller.accountStatus()).toMatchObject({
+    firstUpload: { state: 'done', count: 1 },
     state: 'attached',
     boundEmail: 'me@example.com',
     pendingConnect: null,

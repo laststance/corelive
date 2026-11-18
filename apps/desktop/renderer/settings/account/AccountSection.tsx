@@ -3,6 +3,7 @@ import { useCycleEffect } from '@corelive/live-editor/hooks/use-cycle-effect'
 import { Button } from '@corelive/live-editor/ui/button'
 import { useRef, useState, type ReactNode, type RefObject } from 'react'
 
+import { useSettingsSectionVisible } from '../SettingsNavigation'
 import { useSettings } from '../SettingsProvider'
 import { SettingsSection } from '../SettingsSection'
 
@@ -61,19 +62,18 @@ export function AccountSection({
   headingRef,
 }: AccountSectionProps) {
   const { api, snapshot, refresh } = useSettings()
+  const visible = useSettingsSectionVisible('Account')
   const account = snapshot.account
   const [ui, setUi] = useState<Ui>({ kind: 'idle' })
   const [now, setNow] = useState(() => Date.now())
-  // The "keeps are on your Dashboard" line appears once: main drops it after this copy is taken.
+  // Keep the displayed line for this visit after main clears its pending notice.
   const [uploadDone, setUploadDone] = useState<number | null>(null)
+  const uploadAcknowledgement = useRef<{ count: number } | null>(null)
   const signInRef = useRef<HTMLButtonElement>(null)
   const signOutRef = useRef<HTMLButtonElement>(null)
   const cancelRef = useRef<HTMLButtonElement>(null)
   const pendingFocus = useRef<FocusTarget | null>(null)
   const previousSignIn = useRef(account.signIn)
-
-  if (account.firstUpload?.state === 'done' && uploadDone === null)
-    setUploadDone(account.firstUpload.count)
 
   // A sign-in that re-attached this Mac retires the sign-out notes for good; main pushes the state.
   if (account.state === 'attached' && SIGN_OUT_NOTES.has(ui.kind))
@@ -84,20 +84,46 @@ export function AccountSection({
     return (): void => clearInterval(timer)
   }, [])
 
-  // Tell main the completion line was taken, so reopening Settings does not repeat it.
-  const uploadState = account.firstUpload?.state
+  useCycleEffect(() => api.onHidden(() => setUploadDone(null)), [api])
+
+  const uploadCount =
+    account.firstUpload?.state === 'done' ? account.firstUpload.count : null
+  const showAccountStatus =
+    visible &&
+    account.state === 'attached' &&
+    !account.pendingConnect &&
+    account.signIn !== 'in-progress'
   useCycleEffect(() => {
-    if (uploadState === 'done') void api.account.acknowledgeFirstUpload()
-  }, [api, uploadState])
+    // A stale snapshot can outlive a window hide while main broadcasts the acknowledgement.
+    if (uploadCount === null) uploadAcknowledgement.current = null
+    else if (
+      showAccountStatus &&
+      uploadAcknowledgement.current?.count !== uploadCount
+    ) {
+      if (uploadDone !== uploadCount) {
+        setUploadDone(uploadCount)
+        return
+      }
+      // The completion line is now in the visible Account pane.
+      const attempt = { count: uploadCount }
+      uploadAcknowledgement.current = attempt
+      void api.account.acknowledgeFirstUpload().catch(() => {
+        // Retry on the next visible visit. A late failure cannot clear a newer request.
+        if (uploadAcknowledgement.current === attempt)
+          uploadAcknowledgement.current = null
+      })
+    }
+  }, [api, showAccountStatus, uploadCount, uploadDone])
 
   // Focus returns (DA14): after the login window closes -> heading; after sign-out -> Sign in.
   useCycleEffect(() => {
     const was = previousSignIn.current
     previousSignIn.current = account.signIn
     if (was === 'in-progress' && account.signIn !== 'in-progress')
-      headingRef.current?.focus()
+      pendingFocus.current ??= 'heading'
     const want = pendingFocus.current
-    if (!want) return
+    // Keep the request until Account is visible and its target can take focus.
+    if (!visible || !want) return
     const target = {
       heading: headingRef.current,
       'sign-in': signInRef.current,
@@ -106,7 +132,7 @@ export function AccountSection({
     }[want]
     if (target) {
       target.focus()
-      pendingFocus.current = null
+      if (document.activeElement === target) pendingFocus.current = null
     }
   })
 

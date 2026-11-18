@@ -97,6 +97,12 @@ const ROW_BASE: Pick<SyncDetailRow, 'dashboardValue' | 'macValue' | 'actions'> =
 /** Every Settings state, in `--screenshots` order. The first is the default. */
 export const SETTINGS_FIXTURE_STATES: readonly SettingsStateSpec[] = [
   {
+    name: 'application',
+    description: 'Default Settings view with the Dock icon switch first',
+    readyText: 'Hide App Icon',
+    account: {},
+  },
+  {
     name: 'account-never-attached',
     description: 'Account A: never attached; Sign in is the one action',
     readyText: 'Sign in to also see it on the Dashboard',

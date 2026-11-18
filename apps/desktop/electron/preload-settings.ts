@@ -53,6 +53,7 @@ export function createSettingsBridge(): SettingsWindowAPI {
     snapshot: async () => typedInvoke('settings-window-snapshot'),
     onChanged: (listener) =>
       subscribeToMain('settings-window-changed', listener),
+    onHidden: (listener) => subscribeToMain('settings-window-hidden', listener),
     preferences: {
       patch: async (generation, command) =>
         typedInvoke('settings-window-preferences-patch', generation, command),

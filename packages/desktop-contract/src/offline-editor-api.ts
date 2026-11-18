@@ -127,6 +127,8 @@ export interface SettingsWindowAPI {
   snapshot: () => Promise<SettingsSnapshot>
   /** Fires after any workspace, preference or account change; re-read with {@link snapshot}. */
   onChanged: (listener: () => void) => () => void
+  /** Fires when the native Settings window is hidden and its next presentation should start at Application. */
+  onHidden: (listener: () => void) => () => void
   preferences: {
     /** Applies one revisioned preferences command to the device workspace. */
     patch: (

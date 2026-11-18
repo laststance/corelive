@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import '@testing-library/jest-dom/vitest'
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, test, vi } from 'vitest'
 
@@ -13,25 +13,34 @@ afterEach(() => {
   delete document.documentElement.dataset.theme
 })
 
-test('shows the Settings sections in the DA1 order, each labelled for assistive technology', async () => {
+test('opens Settings with Application and the Dock icon switch first, with Account last', async () => {
   // Arrange / Act
   await renderWithSettings(<ElectronSettingsPage />)
 
   // Assert
-  const headings = screen
-    .getAllByRole('heading', { level: 2 })
-    .map((heading) => heading.textContent)
-  expect(headings).toEqual([
+  const menu = screen.getByRole('combobox', {
+    name: 'Current settings section',
+  })
+  expect(menu).toHaveValue('Application')
+  expect(
+    within(menu)
+      .getAllByRole('option')
+      .map((option) => option.textContent),
+  ).toEqual([
+    'Application',
     'LiveEditor',
     'Appearance',
     'Shortcuts & Sound',
-    'Application',
     'Categories',
     'Updates',
     'Account',
   ])
-  for (const region of screen.getAllByRole('region'))
-    expect(region).toHaveAccessibleName()
+  const application = screen.getByRole('region', { name: 'Application' })
+  expect(application).toBeVisible()
+  expect(within(application).getAllByRole('switch')[0]).toHaveAccessibleName(
+    'Hide App Icon',
+  )
+  expect(screen.getAllByRole('region')).toEqual([application])
 })
 
 test('renders without any network request, so Settings works offline', async () => {
@@ -116,6 +125,10 @@ test('saves Show Today Ember to the device workspace', async () => {
   const { fake } = await renderWithSettings(<ElectronSettingsPage />)
 
   // Act
+  await user.selectOptions(
+    screen.getByRole('combobox', { name: 'Current settings section' }),
+    'LiveEditor',
+  )
   await user.click(screen.getByRole('switch', { name: 'Show Today Ember' }))
 
   // Assert
@@ -143,6 +156,14 @@ test('opens Sync details from Account, hides the Settings sections behind it, an
     account: { needsALookCount: 2 },
   })
 
+  const menu = screen.getByRole('combobox', {
+    name: 'Current settings section',
+  })
+  await user.selectOptions(menu, 'Account')
+  const account = screen.getByRole('region', { name: 'Account' })
+  expect(menu).toBeVisible()
+  expect(account).toBeVisible()
+
   // Act
   await user.click(
     screen.getByRole('button', { name: '2 changes need a look' }),
@@ -152,14 +173,228 @@ test('opens Sync details from Account, hides the Settings sections behind it, an
   expect(
     await screen.findByRole('heading', { name: 'Needs a look' }),
   ).toBeVisible()
-  expect(screen.queryByRole('heading', { name: 'Application' })).toBeNull()
+  expect(menu).not.toBeVisible()
+  expect(account).not.toBeVisible()
 
   // Act
   await user.click(screen.getByRole('button', { name: /Back to Settings/ }))
 
   // Assert
-  expect(screen.getByRole('heading', { name: 'Application' })).toBeVisible()
+  expect(
+    screen.getByRole('combobox', { name: 'Current settings section' }),
+  ).toHaveValue('Account')
   await waitFor(() =>
     expect(screen.getByRole('heading', { name: 'Account' })).toHaveFocus(),
   )
+})
+
+test('Back to Settings keeps focus on Sign in after sign-out completes in Sync details', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  const { fake } = await renderWithSettings(<ElectronSettingsPage />, {
+    account: { state: 'attached' },
+  })
+  let finishSignOut!: () => void
+  fake.api.account.signOut.mockImplementation(
+    async () =>
+      new Promise((resolve) => {
+        finishSignOut = (): void => resolve({ status: 'signed-out' })
+      }),
+  )
+  await user.selectOptions(
+    screen.getByRole('combobox', { name: 'Current settings section' }),
+    'Account',
+  )
+  await user.click(screen.getByRole('button', { name: 'Sign out' }))
+  await user.click(
+    within(screen.getByRole('group', { name: 'Confirm sign out' })).getByRole(
+      'button',
+      { name: 'Sign out' },
+    ),
+  )
+  await user.click(screen.getByRole('button', { name: 'Sync details' }))
+  await act(async () => {
+    fake.setAccount({ state: 'signed-out' })
+    finishSignOut()
+  })
+
+  // Act
+  await user.click(screen.getByRole('button', { name: /Back to Settings/ }))
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+
+  // Assert
+  expect(screen.getByRole('button', { name: 'Sign in' })).toHaveFocus()
+})
+
+test('keeps the Dock switch value when returning from another section', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  await renderWithSettings(<ElectronSettingsPage />)
+  const menu = screen.getByRole('combobox', {
+    name: 'Current settings section',
+  })
+
+  // Act
+  await user.click(screen.getByRole('switch', { name: 'Hide App Icon' }))
+  await user.selectOptions(menu, 'Categories')
+
+  // Assert
+  expect(screen.getByRole('region', { name: 'Categories' })).toBeVisible()
+  expect(screen.queryByRole('switch', { name: 'Hide App Icon' })).toBeNull()
+
+  // Act
+  await user.selectOptions(menu, 'Application')
+
+  // Assert
+  expect(screen.getByRole('switch', { name: 'Hide App Icon' })).toBeChecked()
+})
+
+test('acknowledges the first upload notice only after Account is opened', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  const { fake } = await renderWithSettings(<ElectronSettingsPage />, {
+    account: { state: 'attached', firstUpload: { state: 'done', count: 7 } },
+  })
+  expect(fake.api.account.acknowledgeFirstUpload).not.toHaveBeenCalled()
+
+  // Act
+  await user.selectOptions(
+    screen.getByRole('combobox', { name: 'Current settings section' }),
+    'Account',
+  )
+
+  // Assert
+  expect(screen.getByText('7 keeps are on your Dashboard')).toBeVisible()
+  await waitFor(() =>
+    expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalledOnce(),
+  )
+})
+
+test('preserves an upload notice that arrives while Sync details covers Account', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  const { fake } = await renderWithSettings(<ElectronSettingsPage />, {
+    account: { state: 'attached', needsALookCount: 2 },
+  })
+  await user.selectOptions(
+    screen.getByRole('combobox', { name: 'Current settings section' }),
+    'Account',
+  )
+  await user.click(
+    screen.getByRole('button', { name: '2 changes need a look' }),
+  )
+
+  // Act
+  await act(async () => {
+    fake.setAccount({ firstUpload: { state: 'done', count: 7 } })
+  })
+
+  // Assert
+  expect(screen.getByRole('heading', { name: 'Needs a look' })).toBeVisible()
+  expect(fake.api.account.acknowledgeFirstUpload).not.toHaveBeenCalled()
+
+  // Act
+  await user.click(screen.getByRole('button', { name: /Back to Settings/ }))
+
+  // Assert
+  expect(screen.getByText('7 keeps are on your Dashboard')).toBeVisible()
+  await waitFor(() =>
+    expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalledOnce(),
+  )
+})
+
+test('reopens on Application after dismissing Sync details and preserves the Dock preference', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  const { fake } = await renderWithSettings(<ElectronSettingsPage />, {
+    account: { needsALookCount: 2 },
+  })
+  const menu = screen.getByRole('combobox', {
+    name: 'Current settings section',
+  })
+  await user.click(screen.getByRole('switch', { name: 'Hide App Icon' }))
+  await user.selectOptions(menu, 'Account')
+  await user.click(
+    screen.getByRole('button', { name: '2 changes need a look' }),
+  )
+  expect(
+    await screen.findByRole('heading', { name: 'Needs a look' }),
+  ).toBeVisible()
+
+  // Act
+  act(() => fake.hideWindow())
+
+  // Assert
+  expect(menu).toBeVisible()
+  expect(menu).toHaveValue('Application')
+  expect(screen.getByRole('switch', { name: 'Hide App Icon' })).toBeChecked()
+})
+
+test('keeps an upload pending until Account is visible after the Settings window reopens', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  const { fake } = await renderWithSettings(<ElectronSettingsPage />, {
+    account: { state: 'attached' },
+  })
+  const menu = screen.getByRole('combobox', {
+    name: 'Current settings section',
+  })
+  await user.selectOptions(menu, 'Account')
+
+  // Act
+  act(() => fake.hideWindow())
+  await act(async () =>
+    fake.setAccount({ firstUpload: { state: 'done', count: 3 } }),
+  )
+
+  // Assert
+  expect(menu).toHaveValue('Application')
+  expect(fake.api.account.acknowledgeFirstUpload).not.toHaveBeenCalled()
+
+  // Act
+  await user.selectOptions(menu, 'Account')
+
+  // Assert
+  expect(screen.getByText('3 keeps are on your Dashboard')).toBeVisible()
+  expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalledOnce()
+})
+
+test('resumes the Account notice on uncovering Settings without changing its selected section', async () => {
+  // Arrange
+  const user = userEvent.setup()
+  const { fake } = await renderWithSettings(<ElectronSettingsPage />, {
+    account: { state: 'attached' },
+  })
+  const menu = screen.getByRole('combobox', {
+    name: 'Current settings section',
+  })
+  await user.selectOptions(menu, 'Account')
+  const visibility = vi.spyOn(document, 'visibilityState', 'get')
+
+  try {
+    // Act
+    visibility.mockReturnValue('hidden')
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    await act(async () =>
+      fake.setAccount({ firstUpload: { state: 'done', count: 3 } }),
+    )
+
+    // Assert
+    expect(fake.api.account.acknowledgeFirstUpload).not.toHaveBeenCalled()
+
+    // Act
+    visibility.mockReturnValue('visible')
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+
+    // Assert
+    expect(menu).toHaveValue('Account')
+    expect(screen.getByText('3 keeps are on your Dashboard')).toBeVisible()
+    expect(fake.api.account.acknowledgeFirstUpload).toHaveBeenCalledOnce()
+  } finally {
+    visibility.mockRestore()
+  }
 })
