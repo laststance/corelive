@@ -24,6 +24,8 @@ const mockApp = {
   requestSingleInstanceLock: vi.fn(() => true),
 }
 
+const mockDialog = { showMessageBox: vi.fn(async () => ({ response: 0 })) }
+
 const mockShell = {
   // openDashboardInBrowser awaits `.catch` on the result, so the mock must be thenable.
   openExternal: vi.fn(async () => Promise.resolve()),
@@ -37,6 +39,7 @@ vi.doMock('../logger.ts', () => ({
 vi.doMock('electron', () => ({
   app: mockApp,
   shell: mockShell,
+  dialog: mockDialog,
 }))
 
 describe('DeepLinkManager', () => {
@@ -282,46 +285,57 @@ describe('DeepLinkManager', () => {
       deepLinkManager.initialize()
     })
 
-    test('opens a completed-task search in the Dashboard', async () => {
+    test('opens a decoded search as one Dashboard journal query', async () => {
       // Arrange
-      const query = 'important'
+      const url = 'corelive://search?query=+R%26D%0A+notes+&filter=completed'
 
       // Act
-      await deepLinkManager.handleSearchAction({
-        query,
-        filter: 'completed',
-      })
+      await deepLinkManager.handleDeepLink(url)
 
-      // Assert: search runs in the Dashboard, not a (now-gone) main renderer.
+      // Assert
       expect(mockShell.openExternal).toHaveBeenCalledWith(
-        'https://corelive.app/home?search=important&filter=completed',
+        'https://corelive.app/home?search=R%26D+notes&filter=completed',
       )
     })
+
     test.each([
       [
-        { query: 'x'.repeat(201) },
+        'overlong',
+        'corelive://search?query=' + 'x'.repeat(201),
         'Shorten your search to 200 characters or fewer.',
       ],
       [
-        { query: 'draft', filter: 'pending' },
+        'pending',
+        'corelive://search?query=draft&filter=pending',
         'Dashboard searches completed tasks. Open LiveEditor on your Mac for pending tasks.',
       ],
+      [
+        'empty filter',
+        'corelive://search?query=draft&filter=',
+        'Choose the completed or all filter to search the Dashboard journal.',
+      ],
+      [
+        'null character',
+        'corelive://search?query=release%00',
+        'Use plain text without null characters.',
+      ],
     ])(
-      'explains unsupported searches without opening unrelated results',
-      async (params, message) => {
+      'explains a rejected %s search even when notifications are unavailable',
+      async (_reason, url, message) => {
         // Arrange
-        const openInBrowser = mockShell.openExternal
+        deepLinkManager.setNotificationManager(null)
 
         // Act
-        await deepLinkManager.handleSearchAction(params)
+        await deepLinkManager.handleDeepLink(url)
 
         // Assert
-        expect(openInBrowser).not.toHaveBeenCalled()
-        expect(mockNotificationManager.showNotification).toHaveBeenCalledWith(
-          'Dashboard search',
+        expect(mockShell.openExternal).not.toHaveBeenCalled()
+        expect(mockDialog.showMessageBox).toHaveBeenCalledWith({
+          type: 'info',
+          title: 'Dashboard search',
           message,
-          { type: 'info' },
-        )
+          buttons: ['OK'],
+        })
       },
     )
   })

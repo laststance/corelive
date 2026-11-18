@@ -74,7 +74,7 @@ function FilteredJournalMenuLink({ onClick }: { onClick: () => void }) {
   // Opening the journal closes day detail while retaining its search and category.
   for (const key of ['search', 'category', 'filter']) {
     const value = searchParams.get(key)
-    if (value) journalParams.set(key, value)
+    if (value !== null) journalParams.set(key, value)
   }
   const query = journalParams.toString()
   return (

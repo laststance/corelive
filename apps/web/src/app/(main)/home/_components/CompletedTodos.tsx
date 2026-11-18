@@ -1,3 +1,4 @@
+import { isCompletedJournalFilterSupported } from '@corelive/desktop-contract/journal-search'
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { CheckCircle2, Download } from 'lucide-react'
 import { useSearchParams } from 'next/navigation'
@@ -82,8 +83,7 @@ function readJournalLink(
   const parsedSearch = CompletedJournalSearchSchema.safeParse(rawSearch)
   const search = parsedSearch.success ? parsedSearch.data : rawSearch
   const taskFilter = searchParams.get('filter')
-  const unsupportedFilter =
-    taskFilter !== null && taskFilter !== 'completed' && taskFilter !== 'all'
+  const unsupportedFilter = !isCompletedJournalFilterSupported(taskFilter)
   const canLoadJournal = parsedSearch.success && !unsupportedFilter
   const requestedCategory = searchParams.get('category')
   const requestedCategoryId = Number(requestedCategory)
@@ -280,21 +280,28 @@ function CompletedTodosContent({
 
   // Intersection Observer advances only the currently-filtered result set.
   useCycleEffect(() => {
+    const target = observerRef.current
+    if (!canLoadJournal || !target || !hasNextPage || isFetchingNextPage) return
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0]?.isIntersecting && hasNextPage && !isFetchingNextPage) {
+        if (entries[0]?.isIntersecting) {
           fetchNextPage()
         }
       },
       { threshold: 0.1 },
     )
 
-    if (observerRef.current) {
-      observer.observe(observerRef.current)
-    }
+    observer.observe(target)
 
     return (): void => observer.disconnect()
-  }, [categoryId, fetchNextPage, hasNextPage, isFetchingNextPage, search])
+  }, [
+    canLoadJournal,
+    categoryId,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    search,
+  ])
 
   const updateJournalUrl = (changes: {
     search?: string

@@ -294,6 +294,8 @@ export const DayDetailDialog = function DayDetailDialog({
           if (!target) return
           event.preventDefault()
           target.focus({ preventScroll: true })
+          // Reveal only as far as needed, including inside the scrolling Dashboard.
+          target.scrollIntoView({ block: 'nearest', inline: 'nearest' })
         }}
         className={cn(
           'max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md',

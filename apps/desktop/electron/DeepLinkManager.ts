@@ -15,8 +15,12 @@ import {
   COMPLETED_JOURNAL_SEARCH_MAX_LENGTH,
   DEEP_LINK_PROTOCOL,
 } from '@corelive/desktop-contract/constants'
+import {
+  CompletedJournalSearchSchema,
+  isCompletedJournalFilterSupported,
+} from '@corelive/desktop-contract/journal-search'
 import type { App } from 'electron'
-import { app as electronApp } from 'electron'
+import { app as electronApp, dialog } from 'electron'
 
 import { log } from './logger'
 import type { NotificationManager } from './NotificationManager'
@@ -429,28 +433,32 @@ export class DeepLinkManager {
    * await manager.handleSearchAction({ query: 'reading', filter: 'completed' })
    */
   async handleSearchAction(params: Record<string, string>): Promise<void> {
-    const query = params.query?.trim()
+    const parsed = CompletedJournalSearchSchema.safeParse(params.query ?? '')
     const { filter } = params
-    if (query && query.length > COMPLETED_JOURNAL_SEARCH_MAX_LENGTH) {
-      this.notificationManager?.showNotification(
-        'Dashboard search',
-        `Shorten your search to ${COMPLETED_JOURNAL_SEARCH_MAX_LENGTH} characters or fewer.`,
-        { type: 'info' },
-      )
-      return
-    }
-    // Pending work lives in LiveEditor; the Dashboard journal only contains completions.
-    if (filter && filter !== 'all' && filter !== 'completed') {
-      this.notificationManager?.showNotification(
-        'Dashboard search',
-        'Dashboard searches completed tasks. Open LiveEditor on your Mac for pending tasks.',
-        { type: 'info' },
-      )
-      return
+    let message: string | undefined
+    if (!parsed.success) {
+      message = parsed.error.issues.some((issue) => issue.code === 'too_big')
+        ? `Shorten your search to ${COMPLETED_JOURNAL_SEARCH_MAX_LENGTH} characters or fewer.`
+        : 'Use plain text without null characters.'
+    } else if (!isCompletedJournalFilterSupported(filter)) {
+      message =
+        filter === 'pending'
+          ? 'Dashboard searches completed tasks. Open LiveEditor on your Mac for pending tasks.'
+          : 'Choose the completed or all filter to search the Dashboard journal.'
     }
 
+    // A response to an opened link must remain readable with OS notifications disabled.
+    if (message !== undefined) {
+      await dialog.showMessageBox({
+        type: 'info',
+        title: 'Dashboard search',
+        message,
+        buttons: ['OK'],
+      })
+      return
+    }
     const search = new URLSearchParams()
-    if (query) search.set('search', query)
+    if (parsed.data) search.set('search', parsed.data)
     if (filter) search.set('filter', filter)
 
     this.openInBrowser(`/home?${search.toString()}`)

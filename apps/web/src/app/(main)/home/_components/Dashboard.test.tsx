@@ -16,7 +16,6 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { orpc } from '@/lib/orpc/client-query'
 
 import { Dashboard } from './Dashboard'
-import { DASHBOARD_REFRESH_INTERVAL_MS } from './useDashboardFreshness'
 
 const { heatmap } = vi.hoisted(() => ({ heatmap: vi.fn() }))
 vi.mock('@/lib/orpc/create-client', () => ({
@@ -51,7 +50,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-test('re-reads the activity heatmap on its own while Home stays open', async () => {
+test('refreshes the activity heatmap every 15 seconds while Home stays open', async () => {
   // Arrange
   vi.useFakeTimers()
   const client = new QueryClient({
@@ -67,7 +66,11 @@ test('re-reads the activity heatmap on its own while Home stays open', async () 
 
   // Act
   await act(async () => {
-    await vi.advanceTimersByTimeAsync(DASHBOARD_REFRESH_INTERVAL_MS)
+    await vi.advanceTimersByTimeAsync(14_999)
+  })
+  expect(heatmap).toHaveBeenCalledTimes(1)
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1)
   })
 
   // Assert
@@ -194,7 +197,11 @@ test('an offline refresh marks a cached empty year until activity is up to date'
     screen.getByRole('heading', { name: 'Activity' }).parentElement,
   ).toHaveTextContent('0 completed')
   expect(heatmap).toHaveBeenCalledTimes(1)
+
+  // Act — reconnect to resume the paused refresh.
   await act(async () => onlineManager.setOnline(true))
+
+  // Assert
   expect(
     await screen.findByText('No completions in the last year'),
   ).toBeVisible()

@@ -1,24 +1,59 @@
 import type { ComponentProps } from 'react'
 
+import { navigateFixtureHome } from './navigation'
+
 /**
- * Renders fixture navigation as anchors while preserving the active QA scenario.
+ * Preserves QA modes on local links and mirrors Next's in-page Home navigation.
  * @example <FixtureLink href="/home#journal">Journal</FixtureLink>
  */
-export default function FixtureLink({ href, ...props }: ComponentProps<'a'>) {
-  if (!href?.startsWith('/') || href.startsWith('//')) {
-    return <a href={href} {...props} />
+export default function FixtureLink({
+  href,
+  onClick,
+  ...props
+}: ComponentProps<'a'>) {
+  const destination =
+    href?.startsWith('/') && !href.startsWith('//')
+      ? new URL(href, window.location.origin)
+      : null
+  if (destination?.origin !== window.location.origin) {
+    return <a href={href} onClick={onClick} {...props} />
   }
   const current = new URLSearchParams(window.location.search)
-  const destination = new URL(href, window.location.origin)
   for (const key of ['activity', 'delete']) {
     const value = current.get(key)
     if (value !== null && !destination.searchParams.has(key)) {
       destination.searchParams.set(key, value)
     }
   }
+  const { pathname } = window.location
+  const staysInHome =
+    (pathname === '/' || pathname === '/home') &&
+    (current.get('view') ?? 'home') === 'home' &&
+    destination.pathname === '/home' &&
+    (destination.searchParams.get('view') ?? 'home') === 'home'
+
   return (
     <a
       href={destination.pathname + destination.search + destination.hash}
+      onClick={(event): void => {
+        onClick?.(event)
+        const { target } = event.currentTarget
+        if (
+          !staysInHome ||
+          event.defaultPrevented ||
+          event.button !== 0 ||
+          event.altKey ||
+          event.ctrlKey ||
+          event.metaKey ||
+          event.shiftKey ||
+          (target && target.toLowerCase() !== '_self') ||
+          event.currentTarget.hasAttribute('download')
+        ) {
+          return
+        }
+        event.preventDefault()
+        navigateFixtureHome(destination)
+      }}
       {...props}
     />
   )

@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, test, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { SidebarProvider } from '@/components/ui/sidebar'
 
@@ -32,6 +32,11 @@ vi.mock('@/components/auth/ElectronLoginForm', () => ({
 }))
 
 describe('AppSidebar', () => {
+  beforeEach(() => {
+    navigation.usePathname.mockReset()
+    navigation.useSearchParams.mockReset()
+  })
+
   test('links to Dashboard, Journal, Skill Tree and Settings', () => {
     // Arrange
     render(
@@ -56,30 +61,30 @@ describe('AppSidebar', () => {
     expect(screen.queryByRole('link', { name: /LiveEditor/i })).toBeNull()
   })
   test.each([
-    ['/home', '/home?search=reading&category=2#journal'],
-    ['/skill-tree', '/home#journal'],
-  ])(
-    'opens the journal from %s with the applicable journal filters',
-    (pathname, expectedHref) => {
-      // Arrange
-      navigation.usePathname.mockReturnValueOnce(pathname)
-      navigation.useSearchParams.mockImplementationOnce(
-        () => new URLSearchParams('date=2026-11-18&search=reading&category=2'),
-      )
+    [
+      '/home',
+      'date=2026-11-18&search=reading&category=2',
+      '/home?search=reading&category=2#journal',
+    ],
+    ['/home', 'search=reading&filter=', '/home?search=reading&filter=#journal'],
+    ['/skill-tree', 'search=reading&category=2', '/home#journal'],
+  ])('links from %s?%s to %s', (pathname, query, expectedHref) => {
+    // Arrange
+    navigation.usePathname.mockReturnValue(pathname)
+    navigation.useSearchParams.mockReturnValue(new URLSearchParams(query))
 
-      // Act
-      render(
-        <SidebarProvider>
-          <AppSidebar />
-        </SidebarProvider>,
-      )
+    // Act
+    render(
+      <SidebarProvider>
+        <AppSidebar />
+      </SidebarProvider>,
+    )
 
-      // Assert
-      expect(screen.getByRole('link', { name: 'Journal' })).toHaveAttribute(
-        'href',
-        expectedHref,
-      )
-      expect(screen.getByRole('button', { name: 'Account' })).toBeVisible()
-    },
-  )
+    // Assert
+    expect(screen.getByRole('link', { name: 'Journal' })).toHaveAttribute(
+      'href',
+      expectedHref,
+    )
+    expect(screen.getByRole('button', { name: 'Account' })).toBeVisible()
+  })
 })

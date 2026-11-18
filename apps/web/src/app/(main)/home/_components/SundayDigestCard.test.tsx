@@ -2,7 +2,6 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, test } from 'vitest'
 
 import type { HeatmapDay } from '@/hooks/useHeatmapData'
-import { shiftIsoDate } from '@/lib/shiftIsoDate'
 
 import { SundayDigestCard } from './SundayDigestCard'
 
@@ -51,149 +50,143 @@ describe('SundayDigestCard', () => {
     window.localStorage.clear()
   })
 
-  test('renders nothing on a non-Sunday', () => {
+  test('keeps the recap hidden on a weekday with completed work', () => {
+    // Arrange
+    const data = buildWeekFixture(3)
+
+    // Act
     const { container } = render(
-      <SundayDigestCard
-        dataByDate={buildWeekFixture(3)}
-        hidden={false}
-        now={LOCAL_TUESDAY}
-      />,
+      <SundayDigestCard dataByDate={data} now={LOCAL_TUESDAY} />,
     )
+
+    // Assert
     expect(container).toBeEmptyDOMElement()
   })
 
-  test('renders nothing while loading', () => {
+  test('hides a Sunday recap with completed work while activity is unavailable', () => {
+    // Arrange
+    const data = buildWeekFixture(3)
+
+    // Act
     const { container } = render(
-      <SundayDigestCard
-        dataByDate={buildWeekFixture(3)}
-        hidden={true}
-        now={LOCAL_SUNDAY}
-      />,
+      <SundayDigestCard dataByDate={data} hidden now={LOCAL_SUNDAY} />,
     )
+
+    // Assert
     expect(container).toBeEmptyDOMElement()
   })
 
-  test('renders the quiet-week fallback when the heatmap is empty', () => {
-    // A new user (or a fully quiet week) should still see the digest —
-    // the "quiet week" copy is exactly what the empty path was designed
-    // for (DESIGN.md: self-affirmation on rest weeks too).
-    render(
-      <SundayDigestCard
-        dataByDate={new Map()}
-        hidden={false}
-        now={LOCAL_SUNDAY}
-      />,
-    )
-    expect(screen.getByLabelText(/quiet sunday recap/i)).toBeInTheDocument()
-    expect(screen.getByText(/room was quiet this week/i)).toBeInTheDocument()
-  })
-
-  test('renders the digest on Sunday with non-zero data', () => {
-    render(
-      <SundayDigestCard
-        dataByDate={buildWeekFixture(4, [
-          { date: shiftIsoDate(LOCAL_SUNDAY_ISO, -2), count: 2 },
-        ])}
-        hidden={false}
-        now={LOCAL_SUNDAY}
-      />,
-    )
-    expect(screen.getByLabelText(/quiet sunday recap/i)).toBeInTheDocument()
-    expect(
-      screen.getByText(/things made it onto the wall/i),
-    ).toBeInTheDocument()
-  })
-
-  test('shows the zero-week fallback when total is zero', () => {
-    // dataByDate is non-empty but only has activity outside the 7-day window
+  test('shows the quiet-week message on a first Sunday with no completions', () => {
+    // Arrange
     const data = new Map<string, HeatmapDay>()
-    const oldDate = shiftIsoDate(LOCAL_SUNDAY_ISO, -30)
-    data.set(oldDate, { date: oldDate, count: 5, categories: [] })
 
-    render(
-      <SundayDigestCard dataByDate={data} hidden={false} now={LOCAL_SUNDAY} />,
-    )
-    expect(screen.getByText(/room was quiet this week/i)).toBeInTheDocument()
+    // Act
+    render(<SundayDigestCard dataByDate={data} now={LOCAL_SUNDAY} />)
+
+    // Assert
+    expect(screen.getByLabelText('A quiet Sunday recap')).toBeVisible()
+    expect(
+      screen.getByText('the room was quiet this week — that is fine too.'),
+    ).toBeVisible()
+  })
+
+  test('counts completed work from the whole week in the Sunday recap', () => {
+    // Arrange
+    const data = buildWeekFixture(4, [{ date: '2026-05-08', count: 2 }])
+
+    // Act
+    render(<SundayDigestCard dataByDate={data} now={LOCAL_SUNDAY} />)
+
+    // Assert
+    expect(screen.getByText('6 things made it onto the wall.')).toBeVisible()
+  })
+
+  test('shows a quiet week when all activity falls outside the seven-day window', () => {
+    // Arrange
+    const data = buildWeekFixture(0, [{ date: '2026-04-10', count: 5 }])
+
+    // Act
+    render(<SundayDigestCard dataByDate={data} now={LOCAL_SUNDAY} />)
+
+    // Assert
+    expect(
+      screen.getByText('the room was quiet this week — that is fine too.'),
+    ).toBeVisible()
   })
 
   test('shows the brightest day inside the week', () => {
-    const wednesday = shiftIsoDate(LOCAL_SUNDAY_ISO, -4)
-    const data = buildWeekFixture(2, [{ date: wednesday, count: 6 }])
-    render(
-      <SundayDigestCard dataByDate={data} hidden={false} now={LOCAL_SUNDAY} />,
-    )
-    // The "brightest day:" line surfaces the best day; assert the spelled-out
-    // count ("6 things") renders — the previous "(6)" framing read as KPI.
-    expect(screen.getByText(/brightest day/i)).toBeInTheDocument()
-    expect(screen.getByText(/6 things/i)).toBeInTheDocument()
+    // Arrange
+    const data = buildWeekFixture(2, [{ date: '2026-05-06', count: 6 }])
+
+    // Act
+    render(<SundayDigestCard dataByDate={data} now={LOCAL_SUNDAY} />)
+
+    // Assert
+    expect(screen.getByText(/brightest day/i)).toBeVisible()
+    expect(screen.getByText('6 things')).toBeVisible()
   })
 
   test('uses the singular "1 thing" for a one-item brightest day', () => {
-    const wednesday = shiftIsoDate(LOCAL_SUNDAY_ISO, -4)
-    const data = buildWeekFixture(0, [{ date: wednesday, count: 1 }])
-    render(
-      <SundayDigestCard dataByDate={data} hidden={false} now={LOCAL_SUNDAY} />,
-    )
-    expect(screen.getByText(/1 thing(?!s)/i)).toBeInTheDocument()
+    // Arrange
+    const data = buildWeekFixture(0, [{ date: '2026-05-06', count: 1 }])
+
+    // Act
+    render(<SundayDigestCard dataByDate={data} now={LOCAL_SUNDAY} />)
+
+    // Assert
+    expect(screen.getByText('1 thing')).toBeVisible()
   })
 
-  test('hides the card after the dismiss button is clicked and persists per-week', () => {
-    render(
-      <SundayDigestCard
-        dataByDate={buildWeekFixture(3)}
-        hidden={false}
-        now={LOCAL_SUNDAY}
-      />,
-    )
-    expect(screen.getByLabelText(/quiet sunday recap/i)).toBeInTheDocument()
-
+  test('dismisses the recap for the current Sunday', () => {
+    // Arrange
+    const data = buildWeekFixture(3)
+    render(<SundayDigestCard dataByDate={data} now={LOCAL_SUNDAY} />)
     const dismissButton = screen.getByRole('button', {
-      name: /dismiss the sunday recap/i,
+      name: 'Dismiss the Sunday recap until next week',
     })
+
+    // Act
     fireEvent.click(dismissButton)
 
+    // Assert
+    expect(screen.queryByLabelText('A quiet Sunday recap')).toBeNull()
     expect(
-      screen.queryByLabelText(/quiet sunday recap/i),
-    ).not.toBeInTheDocument()
-
-    // Find the dismiss key — exact format depends on local TZ. We expect
-    // exactly one key set to '1'.
-    const setKeys = Object.keys(window.localStorage).filter((k) =>
-      k.startsWith('corelive.sunday-digest-dismissed.'),
-    )
-    expect(setKeys.length).toBe(1)
-    expect(window.localStorage.getItem(setKeys[0]!)).toBe('1')
+      window.localStorage.getItem(
+        'corelive.sunday-digest-dismissed.2026-05-10',
+      ),
+    ).toBe('1')
   })
 
-  test('honors a pre-existing dismiss flag for the same week (mount-time read)', () => {
-    // Seed the dismiss flag for the current Sunday before mount.
-    const sundayKey = `corelive.sunday-digest-dismissed.${LOCAL_SUNDAY.toLocaleDateString('en-CA')}`
-    window.localStorage.setItem(sundayKey, '1')
-
-    const { container } = render(
-      <SundayDigestCard
-        dataByDate={buildWeekFixture(3)}
-        hidden={false}
-        now={LOCAL_SUNDAY}
-      />,
+  test('keeps the recap hidden when returning on the same Sunday', () => {
+    // Arrange
+    const data = buildWeekFixture(3)
+    window.localStorage.setItem(
+      'corelive.sunday-digest-dismissed.2026-05-10',
+      '1',
     )
+
+    // Act
+    const { container } = render(
+      <SundayDigestCard dataByDate={data} now={LOCAL_SUNDAY} />,
+    )
+
+    // Assert
     expect(container).toBeEmptyDOMElement()
   })
 
-  test('re-appears next Sunday (different week key)', () => {
-    // Seed dismiss for last Sunday.
-    const lastSunday = new Date(2026, 4, 3, 12)
-    const lastSundayKey = `corelive.sunday-digest-dismissed.${lastSunday.toLocaleDateString('en-CA')}`
-    window.localStorage.setItem(lastSundayKey, '1')
-
-    render(
-      <SundayDigestCard
-        dataByDate={buildWeekFixture(3)}
-        hidden={false}
-        now={LOCAL_SUNDAY}
-      />,
+  test('shows the new recap the Sunday after a dismissal', () => {
+    // Arrange
+    const data = buildWeekFixture(3)
+    window.localStorage.setItem(
+      'corelive.sunday-digest-dismissed.2026-05-03',
+      '1',
     )
-    expect(screen.getByLabelText(/quiet sunday recap/i)).toBeInTheDocument()
+
+    // Act
+    render(<SundayDigestCard dataByDate={data} now={LOCAL_SUNDAY} />)
+
+    // Assert
+    expect(screen.getByLabelText('A quiet Sunday recap')).toBeVisible()
   })
 })
 

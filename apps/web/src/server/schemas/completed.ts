@@ -1,6 +1,7 @@
+import { CompletedJournalSearchSchema } from '@corelive/desktop-contract/journal-search'
 import { z } from 'zod'
 
-import { COMPLETED_JOURNAL_SEARCH_MAX_LENGTH } from '@/lib/constants/completed'
+export { CompletedJournalSearchSchema }
 
 /**
  * Optional IANA timezone the client reports (e.g. `'Asia/Tokyo'`) so the
@@ -147,17 +148,6 @@ export const DayDetailResponseSchema = z.object({
   tasks: z.array(DayDetailTaskSchema),
   categories: z.array(HeatmapCategorySchema),
 })
-
-/**
- * Validates the search term at both the Home URL and RPC boundaries. PostgreSQL
- * text values cannot contain null characters.
- * @example CompletedJournalSearchSchema.parse('  Ship release  ') // => 'Ship release'
- */
-export const CompletedJournalSearchSchema = z
-  .string()
-  .trim()
-  .max(COMPLETED_JOURNAL_SEARCH_MAX_LENGTH)
-  .refine((value) => !value.includes('\0'))
 
 /**
  * Input schema for the permanent completion journal (`completed.journal`).

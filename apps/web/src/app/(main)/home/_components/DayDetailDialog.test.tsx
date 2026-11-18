@@ -171,14 +171,18 @@ test.each(['direct link', 'removed button'] as const)(
       rerender(<Example showButton={false} />)
     }
     expect(screen.getByRole('dialog')).toBeVisible()
+    const heading = screen.getByText('Activity', { selector: 'h2' })
+    const revealHeading = vi.spyOn(heading, 'scrollIntoView')
 
     // Act
     await user.keyboard('{Escape}')
 
     // Assert
-    await waitFor(() =>
-      expect(screen.getByRole('heading', { name: 'Activity' })).toHaveFocus(),
-    )
+    await waitFor(() => expect(heading).toHaveFocus())
+    expect(revealHeading).toHaveBeenCalledWith({
+      block: 'nearest',
+      inline: 'nearest',
+    })
   },
 )
 

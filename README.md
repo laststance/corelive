@@ -232,11 +232,10 @@ CoreLive bundles LiveEditor and Settings locally under `corelive-editor://`. The
 ### Electron Development
 
 ```bash
-# Run the desktop app in development mode (starts Dashboard too)
+# Start the desktop app and local Dashboard together for sign-in and sync
 pnpm electron:dev
 
-# Run Electron directly from the bundled files; the editor and Settings need no
-# Dashboard server. Start `pnpm dev` when working on sign-in or sync.
+# Run the bundled LiveEditor and Settings for offline development.
 pnpm electron:build:ts && pnpm electron
 ```
 

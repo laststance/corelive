@@ -4,6 +4,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from '@testing-library/react'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
@@ -55,9 +56,11 @@ test('the last seven days show eight completions and opening today reveals an en
   fireEvent.popState(window)
 
   // Assert
-  expect(
-    screen.getByText('Completed', { selector: 'dt' }).nextElementSibling,
-  ).toHaveTextContent(/^8$/)
+  const completed = screen.getByText('Completed', {
+    selector: 'dt',
+  }).nextElementSibling
+  expect(completed).toBeVisible()
+  expect(completed).toHaveTextContent(/^8$/)
   const day = await screen.findByRole('dialog')
   expect(await within(day).findByText('Sketch the first spread')).toBeVisible()
 })
@@ -147,6 +150,50 @@ test('the Journal link preserves search, category, and the active QA modes', asy
   )
 })
 
+test.each([
+  ['General', '?view=home&search=color&category=1'],
+  ['Journal', '?search=color'],
+])(
+  'opening %s keeps moved completions in the current page',
+  async (link, search) => {
+    // Arrange
+    window.history.replaceState(null, '', '/?view=home&search=color')
+    fixture = installHomeFixture(new URLSearchParams(window.location.search))
+    await createClient().category.delete({ id: 2, targetCategoryId: 1 })
+    const query = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    render(
+      <QueryClientProvider client={query}>
+        {fixture.element}
+      </QueryClientProvider>,
+    )
+    const journal = await screen.findByRole('region', {
+      name: 'Completion journal',
+    })
+
+    // Act
+    const destination = await screen.findByRole('link', {
+      name: link,
+    })
+    destination.focus()
+    const usesNativeNavigation = fireEvent.click(destination)
+
+    // Assert
+    expect(usesNativeNavigation).toBe(false)
+    expect(
+      window.location.pathname + window.location.search + window.location.hash,
+    ).toBe('/home' + search + '#journal')
+    expect(journal).toHaveFocus()
+    const movedEntry = await within(journal).findByText(
+      'Read the chapter on color',
+    )
+    expect(movedEntry).toBeVisible()
+    expect(movedEntry.parentElement).toHaveTextContent('General')
+    expect(screen.queryByRole('link', { name: 'Reading' })).toBeNull()
+  },
+)
+
 test('restarting the fixture restores browser globals and starts a fresh scenario', async () => {
   // Arrange
   const fetch = window.fetch
@@ -170,4 +217,69 @@ test('restarting the fixture restores browser globals and starts a fresh scenari
       ({ recordCount }) => recordCount,
     ),
   ).toEqual([0, 0])
+})
+
+test('uninstalling cancels both pending deletes and restores fetch', async () => {
+  // Arrange
+  const originalFetch = window.fetch
+  fixture = installHomeFixture(new URLSearchParams('delete=pending'))
+  const dispatch = vi.fn(window.fetch)
+  window.fetch = dispatch
+  const client = createClient()
+  const requests = Promise.allSettled([
+    client.category.delete({ id: 2, targetCategoryId: 1 }),
+    client.category.delete({ id: 2, targetCategoryId: 1 }),
+  ])
+  await waitFor(() => expect(dispatch).toHaveBeenCalledTimes(2))
+
+  // Act
+  fixture.uninstall()
+  fixture = undefined
+
+  // Assert
+  expect(window.fetch).toBe(originalFetch)
+  expect(await requests).toEqual([
+    {
+      status: 'rejected',
+      reason: expect.objectContaining({ code: 'CLIENT_CLOSED_REQUEST' }),
+    },
+    {
+      status: 'rejected',
+      reason: expect.objectContaining({ code: 'CLIENT_CLOSED_REQUEST' }),
+    },
+  ])
+})
+
+test('releasing pending deletes removes Reading once and settles both requests', async () => {
+  // Arrange
+  fixture = installHomeFixture(new URLSearchParams('delete=pending'))
+  const browser: Window & { __homeFixture?: { release: () => void } } = window
+  const dispatch = vi.fn(window.fetch)
+  window.fetch = dispatch
+  const client = createClient()
+  const requests = Promise.allSettled([
+    client.category.delete({ id: 2, targetCategoryId: 1 }),
+    client.category.delete({ id: 2, targetCategoryId: 1 }),
+  ])
+  await waitFor(() => expect(dispatch).toHaveBeenCalledTimes(2))
+  expect(
+    (await client.category.list()).categories.map(({ name }) => name),
+  ).toEqual(['General', 'Reading'])
+
+  // Act
+  browser.__homeFixture?.release()
+
+  // Assert
+  const outcomes = await requests
+  expect(outcomes).toContainEqual({
+    status: 'fulfilled',
+    value: { success: true, movedToCategoryId: 1, promotedCategoryIds: [] },
+  })
+  expect(outcomes).toContainEqual({
+    status: 'rejected',
+    reason: expect.objectContaining({ code: 'NOT_FOUND' }),
+  })
+  expect(
+    (await client.category.list()).categories.map(({ name }) => name),
+  ).toEqual(['General'])
 })

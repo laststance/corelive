@@ -6,6 +6,7 @@ import {
   within,
 } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ComponentProps } from 'react'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { SidebarProvider } from '@/components/ui/sidebar'
@@ -43,6 +44,17 @@ const CATEGORIES: CategoryWithCount[] = [
     _count: { todos: 0 },
   },
 ]
+vi.mock('next/link', () => ({
+  default: ({ onClick, ...props }: ComponentProps<'a'>) => (
+    <a
+      {...props}
+      onClick={(event) => {
+        onClick?.(event)
+        event.preventDefault()
+      }}
+    />
+  ),
+}))
 vi.mock('next/navigation', () => ({
   usePathname: () => window.location.pathname,
   useSearchParams: () => new URLSearchParams(window.location.search),
@@ -78,7 +90,7 @@ test('sidebar links from Skill Tree open the child journal and preserve its sear
   window.history.replaceState(
     null,
     '',
-    '/skill-tree?date=2026-10-01&search=Release',
+    '/skill-tree?date=2026-10-01&filter=pending&search=Release',
   )
   render(
     <SidebarProvider>

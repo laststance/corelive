@@ -53,16 +53,28 @@ describe('RouteError (route-level error boundary)', () => {
     expect(reset).toHaveBeenCalledTimes(1)
   })
 
-  test('offers a direct link out of a failed route to the Dashboard landing page', () => {
+  test('lets the browser navigate out of a failed route to the Dashboard landing page', async () => {
     // Arrange
-    const error = new Error('Failed route')
+    const user = userEvent.setup()
+    render(<RouteError error={new Error('Failed route')} reset={vi.fn()} />)
+    const link = screen.getByRole('link', { name: 'Dashboard landing page' })
+    let navigates = false
+    document.addEventListener(
+      'click',
+      (event) => {
+        navigates = !event.defaultPrevented
+        // jsdom has no document navigation; observe the default action before stopping it.
+        event.preventDefault()
+      },
+      { once: true },
+    )
 
     // Act
-    render(<RouteError error={error} reset={vi.fn()} />)
+    await user.click(link)
 
     // Assert
-    const link = screen.getByRole('link', { name: 'Dashboard landing page' })
     expect(link).toBeVisible()
     expect(link).toHaveAttribute('href', '/')
+    expect(navigates).toBe(true)
   })
 })

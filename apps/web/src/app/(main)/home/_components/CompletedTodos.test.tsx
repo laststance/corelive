@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -8,6 +9,9 @@ import {
 } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
+
+import { getHomeJournalQueryKey } from '@/lib/query/homeBootstrapQueries'
+import type { DayDetailTask } from '@/server/schemas/completed'
 
 import { CompletedTodos } from './CompletedTodos'
 
@@ -199,6 +203,37 @@ test.each([
     client.clear()
   },
 )
+
+test('a multiline journal link searches for the same single-line term displayed in the search box', async () => {
+  // Arrange
+  window.history.replaceState(
+    null,
+    '',
+    '/home?search=%20Re%0Dle%0Aase%0D%0A_50%25%20',
+  )
+  journal.mockResolvedValue({ entries: [], total: 0 })
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+
+  // Act
+  render(
+    <QueryClientProvider client={client}>
+      <CompletedTodos categories={CATEGORIES} />
+    </QueryClientProvider>,
+  )
+
+  // Assert
+  expect(await screen.findByText('No matching wins')).toBeVisible()
+  expect(
+    screen.getByRole('searchbox', { name: 'Search completed tasks' }),
+  ).toHaveValue('Release_50%')
+  expect(journal).toHaveBeenCalledExactlyOnceWith(
+    { limit: 10, offset: 0, search: 'Release_50%' },
+    expect.anything(),
+  )
+  client.clear()
+})
 
 test('a valid day detail link keeps focus outside the journal', async () => {
   // Arrange
@@ -498,6 +533,74 @@ test('a category removed while the journal is open falls back to all categories 
   expect(await screen.findByText('No matching wins')).toBeVisible()
   expect(journal).toHaveBeenLastCalledWith(
     { limit: 10, offset: 0, search: 'Release' },
+    expect.anything(),
+  )
+  client.clear()
+})
+
+test('clearing a legacy filter lets the visitor scroll past the cached first journal page', async () => {
+  // Arrange
+  window.history.replaceState(null, '', '/home?filter=pending')
+  const observe = vi.fn<(enterViewport: () => void) => void>()
+  vi.stubGlobal(
+    'IntersectionObserver',
+    class {
+      constructor(
+        private readonly notify: (
+          entries: Pick<
+            IntersectionObserverEntry,
+            'isIntersecting' | 'target'
+          >[],
+        ) => void,
+      ) {}
+      observe(target: Element): void {
+        observe(() => this.notify([{ isIntersecting: true, target }]))
+      }
+      disconnect(): void {}
+    },
+  )
+  const user = userEvent.setup()
+  const entry: DayDetailTask = {
+    source: 'completed',
+    id: 1,
+    title: 'Cached journal entry 1',
+    completedAt: new Date('2026-10-01T09:00:00Z'),
+    category: { id: 1, name: 'Work', color: 'blue', parent: null },
+  }
+  const client = new QueryClient({
+    defaultOptions: { queries: { staleTime: Infinity, retry: false } },
+  })
+  const firstPage = Array.from({ length: 10 }, (_, index) => ({
+    ...entry,
+    id: index + 1,
+    title: `Cached journal entry ${index + 1}`,
+  }))
+  client.setQueryData(getHomeJournalQueryKey(), {
+    pages: [{ entries: firstPage, total: 11, hasMore: true, nextOffset: 10 }],
+    pageParams: [0],
+  })
+  journal.mockResolvedValue({
+    entries: [{ ...entry, id: 11, title: 'Next journal page' }],
+    total: 11,
+    hasMore: false,
+  })
+  render(
+    <QueryClientProvider client={client}>
+      <CompletedTodos categories={CATEGORIES} />
+    </QueryClientProvider>,
+  )
+  expect(screen.queryByText('Cached journal entry 1')).toBeNull()
+  expect(observe).not.toHaveBeenCalled()
+
+  // Act
+  await user.click(screen.getByRole('button', { name: 'Clear' }))
+  expect(await screen.findByText('Cached journal entry 1')).toBeVisible()
+  await act(async () => observe.mock.lastCall?.[0]())
+
+  // Assert
+  expect(await screen.findByText('Next journal page')).toBeVisible()
+  expect(journal).toHaveBeenCalledExactlyOnceWith(
+    { limit: 10, offset: 10 },
     expect.anything(),
   )
   client.clear()

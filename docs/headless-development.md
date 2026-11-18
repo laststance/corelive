@@ -91,7 +91,7 @@ For a fresh checkout, copy `.env.example` to `apps/web/.env` and provide the Das
 configuration. For an existing root `.env`, the setup helper below copies it
 without overwriting app files and keeps signing credentials in desktop only. If
 `apps/desktop/.env` already exists, add any missing signing settings such as
-`APPLE_KEYCHAIN_PROFILE` to that file before building a signed release.
+`APPLE_KEYCHAIN_PROFILE` to that file.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -122,6 +122,16 @@ get different browser sessions. It removes inherited Playwright MCP connection a
 profile settings, `PWDEBUG` (including npm aliases), remote Selenium settings,
 and session overrides from the child environment. The browser closes after five idle
 minutes. Explicitly close it when the work is done.
+
+The signing launcher reads the profile
+from its process environment before Electron Builder reads the desktop file.
+When building with a Keychain profile, run the following in the same shell,
+using the name of your configured notary profile.
+
+```sh
+export APPLE_KEYCHAIN_PROFILE="your-notary-profile"
+pnpm electron:build:mac
+```
 
 Put the command first and any command-specific options after it, such as
 `pnpm qa:browser snapshot --json`. `open` accepts only an optional URL. The wrapper

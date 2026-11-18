@@ -91,7 +91,12 @@ export function installHomeFixture(parameters: URLSearchParams): {
     [reading.id, reading],
   ])
   const activity = createActivityFixture(categories, parameters)
-  let releasePendingDelete: (() => void) | undefined
+  const pendingDeletes = new Set<() => void>()
+  let installed = true
+  const resumeDeleteWaiters = (): void => {
+    for (const resume of pendingDeletes) resume()
+    pendingDeletes.clear()
+  }
   const router = {
     category: {
       list: os.handler(() => ({
@@ -119,9 +124,14 @@ export function installHomeFixture(parameters: URLSearchParams): {
         )
         .handler(async ({ input }) => {
           // Each mode reproduces one server answer the dialog must handle.
-          if (deleteMode === 'pending')
+          if (deleteMode === 'pending' && installed)
             await new Promise<void>((resolve) => {
-              releasePendingDelete = resolve
+              pendingDeletes.add(resolve)
+            })
+          // Teardown wakes waiters so they can reject without changing fixture data.
+          if (!installed)
+            throw new ORPCError('CLIENT_CLOSED_REQUEST', {
+              message: 'The Home QA fixture was uninstalled',
             })
           const source = categories.get(input.id)
           const destinationId = input.targetCategoryId ?? general.id
@@ -175,12 +185,7 @@ export function installHomeFixture(parameters: URLSearchParams): {
   }
   Object.defineProperty(window, '__homeFixture', {
     configurable: true,
-    value: {
-      release: () => {
-        releasePendingDelete?.()
-        releasePendingDelete = undefined
-      },
-    },
+    value: { release: resumeDeleteWaiters },
   })
   return {
     element: (
@@ -192,6 +197,9 @@ export function installHomeFixture(parameters: URLSearchParams): {
       </SidebarProvider>
     ),
     uninstall: (): void => {
+      if (!installed) return
+      installed = false
+      resumeDeleteWaiters()
       window.fetch = realFetch
       if (previousControl) {
         Object.defineProperty(window, '__homeFixture', previousControl)
