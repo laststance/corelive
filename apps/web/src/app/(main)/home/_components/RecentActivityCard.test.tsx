@@ -129,7 +129,7 @@ test('the native day selector adds the chosen date to the URL and preserves its 
   ).toBe('/home?force=2026-10-01&date=2026-09-30#journal')
 })
 
-test('clicking a rest-day marker selects its zero-completion date', async () => {
+test('clicking a rest-day marker opens its date even when the day picker points elsewhere', async () => {
   // Arrange
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
     new DOMRect(0, 0, 480, 160),
@@ -138,17 +138,17 @@ test('clicking a rest-day marker selects its zero-completion date', async () => 
     ['2026-09-30', { date: '2026-09-30', count: 2, categories: [] }],
   ])
   render(<RecentActivityCard dataByDate={data} throughDate="2026-10-01" />)
-  const marker = await screen.findByLabelText('Rest day, Oct 1, 2026')
+  const marker = await screen.findByLabelText('Rest day, Sep 29, 2026')
+  expect(screen.getByRole('combobox', { name: 'Day to view' })).toHaveValue(
+    '2026-10-01',
+  )
   expect(screen.queryByLabelText('Rest day, Sep 30, 2026')).toBeNull()
 
   // Act
   fireEvent.click(marker)
 
   // Assert
-  expect(window.location.search).toBe('?date=2026-10-01')
-  expect(
-    screen.getByRole('option', { name: 'Oct 1, 2026 · Rest day' }),
-  ).toBeVisible()
+  expect(window.location.search).toBe('?date=2026-09-29')
 })
 
 test('adjacent rest days have separate tap targets in a narrow 30-day chart', async () => {

@@ -6,6 +6,7 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
   existsSync,
 } from 'node:fs'
@@ -24,8 +25,38 @@ beforeEach(() => {
     'scripts/setup-env.mjs',
     path.join(root, 'scripts/setup-env.mjs'),
   )
+  symlinkSync(
+    path.resolve('node_modules'),
+    path.join(root, 'node_modules'),
+    'junction',
+  )
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
+
+/** Reads the generated file the same way the Dashboard does, in a separate process.
+ * @example expect(readDashboardSettings()).toEqual({ PORT: '3000' })
+ */
+function readDashboardSettings(env: NodeJS.ProcessEnv = {}): unknown {
+  const result = spawnSync(
+    process.execPath,
+    [
+      '--input-type=commonjs',
+      '--eval',
+      `
+        const { loadEnvConfig } = require('@next/env')
+        const inheritedKeys = process.argv.slice(2)
+        const { combinedEnv, parsedEnv } = loadEnvConfig(process.argv[1], true)
+        const keys = Object.keys(parsedEnv).concat(inheritedKeys)
+        process.stdout.write(JSON.stringify(Object.fromEntries(keys.map(key => [key, combinedEnv[key]]))))
+      `,
+      path.join(root, 'apps/web'),
+      ...Object.keys(env),
+    ],
+    { cwd: root, encoding: 'utf8', env },
+  )
+  expect(result.status).toBe(0)
+  return JSON.parse(result.stdout)
+}
 
 describe('workspace environment setup', () => {
   test('keeps signing credentials out of Dashboard configuration and restricts file access', () => {
@@ -50,12 +81,12 @@ describe('workspace environment setup', () => {
     expect(readFileSync(path.join(root, '.env'), 'utf8')).toBe(contents)
     expect(result.stdout + result.stderr).toBe('')
   })
-  test('preserves existing app configuration', () => {
+  test('preserves both existing app files even when the unused root file is malformed', () => {
     // Arrange
     mkdirSync(path.join(root, 'apps/web'))
     writeFileSync(
       path.join(root, '.env'),
-      'CLERK_SECRET_KEY=fixture-new\nAPPLE_ID=fixture-new\n',
+      'CLERK_SECRET_KEY=fixture-new\nAPPLE_ID="fixture-new\n',
     )
     writeFileSync(path.join(root, 'apps/web/.env'), 'WEB_EXISTING=fixture\n')
     writeFileSync(
@@ -74,6 +105,30 @@ describe('workspace environment setup', () => {
     expect(readFileSync(path.join(root, 'apps/desktop/.env'), 'utf8')).toBe(
       'DESKTOP_EXISTING=fixture\n',
     )
+  })
+  test('copies missing Desktop settings when an existing Dashboard file needs no migration', () => {
+    // Arrange
+    mkdirSync(path.join(root, 'apps/web'))
+    writeFileSync(path.join(root, 'apps/web/.env'), 'WEB_EXISTING=fixture\n')
+    writeFileSync(
+      path.join(root, '.env'),
+      'DASHBOARD_PATH="fixture-path\\"\nDASHBOARD_MESSAGE="\nfixture message"\nAPPLE_ID=fixture-apple\n',
+    )
+
+    // Act
+    const result = spawnSync(process.execPath, ['scripts/setup-env.mjs'], {
+      cwd: root,
+      encoding: 'utf8',
+    })
+
+    // Assert
+    expect(result.status).toBe(0)
+    expect(readDashboardSettings()).toEqual({ WEB_EXISTING: 'fixture' })
+    expect(
+      parseEnv(readFileSync(path.join(root, 'apps/desktop/.env'), 'utf8')),
+    ).toEqual({
+      APPLE_ID: 'fixture-apple',
+    })
   })
   test('routes complete quoted values to their workspace across line breaks', () => {
     // Arrange
@@ -106,6 +161,9 @@ describe('workspace environment setup', () => {
     expect(readFileSync(path.join(root, 'apps/web/.env'), 'utf8')).toBe(
       "# Local settings\r\nDASHBOARD_MESSAGE='first line\r\nGH_TOKEN=part of the message\r\nlast line'\r\n",
     )
+    expect(readDashboardSettings()).toEqual({
+      DASHBOARD_MESSAGE: 'first line\nGH_TOKEN=part of the message\nlast line',
+    })
     expect(result.stdout + result.stderr).toBe('')
   })
   test('does not create misleading empty app configuration when the root env is absent', () => {
@@ -150,6 +208,117 @@ describe('workspace environment setup', () => {
     ).toEqual({
       DASHBOARD_MESSAGE: '\nfixture message',
       DASHBOARD_PATH: 'fixture-path\\',
+    })
+    expect(readDashboardSettings()).toEqual({
+      DASHBOARD_MESSAGE: '\nfixture message',
+      DASHBOARD_PATH: 'fixture-path\\',
+    })
+  })
+  test.each([
+    { lineEnding: 'LF', newline: '\n' },
+    { lineEnding: 'CRLF', newline: '\r\n' },
+  ])(
+    'routes signing entries after Unicode separators in $lineEnding comments',
+    ({ newline }) => {
+      // Arrange
+      const contents = [
+        '# Example\u2028EXAMPLE="',
+        'WIN_CSC_KEY_PASSWORD="fixture-windows-secret"',
+        '# Another example\u2029EXAMPLE="',
+        'APPLE_APP_SPECIFIC_PASSWORD="fixture-apple-secret"',
+        'DASHBOARD_PORT=3400',
+        '',
+      ].join(newline)
+      writeFileSync(path.join(root, '.env'), contents)
+
+      // Act
+      const result = spawnSync(process.execPath, ['scripts/setup-env.mjs'], {
+        cwd: root,
+        encoding: 'utf8',
+      })
+
+      // Assert
+      expect(result.status).toBe(0)
+      expect(parseEnv(contents)).toEqual({
+        WIN_CSC_KEY_PASSWORD: 'fixture-windows-secret',
+        APPLE_APP_SPECIFIC_PASSWORD: 'fixture-apple-secret',
+        DASHBOARD_PORT: '3400',
+      })
+      expect(
+        parseEnv(readFileSync(path.join(root, 'apps/desktop/.env'), 'utf8')),
+      ).toEqual({
+        WIN_CSC_KEY_PASSWORD: 'fixture-windows-secret',
+        APPLE_APP_SPECIFIC_PASSWORD: 'fixture-apple-secret',
+      })
+      expect(readDashboardSettings()).toEqual({ DASHBOARD_PORT: '3400' })
+      expect(
+        readFileSync(path.join(root, 'apps/web/.env'), 'utf8'),
+      ).not.toContain('fixture-windows-secret')
+      expect(
+        readFileSync(path.join(root, 'apps/web/.env'), 'utf8'),
+      ).not.toContain('fixture-apple-secret')
+      expect(readFileSync(path.join(root, '.env'), 'utf8')).toBe(contents)
+    },
+  )
+  test('refuses adjacent Dashboard values that the Next loader would silently merge', () => {
+    // Arrange
+    const contents = [
+      'DASHBOARD_PATH="fixture-path\\"',
+      'WIN_CSC_KEY_PASSWORD=fixture-private',
+      'DASHBOARD_MESSAGE="',
+      'fixture message"',
+      '',
+    ].join('\n')
+    writeFileSync(path.join(root, '.env'), contents)
+
+    // Act
+    const result = spawnSync(process.execPath, ['scripts/setup-env.mjs'], {
+      cwd: root,
+      encoding: 'utf8',
+    })
+
+    // Assert
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain(
+      'Node and Next.js read the Dashboard settings differently',
+    )
+    expect(result.stderr).toContain('apps/web/.env')
+    expect(result.stderr).toContain('apps/desktop/.env')
+    expect(result.stdout + result.stderr).not.toContain('fixture-')
+    expect(existsSync(path.join(root, 'apps/web/.env'))).toBe(false)
+    expect(existsSync(path.join(root, 'apps/desktop/.env'))).toBe(false)
+    expect(readFileSync(path.join(root, '.env'), 'utf8')).toBe(contents)
+  })
+  test('preserves compatible trailing backslashes, Next expansion, and process environment priority', () => {
+    // Arrange
+    const contents = [
+      "DASHBOARD_PATH='fixture-path\\'",
+      'DASHBOARD_MESSAGE="',
+      'fixture message"',
+      'DASHBOARD_ALIAS=$DASHBOARD_PATH',
+      'DASHBOARD_BRACED=${DASHBOARD_PATH}',
+      'DASHBOARD_PORT=3400',
+      '',
+    ].join('\n')
+    writeFileSync(path.join(root, '.env'), contents)
+
+    // Act
+    const result = spawnSync(process.execPath, ['scripts/setup-env.mjs'], {
+      cwd: root,
+      encoding: 'utf8',
+    })
+
+    // Assert
+    expect(result.status).toBe(0)
+    expect(readFileSync(path.join(root, 'apps/web/.env'), 'utf8')).toBe(
+      contents,
+    )
+    expect(readDashboardSettings({ DASHBOARD_PORT: '3999' })).toEqual({
+      DASHBOARD_PATH: 'fixture-path\\',
+      DASHBOARD_MESSAGE: '\nfixture message',
+      DASHBOARD_ALIAS: 'fixture-path\\',
+      DASHBOARD_BRACED: 'fixture-path\\',
+      DASHBOARD_PORT: '3999',
     })
   })
   test('keeps both app files uncreated when a quoted signing value is unfinished', () => {
