@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 
 import { Category } from '@/app/(main)/home/_components/Category'
 import { CategoryManageDialog } from '@/app/(main)/home/_components/CategoryManageDialog'
@@ -44,6 +44,48 @@ import {
 import { MAC_DOWNLOAD_URL } from '@/lib/constants/macDownload'
 
 /**
+ * Displays the Journal menu item during prerender and after its URL is available.
+ * @example <JournalMenuLink onClick={closeMobileSidebar} />
+ */
+function JournalMenuLink({
+  href = '/home#journal',
+  onClick,
+}: {
+  href?: string
+  onClick: () => void
+}) {
+  return (
+    <SidebarMenuButton asChild>
+      <Link href={href} onClick={onClick}>
+        <BookOpen className="size-4" />
+        <span>Journal</span>
+      </Link>
+    </SidebarMenuButton>
+  )
+}
+
+/**
+ * Preserves journal filters from the current Dashboard URL once the router is ready.
+ * @example <FilteredJournalMenuLink onClick={closeMobileSidebar} />
+ */
+function FilteredJournalMenuLink({ onClick }: { onClick: () => void }) {
+  const searchParams = useSearchParams()
+  const journalParams = new URLSearchParams()
+  // Opening the journal closes day detail while retaining its search and category.
+  for (const key of ['search', 'category', 'filter']) {
+    const value = searchParams.get(key)
+    if (value) journalParams.set(key, value)
+  }
+  const query = journalParams.toString()
+  return (
+    <JournalMenuLink
+      href={query ? `/home?${query}#journal` : undefined}
+      onClick={onClick}
+    />
+  )
+}
+
+/**
  * Provides account actions, navigation and category management for Dashboard.
  * The shared signed-in layout renders it beside the current page.
  * @example <AppSidebar />
@@ -52,19 +94,6 @@ export const AppSidebar = function AppSidebar() {
   const { user } = useUser()
   const isElectron = useIsElectron()
   const pathname = usePathname()
-  const searchParams = useSearchParams()
-  const journalParams = new URLSearchParams()
-  if (pathname === '/home') {
-    // Day-detail and review links should land in the journal with the active filters.
-    for (const key of ['search', 'category', 'filter']) {
-      const value = searchParams.get(key)
-      if (value) journalParams.set(key, value)
-    }
-  }
-  const journalQuery = journalParams.toString()
-  const journalHref = journalQuery
-    ? `/home?${journalQuery}#journal`
-    : '/home#journal'
   const { setOpenMobile } = useSidebar()
   const [manageDialogOpen, setManageDialogOpen] = useState(false)
   const email = user?.emailAddresses?.[0]?.emailAddress
@@ -147,12 +176,17 @@ export const AppSidebar = function AppSidebar() {
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
-                    <SidebarMenuButton asChild>
-                      <Link href={journalHref} onClick={closeMobileSidebar}>
-                        <BookOpen className="size-4" />
-                        <span>Journal</span>
-                      </Link>
-                    </SidebarMenuButton>
+                    <Suspense
+                      fallback={
+                        <JournalMenuLink onClick={closeMobileSidebar} />
+                      }
+                    >
+                      {pathname === '/home' ? (
+                        <FilteredJournalMenuLink onClick={closeMobileSidebar} />
+                      ) : (
+                        <JournalMenuLink onClick={closeMobileSidebar} />
+                      )}
+                    </Suspense>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
                     <SidebarMenuButton
