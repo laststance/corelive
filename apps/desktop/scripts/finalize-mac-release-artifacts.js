@@ -46,7 +46,7 @@ function buildNotaryArgs() {
  * Fail fast when the build did not emit a required artifact.
  * @param {string} filePath
  * @returns {void}
- * @example assertFileExists('/tmp/CoreLive-0.8.4.dmg')
+ * @example assertFileExists('/tmp/CoreLive-0.8.4-arm64.dmg')
  */
 function assertFileExists(filePath) {
   if (!fs.existsSync(filePath)) {
@@ -69,7 +69,7 @@ function runCommand(command, args) {
  * Write an informational release log without tripping the repo's no-console lint rule.
  * @param {string} message
  * @returns {void}
- * @example writeInfo('[finalize-mac] Stapling CoreLive-0.8.4.dmg...')
+ * @example writeInfo('[finalize-mac] Stapling CoreLive-0.8.4-arm64.dmg...')
  */
 function writeInfo(message) {
   process.stdout.write(`${message}\n`)
@@ -79,7 +79,7 @@ function writeInfo(message) {
  * Detect whether a DMG already has a stapled ticket so retries stay idempotent.
  * @param {string} filePath
  * @returns {boolean}
- * @example hasStapledTicket('/tmp/CoreLive-0.8.4.dmg')
+ * @example hasStapledTicket('/tmp/CoreLive-0.8.4-arm64.dmg')
  */
 function hasStapledTicket(filePath) {
   try {
@@ -96,7 +96,7 @@ function hasStapledTicket(filePath) {
  * Return a file's SHA-512 as base64 for `latest-mac.yml`.
  * @param {string} filePath
  * @returns {string}
- * @example getSha512Base64('/tmp/CoreLive-0.8.4-mac.zip')
+ * @example getSha512Base64('/tmp/CoreLive-0.8.4-arm64-mac.zip')
  */
 function getSha512Base64(filePath) {
   return crypto
@@ -109,7 +109,7 @@ function getSha512Base64(filePath) {
  * Return a file's SHA-256 as hex for `checksums.json`.
  * @param {string} filePath
  * @returns {string}
- * @example getSha256Hex('/tmp/CoreLive-0.8.4.dmg')
+ * @example getSha256Hex('/tmp/CoreLive-0.8.4-arm64.dmg')
  */
 function getSha256Hex(filePath) {
   return crypto
@@ -129,7 +129,7 @@ function getFileSize(filePath) {
 }
 
 /**
- * Notarize, staple, and assess one DMG so manual downloads satisfy Gatekeeper.
+ * Notarize and staple the released DMG so manual downloads satisfy Gatekeeper.
  * @param {string} filePath
  * @returns {void}
  * @example finalizeDmg('/tmp/CoreLive-0.8.4-arm64.dmg')
