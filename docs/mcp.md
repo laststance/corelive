@@ -115,13 +115,37 @@ Paste this request into the agent chat.
 ## Everyday requests
 
 - “Show the draft in Work / CoreLive, then add ‘Check the invoice’ to that category.”
-- A long note can be read in parts. When `read_draft` reports `result-too-large`, request `textPage` with offset zero. Carry the returned category ID, revision and next offset into each later call. Start again if the revision changes. To edit the note, join the page text in order and use each distinct `rowSpans` ID once. A row may span multiple pages. Its `startOffset` and `endOffset` mark the UTF-16 range in the assembled text, excluding the separating newline. Keep its original ID and any completion ID in the edit.
 - “Create a category called Planning under Work.”
 - “Export my workspace to corelive-backup.json.” `save_workspace_backup` writes a JSON copy for inspection and manual recovery and returns its path, even when the inline export reports `result-too-large`. To restore CoreLive on a Mac, back up the entire `offline/` directory, including the device registry and checksummed workspace files. [Back up or move CoreLive to a new Mac](./offline-liveeditor.md#backup-and-moving-to-a-new-mac)
 - “Set my dashboard appearance to Harbor dark.” This changes the connected account. Other browsers load the saved theme when you open or refocus the dashboard. LiveEditor keeps its own appearance.
 - To connect this Mac or choose Not now, read the pending account with `read_account_status`. After confirming the account, pass its `pendingConnect.promptId` to `connect_account` or `defer_account_connection`. If the prompt has changed, read the account status again before acting.
 - “Show this week's completed tasks in Work, including tasks from child categories.”
 - “Save today's activity card as activity.png.” Choose a day with completed activity on the connected Dashboard. A filename alone goes under the active profile's `Exports`. A standard installation uses `~/Library/Application Support/CoreLive/Exports`. You can also give an absolute path. The answer includes the actual path after saving. An occupied filename requires an explicit overwrite instruction.
+
+### Read and edit a long note
+
+When `read_draft` reports `result-too-large`, call it with `{"textPage":{"offset":0}}`. For each subsequent page, pass the first page’s `categoryId` and `revision` as `categoryId` and `textPage.expectedRevision`. Pass the last page’s `nextOffset` as `textPage.offset`. For example, if the revision is 0 and the next offset is 2, call `read_draft` with the following arguments.
+
+```json
+{
+  "categoryId": "10000000-0000-4000-8000-000000000001",
+  "textPage": { "offset": 2, "expectedRevision": 0 }
+}
+```
+
+Join the pages' text in order. Each distinct `rowSpans` ID represents one row, even if it spans several pages. Its `startOffset` and `endOffset` count UTF-16 units in the joined text and exclude the separating newline. Preserve the row ID and any completion ID. Send all reconstructed rows to `edit_draft`, using the first page’s revision as `baseRevision`. For a one-row note, the edited request could look like this.
+
+```json
+{
+  "categoryId": "10000000-0000-4000-8000-000000000001",
+  "baseRevision": 0,
+  "rows": [
+    { "id": "20000000-0000-4000-8000-000000000001", "text": "Send the invoice" }
+  ]
+}
+```
+
+If the revision changes, read again from offset zero before editing.
 
 ## If a request fails
 

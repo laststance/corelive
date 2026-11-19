@@ -17,6 +17,7 @@ import {
   McpActionError,
   mcpFailure,
   mcpSuccess,
+  taskAdditionLookupAction,
   type McpResult,
 } from './result'
 import {
@@ -279,7 +280,9 @@ function actionFailure(
       name,
       problem.code,
       writing ? problem.effect : 'none',
-      problem.nextAction,
+      call?.name === 'append_unfinished_task' && problem.effect === 'unknown'
+        ? taskAdditionLookupAction
+        : problem.nextAction,
       operationId,
     )
   }

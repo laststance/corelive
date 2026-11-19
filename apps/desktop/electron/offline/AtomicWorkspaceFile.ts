@@ -232,8 +232,8 @@ export class AtomicWorkspaceFile<T> {
 
   /** Packages exact partition bytes for the worker when the primary cannot be opened.
    * Known foreign-owner envelopes are excluded, and invalid bytes are labelled as unvalidated.
-   * @returns The recovery data, or null when neither file exists.
-   * @throws {@link WorkspaceFileError} if every surviving file declares a foreign owner.
+   * A foreign-only result carries exclusion metadata and no file bytes.
+   * @throws Filesystem errors when an existing source cannot be read.
    * @example const recovery = await file.exportRecoveryFiles()
    */
   async exportRecoveryFiles() {
@@ -268,18 +268,19 @@ export class AtomicWorkspaceFile<T> {
         }
         files.push({ name, contentBase64: bytes.toString('base64'), integrity })
       }
-      if (!files.length) {
-        if (excluded.length) throw new WorkspaceFileError('recovery-missing')
-        return null
-      }
+      if (!files.length && !excluded.length)
+        return { status: 'missing' } as const
       return {
-        format: 'corelive-recovery-files',
-        version: 1,
-        ownerId: this.ownerId,
-        exportedAt: new Date().toISOString(),
-        files,
-        excluded,
-      }
+        status: files.length ? 'available' : 'foreign-account',
+        recovery: {
+          format: 'corelive-recovery-files',
+          version: 1,
+          ownerId: this.ownerId,
+          exportedAt: new Date().toISOString(),
+          files,
+          excluded,
+        },
+      } as const
     })
   }
 

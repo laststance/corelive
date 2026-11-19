@@ -7,8 +7,8 @@ import type { McpResult } from './result'
 // Version changes deliberately reach the old endpoint so its owner can report incompatibility.
 export const BRIDGE_VERSION = 2
 export const OWNER_START_TIMEOUT_MS = 15_000
-// Allow active archive and history work up to the SDK's default call budget.
-export const OWNER_RESPONSE_TIMEOUT_MS = 60_000
+// Keep time for framing and delivery before the SDK's default 60-second timeout.
+export const MCP_CALL_TIMEOUT_MS = 50_000
 export const MCP_BACKGROUND_SWITCH = '--corelive-mcp-background'
 export const MAX_FRAME_BYTES = 32 * 1024 * 1024
 // The SDK's default stdio client accepts a 10 MiB JSON-RPC message. Reserve room for its envelope.

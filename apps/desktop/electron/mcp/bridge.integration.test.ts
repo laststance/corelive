@@ -1,7 +1,15 @@
 import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { EventEmitter, once } from 'node:events'
-import { mkdtempSync, rmSync, unlinkSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+} from 'node:fs'
+import { link, readFile, readdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -10,18 +18,34 @@ import { McpHistoryInputSchema } from '@corelive/desktop-contract/completion-his
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest'
+import { z } from 'zod'
 
+import { initializeDeviceWorkspace } from '../offline/deviceWorkspaceFixture'
+import { OfflineEditorController } from '../offline/OfflineEditorController'
+import { WorkspaceWorkerClient } from '../offline/WorkspaceWorkerClient'
+
+import { createAppActions } from './appActions'
 import { createMcpClient } from './bridgeClient'
 import { startMcpOwner } from './bridgeOwner'
+import type { EditorRuntime } from './editorActions'
 import { createCompletionHistory } from './history'
+import { McpAccountError } from './historyAuthority'
 import { adoptPeer, loadPeerBinding, peerEndpoint } from './peer'
 import { BRIDGE_VERSION, encodeFrame, readFrames, writeFrame } from './protocol'
+import { publishExportFile } from './publishExportFile'
 import { mcpSuccess } from './result'
 import { parseMcpCall } from './tools'
+
+vi.mock('./activityExport', () => ({ exportActivityPng: vi.fn() }))
 
 const desktop = fileURLToPath(new URL('../../', import.meta.url))
 const stdio = join(desktop, 'dist-electron/mcp-runtime/stdio.cjs')
 const cleanup: Array<() => void | Promise<void>> = []
+
+vi.mock(import('node:fs/promises'), async (importOriginal) => {
+  const fs = await importOriginal()
+  return { ...fs, link: vi.fn(fs.link) }
+})
 
 function isolatedProfile() {
   const directory = mkdtempSync(join(tmpdir(), 'corelive-mcp-integration-'))
@@ -107,6 +131,65 @@ test('an overlong unknown tool name receives a bounded error and the helper stay
 })
 
 describe.runIf(process.platform === 'darwin')('verified Mac socket', () => {
+  test('exports on a volume without hard links publish complete bytes once and preserve an occupied name', async () => {
+    // Arrange
+    const profile = isolatedProfile()
+    const path = join(profile, 'activity.png')
+    const unsupported = Object.assign(new Error('Hard links unsupported'), {
+      code: 'ENOTSUP',
+    })
+    vi.mocked(link)
+      .mockRejectedValueOnce(unsupported)
+      .mockRejectedValueOnce(unsupported)
+    const request = {
+      filename: path,
+      bytes: Buffer.from('first export'),
+      profileDirectory: profile,
+    }
+
+    // Act
+    const saved = await publishExportFile(request)
+    const duplicate = publishExportFile({
+      ...request,
+      bytes: Buffer.from('second export'),
+    })
+
+    // Assert
+    await expect(duplicate).rejects.toMatchObject({
+      code: 'file-exists',
+      effect: 'none',
+    })
+    expect(saved.path).toBe(path)
+    expect(await readFile(path, 'utf8')).toBe('first export')
+    expect(await readdir(profile)).toEqual(['activity.png'])
+  })
+
+  test('an account change while a volume rejects hard links cancels the exclusive rename', async () => {
+    // Arrange
+    const profile = isolatedProfile()
+    let changed = false
+    vi.mocked(link).mockImplementationOnce(async () => {
+      changed = true
+      throw Object.assign(new Error('Hard links unsupported'), {
+        code: 'ENOTSUP',
+      })
+    })
+
+    // Act
+    const result = publishExportFile({
+      filename: join(profile, 'activity.png'),
+      bytes: Buffer.from('private'),
+      profileDirectory: profile,
+      beforePublish: () => {
+        if (changed) throw new McpAccountError('account-changed', false)
+      },
+    })
+
+    // Assert
+    await expect(result).rejects.toMatchObject({ code: 'account-changed' })
+    expect(await readdir(profile)).toEqual([])
+  })
+
   test('the kernel peer check rejects a mismatched effective user and an invalid descriptor', () => {
     // Arrange
     const binary = join(isolatedProfile(), 'test-peer-identity')
@@ -127,6 +210,7 @@ describe.runIf(process.platform === 'darwin')('verified Mac socket', () => {
     const close = vi.fn(native.close)
     const useBinding = vi.spyOn(peers, 'loadPeerBinding').mockReturnValue({
       connect: native.connect,
+      renameExclusive: native.renameExclusive,
       close,
       listen(path, adopt) {
         const listener = native.listen(path, adopt)
@@ -148,17 +232,13 @@ describe.runIf(process.platform === 'darwin')('verified Mac socket', () => {
     expect(close).toHaveBeenCalledOnce()
   })
 
-  test('two stdio helpers can read from the same owner with distinct sessions', async () => {
+  test('closing one stdio helper releases its session and leaves the other helper connected', async () => {
     // Arrange
     const profile = isolatedProfile()
-    const sessions = new Set<string>()
     const closeSession = vi.fn()
     cleanup.push(
       await startMcpOwner(profile, {
-        call: async (session, name) => {
-          sessions.add(session)
-          return mcpSuccess({ categoryPath: 'Work / CoreLive', name })
-        },
+        call: async (sessionId, name) => mcpSuccess({ sessionId, name }),
         closeSession,
       }),
     )
@@ -168,22 +248,78 @@ describe.runIf(process.platform === 'darwin')('verified Mac socket', () => {
       first.client.connect(first.transport),
       second.client.connect(second.transport),
     ])
+    const reply = z.object({
+      sessionId: z.uuid(),
+      name: z.literal('read_draft'),
+    })
+    const [firstRead, secondRead] = await Promise.all([
+      first.client.callTool({ name: 'read_draft' }),
+      second.client.callTool({ name: 'read_draft' }),
+    ])
+    const firstSession = reply.parse(firstRead.structuredContent)
+    const secondSession = reply.parse(secondRead.structuredContent)
 
     // Act
-    const results = await Promise.all(
-      [first.client, second.client].map(async (client) =>
-        client.callTool({ name: 'read_draft' }),
-      ),
-    )
     await first.client.close()
+    const continued = await second.client.callTool({ name: 'read_draft' })
 
     // Assert
-    expect(results.map((result) => result.structuredContent)).toEqual([
-      { categoryPath: 'Work / CoreLive', name: 'read_draft' },
-      { categoryPath: 'Work / CoreLive', name: 'read_draft' },
-    ])
-    expect(sessions.size).toBe(2)
-    await vi.waitFor(() => expect(closeSession).toHaveBeenCalled())
+    expect(firstSession.sessionId).not.toBe(secondSession.sessionId)
+    await vi.waitFor(() =>
+      expect(closeSession).toHaveBeenCalledWith(firstSession.sessionId),
+    )
+    expect(closeSession).not.toHaveBeenCalledWith(secondSession.sessionId)
+    expect(continued.structuredContent).toEqual(secondSession)
+  })
+
+  test('aliases share a profile endpoint while distinct case-sensitive directories keep separate endpoints', () => {
+    // Arrange
+    const root = isolatedProfile()
+    const stored = join(root, 'CoreLive')
+    const lowercase = join(root, 'corelive')
+    const linked = join(root, 'ProfileLink')
+    mkdirSync(stored)
+    symlinkSync(stored, linked)
+
+    // Act / Assert
+    expect(peerEndpoint(linked)).toEqual(peerEndpoint(stored))
+    // The same spelling difference can name one directory or two on different volumes.
+    if (existsSync(lowercase)) {
+      expect(peerEndpoint(lowercase)).toEqual(peerEndpoint(stored))
+    } else {
+      mkdirSync(lowercase)
+      expect(peerEndpoint(lowercase).path).not.toBe(peerEndpoint(stored).path)
+    }
+  })
+
+  test('a cold helper finds the owner after the profile is created under its canonical spelling', async () => {
+    // Arrange
+    const root = isolatedProfile()
+    const stored = join(root, 'CoreLive')
+    const alias = join(root, 'corelive')
+    const wake = vi.fn(async () => {
+      mkdirSync(stored)
+      // On a case-sensitive volume, an explicit alias still exercises creation after lookup.
+      if (!existsSync(alias)) symlinkSync(stored, alias)
+      cleanup.push(
+        await startMcpOwner(stored, {
+          call: async () => mcpSuccess({ text: 'Profile found' }),
+          closeSession: vi.fn(),
+        }),
+      )
+    })
+    const helper = createMcpClient(alias, wake, 1_000)
+    cleanup.push(() => helper.close())
+
+    // Act
+    const result = await helper.call(parseMcpCall('read_draft', {}))
+
+    // Assert
+    expect(result).toMatchObject({
+      isError: false,
+      structuredContent: { text: 'Profile found' },
+    })
+    expect(wake).toHaveBeenCalledOnce()
   })
 
   test('cancelling a draft read lets the helper continue its frozen history read', async () => {
@@ -325,9 +461,160 @@ describe.runIf(process.platform === 'darwin')('verified Mac socket', () => {
     expect(next.structuredContent).toEqual({ name: 'read_draft' })
   })
 
-  test('a response deadline reports an unconfirmed write and advances the queue without resending it', async () => {
+  test('a worker that loses a committed write reply releases the real dispatcher and its durable receipt', async () => {
     // Arrange
     const profile = isolatedProfile()
+    const directory = join(profile, 'workspaces')
+    await initializeDeviceWorkspace(directory, { notes: { 1: 'Original' } })
+    const workerURL = new URL('../offline/workspace-worker.ts', import.meta.url)
+      .href
+    const script = join(profile, 'withhold-append-reply.mjs')
+    const seen = join(directory, 'append-attempts')
+    const persisted = join(directory, 'append-committed')
+    await writeFile(
+      script,
+      `import { appendFileSync, writeFileSync } from 'node:fs';
+import { parentPort, workerData } from 'node:worker_threads';
+import { join } from 'node:path';
+let appendId;
+parentPort.on('message', (request) => {
+  if (request.type !== 'appendTask') return;
+  appendId = request.requestId;
+  appendFileSync(join(workerData.directory, 'append-attempts'), 'append\\n');
+});
+const send = parentPort.postMessage.bind(parentPort);
+parentPort.postMessage = (reply) => {
+  if (reply.requestId === appendId && reply.ok) {
+    writeFileSync(join(workerData.directory, 'append-committed'), 'committed');
+    return;
+  }
+  send(reply);
+};
+await import(${JSON.stringify(workerURL)});
+`,
+    )
+    const actor = new WorkspaceWorkerClient({
+      script,
+      directory,
+      ownerId: 'device',
+      execArgv: ['--import', 'tsx'],
+      replyTimeoutMs: 4_000,
+    })
+    const controller = new OfflineEditorController({
+      directory: profile,
+      workerScript: script,
+      actor: () => actor,
+      broker: {
+        acquire: async () => {
+          throw new Error('Unexpected account request')
+        },
+        reset: () => undefined,
+        revoke: async () => 'revoked',
+      },
+      transport: () => {
+        throw new Error('Unexpected outbound synchronization')
+      },
+      legacyNotes: () => ({}),
+      requestFlush: async () => true,
+      onSnapshot: () => undefined,
+      endLocalSession: async () => ({ status: 'signed-out' }),
+    })
+    cleanup.push(async () => actor.close())
+    cleanup.push(async () => {
+      await controller.shutdown()
+    })
+    await controller.initialize()
+    expect(controller.getSnapshot().phase).toBe('ready')
+
+    const ipc = {
+      flush: vi.fn(async () => true),
+      shown: vi.fn(),
+    } as unknown as EditorRuntime['ipc']
+    const actions = createAppActions({
+      profileDirectory: profile,
+      runtime: { controller, ipc },
+      native: async () => undefined,
+      signOutDevice: async (run) => run(),
+    })
+    const signals = new EventEmitter()
+    const reachedOwner = once(signals, 'read')
+    cleanup.push(
+      await startMcpOwner(profile, {
+        ...actions,
+        async call(session, name, args) {
+          if (name === 'read_draft') signals.emit('read')
+          return actions.call(session, name, args)
+        },
+      }),
+    )
+    const first = stdioClient(profile)
+    const second = stdioClient(profile)
+    await Promise.all([
+      first.client.connect(first.transport),
+      second.client.connect(second.transport),
+    ])
+    const operationId = '00000000-0000-4000-8000-000000000001'
+    const draft = vi.spyOn(controller, 'draft')
+
+    // Act
+    const writing = first.client.callTool({
+      name: 'append_unfinished_task',
+      arguments: { title: 'Ship it', operationId },
+    })
+    await vi.waitFor(() => expect(existsSync(persisted)).toBe(true))
+    const reading = second.client.callTool({ name: 'read_draft' })
+    await reachedOwner
+
+    // Assert that the second session cannot read past the pending write.
+    expect(draft).not.toHaveBeenCalled()
+    expect(await writing).toMatchObject({
+      isError: true,
+      structuredContent: {
+        code: 'worker-unavailable',
+        effect: 'unknown',
+        operationId: '00000000-0000-4000-8000-000000000001',
+        nextAction: expect.stringContaining('get_task_addition_result'),
+      },
+    })
+    const read = await reading
+    if (read.isError) {
+      // A request can see the retiring worker before its exit, but it must return.
+      expect(read.structuredContent).toMatchObject({
+        code: 'worker-unavailable',
+        effect: 'none',
+      })
+    } else {
+      expect(read.structuredContent).toMatchObject({
+        text: 'Original\n- [ ] Ship it',
+      })
+    }
+    await vi.waitFor(
+      async () => {
+        const receipt = await second.client.callTool({
+          name: 'get_task_addition_result',
+          arguments: { operationId },
+        })
+        expect(receipt).toMatchObject({
+          isError: false,
+          structuredContent: {
+            operationId: '00000000-0000-4000-8000-000000000001',
+            status: 'saved',
+            title: 'Ship it',
+          },
+        })
+      },
+      { timeout: 6_000 },
+    )
+    expect(await readFile(seen, 'utf8')).toBe('append\n')
+  }, 20_000)
+
+  test('the stdio client receives uncertain and never-dispatched write outcomes before its own deadline', async () => {
+    // Arrange
+    const profile = isolatedProfile()
+    const { MCP_CALL_TIMEOUT_MS } = await import('./protocol')
+    const { DEFAULT_REQUEST_TIMEOUT_MSEC } =
+      await import('@modelcontextprotocol/sdk/shared/protocol.js')
+    expect(MCP_CALL_TIMEOUT_MS).toBeLessThan(DEFAULT_REQUEST_TIMEOUT_MSEC)
     const signals = new EventEmitter()
     const dispatched = once(signals, 'dispatched')
     const finish = once(signals, 'finish')
@@ -348,35 +635,93 @@ describe.runIf(process.platform === 'darwin')('verified Mac socket', () => {
     cleanup.push(() => {
       signals.emit('finish')
     })
-    const client = createMcpClient(
-      profile,
-      async () => {
-        throw new Error('Unexpected wake')
+
+    // Accelerate only the bundled helper's clocks. The client still uses its default SDK deadline.
+    const preload = `let count = 0;
+const schedule = globalThis.setTimeout;
+globalThis.setTimeout = (callback, ms, ...args) => schedule(callback,
+  ms === ${MCP_CALL_TIMEOUT_MS} ? ([1200, 100][count++] ?? 1200) : ms, ...args);`
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [
+        '--import',
+        'data:text/javascript,' + encodeURIComponent(preload),
+        stdio,
+        '--user-data-dir=' + profile,
+      ],
+      stderr: 'pipe',
+    })
+    const client = new Client({
+      name: 'CoreLive integration test',
+      version: '1',
+    })
+    cleanup.push(async () => client.close())
+    await client.connect(transport)
+
+    // Act
+    const dispatchedWrite = client.callTool({
+      name: 'append_unfinished_task',
+      arguments: {
+        title: 'Ship it',
+        operationId: '00000000-0000-4000-8000-000000000001',
       },
-      undefined,
-      200,
-    )
-    cleanup.push(() => client.close())
-    const write = client.call(
+    })
+    await dispatched
+    const queued = await client.callTool({
+      name: 'append_unfinished_task',
+      arguments: {
+        title: 'Finish later',
+        operationId: '00000000-0000-4000-8000-000000000002',
+      },
+    })
+
+    // Assert
+    expect(queued.structuredContent).toMatchObject({
+      code: 'request-timeout',
+      effect: 'none',
+    })
+    expect((await dispatchedWrite).structuredContent).toMatchObject({
+      code: 'worker-unavailable',
+      effect: 'unknown',
+      operationId: '00000000-0000-4000-8000-000000000001',
+      nextAction: expect.stringContaining('get_task_addition_result'),
+    })
+    const read = await client.callTool({ name: 'read_draft' })
+    expect(read.structuredContent).toEqual({ name: 'read_draft' })
+    expect(received).toEqual(['append_unfinished_task', 'read_draft'])
+  })
+
+  test('connection startup shares the call deadline and releases the helper queue', async () => {
+    // Arrange
+    const profile = isolatedProfile()
+    const wake = vi.fn(async () => new Promise<void>(() => undefined))
+    const helper = createMcpClient(profile, wake, 5_000, 250)
+    cleanup.push(() => helper.close())
+
+    // Act
+    const timedOut = await helper.call(
       parseMcpCall('append_unfinished_task', {
         title: 'Ship it',
         operationId: '00000000-0000-4000-8000-000000000001',
       }),
     )
-
-    // Act
-    await dispatched
-    const read = client.call(parseMcpCall('read_draft', {}))
+    const calls = vi.fn(async (_session: string, name: string) =>
+      mcpSuccess({ name }),
+    )
+    cleanup.push(
+      await startMcpOwner(profile, { call: calls, closeSession: vi.fn() }),
+    )
+    const read = await helper.call(parseMcpCall('read_draft', {}))
 
     // Assert
-    expect((await write).structuredContent).toMatchObject({
-      code: 'worker-unavailable',
-      effect: 'unknown',
-      operationId: '00000000-0000-4000-8000-000000000001',
+    expect(wake).toHaveBeenCalledOnce()
+    expect(timedOut.structuredContent).toMatchObject({
+      code: 'request-timeout',
+      effect: 'none',
     })
-    expect((await read).structuredContent).toEqual({ name: 'read_draft' })
-    expect(received).toEqual(['append_unfinished_task', 'read_draft'])
-  }, 3_000)
+    expect(read.structuredContent).toEqual({ name: 'read_draft' })
+    expect(calls.mock.calls.map(([, name]) => name)).toEqual(['read_draft'])
+  })
 
   test.each([
     {

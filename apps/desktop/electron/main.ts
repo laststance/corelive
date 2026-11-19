@@ -190,6 +190,10 @@ let ipcHandlersInitialized = false
  */
 let autoUpdater: AutoUpdaterType | null = null
 let systemTrayManager: SystemTrayManagerType | null = null
+let finishTrayStartup = (): void => {}
+const trayStartup = new Promise<void>((resolve) => {
+  finishTrayStartup = resolve
+})
 let notificationManager: NotificationManagerType | null = null
 let shortcutManager: ShortcutManagerType | null = null
 /**
@@ -789,6 +793,8 @@ async function createWindow(background = false): Promise<void> {
       log.info('✅ [DEFERRED] MenuManager loaded')
 
       await loadSystemIntegrationStack()
+      // The startup preference has been applied. Menu bar changes can now run.
+      finishTrayStartup()
 
       // Only packaged apps have an update target; development and unit-test processes must not create updater timers.
       if (app.isPackaged) {
@@ -811,6 +817,8 @@ async function createWindow(background = false): Promise<void> {
       // No main-window close-to-tray wiring after T18 — the surviving panels own
       // their own close behavior (LiveEditor via live-editor-window-* IPC).
     } catch (error) {
+      // A failed tray startup must let waiting requests report the refusal.
+      finishTrayStartup()
       log.error('❌ Deferred initialization failed:', error)
       // Continue without non-critical components
     }
@@ -1273,29 +1281,35 @@ function setupIPCHandlers(): void {
   // Show in Menu Bar IPC handler — shows/hides the tray (menu-bar) icon and persists the
   // choice in `behavior.showInMenuBar`; boot hides the freshly created tray again when the
   // stored value is false (resolveShowInMenuBar). See SystemTrayManager.setMenuBarVisible.
-  registerNativeSetting('settings:setShowInMenuBar', async (show) => {
-    try {
-      if (!systemTrayManager) {
-        log.warn('settings:setShowInMenuBar - systemTrayManager not available')
+  registerNativeSetting(
+    'settings:setShowInMenuBar',
+    async (show) => {
+      try {
+        if (!systemTrayManager) {
+          log.warn(
+            'settings:setShowInMenuBar - systemTrayManager not available',
+          )
+          return false
+        }
+        const didApply = await systemTrayManager.setMenuBarVisible(show)
+        // Persist only a choice that actually applied, so the toggle stays truthful after a restart.
+        const didSave =
+          didApply &&
+          configManager?.set(SHOW_IN_MENU_BAR_CONFIG_PATH, show) === true
+        log.info(
+          `settings:setShowInMenuBar - Menu bar ${show ? 'shown' : 'hidden'}: ${didSave}`,
+        )
+        return didSave
+      } catch (error) {
+        log.error(
+          'settings:setShowInMenuBar - Failed to change menu bar visibility:',
+          error,
+        )
         return false
       }
-      const didApply = await systemTrayManager.setMenuBarVisible(show)
-      // Persist only a choice that actually applied, so the toggle stays truthful after a restart.
-      const didSave =
-        didApply &&
-        configManager?.set(SHOW_IN_MENU_BAR_CONFIG_PATH, show) === true
-      log.info(
-        `settings:setShowInMenuBar - Menu bar ${show ? 'shown' : 'hidden'}: ${didSave}`,
-      )
-      return didSave
-    } catch (error) {
-      log.error(
-        'settings:setShowInMenuBar - Failed to change menu bar visibility:',
-        error,
-      )
-      return false
-    }
-  })
+    },
+    trayStartup,
+  )
 
   // Start at Login IPC handler
   registerNativeSetting('settings:setStartAtLogin', (startAtLogin) => {

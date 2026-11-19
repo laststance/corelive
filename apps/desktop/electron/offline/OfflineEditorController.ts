@@ -105,6 +105,8 @@ export class OfflineEditorController {
   private firstUpload: AccountStatus['firstUpload'] = null
   private signOutRun: Promise<SignOutResult> | null = null
   private clearRun: Promise<SignOutResult> | null = null
+  /** Queued and verifying login notifications can temporarily block an older connection prompt. */
+  private readonly pendingSignIns = new Set<{ clerkId: string }>()
   /** Set while a sign-out or Clear again runs; resolves to whether it actually ended the session. */
   private sessionEnding: Promise<boolean> | null = null
   /** Settles {@link sessionEnding} early, once the sweep is done; logins after it are new sessions. */
@@ -341,7 +343,7 @@ export class OfflineEditorController {
     })
   }
 
-  /** Reads the stored addition in the current account. Automatic recovery also verifies the original request.
+  /** Reads the stored addition in the account that entered the queue. Automatic recovery also verifies the original request.
    * @param original - The title and the explicit or implicit category choice from the interrupted call.
    * @example await controller.findMcpTask(generation, operationId)
    */
@@ -350,22 +352,29 @@ export class OfflineEditorController {
     operationId: string,
     original?: WorkspaceWorkerCalls['findTaskAddition']['input']['original'],
   ) {
-    return this.withSessionLock(async () => {
-      const context = this.requireContext(generation)
-      if (this.sessionEnding) throw new WorkspaceWorkerError('account-changed')
-      const binding = this.mcpAccountBinding()
-      const saved = await context.worker.call('findTaskAddition', {
-        operationId,
-        accountId: binding?.accountId ?? null,
-        original,
-      })
-      // Account revocation may arrive while the storage worker reads a preexisting receipt.
+    const binding = this.mcpAccountBinding()
+    const epoch = this.mcpEpoch
+    const assertCurrent = (): void => {
       if (
-        binding?.signal.aborted ||
-        this.mcpAccountBinding()?.epoch !== binding?.epoch
+        this.sessionEnding ||
+        this.mcpEpoch !== epoch ||
+        this.mcpAccountBinding()?.accountId !== binding?.accountId
       )
         throw new WorkspaceWorkerError('account-changed')
-      return saved
+    }
+    return this.withSessionLock(async () => {
+      const context = this.requireContext(generation)
+      assertCurrent()
+      try {
+        return await context.worker.call('findTaskAddition', {
+          operationId,
+          accountId: binding?.accountId ?? null,
+          original,
+        })
+      } finally {
+        // Revocation also invalidates the worker's outcome when it arrives during the read.
+        assertCurrent()
+      }
     })
   }
 
@@ -392,16 +401,21 @@ export class OfflineEditorController {
    * @example await controller.authenticated('user_123')
    */
   async authenticated(clerkId: string): Promise<void> {
-    // One arriving while a sign-out or Clear again runs waits for it outside the queue; it is dropped
-    // only when that run actually ended the session (not when cancelled or when nothing was cleared).
-    const ending = this.sessionEnding
-    if (ending && (await ending)) return
-    // A notification queued before a session end belongs to the session that ended.
-    const epoch = this.signOutEpoch
-    this.sessionTail = this.sessionTail
-      .then(async () => this.handleSession(clerkId, epoch))
-      .catch(() => undefined)
-    await this.sessionTail
+    const notification = { clerkId }
+    this.pendingSignIns.add(notification)
+    try {
+      // One arriving while a sign-out or Clear again runs waits for its outcome outside the queue.
+      const ending = this.sessionEnding
+      if (ending && (await ending)) return
+      // A notification queued before a session end belongs to the session that ended.
+      const epoch = this.signOutEpoch
+      this.sessionTail = this.sessionTail
+        .then(async () => this.handleSession(clerkId, epoch))
+        .catch(() => undefined)
+      await this.sessionTail
+    } finally {
+      this.pendingSignIns.delete(notification)
+    }
   }
 
   /** Verifies the identity and routes it; see {@link authenticated}. */
@@ -498,6 +512,18 @@ export class OfflineEditorController {
     return { ...pending, promptId: this.connectPromptId }
   }
 
+  /** Checks the displayed prompt immediately before Connect or Not now may change the session.
+   * @example const pending = this.matchingConnectPrompt(promptId)
+   */
+  private matchingConnectPrompt(promptId: string) {
+    const pending = this.connectPrompt()
+    if (!pending || pending.promptId !== promptId) return null
+    // A different login may already hold the browser session while its identity is being verified.
+    for (const { clerkId } of this.pendingSignIns)
+      if (clerkId !== pending.accountId) return null
+    return pending
+  }
+
   /**
    * Runs `task` after every earlier attach or session end finished ({@link sessionLock}).
    * Tasks never take the lock again, so it cannot deadlock.
@@ -578,15 +604,9 @@ export class OfflineEditorController {
    * @example if (await controller.connect(promptId)) showUploading()
    */
   async connect(promptId: string): Promise<boolean> {
-    const pending = this.connectPrompt()
+    const pending = this.matchingConnectPrompt(promptId)
     const context = this.context
-    if (
-      !pending ||
-      pending.promptId !== promptId ||
-      !context ||
-      this.sessionEnding
-    )
-      return false
+    if (!pending || !context || this.sessionEnding) return false
     const epoch = this.signOutEpoch
     const bound = await context.worker.call('binding', null)
     if (bound && bound.accountId !== pending.accountId) return false
@@ -599,7 +619,7 @@ export class OfflineEditorController {
         epoch !== this.signOutEpoch ||
         this.context !== context ||
         this.sessionEnding ||
-        this.connectPrompt()?.promptId !== promptId
+        !this.matchingConnectPrompt(promptId)
       )
         return false
       this.firstUpload = total > 0 ? { state: 'uploading', count: total } : null
@@ -627,12 +647,14 @@ export class OfflineEditorController {
   async notNow(promptId: string): Promise<SignOutResult> {
     // Connect and sign-in commit under the same lock. A stale prompt must never end a new session.
     return this.withSessionLock(async () => {
-      const pending = this.connectPrompt()
-      if (this.sessionEnding || !pending || pending.promptId !== promptId)
+      if (this.sessionEnding || !this.matchingConnectPrompt(promptId))
         throw new WorkspaceWorkerError('connection-not-pending')
-      return this.startSignOut(async (generation) =>
-        this.endSession(generation),
-      )
+      return this.startSignOut(async (generation) => {
+        // A sign-in notification can arrive while the editor confirms its flush.
+        if (!this.matchingConnectPrompt(promptId))
+          throw new WorkspaceWorkerError('connection-not-pending')
+        return this.endSession(generation)
+      })
     })
   }
 

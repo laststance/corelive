@@ -101,12 +101,12 @@ async function applyWindowRole(
     window === 'editor' &&
     (role === 'reload_window' || role === 'force_reload_window')
   if (!reloadsEditor) return runWindowRole(deps, role, window)
-  if (!(await runtime.ipc.flush(runtime.controller.getSnapshot().generation)))
-    throw new McpActionError(
-      'flush-failed',
-      'Save pending LiveEditor writing first.',
-    )
   try {
+    if (!(await runtime.ipc.flush(runtime.controller.getSnapshot().generation)))
+      throw new McpActionError(
+        'flush-failed',
+        'Save pending LiveEditor writing first.',
+      )
     return await runWindowRole(deps, role, window)
   } catch (error) {
     // A reload that could not start leaves the existing renderer in place.

@@ -7,7 +7,11 @@ import { z } from 'zod'
 export const ShortcutAcceleratorSchema = z.string().max(64)
 // Window dimension floor matches `WindowStateManager` minWidth/minHeight (320).
 // Ceiling is loose enough for 8K displays but rejects runaway values.
-export const LiveEditorWindowDimensionSchema = z.number().min(320).max(8192)
+export const LIVE_EDITOR_WINDOW_DIMENSION_MAX = 8192
+export const LiveEditorWindowDimensionSchema = z
+  .number()
+  .min(320)
+  .max(LIVE_EDITOR_WINDOW_DIMENSION_MAX)
 
 const RENDERER_READABLE_LIVE_EDITOR_CONFIG_PATHS = new Set([
   'liveEditor.width',

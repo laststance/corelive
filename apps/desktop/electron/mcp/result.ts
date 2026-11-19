@@ -6,6 +6,9 @@ export interface McpResult {
   structuredContent: Record<string, unknown>
 }
 
+export const taskAdditionLookupAction =
+  'Look up the original operationId with get_task_addition_result before considering another write.'
+
 export type SaveEffect = 'none' | 'unknown' | 'partial'
 
 /** Carries a caller-safe refusal across the ordinary app's action handlers.

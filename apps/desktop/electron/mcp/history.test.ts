@@ -16,7 +16,7 @@ import {
   OfflineWorkspaceSchema,
   WorkspaceArchiveSchema,
 } from '@corelive/desktop-contract/offline-workspace-v2'
-import { expect, test, vi } from 'vitest'
+import { expect, onTestFinished, test, vi } from 'vitest'
 
 import { AtomicWorkspaceFile } from '../offline/AtomicWorkspaceFile'
 import {
@@ -119,6 +119,7 @@ const emptyDevice: DeviceHistory = {
 test('archived titleless completions retain their place, equal titles remain separate and only verified account identities merge', async () => {
   // Arrange
   const directory = await mkdtemp(join(tmpdir(), 'corelive-mcp-history-'))
+  onTestFinished(async () => rm(directory, { recursive: true, force: true }))
   const state = buildDeviceWorkspace({
     boundAccountId: accountId,
     categoryNames: ['Work'],
@@ -234,7 +235,6 @@ test('archived titleless completions retain their place, equal titles remain sep
     ).rejects.toMatchObject({ code: 'device-history-unavailable' })
   } finally {
     await worker.close()
-    await rm(directory, { recursive: true, force: true })
   }
 })
 

@@ -5,7 +5,9 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  realpath,
   rm,
+  symlink,
   writeFile,
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -88,6 +90,35 @@ test('an occupied explicit filename keeps its original bytes until replacement i
   ).resolves.toEqual({ path })
   expect(await readFile(path, 'utf8')).toBe('complete replacement')
   expect(await readdir(profile)).toEqual(['explicit'])
+})
+
+test('a parent step after a symlink saves in the physical parent and preserves the other directory', async () => {
+  // Arrange
+  const view = join(profile, 'view')
+  const actual = join(profile, 'actual')
+  await mkdir(view)
+  await mkdir(join(actual, 'child'), { recursive: true })
+  await symlink(join(actual, 'child'), join(view, 'jump'), 'dir')
+  await writeFile(join(actual, 'activity.png'), 'original')
+  await writeFile(join(view, 'activity.png'), 'unrelated')
+  const request = {
+    filename: view + '/jump/../activity.png',
+    profileDirectory: profile,
+    bytes: Buffer.from('complete replacement'),
+  }
+
+  // Act
+  await expect(publishExportFile(request)).rejects.toMatchObject({
+    code: 'file-exists',
+  })
+  const saved = await publishExportFile({ ...request, overwrite: true })
+
+  // Assert
+  expect(saved.path).toBe(join(await realpath(actual), 'activity.png'))
+  expect(await readFile(join(actual, 'activity.png'), 'utf8')).toBe(
+    'complete replacement',
+  )
+  expect(await readFile(join(view, 'activity.png'), 'utf8')).toBe('unrelated')
 })
 
 test('an account change after staging preserves the destination and removes private temporary bytes', async () => {

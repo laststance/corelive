@@ -6,17 +6,19 @@ import { basename, dirname, join, resolve } from 'node:path'
 
 type Adopt = (fd: number) => Socket | undefined
 interface PeerBinding {
+  renameExclusive(stagingPath: string, destinationPath: string): void
   connect(path: string, adopt: Adopt): Socket
   listen(path: string, adopt: Adopt): object
   close(listener: object): void
 }
 
-/** Canonicalizes a profile even before a cold launch creates its directory.
+/** Resolves profile aliases, including case on case-insensitive volumes, before hashing.
+ * Missing profiles use their nearest existing parent until the app creates the directory.
  * @example canonicalProfile('/tmp/new-CoreLive-profile')
  */
 function canonicalProfile(path: string): string {
   try {
-    return realpathSync(path)
+    return realpathSync.native(path)
   } catch (error) {
     if (!hasCode(error, 'ENOENT')) throw error
     return join(canonicalProfile(dirname(path)), basename(path))
@@ -73,7 +75,7 @@ export function checkPeerDirectory(
     )
 }
 
-/** Loads the signed in-process peer verifier only when an operation actually needs a connection.
+/** Loads the signed macOS binding on demand for a verified local connection or an exclusive file rename.
  * @example const peer = loadPeerBinding()
  */
 export function loadPeerBinding(): PeerBinding {

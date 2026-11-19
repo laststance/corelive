@@ -5,6 +5,8 @@ import { z } from 'zod'
 
 import type { WorkspaceWorkerCalls } from './workspace-worker-protocol'
 
+const WORKSPACE_REPLY_TIMEOUT_MS = 30_000
+
 const replySchema = z.discriminatedUnion('ok', [
   z.object({ requestId: z.string(), ok: z.literal(true), result: z.unknown() }),
   z.object({
@@ -34,9 +36,14 @@ export class WorkspaceWorkerError extends Error {
  */
 export class WorkspaceWorkerClient {
   private worker: Worker | null = null
+  private retiring: Promise<number> | null = null
   private readonly pending = new Map<
     string,
-    { resolve: (value: unknown) => void; reject: (reason: unknown) => void }
+    {
+      resolve: (value: unknown) => void
+      reject: (reason: unknown) => void
+      timer: ReturnType<typeof setTimeout>
+    }
   >()
   private closed = false
 
@@ -46,6 +53,7 @@ export class WorkspaceWorkerClient {
       directory: string
       ownerId: string
       execArgv?: string[]
+      replyTimeoutMs?: number
     },
   ) {
     this.worker = this.startWorker()
@@ -62,6 +70,7 @@ export class WorkspaceWorkerClient {
       ...(options.execArgv ? { execArgv: options.execArgv } : {}),
     })
     worker.on('message', (input: unknown) => {
+      if (this.worker !== worker || this.retiring) return
       const parsed = replySchema.safeParse(input)
       if (!parsed.success) {
         this.failAll('invalid-reply')
@@ -71,6 +80,7 @@ export class WorkspaceWorkerClient {
       const pending = this.pending.get(reply.requestId)
       if (!pending) return
       this.pending.delete(reply.requestId)
+      clearTimeout(pending.timer)
       if (reply.ok) pending.resolve(reply.result)
       else pending.reject(new WorkspaceWorkerError(reply.reason, reply.detail))
     })
@@ -79,6 +89,7 @@ export class WorkspaceWorkerClient {
       // Exit is the final event: a later caller may replace this writer without overlapping it.
       if (this.worker !== worker) return
       this.worker = null
+      this.retiring = null
       this.failAll('worker-unavailable')
     })
     return worker
@@ -91,16 +102,28 @@ export class WorkspaceWorkerClient {
     type: K,
     input: WorkspaceWorkerCalls[K]['input'],
   ): Promise<WorkspaceWorkerCalls[K]['output']> {
-    if (this.closed) throw new WorkspaceWorkerError('worker-unavailable')
+    if (this.closed || this.retiring)
+      throw new WorkspaceWorkerError('worker-unavailable')
     // Replacement is demand-driven; never replay an unknown command inside the transport.
     const worker = (this.worker ??= this.startWorker())
     const requestId = randomUUID()
     return new Promise<WorkspaceWorkerCalls[K]['output']>((resolve, reject) => {
+      const timer = setTimeout(
+        () => this.retire(worker),
+        this.options.replyTimeoutMs ?? WORKSPACE_REPLY_TIMEOUT_MS,
+      ).unref()
       this.pending.set(requestId, {
         resolve: (value) => resolve(value as WorkspaceWorkerCalls[K]['output']),
         reject,
+        timer,
       })
-      worker.postMessage({ requestId, type, input })
+      try {
+        worker.postMessage({ requestId, type, input })
+      } catch (error) {
+        this.pending.delete(requestId)
+        clearTimeout(timer)
+        reject(error)
+      }
     })
   }
 
@@ -110,7 +133,18 @@ export class WorkspaceWorkerClient {
    */
   async close(): Promise<void> {
     this.closed = true
-    await this.worker?.terminate()
+    if (this.worker) this.retire(this.worker)
+    await this.retiring
+  }
+
+  /** Ends a stalled writer without replaying uncertain writes or starting a competing worker.
+   * The reply timer calls this; a subsequent request can reopen the workspace after exit.
+   * @example this.retire(worker)
+   */
+  private retire(worker: Worker): void {
+    if (this.worker !== worker || this.retiring) return
+    this.retiring = worker.terminate()
+    void this.retiring.catch(() => undefined)
     this.failAll('worker-unavailable')
   }
 
@@ -118,8 +152,10 @@ export class WorkspaceWorkerClient {
    * @example this.failAll('worker-unavailable')
    */
   private failAll(reason: string): void {
-    for (const pending of this.pending.values())
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timer)
       pending.reject(new WorkspaceWorkerError(reason))
+    }
     this.pending.clear()
   }
 }

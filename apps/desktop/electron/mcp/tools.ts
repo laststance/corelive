@@ -18,6 +18,7 @@ import { THEME_IDS } from '@corelive/live-editor/themes'
 import { z } from 'zod'
 
 import {
+  LIVE_EDITOR_WINDOW_DIMENSION_MAX,
   LiveEditorWindowDimensionSchema,
   ShortcutAcceleratorSchema,
 } from '../ipc/ipc-schemas'
@@ -50,6 +51,12 @@ const pagination = {
 const assignment = { nodeId: positiveId, todoId: positiveId }
 const flag = { enabled: z.boolean() }
 const target = { window: z.enum(['editor', 'settings']).default('editor') }
+// Electron calculates right and bottom in float32 before converting the rectangle to integers.
+const maxExactWindowEdge = 2 ** 24
+const windowOrigin = z
+  .int()
+  .min(-maxExactWindowEdge)
+  .max(maxExactWindowEdge - LIVE_EDITOR_WINDOW_DIMENSION_MAX)
 const empty = z.strictObject({})
 const accountPrompt = z.strictObject({
   promptId: id.describe(
@@ -312,8 +319,8 @@ export const coreLiveTools = {
     'Move or resize an open LiveEditor window on this Mac.',
     false,
     z.strictObject({
-      x: z.int(),
-      y: z.int(),
+      x: windowOrigin,
+      y: windowOrigin,
       width: LiveEditorWindowDimensionSchema.int(),
       height: LiveEditorWindowDimensionSchema.int(),
     }),

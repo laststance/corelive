@@ -85,7 +85,7 @@ export const ARCHIVE_MIN_AGE_MS = 48 * 60 * 60 * 1000
  * keep commands.
  *
  * @param current - The committed state; never mutated.
- * @returns A state safe to hand to {@link WorkspaceService.apply} for save and complete.
+ * @returns A state safe for typing and completion creation in {@link WorkspaceService.apply}.
  * @example const state = forkWorkspace(current)
  */
 function forkWorkspace(current: OfflineWorkspace): OfflineWorkspace {
@@ -206,10 +206,11 @@ export class WorkspaceService {
             throw new WorkspaceCommandError('command-conflict')
           return current
         }
-        // Typing and keeping only touch drafts and add records, so they fork cheaply; every
-        // other command deep-clones.
+        // These commands update drafts and add or replace map entries. Other reducers can mutate existing records.
         const state =
-          command.type === 'save' || command.type === 'complete'
+          command.type === 'save' ||
+          command.type === 'complete' ||
+          command.type === 'recordCompletedTask'
             ? forkWorkspace(current)
             : structuredClone(current)
         if (

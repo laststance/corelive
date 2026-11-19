@@ -23,6 +23,10 @@ function stdioFailure(name: string, error: unknown): McpResult {
     error instanceof McpActionError
       ? error
       : new McpActionError('invalid-arguments', nextAction)
+  const compact = (): McpResult =>
+    mcpFailure('tools/call', problem.code, problem.effect, nextAction)
+  // The operation name appears in both the structured result and its text fallback.
+  if (2 * Buffer.byteLength(name) > MAX_MCP_RESULT_BYTES) return compact()
   try {
     const result = mcpFailure(
       name,
@@ -36,7 +40,7 @@ function stdioFailure(name: string, error: unknown): McpResult {
   } catch (failure) {
     if (!(failure instanceof RangeError)) throw failure
   }
-  return mcpFailure('tools/call', problem.code, problem.effect, nextAction)
+  return compact()
 }
 
 /** Runs the bundled local MCP endpoint. Only data calls create an owner connection.

@@ -389,9 +389,10 @@ async function readHistoryArchive() {
 async function exportWriting(): Promise<string> {
   const workspace = await file.read().catch(async (error: unknown) => {
     if (!(error instanceof WorkspaceFileError)) throw error
-    const recovery = await file.exportRecoveryFiles()
-    if (!recovery) throw new WorkspaceFileError('recovery-missing')
-    return recovery
+    const result = await file.exportRecoveryFiles()
+    if (result.status !== 'available')
+      throw new WorkspaceFileError('recovery-missing')
+    return result.recovery
   })
   // Read the workspace first so a completion moved into the archive during export is still included.
   const history = await exportArchive()
@@ -412,8 +413,9 @@ async function exportArchive() {
   } catch (error) {
     if (!(error instanceof WorkspaceFileError)) throw error
     // The primary may be gone while its recovery copy still holds history.
-    const recovery = await archive.exportRecoveryFiles()
-    if (recovery) return { archiveRecoveryFiles: recovery }
+    const result = await archive.exportRecoveryFiles()
+    if (result.status !== 'missing')
+      return { archiveRecoveryFiles: result.recovery }
     if (error.reason !== 'missing')
       throw new WorkspaceFileError('recovery-missing')
   }

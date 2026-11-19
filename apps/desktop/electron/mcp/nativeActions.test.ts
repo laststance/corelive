@@ -87,6 +87,45 @@ test.each([
   },
 )
 
+test.each(['reload_window', 'force_reload_window'] as const)(
+  '%s leaves LiveEditor editable when the renderer does not acknowledge a save',
+  async (name) => {
+    // Arrange
+    const shown = vi.fn()
+    const reload = vi.fn()
+    const window = {
+      isDestroyed: () => false,
+      webContents: {
+        isDestroyed: () => false,
+        getURL: () => 'corelive-editor://app/index.html',
+        reload,
+        reloadIgnoringCache: reload,
+      },
+    }
+    const context = {
+      windows: { getLiveEditorWindow: () => window },
+    } as unknown as NativeActionContext
+    const runtime = {
+      controller: { getSnapshot: () => ({ generation: 1 }) },
+      ipc: { flush: async () => false, shown },
+    } as unknown as EditorRuntime
+
+    // Act
+    const reloading = runNativeAction(context, runtime, {
+      name,
+      args: { window: 'editor' },
+    })
+
+    // Assert
+    await expect(reloading).rejects.toMatchObject({
+      code: 'flush-failed',
+      effect: 'none',
+    })
+    expect(reload).not.toHaveBeenCalled()
+    expect(shown).toHaveBeenCalledOnce()
+  },
+)
+
 // Value: protects=a refused Dock visibility change reports a possible partial effect;
 // fails_when=the MCP route changes a different preference or reports success;
 // why_new=Settings tests invoke IPC separately from the MCP caller;
@@ -174,6 +213,45 @@ test.each([
 // fails_when=the download action ignores the updater refusal;
 // why_new=updater tests exercise its own API without the MCP result;
 // seam=none; no_claim=no update server or Electron session participates.
+test('a cold menu bar change waits for tray startup while other settings remain available', async () => {
+  // Arrange
+  let finishTrayStartup = (): void => {}
+  const trayStartup = new Promise<void>((resolve) => {
+    finishTrayStartup = resolve
+  })
+  const changeTray = vi.fn((_visible: boolean) => true)
+  const persist = vi.fn((_visible: boolean) => true)
+  registerNativeSetting(
+    'settings:setShowInMenuBar',
+    (show) => changeTray(show) && persist(show),
+    trayStartup,
+  )
+  const changeLogin = vi.fn(() => true)
+  registerNativeSetting('settings:setStartAtLogin', changeLogin)
+  const context = {} as NativeActionContext
+  const runtime = {} as EditorRuntime
+
+  // Act
+  const change = runNativeAction(context, runtime, {
+    name: 'set_menu_bar_visible',
+    args: { enabled: false },
+  })
+  const login = await runNativeAction(context, runtime, {
+    name: 'set_start_at_login',
+    args: { enabled: true },
+  })
+
+  // Assert
+  expect(login).toEqual({ status: 'saved' })
+  expect(changeLogin).toHaveBeenCalledWith(true)
+  expect(changeTray).not.toHaveBeenCalled()
+  expect(persist).not.toHaveBeenCalled()
+  finishTrayStartup()
+  await expect(change).resolves.toEqual({ status: 'saved' })
+  expect(changeTray).toHaveBeenCalledExactlyOnceWith(false)
+  expect(persist).toHaveBeenCalledExactlyOnceWith(false)
+})
+
 test('requesting a download without an available update reports a refusal', async () => {
   // Arrange
   const context = {

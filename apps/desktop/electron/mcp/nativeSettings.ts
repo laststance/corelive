@@ -15,15 +15,23 @@ type Handler<C extends Setting> = (
 ) => IPCChannels[C]['response'] | Promise<IPCChannels[C]['response']>
 const settings: Partial<{ [C in Setting]: Handler<C> }> = {}
 
-/** Registers a sender-independent Mac setting once for both its existing Settings IPC and the local app owner.
- * @example registerNativeSetting('settings:setStartAtLogin', enabled => updateLoginItem(enabled))
+/** Registers a sender-independent Mac setting for both Settings IPC and the local app owner.
+ * @param ready - The startup phase that must settle before this setting can apply.
+ * @example registerNativeSetting('settings:setShowInMenuBar', changeVisibility, trayStartup)
  */
 export function registerNativeSetting<C extends Setting>(
   channel: C,
   handler: Handler<C>,
+  ready?: Promise<void>,
 ): void {
-  Object.assign(settings, { [channel]: handler })
-  typedHandle(channel, async (_event, ...args) => handler(...args))
+  const apply: Handler<C> = ready
+    ? async (...args) => {
+        await ready
+        return handler(...args)
+      }
+    : handler
+  Object.assign(settings, { [channel]: apply })
+  typedHandle(channel, async (_event, ...args) => apply(...args))
 }
 
 /** Invokes an explicitly supported Mac setting using its ordinary UI implementation.

@@ -1,15 +1,16 @@
 import { randomUUID } from 'node:crypto'
-import { link, mkdir, open, rename, unlink } from 'node:fs/promises'
+import { link, mkdir, open, realpath, rename, unlink } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 
 import { McpAccountError } from './historyAuthority'
+import { hasCode, loadPeerBinding } from './peer'
 import { McpActionError } from './result'
 
 /** Resolves a supplied name in the current app profile or honors an exact absolute location.
- * @example resolveDestination('activity.png', profile)
+ * @example await resolveDestination('activity.png', profile)
  */
-function resolveDestination(filename: string, profileDirectory: string) {
+async function resolveDestination(filename: string, profileDirectory: string) {
   if (
     !filename ||
     filename.includes('\0') ||
@@ -28,7 +29,7 @@ function resolveDestination(filename: string, profileDirectory: string) {
       isProfileExport,
     }
   const full = filename.startsWith('~/')
-    ? join(homedir(), filename.slice(2))
+    ? homedir() + filename.slice(1)
     : filename
   if (!isAbsolute(full)) {
     throw new McpActionError(
@@ -36,7 +37,56 @@ function resolveDestination(filename: string, profileDirectory: string) {
       'Use an absolute directory or ~/ for a location outside the profile Exports folder.',
     )
   }
-  return { path: resolve(full), isProfileExport }
+  // Let the filesystem follow symlinks before interpreting a subsequent parent step.
+  const parent = dirname(full)
+  const path = parent.split(sep).includes('..')
+    ? join(await realpath(parent).catch(refuseFileWrite), basename(full))
+    : resolve(full)
+  return { path, isProfileExport }
+}
+
+/** Some writable volumes reject hard links or exclusive renames at the filesystem level.
+ * @example if (unsupportedPublication(error)) chooseAnotherVolume()
+ */
+function unsupportedPublication(error: unknown): boolean {
+  return ['ENOTSUP', 'EOPNOTSUPP', 'ENOSYS'].some((code) =>
+    hasCode(error, code),
+  )
+}
+
+/** Publishes without replacing another export and reports whether the staging name remains.
+ * @example const stagingRemains = await publishExclusive(temp, destination)
+ */
+async function publishExclusive(
+  temp: string,
+  destination: string,
+  beforePublish?: () => void,
+): Promise<boolean> {
+  try {
+    await link(temp, destination)
+    return true
+  } catch (error) {
+    // Darwin also reports EPERM when a volume does not implement hard links.
+    if (
+      !unsupportedPublication(error) &&
+      !(process.platform === 'darwin' && hasCode(error, 'EPERM'))
+    )
+      refuseFileWrite(error)
+  }
+  if (process.platform === 'darwin') {
+    // The first attempt yielded to the event loop, where the connected account may have changed.
+    beforePublish?.()
+    try {
+      loadPeerBinding().renameExclusive(temp, destination)
+      return false
+    } catch (error) {
+      if (!unsupportedPublication(error)) refuseFileWrite(error)
+    }
+  }
+  throw new McpActionError(
+    'file-publication-unsupported',
+    'Choose a destination on a volume that supports saving a new file without replacing an existing file.',
+  )
 }
 
 /** Maps only filesystem errors; authentication and binding failures keep their original meaning.
@@ -122,7 +172,7 @@ export async function publishExportFile(request: {
   overwrite?: boolean
   beforePublish?: () => void
 }): Promise<{ path: string }> {
-  const destination = resolveDestination(
+  const destination = await resolveDestination(
     request.filename,
     request.profileDirectory,
   )
@@ -133,6 +183,7 @@ export async function publishExportFile(request: {
     )
   const temp = join(directory, `.corelive-${randomUUID()}.tmp`)
   const handle = await open(temp, 'wx', 0o600).catch(refuseFileWrite)
+  let stagingRemains = false
   try {
     try {
       await handle.writeFile(request.bytes).catch(refuseFileWrite)
@@ -144,12 +195,17 @@ export async function publishExportFile(request: {
     request.beforePublish?.()
     if (request.overwrite)
       await rename(temp, destination.path).catch(refuseFileWrite)
-    else await link(temp, destination.path).catch(refuseFileWrite)
+    else
+      stagingRemains = await publishExclusive(
+        temp,
+        destination.path,
+        request.beforePublish,
+      )
   } catch (error) {
     await removeStagingFile(temp, destination.path, false, error)
     throw error
   }
   // A successful rename consumes the staging path; an exclusive link leaves it to remove.
-  if (!request.overwrite) await removeStagingFile(temp, destination.path, true)
+  if (stagingRemains) await removeStagingFile(temp, destination.path, true)
   return { path: destination.path }
 }

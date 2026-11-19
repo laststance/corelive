@@ -1,8 +1,10 @@
-// Verify the peer of the connected descriptor before handing that descriptor to a Node net.Socket.
+// Darwin bindings for verified local sockets and atomic file publication.
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <node_api.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -23,6 +25,32 @@ typedef struct {
 static napi_value fail(napi_env env, const char *code) {
   napi_throw_error(env, code, code);
   return NULL;
+}
+
+// Copy the complete UTF-8 path: a truncated or embedded-NUL name could publish to another file.
+static int export_path(napi_env env, napi_value value, char path[PATH_MAX]) {
+  size_t bytes;
+  if (napi_get_value_string_utf8(env, value, NULL, 0, &bytes) != napi_ok || bytes == 0)
+    return EINVAL;
+  if (bytes >= PATH_MAX) return ENAMETOOLONG;
+  if (napi_get_value_string_utf8(env, value, path, PATH_MAX, &bytes) != napi_ok ||
+      path[0] != '/' || strlen(path) != bytes) return EINVAL;
+  return 0;
+}
+
+// Publish a complete staged export only if the destination name is still vacant.
+static napi_value rename_exclusive(napi_env env, napi_callback_info info) {
+  napi_value args[2], result;
+  size_t argc = 2;
+  char from[PATH_MAX], to[PATH_MAX];
+  if (napi_get_cb_info(env, info, &argc, args, NULL, NULL) != napi_ok || argc != 2)
+    return fail(env, "EINVAL");
+  int error = export_path(env, args[0], from);
+  if (!error) error = export_path(env, args[1], to);
+  if (!error && renamex_np(from, to, RENAME_EXCL) < 0) error = errno;
+  if (error) return fail(env, uv_err_name(uv_translate_sys_error(error)));
+  napi_get_undefined(env, &result);
+  return result;
 }
 
 static int prepare_fd(int fd) {
@@ -165,6 +193,7 @@ static napi_value listen_peers(napi_env env, napi_callback_info info) {
 
 static napi_value init(napi_env env, napi_value exports) {
   const napi_property_descriptor api[] = {
+    {"renameExclusive", NULL, rename_exclusive, NULL, NULL, NULL, napi_default, NULL},
     {"connect", NULL, connect_peer, NULL, NULL, NULL, napi_default, NULL},
     {"listen", NULL, listen_peers, NULL, NULL, NULL, napi_default, NULL},
     {"close", NULL, close_listener, NULL, NULL, NULL, napi_default, NULL}

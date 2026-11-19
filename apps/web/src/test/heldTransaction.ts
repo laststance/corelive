@@ -6,11 +6,10 @@ import { db } from '@/db'
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 /**
- * Polls `pg_blocking_pids()` until some statement is parked behind the given backend, so a
- * test commits the blocker at exactly the right moment. Scoped to ONE holder pid, so a lock
- * wait belonging to a test running in another worker can never satisfy it.
+ * Waits for a conflicting row or unique-key write to reach the holder's uncommitted transaction.
+ * A concurrent suite can request a table lock behind the same holder before the tested write even starts.
  * @param holderPid - `pg_backend_pid()` of the transaction that holds the locks.
- * @returns Resolves once at least one statement is waiting on that backend.
+ * @returns Resolves once a writer waits for that transaction to finish.
  * @throws when nothing blocks within ten seconds.
  * @example
  * await waitForStatementBlockedBy(holderPid)
@@ -21,7 +20,9 @@ async function waitForStatementBlockedBy(holderPid: number): Promise<void> {
     const { rows } = await db.execute<{ blocked: number }>(sql`
       SELECT count(*)::int AS blocked
       FROM pg_stat_activity
-      WHERE ${holderPid}::int = ANY(pg_blocking_pids(pid))
+      WHERE wait_event_type = 'Lock'
+        AND wait_event = 'transactionid'
+        AND ${holderPid}::int = ANY(pg_blocking_pids(pid))
     `)
     if ((rows[0]?.blocked ?? 0) > 0) return
     await new Promise((resolve) => setTimeout(resolve, 25))

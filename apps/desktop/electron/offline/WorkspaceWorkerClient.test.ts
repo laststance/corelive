@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import {
+  mkdir,
   mkdtemp,
   readFile,
   readdir,
@@ -344,7 +345,7 @@ async function createArchivedWorkspace() {
   })
   const id = randomUUID()
   const old = Date.now() - 5 * 365 * 24 * 60 * 60 * 1000
-  const workspace = buildDeviceWorkspace({ categoryCount: 1 })
+  const workspace = buildDeviceWorkspace({ notes: { 1: 'Current writing' } })
   workspace.completions[id] = {
     id,
     categoryId: categoryUuid(1),
@@ -468,3 +469,86 @@ test.each([
     expect(await readFile(recoveryPath)).toEqual(recovery)
   },
 )
+
+test.each([
+  { suffix: '.json', excluded: 'workspace.json', ownerInPayload: false },
+  { suffix: '.recovery.json', excluded: 'recovery.json', ownerInPayload: true },
+])(
+  'valid writing exports with an exclusion notice when only a foreign $excluded archive exists',
+  async ({ suffix, excluded, ownerInPayload }) => {
+    // Arrange
+    const { client, directory } = await createArchivedWorkspace()
+    await rename(
+      join(directory, `${DEVICE_ARCHIVE_FILE_NAME}.json`),
+      join(directory, 'unused-fixture.json'),
+    )
+    const foreign = JSON.stringify(
+      ownerInPayload
+        ? {
+            ownerId: 'device',
+            payload: JSON.stringify({
+              ownerId: 'account-b',
+              text: 'Foreign archive data',
+            }),
+          }
+        : { ownerId: 'account-b', payload: 'Foreign archive data' },
+    )
+    await writeFile(join(directory, DEVICE_ARCHIVE_FILE_NAME + suffix), foreign)
+
+    // Act
+    const writing = await client.call('export', null)
+
+    // Assert
+    expect(JSON.parse(writing) as unknown).toMatchObject({
+      version: 2,
+      drafts: {
+        '00000000-0000-4000-8000-000000000001': {
+          rows: [{ text: 'Current writing' }],
+        },
+      },
+      archiveRecoveryFiles: {
+        format: 'corelive-recovery-files',
+        version: 1,
+        ownerId: 'device',
+        files: [],
+        excluded: [excluded],
+      },
+    })
+    expect(writing).not.toContain('Foreign archive data')
+    expect(writing).not.toContain(Buffer.from(foreign).toString('base64'))
+  },
+)
+
+test('export refuses a foreign workspace even when this device has an owned archive', async () => {
+  // Arrange
+  const { client, directory } = await createArchivedWorkspace()
+  const foreign = JSON.stringify({ ownerId: 'account-b' })
+  await writeFile(
+    join(directory, `${DEVICE_WORKSPACE_FILE_NAME}.json`),
+    foreign,
+  )
+  await writeFile(
+    join(directory, `${DEVICE_WORKSPACE_FILE_NAME}.recovery.json`),
+    foreign,
+  )
+
+  // Act + Assert
+  await expect(client.call('export', null)).rejects.toMatchObject({
+    reason: 'recovery-missing',
+  })
+})
+
+test('an I/O error reading archive recovery stays a storage failure during export', async () => {
+  // Arrange
+  const { client, directory } = await createArchivedWorkspace()
+  await rename(
+    join(directory, `${DEVICE_ARCHIVE_FILE_NAME}.json`),
+    join(directory, 'unused-fixture.json'),
+  )
+  await mkdir(join(directory, `${DEVICE_ARCHIVE_FILE_NAME}.recovery.json`))
+
+  // Act + Assert
+  await expect(client.call('export', null)).rejects.toMatchObject({
+    reason: 'storage-failed',
+  })
+})

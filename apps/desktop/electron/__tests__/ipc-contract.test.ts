@@ -229,5 +229,38 @@ describe('IPC contract', () => {
         expect.objectContaining({ code: 'invalid-input', effect: 'none' }),
       )
     })
+
+    test('MCP accepts the minimum documented origin and an exact maximum bottom edge', () => {
+      // Arrange
+      const bounds = { x: -16_777_216, y: 16_769_024, width: 320, height: 8192 }
+
+      // Act
+      const call = parseMcpCall('set_editor_bounds', bounds)
+
+      // Assert
+      expect(call.args).toEqual({
+        x: -16_777_216,
+        y: 16_769_024,
+        width: 320,
+        height: 8192,
+      })
+    })
+
+    test.each([
+      { x: 16_777_217, y: 0 },
+      { x: 0, y: -16_777_217 },
+      { x: 0, y: 16_769_025 },
+    ])(
+      'MCP rejects coordinates outside the exact native bounds at $x, $y',
+      (origin) => {
+        // Arrange
+        const bounds = { ...origin, width: 480, height: 8192 }
+
+        // Act + Assert
+        expect(() => parseMcpCall('set_editor_bounds', bounds)).toThrow(
+          expect.objectContaining({ code: 'invalid-input', effect: 'none' }),
+        )
+      },
+    )
   })
 })

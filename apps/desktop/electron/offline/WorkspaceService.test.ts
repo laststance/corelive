@@ -943,6 +943,38 @@ describe('offline writing and completion transactions', () => {
     expect(await freeze(service)).toHaveLength(2)
   })
 
+  test('recording a completed task preserves existing writing, completion history and in-flight uploads', async () => {
+    // Arrange
+    const { file, service } = await createWorkspace()
+    await service.execute(completionCommand(await file.read()))
+    expect(await freeze(service)).toHaveLength(1)
+    const before = await file.read()
+
+    // Act
+    await service.execute({
+      type: 'recordCompletedTask',
+      commandId: randomUUID(),
+      completionId: completionB,
+      categoryId: category1,
+      title: 'Delivered outside LiveEditor',
+      completedAt: instant,
+      timezone: 'Asia/Tokyo',
+    })
+
+    // Assert
+    const saved = await file.read()
+    expect(saved.drafts).toEqual(before.drafts)
+    expect(saved.completions[completionA]).toEqual(
+      before.completions[completionA],
+    )
+    expect(saved.completions[completionB]).toMatchObject({
+      title: 'Delivered outside LiveEditor',
+      revision: 1,
+      cleared: true,
+    })
+    expect(saved.outbox).toEqual(before.outbox)
+  })
+
   test('reusing a command identity with different text fails without overwriting writing', async () => {
     // Arrange
     const { file, service } = await createWorkspace()
