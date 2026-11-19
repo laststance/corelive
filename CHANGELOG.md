@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.31.0] - 2026-11-19
+
+### Changed
+
+- Settings opens on Application. Choose Account and select Open Dashboard to review work synced from your Mac.
+- The Dashboard shows completed work over 7 or 30 days. Select a day to see its tasks, or search the completion journal by title and category.
+
 ## [0.30.1] - 2026-11-03
 
 ### Fixed
