@@ -107,9 +107,9 @@ function BoundAppearance({
     } catch {
       /* Browser storage is optional. */
     }
-    // next-themes handles storage events. Apply changes to the account or its selected theme here.
+    // A successful refetch can restore the same saved value after a different tab abandoned its save.
     applyAccountTheme(visibleTheme)
-  }, [userId, visibleTheme])
+  }, [userId, visibleTheme, saved.dataUpdatedAt])
 
   return (
     <AccountThemeWriter.Provider

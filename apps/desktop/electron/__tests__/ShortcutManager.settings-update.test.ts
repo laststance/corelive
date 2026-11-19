@@ -118,9 +118,12 @@ test('disabling one focused-window shortcut preserves the other without substitu
   expect(globalShortcut.register).not.toHaveBeenCalled()
 })
 
-test.each(['toggleLiveEditor', 'toggleLiveEditorSecondary'] as const)(
+test.each([
+  ['toggleLiveEditor', 'shortcuts.toggleLiveEditor'],
+  ['toggleLiveEditorSecondary', 'shortcuts.toggleLiveEditorSecondary'],
+] as const)(
   'reports that %s was not saved when writing the config fails',
-  (slot) => {
+  (slot, expectedKey) => {
     // Arrange
     const set = vi.fn(() => false)
     const config = {
@@ -135,6 +138,6 @@ test.each(['toggleLiveEditor', 'toggleLiveEditorSecondary'] as const)(
 
     // Assert
     expect(saved).toBe(false)
-    expect(set).toHaveBeenCalledWith(`shortcuts.${slot}`, 'Control+Shift+B')
+    expect(set).toHaveBeenCalledWith(expectedKey, 'Control+Shift+B')
   },
 )

@@ -146,6 +146,36 @@ test('choosing the cached light theme after another tab selects dark immediately
   expect(screen.getByTestId('theme')).toHaveTextContent('light')
 })
 
+test('a successful refresh restores the saved theme after another tab closes before saving', async () => {
+  // Arrange
+  account.get.mockResolvedValue({ theme: 'light' })
+  const { client } = openDashboard()
+  await waitFor(() =>
+    expect(screen.getByTestId('theme')).toHaveTextContent('light'),
+  )
+  window.localStorage.setItem('corelive-theme', 'harbor-dark')
+  fireEvent(
+    window,
+    new StorageEvent('storage', {
+      key: 'corelive-theme',
+      newValue: 'harbor-dark',
+    }),
+  )
+  expect(screen.getByTestId('theme')).toHaveTextContent('harbor-dark')
+
+  // Act
+  await act(async () =>
+    client.refetchQueries({ queryKey: ['dashboardAppearance', 'account-a'] }),
+  )
+
+  // Assert
+  await waitFor(() =>
+    expect(screen.getByTestId('theme')).toHaveTextContent('light'),
+  )
+  expect(window.localStorage.getItem('corelive-theme')).toBe('light')
+  expect(account.set).not.toHaveBeenCalled()
+})
+
 test('a returning browser imports its legacy theme once and another browser reads the change made in Settings', async () => {
   // Arrange
   const saved = new Map<string, DashboardTheme>()

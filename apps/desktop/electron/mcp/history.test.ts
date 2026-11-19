@@ -406,13 +406,14 @@ test('a missing terminal record or mismatched membership discards every remote r
   })
 
   // Assert
-  expect(result).toMatchObject({
-    scope: 'device',
-    scopeReason: 'account-unavailable',
-    total: 1,
-    entries: [{ title: 'saved here' }],
-  })
-  expect(mismatch).toEqual(result)
+  for (const page of [result, mismatch]) {
+    expect(page).toMatchObject({
+      scope: 'device',
+      scopeReason: 'account-unavailable',
+      total: 1,
+      entries: [{ title: 'saved here' }],
+    })
+  }
   await expect(broken.history.list('a', {})).rejects.toMatchObject({
     code: 'device-history-unavailable',
   })
@@ -437,31 +438,47 @@ test('out-of-range rows and two visible rows claiming the same synced completion
   ).rejects.toThrow('invalid-history-member')
 })
 
-test('a Mac day spans its local midnights when the clock advances during the requested day', async () => {
-  // Arrange
-  const previous = process.env.TZ
-  process.env.TZ = 'America/New_York'
-  const device = vi.fn(async (_range: CompletionRange) => emptyDevice)
-  const { history, getBinding } = historyFixture(device, () => framesFor([]))
-  getBinding.mockReturnValue(null)
-  try {
-    // Act
-    const result = await history.list('local', {
-      startDate: '2026-03-08',
-      endDate: '2026-03-08',
-    })
+test.each([
+  {
+    zone: 'America/New_York',
+    date: '2026-03-08',
+    from: '2026-03-08T05:00:00Z',
+    before: '2026-03-09T04:00:00Z',
+  },
+  {
+    zone: 'America/Sao_Paulo',
+    date: '2018-11-04',
+    from: '2018-11-04T03:00:00Z',
+    before: '2018-11-05T02:00:00Z',
+  },
+])(
+  'history ends at the start of the next Mac day when clocks advance in $zone on $date',
+  async ({ zone, date, from, before }) => {
+    // Arrange
+    const previous = process.env.TZ
+    process.env.TZ = zone
+    const device = vi.fn(async (_range: CompletionRange) => emptyDevice)
+    const { history, getBinding } = historyFixture(device, () => framesFor([]))
+    getBinding.mockReturnValue(null)
+    try {
+      // Act
+      const result = await history.list('local', {
+        startDate: date,
+        endDate: date,
+      })
 
-    // Assert
-    expect(result.timezone).toBe('America/New_York')
-    expect(device).toHaveBeenCalledWith({
-      from: Date.parse('2026-03-08T05:00:00Z'),
-      before: Date.parse('2026-03-09T04:00:00Z'),
-    })
-  } finally {
-    if (previous === undefined) delete process.env.TZ
-    else process.env.TZ = previous
-  }
-})
+      // Assert
+      expect(result.timezone).toBe(zone)
+      expect(device).toHaveBeenCalledWith({
+        from: Date.parse(from),
+        before: Date.parse(before),
+      })
+    } finally {
+      if (previous === undefined) delete process.env.TZ
+      else process.env.TZ = previous
+    }
+  },
+)
 
 test('category filters include child categories and distinguish unknowable legacy matches from known misses', async () => {
   // Arrange

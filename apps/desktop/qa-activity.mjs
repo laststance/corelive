@@ -54,8 +54,21 @@ async function verifyActivityCapture() {
     'activity.png',
   ])
   const bytes = await readFile(destination)
-  const size = nativeImage.createFromBuffer(bytes).getSize()
+  const image = nativeImage.createFromBuffer(bytes)
+  const size = image.getSize()
   assert.deepEqual(size, { width: 960, height: 1200 })
+  // The total is printed below the date, inside the card's border.
+  const numeral = image
+    .crop({ x: 96, y: 170, width: 190, height: 122 })
+    .toBitmap()
+  const background = numeral.readUInt32LE(0)
+  assert.ok(
+    numeral.some(
+      (_, offset) =>
+        offset % 4 === 0 && numeral.readUInt32LE(offset) !== background,
+    ),
+    'The exported card must draw its completion count',
+  )
   assert.equal(BrowserWindow.getAllWindows().length, 0)
   process.stdout.write(
     JSON.stringify({ day, ...size, bytes: bytes.length, windows: 0 }) + '\n',

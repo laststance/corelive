@@ -46,11 +46,10 @@ function historyPeriod(query: McpHistoryInput) {
   const endDate = query.endDate ?? today
   if (startDate > endDate || startDate.startsWith('0000'))
     throw new McpHistoryError('invalid-input')
-  const end = new Date(`${endDate}T00:00:00`)
-  end.setDate(end.getDate() + 1)
   const range = {
     from: new Date(`${startDate}T00:00:00`).getTime(),
-    before: end.getTime(),
+    // ISO 24:00 resolves the following day's midnight even when the end day starts at 01:00.
+    before: new Date(`${endDate}T24:00:00`).getTime(),
   }
   return { startDate, endDate, timezone, range }
 }

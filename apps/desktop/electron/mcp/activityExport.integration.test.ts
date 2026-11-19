@@ -15,6 +15,7 @@ import sharp from 'sharp'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import { exportActivityPng } from './activityExport'
+import { McpAccountError } from './historyAuthority'
 import { publishExportFile } from './publishExportFile'
 
 let profile: string
@@ -139,6 +140,39 @@ test.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
       expect(await readdir(directory)).toEqual(['activity.png'])
     } finally {
       await chmod(directory, 0o700)
+    }
+  },
+)
+
+test.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+  'reports the account change and retained staging file when cleanup is also refused',
+  async () => {
+    // Arrange
+    const target = join(profile, 'activity.png')
+    try {
+      // Act
+      const result = publishExportFile({
+        filename: target,
+        bytes: Buffer.from('private capture'),
+        profileDirectory: profile,
+        beforePublish: () => {
+          chmodSync(profile, 0o500)
+          throw new McpAccountError('account-changed', false)
+        },
+      })
+
+      // Assert
+      await expect(result).rejects.toMatchObject({
+        code: 'file-cleanup-incomplete',
+        effect: 'partial',
+        detail: {
+          destinationSaved: false,
+          publicationError: 'account-changed',
+        },
+      })
+      await expect(readFile(target)).rejects.toMatchObject({ code: 'ENOENT' })
+    } finally {
+      await chmod(profile, 0o700)
     }
   },
 )

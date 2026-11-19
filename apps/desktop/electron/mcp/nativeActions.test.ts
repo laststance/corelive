@@ -91,12 +91,14 @@ test('a refused Dock visibility change tells the client the setting may already 
 
 test.each([
   [
+    'enabling the shortcut sound',
     { name: 'set_shortcut_sound_enabled', args: { enabled: true } },
     'behavior.shortcutOpenSoundEnabled',
     false,
     { enabled: true },
   ],
   [
+    'choosing a shortcut sound',
     {
       name: 'set_shortcut_sound',
       args: { selection: 'balanced-deep-thock' },
@@ -106,8 +108,8 @@ test.each([
     { selection: 'balanced-deep-thock' },
   ],
 ] as const)(
-  '%j reports partial when the sound setting changes in the app but cannot be saved',
-  async (call, path, previous, shortcutSound) => {
+  '%s reports a partial change when the new preference cannot be saved',
+  async (_label, call, path, previous, shortcutSound) => {
     // Arrange
     const directory = mkdtempSync(join(tmpdir(), 'corelive-mcp-config-'))
     onTestFinished(() => rmSync(directory, { recursive: true }))
@@ -167,11 +169,19 @@ test('requesting a download without an available update reports a refusal', asyn
 })
 
 test.each([
-  ['set_editor_on_all_spaces', 'setLiveEditorVisibleOnAllWorkspaces'],
-  ['set_editor_always_on_top', 'setLiveEditorAlwaysOnTop'],
+  [
+    'disabling the editor on all Spaces',
+    'set_editor_on_all_spaces',
+    'setLiveEditorVisibleOnAllWorkspaces',
+  ],
+  [
+    'unpinning the editor',
+    'set_editor_always_on_top',
+    'setLiveEditorAlwaysOnTop',
+  ],
 ] as const)(
   '%s reports partial effect when the panel updates and config saving fails',
-  async (name, method) => {
+  async (_label, name, method) => {
     // Arrange
     const changeWindow = vi.fn(() => ({
       enabled: false,
@@ -198,11 +208,11 @@ test.each([
 )
 
 test.each([
-  ['open_live_editor', 'showLiveEditor'],
-  ['open_settings', 'openSettings'],
+  ['LiveEditor', 'open_live_editor', 'showLiveEditor'],
+  ['Settings', 'open_settings', 'openSettings'],
 ] as const)(
-  '%s acknowledges a request while the first document is still loading',
-  async (name, method) => {
+  'opening %s requests its window and reports the request was accepted',
+  async (_label, name, method) => {
     // Arrange
     const requestOpen = vi.fn()
     const context = {
@@ -251,16 +261,18 @@ test('saving opacity with no editor window reports a saved preference only', asy
 
 test.each([
   [
+    'changing editor opacity',
     { name: 'set_editor_opacity', args: { opacity: 0.9 } },
     'setLiveEditorOpacity',
   ],
   [
+    'resetting the Settings window size',
     { name: 'reset_settings_window_size', args: {} },
     'resetSettingsPopoverSize',
   ],
 ] as const)(
-  '%j reports partial when the window changed but the write failed',
-  async (call, method) => {
+  '%s reports a partial change when the window updates but the preference cannot be saved',
+  async (_label, call, method) => {
     // Arrange
     const context = {
       windows: {

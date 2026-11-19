@@ -3,6 +3,7 @@ import { link, mkdir, open, rename, unlink } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 
+import { McpAccountError } from './historyAuthority'
 import { McpActionError } from './result'
 
 /** Resolves a supplied name in the current app profile or honors an exact absolute location.
@@ -81,19 +82,29 @@ async function removeStagingFile(
   temp: string,
   destination: string,
   published: boolean,
+  publicationError?: unknown,
 ): Promise<void> {
   try {
     await unlink(temp)
   } catch (error) {
     if (error instanceof Error && 'code' in error && error.code === 'ENOENT')
       return
+    const publicationCode =
+      publicationError instanceof McpActionError ||
+      publicationError instanceof McpAccountError
+        ? publicationError.code
+        : undefined
     throw new McpActionError(
       'file-cleanup-incomplete',
-      'A private staging file could not be removed. Check the destination directory before retrying.',
+      publicationCode === 'account-changed'
+        ? 'Check the active account and remove the private staging file before retrying.'
+        : 'A private staging file could not be removed. Check the destination directory before retrying.',
       'partial',
-      published
-        ? { destinationSaved: true, path: destination }
-        : { destinationSaved: false },
+      {
+        destinationSaved: published,
+        ...(published && { path: destination }),
+        ...(publicationCode && { publicationError: publicationCode }),
+      },
     )
   }
 }
@@ -122,7 +133,6 @@ export async function publishExportFile(request: {
     )
   const temp = join(directory, `.corelive-${randomUUID()}.tmp`)
   const handle = await open(temp, 'wx', 0o600).catch(refuseFileWrite)
-  let published = false
   try {
     try {
       await handle.writeFile(request.bytes).catch(refuseFileWrite)
@@ -135,11 +145,11 @@ export async function publishExportFile(request: {
     if (request.overwrite)
       await rename(temp, destination.path).catch(refuseFileWrite)
     else await link(temp, destination.path).catch(refuseFileWrite)
-    published = true
-    return { path: destination.path }
-  } finally {
-    // A successful rename consumes the staging path; an exclusive link leaves it to remove.
-    if (!(published && request.overwrite))
-      await removeStagingFile(temp, destination.path, published)
+  } catch (error) {
+    await removeStagingFile(temp, destination.path, false, error)
+    throw error
   }
+  // A successful rename consumes the staging path; an exclusive link leaves it to remove.
+  if (!request.overwrite) await removeStagingFile(temp, destination.path, true)
+  return { path: destination.path }
 }
