@@ -265,9 +265,7 @@ export class WorkspaceService {
    */
   async appendTask(input: WorkspaceWorkerCalls['appendTask']['input']) {
     const { operationId, categoryId: requested, accountId, title } = input
-    const intent = digest(
-      JSON.stringify(['appendTask', accountId, requested ?? null, title]),
-    )
+    const intent = taskAdditionDigest(input, accountId)
     const state = await this.file.update(
       (current) => {
         const receipt = current.commandReceipts[operationId]
@@ -329,12 +327,21 @@ export class WorkspaceService {
   async findTaskAddition({
     operationId,
     accountId,
+    original,
   }: WorkspaceWorkerCalls['findTaskAddition']['input']) {
     const state = await this.file.read()
-    const saved = state.commandReceipts[operationId]?.taskAddition
-    return saved?.deviceId === state.deviceId && saved.accountId === accountId
-      ? saved
-      : null
+    const receipt = state.commandReceipts[operationId]
+    const saved = receipt?.taskAddition
+    if (
+      !saved ||
+      saved.deviceId !== state.deviceId ||
+      saved.accountId !== accountId
+    )
+      return null
+    // An implicit selection and an explicit UUID are different intents even when both resolve to the same category.
+    if (original && receipt.digest !== taskAdditionDigest(original, accountId))
+      throw new WorkspaceCommandError('command-conflict')
+    return saved
   }
 
   /**
@@ -1839,4 +1846,24 @@ function checkedText(raw: string): string {
  */
 function digest(value: string): string {
   return createHash('sha256').update(value).digest('hex')
+}
+
+/** Matches the on-disk intent written by {@link WorkspaceService.appendTask}, including earlier app versions.
+ * @example taskAdditionDigest({title: 'Send the invoice'}, accountId)
+ */
+function taskAdditionDigest(
+  input: Pick<
+    WorkspaceWorkerCalls['appendTask']['input'],
+    'categoryId' | 'title'
+  >,
+  accountId: string | null,
+): string {
+  return digest(
+    JSON.stringify([
+      'appendTask',
+      accountId,
+      input.categoryId ?? null,
+      input.title,
+    ]),
+  )
 }

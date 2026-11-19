@@ -43,7 +43,7 @@ function createBlockedShortcutManager() {
       toggleLiveEditorSecondary: 'lone-modifier:rightOption',
     }),
     get: vi.fn(),
-    set: vi.fn(),
+    set: vi.fn(() => true),
   } as unknown as ConfigManager
   const manager = new ShortcutManager(
     { toggleLiveEditor } as unknown as WindowManager,

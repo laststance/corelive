@@ -221,9 +221,9 @@ export class WindowManager {
   private applyVisibleOnAllWorkspaces(
     browserWindow: BrowserWindow | null,
     enabled: boolean,
-  ): void {
-    if (process.platform !== 'darwin') return
-    if (!browserWindow || browserWindow.isDestroyed()) return
+  ): boolean {
+    if (process.platform !== 'darwin') return false
+    if (!browserWindow || browserWindow.isDestroyed()) return false
 
     // Include fullscreen Spaces so the panel behaves like Raycast Notes during
     // Mission Control desktop changes, not only normal desktop switches.
@@ -231,6 +231,7 @@ export class WindowManager {
       visibleOnFullScreen: enabled,
       skipTransformProcessType: true,
     })
+    return true
   }
 
   /**
@@ -242,11 +243,12 @@ export class WindowManager {
   private applyAlwaysOnTop(
     browserWindow: BrowserWindow | null,
     enabled: boolean,
-  ): void {
-    if (!browserWindow || browserWindow.isDestroyed()) return
+  ): boolean {
+    if (!browserWindow || browserWindow.isDestroyed()) return false
     // setAlwaysOnTop's default window level (above normal windows, below
     // menus) is the right one for these utility panels.
     browserWindow.setAlwaysOnTop(enabled)
+    return true
   }
 
   /**
@@ -272,18 +274,23 @@ export class WindowManager {
    * window created later reads the persisted config during creation.
    *
    * @param enabled - true keeps LiveEditor visible across Spaces
-   * @returns The setting value that was applied
+   * @returns The requested value and whether it was persisted and applied to a window
    * @example
    * windowManager.setLiveEditorVisibleOnAllWorkspaces(true)
    */
-  setLiveEditorVisibleOnAllWorkspaces(enabled: boolean): boolean {
-    if (this.configManager) {
-      this.configManager.set('liveEditor.visibleOnAllWorkspaces', enabled)
-    }
-
-    this.applyVisibleOnAllWorkspaces(this.liveEditorWindow, enabled)
-
-    return enabled
+  setLiveEditorVisibleOnAllWorkspaces(enabled: boolean): {
+    enabled: boolean
+    persisted: boolean
+    applied: boolean
+  } {
+    const persisted =
+      this.configManager?.set('liveEditor.visibleOnAllWorkspaces', enabled) ??
+      false
+    const applied = this.applyVisibleOnAllWorkspaces(
+      this.liveEditorWindow,
+      enabled,
+    )
+    return { enabled, persisted, applied }
   }
 
   /**
@@ -300,14 +307,18 @@ export class WindowManager {
   /**
    * Persists + applies LiveEditor's always-on-top setting.
    * @param enabled - true pins LiveEditor above other windows; false unpins it.
-   * @returns The applied value (echoed for optimistic-UI confirmation).
+   * @returns The requested value and whether it was persisted and applied to a window
+   * @example windowManager.setLiveEditorAlwaysOnTop(true)
    */
-  setLiveEditorAlwaysOnTop(enabled: boolean): boolean {
-    if (this.configManager) {
-      this.configManager.set('liveEditor.alwaysOnTop', enabled)
-    }
-    this.applyAlwaysOnTop(this.liveEditorWindow, enabled)
-    return enabled
+  setLiveEditorAlwaysOnTop(enabled: boolean): {
+    enabled: boolean
+    persisted: boolean
+    applied: boolean
+  } {
+    const persisted =
+      this.configManager?.set('liveEditor.alwaysOnTop', enabled) ?? false
+    const applied = this.applyAlwaysOnTop(this.liveEditorWindow, enabled)
+    return { enabled, persisted, applied }
   }
 
   /**
@@ -1066,23 +1077,21 @@ export class WindowManager {
    * Set LiveEditor opacity, clamped to [0.30, 1.00] and persisted to config.
    *
    * @param value - Desired opacity (out-of-band values are clamped silently).
-   * @returns The opacity actually applied (post-clamp).
-   * @example
-   * windowManager.setLiveEditorOpacity(0.85) // → 0.85
-   * windowManager.setLiveEditorOpacity(0.10) // → 0.30 (clamped)
+   * @returns The clamped opacity and whether it was persisted and applied to a window.
+   * @example windowManager.setLiveEditorOpacity(0.10).opacity // => 0.30
    */
-  setLiveEditorOpacity(value: number): number {
-    const clamped = Math.max(0.3, Math.min(1, value))
-
-    if (this.liveEditorWindow && !this.liveEditorWindow.isDestroyed()) {
-      this.liveEditorWindow.setOpacity(clamped)
-    }
-
-    if (this.configManager) {
-      this.configManager.set('liveEditor.opacity', clamped)
-    }
-
-    return clamped
+  setLiveEditorOpacity(value: number): {
+    opacity: number
+    persisted: boolean
+    applied: boolean
+  } {
+    const opacity = Math.max(0.3, Math.min(1, value))
+    const panel = this.liveEditorWindow
+    const applied = Boolean(panel && !panel.isDestroyed())
+    if (applied) panel?.setOpacity(opacity)
+    const persisted =
+      this.configManager?.set('liveEditor.opacity', opacity) ?? false
+    return { opacity, persisted, applied }
   }
 
   /** Read current LiveEditor opacity (live window value, else config, else 1). */
@@ -1451,15 +1460,17 @@ export class WindowManager {
    * Resets the Settings popover to default size and re-anchors it to the tray.
    * Called by the "Restore default size" IPC handler. Persists the reset so the
    * next open also uses default dimensions.
+   * @example const { persisted } = windowManager.resetSettingsPopoverSize()
    */
-  resetSettingsPopoverSize(): void {
-    this.configManager?.update({
-      'settingsPopover.width': SETTINGS_POPOVER_DEFAULT_WIDTH_PX,
-      'settingsPopover.height': SETTINGS_POPOVER_DEFAULT_HEIGHT_PX,
-    })
+  resetSettingsPopoverSize(): { persisted: boolean; applied: boolean } {
+    const persisted =
+      this.configManager?.update({
+        'settingsPopover.width': SETTINGS_POPOVER_DEFAULT_WIDTH_PX,
+        'settingsPopover.height': SETTINGS_POPOVER_DEFAULT_HEIGHT_PX,
+      }) ?? false
 
     const win = this.settingsWindow
-    if (!win || win.isDestroyed()) return
+    if (!win || win.isDestroyed()) return { persisted, applied: false }
 
     const { x, y } = this.calculateSettingsPopoverPosition(
       SETTINGS_POPOVER_DEFAULT_WIDTH_PX,
@@ -1471,6 +1482,7 @@ export class WindowManager {
       width: SETTINGS_POPOVER_DEFAULT_WIDTH_PX,
       height: SETTINGS_POPOVER_DEFAULT_HEIGHT_PX,
     })
+    return { persisted, applied: true }
   }
 
   /** Allows native updater close events after main has durably drained writing.

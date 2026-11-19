@@ -33,6 +33,8 @@ const nextSteps: Record<string, string> = {
   'undo-expired': 'The Undo window has closed. Read the current completion.',
   'account-changed':
     'Read the current account and category before starting a new request.',
+  'connection-not-pending':
+    'Read the account status. Only a pending connection can be declined.',
   'invalid-row': 'Read the current row IDs and check the editor input limit.',
 }
 
@@ -124,7 +126,13 @@ async function runEditorAction(
         'Inspect the original operation before repeating the change.',
         'unknown',
       )
-    return { ...result, status: 'saved', revision: outcome.revision }
+    // The next change uses the revision of the edited document or preferences, even if other categories changed.
+    let revision = outcome.revision
+    if ('baseRevision' in intent && outcome.writtenDraft)
+      revision = outcome.writtenDraft.draft.revision
+    if (intent.type === 'preferences')
+      revision = outcome.workspace.preferences.revision
+    return { ...result, status: 'saved', revision }
   }
   const actions: McpActions = {
     export_workspace: async () => ({
@@ -153,8 +161,12 @@ async function runEditorAction(
           selectedAtStart,
         }),
       ),
-    get_task_addition_result: async ({ operationId }) => {
-      const saved = await controller.findMcpTask(generation, operationId)
+    get_task_addition_result: async ({ operationId, original }) => {
+      const saved = await controller.findMcpTask(
+        generation,
+        operationId,
+        original,
+      )
       if (!saved)
         throw new McpActionError(
           'result-unknown',

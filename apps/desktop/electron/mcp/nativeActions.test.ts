@@ -97,3 +97,114 @@ test('requesting a download without an available update reports a refusal', asyn
     effect: 'none',
   })
 })
+
+test.each([
+  ['set_editor_on_all_spaces', 'setLiveEditorVisibleOnAllWorkspaces'],
+  ['set_editor_always_on_top', 'setLiveEditorAlwaysOnTop'],
+] as const)(
+  '%s reports partial effect when the panel updates and config saving fails',
+  async (name, method) => {
+    // Arrange
+    const changeWindow = vi.fn(() => ({
+      enabled: false,
+      persisted: false,
+      applied: true,
+    }))
+    const context = {
+      windows: { [method]: changeWindow },
+    } as unknown as NativeActionContext
+
+    // Act
+    const change = runNativeAction(context, {} as EditorRuntime, {
+      name,
+      args: { enabled: false },
+    })
+
+    // Assert
+    await expect(change).rejects.toMatchObject({
+      code: 'operation-refused',
+      effect: 'partial',
+    })
+    expect(changeWindow).toHaveBeenCalledWith(false)
+  },
+)
+
+test.each([
+  ['open_live_editor', 'showLiveEditor'],
+  ['open_settings', 'openSettings'],
+] as const)(
+  '%s acknowledges a request while the first document is still loading',
+  async (name, method) => {
+    // Arrange
+    const requestOpen = vi.fn()
+    const context = {
+      windows: { [method]: requestOpen },
+    } as unknown as NativeActionContext
+
+    // Act
+    const opening = runNativeAction(context, {} as EditorRuntime, {
+      name,
+      args: {},
+    })
+
+    // Assert
+    await expect(opening).resolves.toEqual({ status: 'requested' })
+    expect(requestOpen).toHaveBeenCalledOnce()
+  },
+)
+
+test('saving opacity with no editor window reports a saved preference only', async () => {
+  // Arrange
+  const context = {
+    windows: {
+      setLiveEditorOpacity: () => ({
+        opacity: 0.3,
+        persisted: true,
+        applied: false,
+      }),
+    },
+  } as unknown as NativeActionContext
+
+  // Act
+  const change = runNativeAction(context, {} as EditorRuntime, {
+    name: 'set_editor_opacity',
+    args: { opacity: 0.1 },
+  })
+
+  // Assert
+  await expect(change).resolves.toEqual({
+    status: 'saved',
+    opacity: 0.3,
+    applied: false,
+  })
+})
+
+test.each([
+  [
+    { name: 'set_editor_opacity', args: { opacity: 0.9 } },
+    'setLiveEditorOpacity',
+  ],
+  [
+    { name: 'reset_settings_window_size', args: {} },
+    'resetSettingsPopoverSize',
+  ],
+] as const)(
+  '%j reports partial when the window changed but the write failed',
+  async (call, method) => {
+    // Arrange
+    const context = {
+      windows: {
+        [method]: () => ({ opacity: 0.9, persisted: false, applied: true }),
+      },
+    } as unknown as NativeActionContext
+
+    // Act
+    const change = runNativeAction(context, {} as EditorRuntime, call)
+
+    // Assert
+    await expect(change).rejects.toMatchObject({
+      code: 'operation-refused',
+      effect: 'partial',
+    })
+  },
+)

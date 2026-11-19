@@ -49,7 +49,14 @@ export interface WorkspaceWorkerCalls {
     output: { view: WorkspaceView; addition: TaskAddition }
   }
   findTaskAddition: {
-    input: { operationId: string; accountId: string | null }
+    input: {
+      operationId: string
+      accountId: string | null
+      original?: Pick<
+        WorkspaceWorkerCalls['appendTask']['input'],
+        'categoryId' | 'title'
+      >
+    }
     output: TaskAddition | null
   }
   command: {

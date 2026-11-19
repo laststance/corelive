@@ -5,10 +5,12 @@ import { z } from 'zod'
 import type { McpResult } from './result'
 
 // Version changes deliberately reach the old endpoint so its owner can report incompatibility.
-export const BRIDGE_VERSION = 1
+export const BRIDGE_VERSION = 2
 export const OWNER_START_TIMEOUT_MS = 15_000
 export const MCP_BACKGROUND_SWITCH = '--corelive-mcp-background'
 const MAX_FRAME_BYTES = 32 * 1024 * 1024
+// The SDK's default stdio client accepts a 10 MiB JSON-RPC message. Reserve room for its envelope.
+export const MAX_MCP_RESULT_BYTES = 8 * 1024 * 1024
 
 export const HelloFrame = z.strictObject({
   type: z.literal('hello'),

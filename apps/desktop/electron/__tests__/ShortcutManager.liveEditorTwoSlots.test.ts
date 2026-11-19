@@ -70,7 +70,7 @@ function createConfigManagerStub(
   return {
     getSection: vi.fn(() => ({ enabled: true, ...shortcuts })),
     get: vi.fn(() => undefined),
-    set: vi.fn(),
+    set: vi.fn(() => true),
   } as unknown as ConfigManager
 }
 

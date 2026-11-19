@@ -68,4 +68,18 @@ describe('broker route isolation', () => {
     expect(screen.getByText('Home page')).toBeVisible()
     expect(state.mounted.mock.calls).toEqual([['appearance'], ['auth']])
   })
+
+  test.each(['/login-shell', '/oauth/callback', '/login'])(
+    'opening %s for desktop sign-in leaves the account theme available for the dashboard to initialize',
+    (path) => {
+      // Arrange
+      state.path = path
+
+      // Act
+      render(<ApplicationProviders>Sign in</ApplicationProviders>)
+
+      // Assert
+      expect(state.mounted.mock.calls).toEqual([['auth']])
+    },
+  )
 })

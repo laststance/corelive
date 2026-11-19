@@ -99,6 +99,7 @@ function createConfigStub(values: Record<string, unknown> = {}): {
   )
   const set = vi.fn((key: string, value: unknown) => {
     store[key] = value
+    return true
   })
   const configManager = {
     get,
@@ -132,9 +133,24 @@ describe('WindowManager always-on-top', () => {
       const applied = windowManager.setLiveEditorAlwaysOnTop(true)
 
       // Assert: config is updated AND the live window is re-pinned immediately.
-      expect(applied).toBe(true)
+      expect(applied).toEqual({ enabled: true, persisted: true, applied: true })
       expect(set).toHaveBeenCalledWith('liveEditor.alwaysOnTop', true)
       expect(liveEditorWindow.win.setAlwaysOnTop).toHaveBeenCalledWith(true)
+    })
+
+    test('reports an unsaved preference when pinning works but the config write fails', () => {
+      // Arrange
+      const { configManager, set } = createConfigStub()
+      set.mockReturnValue(false)
+      const windowManager = new WindowManager(SERVER_URL, configManager, null)
+      windowManager.createLiveEditorWindow()
+
+      // Act
+      const result = windowManager.setLiveEditorAlwaysOnTop(true)
+
+      // Assert
+      expect(createdWindows[0]?.win.setAlwaysOnTop).toHaveBeenCalledWith(true)
+      expect(result).toEqual({ enabled: true, persisted: false, applied: true })
     })
 
     test('does not throw when LiveEditor is closed', () => {

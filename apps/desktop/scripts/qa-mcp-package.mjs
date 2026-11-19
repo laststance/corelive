@@ -278,9 +278,9 @@ if (process.argv[2] === '--fixture') {
   )
   // The current host must be able to execute this bundle. Other slices have separate QA results.
   execFileSync('/usr/bin/lipo', [
+    join(app, 'Contents/MacOS/CoreLive'),
     '-verify_arch',
     process.arch === 'arm64' ? 'arm64' : 'x86_64',
-    join(app, 'Contents/MacOS/CoreLive'),
   ])
   await verifyBundle(app, hostedColdStart)
 }

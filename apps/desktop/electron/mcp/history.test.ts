@@ -283,6 +283,84 @@ test('each helper finishes its original snapshot, a fresh read sees later rows, 
   ).rejects.toMatchObject({ code: 'history-cursor-unavailable' })
 })
 
+test('an IDE can finish a long frozen read while newer first pages evict its least recently read history', async () => {
+  // Arrange
+  const rows = Array.from({ length: 100 }, (_, index) =>
+    remoteRow(index + 1, null, 'Completed work'),
+  )
+  const { history, historyRange } = historyFixture(
+    async () => emptyDevice,
+    () => framesFor(rows),
+  )
+  const firstPage = { startDate: day, endDate: day, pageSize: 1 }
+  const longRead = await history.list('ide', firstPage)
+  const abandoned = await history.list('ide', firstPage)
+
+  // Act
+  const secondPage = await history.list('ide', { cursor: longRead.nextCursor! })
+  await history.list('ide', firstPage)
+  await expect(
+    history.list('ide', { cursor: abandoned.nextCursor! }),
+  ).rejects.toMatchObject({ code: 'history-cursor-unavailable' })
+  const received = [...longRead.entries, ...secondPage.entries]
+  let cursor = secondPage.nextCursor
+  while (cursor) {
+    const next = await history.list('ide', { cursor, pageSize: 7 })
+    received.push(...next.entries)
+    cursor = next.nextCursor
+  }
+
+  // Assert
+  expect(received.map((row) => row.accountRow?.id)).toEqual(
+    Array.from({ length: 100 }, (_, index) => 100 - index),
+  )
+  expect(historyRange).toHaveBeenCalledTimes(3)
+})
+
+test('the app evicts the least recently used history across helpers only when a new continuation needs a slot', async () => {
+  // Arrange
+  const rows = [
+    remoteRow(1, null, 'one'),
+    remoteRow(2, null, 'two'),
+    remoteRow(3, null, 'three'),
+  ]
+  const { history } = historyFixture(
+    async () => emptyDevice,
+    () => framesFor(rows),
+  )
+  const firstPage = { startDate: day, endDate: day, pageSize: 1 }
+  const cursors: string[] = []
+  for (let index = 0; index < 8; index++) {
+    const read = await history.list(`helper-${index}`, firstPage)
+    cursors.push(read.nextCursor!)
+  }
+
+  // Act
+  const singlePage = await history.list('one-page', {
+    ...firstPage,
+    pageSize: 3,
+  })
+  const recentlyRead = await history.list('helper-0', { cursor: cursors[0] })
+  await history.list('new-helper', firstPage)
+  history.closeSession('helper-7')
+  await history.list('replacement', firstPage)
+
+  // Assert
+  expect(singlePage.nextCursor).toBeNull()
+  await expect(
+    history.list('helper-1', { cursor: cursors[1] }),
+  ).rejects.toMatchObject({ code: 'history-cursor-unavailable' })
+  await expect(
+    history.list('helper-7', { cursor: cursors[7] }),
+  ).rejects.toMatchObject({ code: 'history-cursor-unavailable' })
+  expect(
+    await history.list('helper-0', { cursor: recentlyRead.nextCursor! }),
+  ).toMatchObject({ entries: [{ title: 'one' }], nextCursor: null })
+  expect(await history.list('helper-2', { cursor: cursors[2] })).toMatchObject({
+    entries: [{ title: 'two' }],
+  })
+})
+
 test('a missing terminal record or mismatched membership discards every remote row and reports the verified device scope', async () => {
   // Arrange
   const row = remoteRow(1, null, 'remote only')

@@ -254,7 +254,7 @@ describe.runIf(process.platform === 'darwin')('verified Mac socket', () => {
     expect(lookup).toHaveBeenCalledExactlyOnceWith(
       expect.any(String),
       'get_task_addition_result',
-      { operationId },
+      { operationId, original: { title: 'Verify this write' } },
     )
   })
 })

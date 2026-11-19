@@ -116,6 +116,7 @@ Paste this request into the agent chat.
 
 - “Show the draft in Work / CoreLive, then add ‘Check the invoice’ to that category.”
 - “Create a category called Planning under Work.”
+- “Save a complete backup of my workspace to corelive-backup.json.” The app returns the saved file's path. Use `save_workspace_backup` when an inline export reports `result-too-large`.
 - “Set my dashboard appearance to Harbor dark.” This changes the connected account. Other browsers load the saved theme when you open or refocus the dashboard. LiveEditor keeps its own appearance.
 - “Show this week's completed tasks in Work, including tasks from child categories.”
 - “Save today's activity card as activity.png.” A filename alone goes under the active profile's `Exports`. A standard installation uses `~/Library/Application Support/CoreLive/Exports`. You can also give an absolute path. The answer includes the actual path after saving. An occupied filename requires an explicit overwrite instruction.

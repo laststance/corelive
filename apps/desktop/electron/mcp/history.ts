@@ -19,6 +19,9 @@ type Owner = Pick<
 >
 type HistoryScope = 'device' | 'device-and-account'
 type ScopeReason = 'verified' | 'not-connected' | 'account-unavailable'
+// An IDE can alternate two reads; the app can keep a read for all seven target agents simultaneously.
+const MAX_READS_PER_SESSION = 2
+const MAX_READS_TOTAL = 8
 interface FrozenRead {
   sessionId: string
   query: McpHistoryInput
@@ -102,6 +105,27 @@ export function createCompletionHistory({ controller }: { controller: Owner }) {
   const retained = new Map<string, { read: FrozenRead; release: () => void }>()
   const pending = new Map<string, Set<AbortController>>()
 
+  /** Keeps the just-served read most recent. Continuing a cursor removes its old slot before adding this one.
+   * @example const nextCursor = retain(read)
+   */
+  function retain(read: FrozenRead): string {
+    const sameSession = [...retained.values()].filter(
+      (entry) => entry.read.sessionId === read.sessionId,
+    )
+    if (sameSession.length >= MAX_READS_PER_SESSION) sameSession[0]?.release()
+    if (retained.size >= MAX_READS_TOTAL)
+      retained.values().next().value?.release()
+
+    const cursor = randomUUID()
+    const release = (): void => {
+      retained.delete(cursor)
+      read.binding?.signal.removeEventListener('abort', release)
+    }
+    retained.set(cursor, { read, release })
+    read.binding?.signal.addEventListener('abort', release, { once: true })
+    return cursor
+  }
+
   function page(read: FrozenRead) {
     if (
       read.binding &&
@@ -112,17 +136,7 @@ export function createCompletionHistory({ controller }: { controller: Owner }) {
     const { entries, unverifiedFilterCount } = read.projection
     const slice = entries.slice(read.offset, read.offset + read.pageSize)
     read.offset += slice.length
-    let nextCursor = null
-    if (read.offset < entries.length) {
-      const cursor = randomUUID()
-      const release = (): void => {
-        retained.delete(cursor)
-        read.binding?.signal.removeEventListener('abort', release)
-      }
-      retained.set(cursor, { read, release })
-      read.binding?.signal.addEventListener('abort', release, { once: true })
-      nextCursor = cursor
-    }
+    const nextCursor = read.offset < entries.length ? retain(read) : null
     return {
       scope: read.scope,
       scopeReason: read.scopeReason,

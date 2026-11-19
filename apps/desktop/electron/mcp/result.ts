@@ -34,6 +34,8 @@ export function mcpSuccess(result: Record<string, unknown>): McpResult {
 }
 
 const messages: Readonly<Record<string, string>> = {
+  'result-too-large':
+    'The complete tool result exceeds the inline MCP response size limit.',
   'invalid-input': 'The supplied arguments do not match this operation.',
   'category-unavailable':
     'The requested category is unavailable in this workspace.',
@@ -48,6 +50,7 @@ const messages: Readonly<Record<string, string>> = {
   'flush-failed': 'The editor could not confirm that current typing was saved.',
   'account-changed': 'The account changed during this operation.',
   'account-required': 'This operation needs a connected CoreLive account.',
+  'connection-not-pending': 'The account has no pending connection to decline.',
   'account-unavailable': 'The connected account could not be reached.',
   'history-cursor-unavailable':
     'This history page is no longer available to this session.',

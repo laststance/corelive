@@ -12,16 +12,57 @@ import {
 import {
   BRIDGE_VERSION,
   HelloFrame,
+  MAX_MCP_RESULT_BYTES,
   OWNER_START_TIMEOUT_MS,
   readFrames,
   RequestFrame,
   writeFrame,
 } from './protocol'
 import { mcpFailure, type McpResult } from './result'
+import { coreLiveTools } from './tools'
 
 export interface McpOwnerActions {
   call(sessionId: string, name: string, args: unknown): Promise<McpResult>
   closeSession(sessionId: string): void
+}
+
+/** Keeps complete tool replies readable by a default stdio client, including its text fallback.
+ * A large read can be recovered without changing the workspace or disconnecting the helper.
+ * @example const reply = stdioResult('export_workspace', result)
+ */
+function stdioResult(name: string, result: McpResult): McpResult {
+  let resultBytes: number | undefined
+  try {
+    resultBytes = Buffer.byteLength(JSON.stringify(result))
+  } catch (error) {
+    // A serializable structured result plus its duplicate text can exceed V8's single-string limit.
+    if (!(error instanceof RangeError)) throw error
+  }
+  if (resultBytes !== undefined && resultBytes <= MAX_MCP_RESULT_BYTES)
+    return result
+  const readOnly =
+    Object.hasOwn(coreLiveTools, name) &&
+    coreLiveTools[name as keyof typeof coreLiveTools].readOnly
+  const writing = result.structuredContent.writing
+  const next =
+    name === 'export_workspace'
+      ? 'Request save_workspace_backup with a JSON filename to save the complete workspace on this Mac.'
+      : readOnly
+        ? 'Narrow the range or request a smaller page.'
+        : 'Inspect the saved state before repeating this operation.'
+  return mcpFailure(
+    name,
+    'result-too-large',
+    readOnly ? 'none' : 'unknown',
+    next,
+    {
+      limitBytes: MAX_MCP_RESULT_BYTES,
+      ...(resultBytes === undefined ? {} : { resultBytes }),
+      ...(name === 'export_workspace' && typeof writing === 'string'
+        ? { backupBytes: Buffer.byteLength(writing) }
+        : {}),
+    },
+  )
 }
 
 /** Removes only the socket inode the lock-holding owner checked. Never remove a replacement.
@@ -83,7 +124,10 @@ async function servePeer(
           ),
         )
       if (closed || socket.destroyed) break
-      await writeFrame(socket, { id: request.id, result })
+      await writeFrame(socket, {
+        id: request.id,
+        result: stdioResult(request.name, result),
+      })
     }
   } finally {
     socket.destroy()

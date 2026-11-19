@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 
 import type { OfflineEditorAPI } from '@corelive/desktop-contract/offline-editor-api'
 import type { CompletionSyncTransport } from '@corelive/desktop-contract/offline-sync'
+import { DraftRowSchema } from '@corelive/desktop-contract/offline-workspace'
 import {
   DEVICE_OWNER_ID,
   DEVICE_WORKSPACE_FILE_NAME,
@@ -23,6 +24,7 @@ import { DurableEditorStore } from '../../renderer/editor/DurableEditorStore'
 import { createAppActions } from '../mcp/appActions'
 import { startMcpOwner } from '../mcp/bridgeOwner'
 import { createEditorDispatcher } from '../mcp/editorActions'
+import { mcpSuccess } from '../mcp/result'
 import { parseMcpCall } from '../mcp/tools'
 import type { WindowManager } from '../WindowManager'
 
@@ -887,6 +889,24 @@ test('Not now ends the session locally and keeps the Mac unbound', async () => {
   expect(syncCalls(fixture.transport)).toBe(0)
 })
 
+test('declining a connection after another client accepted it keeps the account attached', async () => {
+  // Arrange
+  const fixture = await createFixture()
+  await fixture.controller.initialize()
+  await fixture.controller.authenticated('account-a')
+  await fixture.controller.connect()
+
+  // Act
+  const stalePrompt = fixture.controller.notNow()
+
+  // Assert
+  await expect(stalePrompt).rejects.toMatchObject({
+    reason: 'connection-not-pending',
+  })
+  expect(fixture.controller.accountStatus().state).toBe('attached')
+  expect(fixture.endLocalSession).not.toHaveBeenCalled()
+})
+
 test('a different account signed in over the bound one stays detached, sends nothing and keeps editing', async () => {
   // Arrange
   const fixture = await createFixture({
@@ -1434,7 +1454,322 @@ test('a sign-out whose final detach write fails still finishes and keeps the jou
   expect(fixture.controller.accountStatus().state).toBe('signed-out')
 })
 
+/** Builds the real stdio helper for a fresh device workspace and supplies the ordinary app dispatcher.
+ * @example const {actionsFor,connect} = deviceMcpFixture(directory)
+ */
+function deviceMcpFixture(directory: string) {
+  const desktop = fileURLToPath(new URL('../../', import.meta.url))
+  execFileSync(process.execPath, ['scripts/build-mcp.mjs'], {
+    cwd: desktop,
+  })
+  const noWindows = {
+    getLiveEditorWindow: () => null,
+    getSettingsWindow: () => null,
+    setLoginWindowObserver: vi.fn(),
+  } as unknown as WindowManager
+  const actionsFor = async (device: OfflineEditorController) => {
+    await device.initialize()
+    const ipc = new OfflineEditorIPC(noWindows, device, {
+      signOutDevice: async (run) => run(),
+      isOnline: () => false,
+    })
+    return createAppActions({
+      runtime: { controller: device, ipc },
+      profileDirectory: directory,
+      native: async () => undefined,
+      signOutDevice: async (run) => run(),
+    })
+  }
+  const connect = async () => {
+    const client = new Client({
+      name: 'CoreLive integration',
+      version: '1',
+    })
+    await client.connect(
+      new StdioClientTransport({
+        command: process.execPath,
+        args: [
+          join(desktop, 'dist-electron/mcp-runtime/stdio.cjs'),
+          '--user-data-dir=' + directory,
+        ],
+        stderr: 'pipe',
+      }),
+    )
+    onTestFinished(async () => client.close())
+    return client
+  }
+  return { actionsFor, connect }
+}
+
 describe('MCP operations in the device workspace', () => {
+  test('editing another line preserves the completed row returned by read_draft', async () => {
+    // Arrange
+    const { controller } = await createFixture()
+    await controller.initialize()
+    const snapshot = controller.getSnapshot()
+    if (snapshot.phase !== 'ready')
+      throw new Error('Expected an editable workspace')
+    const categoryId = snapshot.workspace.selectedCategoryId
+    const dispatch = createEditorDispatcher(controller, {
+      flush: async () => true,
+      shown: () => {},
+    })
+    const rowId = snapshot.workspace.draft.rows[0]!.id
+    await dispatch(
+      parseMcpCall('complete_draft_line', {
+        categoryId,
+        rowId,
+        baseRevision: 0,
+      }),
+    )
+    const read = await dispatch(parseMcpCall('read_draft', { categoryId }))
+    const rows = DraftRowSchema.array().parse(read.rows)
+
+    // Act
+    await dispatch(
+      parseMcpCall('edit_draft', {
+        categoryId,
+        baseRevision: read.revision,
+        rows: [
+          ...rows,
+          { id: '00000000-0000-4000-8000-000000000228', text: 'New note' },
+        ],
+      }),
+    )
+
+    // Assert
+    const saved = await controller.draft(snapshot.generation, categoryId)
+    expect(rows[0]?.completionId).toEqual(expect.any(String))
+    expect(saved.draft.rows[0]).toEqual(rows[0])
+    expect(saved.draft.rows[1]?.text).toBe('New note')
+  })
+
+  test('a resident app uses the current Mac time zone for each new dashboard day request', async () => {
+    // Arrange
+    const dayDetail = vi.fn(async () => ({}))
+    const fixture = await createFixture({
+      bound: 'account-a',
+      attached: true,
+      override: {
+        mcpClient: () =>
+          ({ completed: { dayDetail } }) as unknown as ReturnType<
+            typeof createMcpAccountClient
+          >,
+      },
+    })
+    await fixture.controller.initialize()
+    const runtime = {
+      controller: fixture.controller,
+      ipc: {} as OfflineEditorIPC,
+    }
+    const actions = createAppActions({
+      runtime,
+      profileDirectory: fixture.directory,
+      native: async () => undefined,
+      signOutDevice: async (run) => run(),
+    })
+    const options = Intl.DateTimeFormat().resolvedOptions()
+    const zone = vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions')
+    onTestFinished(() => zone.mockRestore())
+
+    // Act
+    for (const timeZone of ['Asia/Tokyo', 'America/Los_Angeles']) {
+      zone.mockReturnValue({ ...options, timeZone })
+      await actions.call('one-session', 'read_activity_day', {
+        day: '2026-11-19',
+      })
+    }
+
+    // Assert
+    expect(dayDetail).toHaveBeenNthCalledWith(
+      1,
+      { date: '2026-11-19', timezone: 'Asia/Tokyo' },
+      { signal: expect.any(AbortSignal) },
+    )
+    expect(dayDetail).toHaveBeenNthCalledWith(
+      2,
+      { date: '2026-11-19', timezone: 'America/Los_Angeles' },
+      { signal: expect.any(AbortSignal) },
+    )
+  })
+
+  test('another category change preserves the revision needed for the next draft or preferences update', async () => {
+    // Arrange
+    const { controller } = await createFixture({
+      categoryNames: ['Work', 'Personal'],
+    })
+    await controller.initialize()
+    const dispatch = createEditorDispatcher(controller, {
+      flush: async () => true,
+      shown: () => {},
+    })
+    const work = categoryUuid(1)
+    const rows = [
+      { id: '00000000-0000-4000-8000-000000000118', text: 'First line' },
+    ]
+    await dispatch(
+      parseMcpCall('select_category', { categoryId: categoryUuid(2) }),
+    )
+
+    // Act
+    const edited = await dispatch(
+      parseMcpCall('edit_draft', { categoryId: work, baseRevision: 0, rows }),
+    )
+    const completed = await dispatch(
+      parseMcpCall('complete_draft_line', {
+        categoryId: work,
+        baseRevision: edited.revision,
+        rowId: rows[0]!.id,
+      }),
+    )
+    const preference = await dispatch(
+      parseMcpCall('update_editor_preferences', {
+        expectedRevision: 0,
+        patch: { showTodayEmber: true },
+      }),
+    )
+    const secondPreference = await dispatch(
+      parseMcpCall('update_editor_preferences', {
+        expectedRevision: preference.revision,
+        patch: { showTodayEmber: false },
+      }),
+    )
+
+    // Assert
+    expect(edited.revision).toBe(1)
+    expect(completed.revision).toBe(2)
+    expect(preference.revision).toBe(1)
+    expect(secondPreference.revision).toBe(2)
+  })
+
+  test.runIf(process.platform === 'darwin')(
+    'a large workspace can be saved byte-for-byte after an inline export refusal on the same stdio connection',
+    async () => {
+      // Arrange
+      const { directory, controller } = await createFixture({ existing: false })
+      const journal = '日'.repeat(6 * 1024 * 1024)
+      await initializeDeviceWorkspace(join(directory, 'workspaces'), {
+        notes: { 1: journal },
+      })
+      const { actionsFor, connect } = deviceMcpFixture(directory)
+      const actions = await actionsFor(controller)
+      const sessions = new Set<string>()
+      const stop = await startMcpOwner(directory, {
+        ...actions,
+        call: async (session, name, args) => {
+          sessions.add(session)
+          return actions.call(session, name, args)
+        },
+      })
+      onTestFinished(stop)
+      const client = await connect()
+      const expected = await controller.export(
+        controller.getSnapshot().generation,
+      )
+
+      // Act
+      const inline = await client.callTool({ name: 'export_workspace' })
+      const path = join(directory, 'Exports', 'complete.json')
+      await expect(readFile(path)).rejects.toMatchObject({ code: 'ENOENT' })
+      const saved = await client.callTool({
+        name: 'save_workspace_backup',
+        arguments: { filename: 'complete.json' },
+      })
+      const categories = await client.callTool({ name: 'list_categories' })
+
+      // Assert
+      const actualBytes = Buffer.byteLength(
+        JSON.stringify(mcpSuccess({ format: 'json', writing: expected })),
+      )
+      expect(actualBytes).toBeGreaterThan(32 * 1024 * 1024)
+      expect(inline.isError).toBe(true)
+      expect(inline.structuredContent).toMatchObject({
+        code: 'result-too-large',
+        effect: 'none',
+        limitBytes: 8 * 1024 * 1024,
+        resultBytes: actualBytes,
+        backupBytes: Buffer.byteLength(expected),
+        nextAction: expect.stringContaining('save_workspace_backup'),
+      })
+      expect(saved.structuredContent).toEqual({ path })
+      expect((await readFile(path)).equals(Buffer.from(expected))).toBe(true)
+      expect(expected.includes(journal)).toBe(true)
+      expect(categories.isError).toBe(false)
+      expect(sessions.size).toBe(1)
+    },
+    30_000,
+  )
+
+  test.runIf(process.platform === 'darwin')(
+    'losing an implicit addition reply cannot claim the receipt of an earlier explicit category request',
+    async () => {
+      // Arrange
+      const { directory, controller } = await createFixture({
+        categoryNames: ['Work', 'Personal'],
+      })
+      const { actionsFor, connect } = deviceMcpFixture(directory)
+      const actions = await actionsFor(controller)
+      const operationId = '00000000-0000-4000-8000-000000000220'
+      const title = 'Use the intended category'
+      let additions = 0
+      let replacement: (() => void) | undefined
+      onTestFinished(() => replacement?.())
+      const stop = await startMcpOwner(directory, {
+        ...actions,
+        call: async (session, name, args) => {
+          const result = await actions.call(session, name, args)
+          if (name === 'append_unfinished_task' && ++additions === 2) {
+            stop()
+            replacement = await startMcpOwner(directory, actions)
+          }
+          return result
+        },
+      })
+      onTestFinished(stop)
+      const client = await connect()
+      const saved = await client.callTool({
+        name: 'append_unfinished_task',
+        arguments: { operationId, title, categoryId: categoryUuid(1) },
+      })
+
+      // Act
+      const interrupted = await client.callTool({
+        name: 'append_unfinished_task',
+        arguments: { operationId, title },
+      })
+      const receipt = await client.callTool({
+        name: 'get_task_addition_result',
+        arguments: { operationId },
+      })
+      const exact = await client.callTool({
+        name: 'get_task_addition_result',
+        arguments: {
+          operationId,
+          original: { categoryId: categoryUuid(1), title },
+        },
+      })
+      const conflict = await client.callTool({
+        name: 'get_task_addition_result',
+        arguments: { operationId, original: { title } },
+      })
+
+      // Assert
+      expect(saved.isError).toBe(false)
+      expect(interrupted.isError).toBe(true)
+      expect(interrupted.structuredContent).toMatchObject({
+        effect: 'unknown',
+        operationId,
+      })
+      expect(receipt.structuredContent).toEqual(saved.structuredContent)
+      expect(exact.structuredContent).toEqual(saved.structuredContent)
+      expect(conflict.structuredContent).toMatchObject({
+        code: 'command-conflict',
+        effect: 'none',
+      })
+      expect(additions).toBe(2)
+    },
+  )
+
   test.runIf(process.platform === 'darwin')(
     'two independent stdio sessions read the note, add to the original category and recover the saved result after an app-owner restart',
     async () => {
@@ -1443,48 +1778,8 @@ describe('MCP operations in the device workspace', () => {
         categoryNames: ['Work', 'Personal'],
       })
       const { directory, controller, options } = fixture
-      const desktop = fileURLToPath(new URL('../../', import.meta.url))
-      execFileSync(process.execPath, ['scripts/build-mcp.mjs'], {
-        cwd: desktop,
-      })
-      const noWindows = {
-        getLiveEditorWindow: () => null,
-        getSettingsWindow: () => null,
-        setLoginWindowObserver: vi.fn(),
-      } as unknown as WindowManager
-      const serve = async (device: OfflineEditorController) => {
-        await device.initialize()
-        const ipc = new OfflineEditorIPC(noWindows, device, {
-          signOutDevice: async (run) => run(),
-          isOnline: () => false,
-        })
-        const actions = createAppActions({
-          runtime: { controller: device, ipc },
-          profileDirectory: directory,
-          native: async () => undefined,
-          signOutDevice: async (run) => run(),
-        })
-        return startMcpOwner(directory, actions)
-      }
-      const connect = async () => {
-        const client = new Client({
-          name: 'CoreLive integration',
-          version: '1',
-        })
-        await client.connect(
-          new StdioClientTransport({
-            command: process.execPath,
-            args: [
-              join(desktop, 'dist-electron/mcp-runtime/stdio.cjs'),
-              '--user-data-dir=' + directory,
-            ],
-            stderr: 'pipe',
-          }),
-        )
-        onTestFinished(async () => client.close())
-        return client
-      }
-      const close = await serve(controller)
+      const { actionsFor, connect } = deviceMcpFixture(directory)
+      const close = await startMcpOwner(directory, await actionsFor(controller))
       onTestFinished(close)
       const first = await connect(),
         second = await connect()
@@ -1522,7 +1817,10 @@ describe('MCP operations in the device workspace', () => {
       onTestFinished(async () => {
         await restarted.shutdown()
       })
-      const closeRestarted = await serve(restarted)
+      const closeRestarted = await startMcpOwner(
+        directory,
+        await actionsFor(restarted),
+      )
       onTestFinished(closeRestarted)
       const reconnected = await connect()
       const recovered = await reconnected.callTool({

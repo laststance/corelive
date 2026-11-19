@@ -48,7 +48,6 @@ export function createAppActions(options: ActionOptions) {
   const { controller, ipc } = runtime
   const history = createCompletionHistory(runtime)
   const dispatchEditor = createEditorDispatcher(controller, ipc)
-  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
   async function endAccount(
     which:
@@ -77,6 +76,8 @@ export function createAppActions(options: ActionOptions) {
     sessionId: string,
     call: McpCall,
   ): Promise<Record<string, unknown>> {
+    // A long-running Mac app can move between time zones. Pin the local zone for this request.
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
     const generation = controller.getSnapshot().generation
     const binding = controller.mcpAccountBinding()
     const assertCurrent = (): void => {

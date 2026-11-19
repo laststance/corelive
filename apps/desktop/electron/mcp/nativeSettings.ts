@@ -9,7 +9,6 @@ type Setting =
   | 'settings:setHideAppIcon'
   | 'settings:setShowInMenuBar'
   | 'settings:setStartAtLogin'
-  | 'settings:resetPopoverSize'
   | 'config-open'
 type Handler<C extends Setting> = (
   ...args: ArgsOf<C>

@@ -196,18 +196,29 @@ export async function runNativeAction(
             : 'live-editor-config-set-shortcut-secondary',
           args.accelerator,
         ),
+        'unknown',
       ),
-    set_editor_on_all_spaces: (args) =>
-      saved(
-        windows.setLiveEditorVisibleOnAllWorkspaces(args.enabled) ===
-          args.enabled,
-      ),
-    set_editor_always_on_top: (args) =>
-      saved(windows.setLiveEditorAlwaysOnTop(args.enabled) === args.enabled),
-    set_editor_opacity: (args) => ({
-      status: 'applied',
-      opacity: windows.setLiveEditorOpacity(args.opacity),
-    }),
+    set_editor_on_all_spaces: (args) => {
+      const { persisted, applied } =
+        windows.setLiveEditorVisibleOnAllWorkspaces(args.enabled)
+      return saved(persisted, applied ? 'partial' : 'unknown')
+    },
+    set_editor_always_on_top: (args) => {
+      const { persisted, applied } = windows.setLiveEditorAlwaysOnTop(
+        args.enabled,
+      )
+      return saved(persisted, applied ? 'partial' : 'unknown')
+    },
+    set_editor_opacity: (args) => {
+      const { opacity, persisted, applied } = windows.setLiveEditorOpacity(
+        args.opacity,
+      )
+      return {
+        ...saved(persisted, applied ? 'partial' : 'unknown'),
+        opacity,
+        applied,
+      }
+    },
     set_editor_bounds: (args) => {
       const win = windows.getLiveEditorWindow()
       if (!win || win.isDestroyed())
@@ -240,13 +251,15 @@ export async function runNativeAction(
       ),
     set_start_at_login: async (args) =>
       saved(await applyNativeSetting('settings:setStartAtLogin', args.enabled)),
-    reset_settings_window_size: async () =>
-      saved(await applyNativeSetting('settings:resetPopoverSize')),
+    reset_settings_window_size: () => {
+      const { persisted, applied } = windows.resetSettingsPopoverSize()
+      return { ...saved(persisted, applied ? 'partial' : 'unknown'), applied }
+    },
     open_config_file: async () =>
       opened(await applyNativeSetting('config-open')),
     open_live_editor: () => {
       windows.showLiveEditor()
-      return { status: 'opened' }
+      return { status: 'requested' }
     },
     hide_live_editor: async () => {
       await windows.hideLiveEditor()
@@ -259,7 +272,7 @@ export async function runNativeAction(
     },
     open_settings: () => {
       windows.openSettings()
-      return { status: 'opened' }
+      return { status: 'requested' }
     },
     open_dashboard: async () =>
       opened(

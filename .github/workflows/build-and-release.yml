@@ -137,8 +137,34 @@ jobs:
             apps/desktop/dist/checksums.json
           retention-days: 30
 
-  release:
+  signed-intel-package:
+    name: Verify signed Intel release archive
     needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    runs-on: macos-26-intel
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/prepare
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: electron-app-macos
+          path: ${{ runner.temp }}/release-archive
+      - name: Run the signed Intel app from the archive that will be published
+        shell: bash
+        run: |
+          app_dir="$RUNNER_TEMP/signed-intel"
+          mkdir -p "$app_dir"
+          ditto -x -k "$RUNNER_TEMP/release-archive/CoreLive-${GITHUB_REF_NAME#v}-mac.zip" "$app_dir"
+          app="$app_dir/CoreLive.app"
+          test "$(lipo -archs "$app/Contents/MacOS/CoreLive")" = "x86_64"
+          codesign --verify --strict --deep --all-architectures "$app"
+          pnpm --filter @corelive/desktop qa:mcp-package "$app" --hosted-cold-start
+
+  release:
+    needs: [build, signed-intel-package]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     permissions:

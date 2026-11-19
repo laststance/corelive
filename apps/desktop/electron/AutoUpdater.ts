@@ -129,6 +129,7 @@ export class AutoUpdater {
 
   constructor(
     private readonly beforeInstall: () => Promise<boolean> = async () => true,
+    scheduleAutomaticChecks = true,
   ) {
     this.updateAvailable = false
     this.updateDownloaded = false
@@ -149,10 +150,11 @@ export class AutoUpdater {
     autoUpdater.autoDownload = false
 
     this.setupAutoUpdater()
+    if (scheduleAutomaticChecks) this.enableAutomaticChecks()
   }
 
   /**
-   * Configures auto-updater event handlers and scheduling.
+   * Configures auto-updater event handlers for both manual and scheduled checks.
    */
   setupAutoUpdater(): void {
     autoUpdater.on('checking-for-update', () => {
@@ -218,6 +220,15 @@ export class AutoUpdater {
         log.error('Failed to show update downloaded dialog:', err)
       })
     })
+  }
+
+  /**
+   * Starts automatic update checks when CoreLive opens in the foreground.
+   * A background-only MCP launch keeps manual update actions available.
+   * @example updater.enableAutomaticChecks()
+   */
+  enableAutomaticChecks(): void {
+    if (this.periodicCheckInterval) return
 
     // Initial check after startup
     this.initialCheckTimeout = setTimeout(() => {

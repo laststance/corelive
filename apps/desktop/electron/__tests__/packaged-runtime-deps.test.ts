@@ -111,3 +111,29 @@ test('a Mac build is verified through the bundled MCP launcher before its artifa
   expect(upload).toBeGreaterThan(check)
   expect(steps[check]).not.toMatch(/^        (?:if|continue-on-error):/m)
 })
+
+test('tag publication waits for an Intel runner to open the signed archive from that same build', () => {
+  // Arrange
+  const workflow = readFileSync(
+    new URL(
+      '../../../../.github/workflows/build-and-release.yml',
+      import.meta.url,
+    ),
+    'utf8',
+  )
+  const signedJob = workflow
+    .split('  signed-intel-package:\n')[1]
+    ?.split('\n  release:\n')[0]
+
+  // Act
+  const release = workflow
+    .split('\n  release:\n')[1]
+    ?.split('\n  security-scan:\n')[0]
+
+  // Assert
+  expect(signedJob).toContain('needs: build')
+  expect(signedJob).toContain('runs-on: macos-26-intel')
+  expect(signedJob).toContain('name: electron-app-macos')
+  expect(signedJob).toContain('qa:mcp-package "$app" --hosted-cold-start')
+  expect(release).toContain('needs: [build, signed-intel-package]')
+})

@@ -13,6 +13,7 @@ import {
   LIVE_EDITOR_TOAST_DURATION_MIN_MS,
   LIVE_EDITOR_TOAST_DURATION_MAX_MS,
 } from '@corelive/desktop-contract/live-editor-constants'
+import { DraftRowSchema } from '@corelive/desktop-contract/offline-workspace'
 import { THEME_IDS } from '@corelive/live-editor/themes'
 import { z } from 'zod'
 
@@ -92,7 +93,15 @@ export const coreLiveTools = {
   get_task_addition_result: tool(
     'Check whether this original task addition was saved after reconnecting. A missing receipt means unknown. Never retry a write on evidence of a missing receipt.',
     true,
-    z.strictObject({ operationId: id }),
+    z.strictObject({
+      operationId: id,
+      original: z
+        .strictObject({ ...selected, title })
+        .optional()
+        .describe(
+          'When supplied, verify the original title and category choice. Omit its categoryId if the original addition used the selected category.',
+        ),
+    }),
   ),
   edit_draft: tool(
     'Save the rows of a draft at the specified revision. Preserve existing row IDs, use fresh UUIDs for new rows and read again if the revision changes.',
@@ -100,7 +109,12 @@ export const coreLiveTools = {
     z.strictObject({
       categoryId: id,
       baseRevision: revision,
-      rows: z.array(z.strictObject({ id, text: z.string().regex(/^[^\n]*$/) })),
+      rows: z.array(
+        z.strictObject({
+          ...DraftRowSchema.shape,
+          text: z.string().regex(/^[^\n]*$/),
+        }),
+      ),
     }),
   ),
   complete_draft_line: tool(
@@ -454,7 +468,7 @@ export const coreLiveTools = {
     }),
   ),
   open_live_editor: tool(
-    'Show and focus the LiveEditor window when the user asks to open it.',
+    'Request the LiveEditor window when the user asks to open it. The first window may still be loading.',
     false,
     empty,
   ),
@@ -473,7 +487,11 @@ export const coreLiveTools = {
     false,
     empty,
   ),
-  open_settings: tool('Open CoreLive Settings.', false, empty),
+  open_settings: tool(
+    'Request CoreLive Settings. The first window may still be loading.',
+    false,
+    empty,
+  ),
   read_update_status: tool(
     'Check CoreLive’s installed version and current updater state.',
     true,

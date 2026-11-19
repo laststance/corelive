@@ -329,10 +329,15 @@ export class OfflineEditorController {
     })
   }
 
-  /** Reconciles the original operation within the currently attached account, including after a helper restart.
+  /** Reads the stored addition in the current account. Automatic recovery also verifies the original request.
+   * @param original - The title and the explicit or implicit category choice from the interrupted call.
    * @example await controller.findMcpTask(generation, operationId)
    */
-  async findMcpTask(generation: number, operationId: string) {
+  async findMcpTask(
+    generation: number,
+    operationId: string,
+    original?: WorkspaceWorkerCalls['findTaskAddition']['input']['original'],
+  ) {
     return this.withSessionLock(async () => {
       const context = this.requireContext(generation)
       if (this.sessionEnding) throw new WorkspaceWorkerError('account-changed')
@@ -340,6 +345,7 @@ export class OfflineEditorController {
       const saved = await context.worker.call('findTaskAddition', {
         operationId,
         accountId: binding?.accountId ?? null,
+        original,
       })
       // Account revocation may arrive while the storage worker reads a preexisting receipt.
       if (
@@ -583,8 +589,19 @@ export class OfflineEditorController {
    * @example await controller.notNow()
    */
   async notNow(): Promise<SignOutResult> {
-    this.registryState = await this.registry.update({ pendingConnect: null })
-    return this.signOut()
+    const pending = this.registryState?.pendingConnect?.accountId
+    if (!pending) throw new WorkspaceWorkerError('connection-not-pending')
+    // Connect and sign-in commit under the same lock. A stale prompt must never end a new session.
+    return this.withSessionLock(async () => {
+      if (
+        this.sessionEnding ||
+        this.registryState?.pendingConnect?.accountId !== pending
+      )
+        throw new WorkspaceWorkerError('connection-not-pending')
+      return this.startSignOut(async (generation) =>
+        this.endSession(generation),
+      )
+    })
   }
 
   /**
@@ -654,9 +671,20 @@ export class OfflineEditorController {
     // finish, then sign out. Concurrent sign-outs share one run.
     const clearing = this.clearRun
     if (clearing) await clearing.catch(() => undefined)
+    return this.startSignOut(async (generation) =>
+      this.withSessionLock(async () => this.endSession(generation)),
+    )
+  }
+
+  /** Shares one flush and session end between callers. A pending prompt already holds the session lock.
+   * @example return this.startSignOut(async (generation) => this.endSession(generation))
+   */
+  private async startSignOut(
+    end: (generation: number) => Promise<SignOutResult>,
+  ): Promise<SignOutResult> {
     this.signOutRun ??= this.beginSessionEnd(async () => {
       try {
-        const result = await this.runSignOut()
+        const result = await this.runSignOut(end)
         return { result, ended: result.status !== 'flush-failed' }
       } finally {
         this.signOutRun = null
@@ -665,7 +693,9 @@ export class OfflineEditorController {
     return this.signOutRun
   }
 
-  private async runSignOut(): Promise<SignOutResult> {
+  private async runSignOut(
+    end: (generation: number) => Promise<SignOutResult>,
+  ): Promise<SignOutResult> {
     const generation = this.generation
     const flushed = await this.options
       .requestFlush(generation)
@@ -673,7 +703,7 @@ export class OfflineEditorController {
     if (!flushed || generation !== this.generation) return this.flushFailed()
     // Sign-out keeps the editor open, so its flush must not leave editing blocked.
     this.options.releaseEditorBarrier?.()
-    return this.withSessionLock(async () => this.endSession(generation))
+    return end(generation)
   }
 
   /**

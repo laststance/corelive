@@ -697,6 +697,15 @@ async function signOutDevice(
 }
 
 async function createWindow(background = false): Promise<void> {
+  // A real window focus ends the quiet startup, including a tray or shortcut open.
+  let foreground = !background
+  if (background && app.isPackaged) {
+    app.once('browser-window-focus', () => {
+      foreground = true
+      autoUpdater?.enableAutomaticChecks()
+    })
+  }
+
   // Monitor memory in both development and packaged runs.
   memoryProfiler.startMonitoring()
 
@@ -787,7 +796,7 @@ async function createWindow(background = false): Promise<void> {
         try {
           const AutoUpdaterCls =
             await lazyLoadManager.loadComponent('AutoUpdater')
-          autoUpdater = new AutoUpdaterCls(prepareForQuit)
+          autoUpdater = new AutoUpdaterCls(prepareForQuit, foreground)
           // No main window to bind dialogs to after T18; the updater surfaces
           // through its own notifications.
         } catch (autoUpdaterError) {
@@ -907,7 +916,7 @@ function setupIPCHandlers(): void {
     'live-editor-set-visible-on-all-workspaces',
     (_event, enabled) => {
       if (!windowManager) return false
-      return windowManager.setLiveEditorVisibleOnAllWorkspaces(enabled)
+      return windowManager.setLiveEditorVisibleOnAllWorkspaces(enabled).enabled
     },
   )
 
@@ -918,7 +927,7 @@ function setupIPCHandlers(): void {
 
   typedHandle('live-editor-window-set-always-on-top', (_event, enabled) => {
     if (!windowManager) return false
-    return windowManager.setLiveEditorAlwaysOnTop(enabled)
+    return windowManager.setLiveEditorAlwaysOnTop(enabled).enabled
   })
 
   // ────────────────────────────────────────────────────────────────────────
@@ -940,7 +949,7 @@ function setupIPCHandlers(): void {
 
   typedHandle('live-editor-window-set-opacity', (_event, value) => {
     if (!windowManager) return 1
-    return windowManager.setLiveEditorOpacity(value)
+    return windowManager.setLiveEditorOpacity(value).opacity
   })
 
   typedHandle('live-editor-window-get-opacity', () => {
@@ -1031,7 +1040,7 @@ function setupIPCHandlers(): void {
       // hasn't loaded yet): `updateShortcuts` — which normally does this write —
       // never ran, so persist the choice here or it would vanish on read-back
       // and never reach the next registration pass.
-      configManager.set(`shortcuts.${slotId}`, accelerator)
+      if (!configManager.set(`shortcuts.${slotId}`, accelerator)) return false
     }
     // Keep the tray's displayed LiveEditor hotkey in sync with the rebind.
     systemTrayManager?.refreshTrayMenu()
@@ -1319,11 +1328,10 @@ function setupIPCHandlers(): void {
   })
 
   // Reset the Settings popover to default size and re-anchor to the tray.
-  registerNativeSetting('settings:resetPopoverSize', () => {
+  typedHandle('settings:resetPopoverSize', () => {
     try {
       if (windowManager) {
-        windowManager.resetSettingsPopoverSize()
-        return true
+        return windowManager.resetSettingsPopoverSize().persisted
       }
       log.warn('settings:resetPopoverSize - windowManager not available')
       return false

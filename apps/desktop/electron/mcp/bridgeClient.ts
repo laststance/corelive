@@ -201,7 +201,13 @@ export function createMcpClient(
         const lookup = await execute(
           {
             name: 'get_task_addition_result',
-            args: { operationId: call.args.operationId },
+            args: {
+              operationId: call.args.operationId,
+              original: {
+                title: call.args.title,
+                categoryId: call.args.categoryId,
+              },
+            },
           },
           signal,
         )

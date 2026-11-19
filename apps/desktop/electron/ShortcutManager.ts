@@ -969,7 +969,7 @@ export class ShortcutManager {
    * Called by {@link applyShortcutRebind} when the user saves a shortcut in Settings.
    * @param options.retryNativeTap - Allows an explicit native-key save to retry
    *   after an unfinished start. Startup and rollback must keep this disabled.
-   * @returns Whether every requested shortcut registered successfully.
+   * @returns Whether settings were saved and every requested shortcut registered successfully.
    * @example
    * manager.updateShortcuts({ toggleLiveEditorSecondary: 'lone-modifier:rightOption' }, { retryNativeTap: true })
    */
@@ -1004,9 +1004,11 @@ export class ShortcutManager {
 
       this.shortcuts = { ...this.shortcuts, ...newShortcuts }
 
+      let persisted = true
       if (this.configManager) {
         for (const [key, value] of Object.entries(newShortcuts)) {
-          this.configManager.set(`shortcuts.${key}`, value)
+          if (!this.configManager.set(`shortcuts.${key}`, value))
+            persisted = false
         }
       }
 
@@ -1018,7 +1020,7 @@ export class ShortcutManager {
       // Saving the master switch off releases every binding immediately, including focused-window keys.
       if (!this.isEnabled) {
         this.unregisterAllShortcuts()
-        return true
+        return persisted
       }
 
       this.unregisterChangedShortcuts(newShortcuts)
@@ -1062,7 +1064,7 @@ export class ShortcutManager {
       allRegistered =
         allRegistered && contextualResults.every((result) => result.success)
 
-      return allRegistered
+      return persisted && allRegistered
     } catch (error) {
       log.error('Error updating shortcuts:', error)
       return false
