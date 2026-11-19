@@ -161,6 +161,43 @@ describe('IPC contract', () => {
     })
 
     test.each([
+      ['record_completed_task', { title: 'Finished work' }],
+      [
+        'correct_completion_time',
+        { completionId: '70000000-0000-4000-8000-000000000001' },
+      ],
+    ] as const)(
+      '%s refuses completion times outside the stored UTC range',
+      (name, args) => {
+        // Arrange
+        const beforeEpoch = '1970-01-01T00:30:00+01:00'
+        const afterLastYear = '9999-12-31T23:59:59-01:00'
+
+        // Act
+        const parse = (completedAt: string) =>
+          parseMcpCall(name, { ...args, completedAt })
+
+        // Assert
+        expect(() => parse(beforeEpoch)).toThrow(
+          expect.objectContaining({
+            code: 'invalid-input',
+            effect: 'none',
+            detail: { fields: ['completedAt'] },
+          }),
+        )
+        expect(() => parse(afterLastYear)).toThrow(
+          expect.objectContaining({ code: 'invalid-input' }),
+        )
+        expect(parse('1970-01-01T00:00:00.000Z').args).toMatchObject({
+          completedAt: '1970-01-01T00:00:00.000Z',
+        })
+        expect(parse('9999-12-31T23:59:59.999Z').args).toMatchObject({
+          completedAt: '9999-12-31T23:59:59.999Z',
+        })
+      },
+    )
+
+    test.each([
       [
         'primary',
         'live-editor-config-set-shortcut',

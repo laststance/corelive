@@ -65,7 +65,7 @@ async function createFixture(text = 'First\nSecond', clear = false) {
   }
   const listeners = new Set<(snapshot: OfflineEditorSnapshot) => void>()
   const flushListeners = new Set<(request: OfflineFlushRequest) => void>()
-  const shownListeners = new Set<() => void>()
+  const shownListeners = new Set<(requestId?: string) => void>()
   const publish = (next: OfflineEditorSnapshot): void => {
     snapshot = next
     for (const listener of listeners) listener(next)
@@ -184,12 +184,12 @@ async function createFixture(text = 'First\nSecond', clear = false) {
     publish,
     replyFlush,
     copyWriting,
-    requestFlush: (): void => {
+    requestFlush: (requestId = randomUUID()): void => {
       for (const listener of flushListeners)
-        listener({ requestId: randomUUID(), generation: snapshot.generation })
+        listener({ requestId, generation: snapshot.generation })
     },
-    shown: (): void => {
-      for (const listener of shownListeners) listener()
+    shown: (requestId?: string): void => {
+      for (const listener of shownListeners) listener(requestId)
     },
   }
 }
@@ -732,6 +732,33 @@ test('an explicit native reveal releases the exit input barrier after a successf
   // Assert
   expect(fixture.store.getSnapshot().exitPending).toBe(false)
   expect(fixture.store.getSnapshot().save).toBe('saved')
+})
+
+test('releasing a timed-out reload and rejecting its late reply preserves the active flush barrier', async () => {
+  // Arrange
+  const fixture = await createFixture()
+  const reload = '00000000-0000-4000-8000-000000000101'
+  const active = '00000000-0000-4000-8000-000000000102'
+  let rejectLateReply = (): void => {}
+  const lateReply = new Promise<boolean>((resolve) => {
+    rejectLateReply = (): void => resolve(false)
+  })
+  fixture.replyFlush.mockReturnValueOnce(lateReply)
+  fixture.requestFlush(reload)
+  await vi.waitFor(() => expect(fixture.replyFlush).toHaveBeenCalledOnce())
+  fixture.requestFlush(active)
+  await vi.waitFor(() => expect(fixture.replyFlush).toHaveBeenCalledTimes(2))
+
+  // Act
+  fixture.shown(reload)
+  expect(fixture.store.getSnapshot().exitPending).toBe(true)
+  rejectLateReply()
+  await new Promise<void>((resolve) => setImmediate(resolve))
+
+  // Assert
+  expect(fixture.store.getSnapshot().exitPending).toBe(true)
+  fixture.shown(active)
+  expect(fixture.store.getSnapshot().exitPending).toBe(false)
 })
 
 test('Cmd+Enter on a finished line in keep mode sends nothing and shows no error', async () => {

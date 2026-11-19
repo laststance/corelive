@@ -260,6 +260,8 @@ pnpm electron:build:mac
 
 The built macOS applications (DMG and ZIP) will be available in `apps/desktop/dist/`.
 
+For a GitHub release, first commit the new `version` in `apps/desktop/package.json`. Tag that commit with `v` followed by that exact version. For example, package version `1.2.3` uses tag `v1.2.3`. The tag workflow builds both Mac packages and verifies the signed Intel archive before publication.
+
 > **Note**: Only macOS builds are supported. Windows and Linux builds have been removed.
 
 ### Migration verification

@@ -26,6 +26,7 @@ import {
   assignTask,
   getMyTree,
   getUnassignedPool,
+  getUnassignedPoolPage,
   unassignTask,
 } from './procedures/skillTree'
 
@@ -61,6 +62,7 @@ export const router = {
   skillTree: {
     getMyTree,
     getUnassignedPool,
+    getUnassignedPoolPage,
     assignTask,
     unassignTask,
   },

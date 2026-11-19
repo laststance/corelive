@@ -151,6 +151,7 @@ async function removeStagingFile(
         : 'A private staging file could not be removed. Check the destination directory before retrying.',
       'partial',
       {
+        stagingPath: temp,
         destinationSaved: published,
         ...(published && { path: destination }),
         ...(publicationCode && { publicationError: publicationCode }),

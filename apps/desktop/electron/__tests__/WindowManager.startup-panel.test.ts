@@ -269,6 +269,31 @@ describe('WindowManager bundled startup panel', () => {
     expect(editor.win.show).toHaveBeenCalledOnce()
   })
 
+  test('a refused MCP hide reports the failure even when LiveEditor is still waiting to appear', async () => {
+    // Arrange
+    const manager = new WindowManager(SERVER_URL)
+    manager.showLiveEditor()
+    const editor = getWindow(0)
+    manager.setBeforeEditorHide(async () => false)
+
+    // Act
+    const hiding = runNativeAction(
+      { windows: manager } as NativeActionContext,
+      {} as EditorRuntime,
+      { name: 'hide_live_editor', args: {} },
+    )
+
+    // Assert
+    await expect(hiding).rejects.toMatchObject({
+      code: 'flush-failed',
+      effect: 'none',
+    })
+    expect(editor.win.show).not.toHaveBeenCalled()
+    expect(editor.win.hide).not.toHaveBeenCalled()
+    editor.fireWebContents('did-finish-load')
+    expect(editor.win.show).toHaveBeenCalledOnce()
+  })
+
   test('the native close button intercepts destruction and hides LiveEditor after one save', async () => {
     // Arrange
     let acknowledge = (): void => {}

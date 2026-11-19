@@ -402,7 +402,7 @@ export interface IPCChannels extends OfflineIPCChannels {
 export interface IPCEventChannels {
   'offline-editor-changed': OfflineEditorSnapshot
   'offline-editor-flush': OfflineFlushRequest
-  'offline-editor-shown': void
+  'offline-editor-shown': string | undefined
   'settings-window-changed': void
   'settings-window-hidden': void
   'offline-auth-request': OfflineAuthRequest

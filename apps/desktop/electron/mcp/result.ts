@@ -50,6 +50,8 @@ const messages: Readonly<Record<string, string>> = {
     'This operation ID already belongs to a different request.',
   'undo-expired': 'The time to undo this completion has elapsed.',
   'result-unknown': 'CoreLive could not confirm the original task addition.',
+  'request-timeout':
+    'The CoreLive request did not complete before its deadline.',
   'worker-unavailable':
     'The workspace worker stopped before it returned the result.',
   'flush-failed': 'The editor could not confirm that current typing was saved.',

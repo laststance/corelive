@@ -95,6 +95,7 @@ function forkWorkspace(current: OfflineWorkspace): OfflineWorkspace {
     outbox,
     categoryOutbox,
     commandReceipts,
+    taskAdditionReceipts,
     ...small
   } = current
   return {
@@ -104,11 +105,13 @@ function forkWorkspace(current: OfflineWorkspace): OfflineWorkspace {
     outbox: { ...outbox },
     categoryOutbox: { ...categoryOutbox },
     commandReceipts: { ...commandReceipts },
+    taskAdditionReceipts,
   }
 }
 
 /**
- * Drops receipts older than {@link COMMAND_RECEIPT_WINDOW} commits (by workspace revision).
+ * Drops ordinary receipts older than {@link COMMAND_RECEIPT_WINDOW} commits (by workspace revision).
+ * Older builds embedded task receipts here; their operation IDs still protect committed writing.
  *
  * @param state - The candidate state, already at its new revision; mutated in place.
  * @example pruneCommandReceipts(state)
@@ -117,9 +120,21 @@ function pruneCommandReceipts(state: OfflineWorkspace): void {
   const receipts = Object.keys(state.commandReceipts)
   if (receipts.length <= COMMAND_RECEIPT_WINDOW) return
   const oldest = state.revision - COMMAND_RECEIPT_WINDOW
-  for (const id of receipts)
-    if (state.commandReceipts[id]!.revision <= oldest)
+  for (const id of receipts) {
+    const receipt = state.commandReceipts[id]
+    if (receipt && !receipt.taskAddition && receipt.revision <= oldest)
       delete state.commandReceipts[id]
+  }
+}
+
+/** Looks up an operation ID for appending or confirming a task, including older snapshots.
+ * @example const receipt = taskReceipt(state, operationId)
+ */
+function taskReceipt(state: OfflineWorkspace, operationId: string) {
+  return (
+    state.taskAdditionReceipts[operationId] ??
+    state.commandReceipts[operationId]
+  )
 }
 
 /**
@@ -200,6 +215,8 @@ export class WorkspaceService {
     const commandDigest = digest(JSON.stringify(command))
     return this.file.update(
       (current) => {
+        if (current.taskAdditionReceipts[command.commandId])
+          throw new WorkspaceCommandError('command-conflict')
         const receipt = current.commandReceipts[command.commandId]
         if (receipt) {
           if (receipt.digest !== commandDigest)
@@ -269,7 +286,7 @@ export class WorkspaceService {
     const intent = taskAdditionDigest(input, accountId)
     const state = await this.file.update(
       (current) => {
-        const receipt = current.commandReceipts[operationId]
+        const receipt = taskReceipt(current, operationId)
         if (receipt) {
           if (
             receipt.digest !== intent ||
@@ -300,24 +317,26 @@ export class WorkspaceService {
         })
         draft.inputLimit = getDraftInputLimit(draft)
         state.revision++
-        state.commandReceipts[operationId] = {
-          digest: intent,
-          revision: state.revision,
-          taskAddition: {
-            accountId,
-            deviceId: state.deviceId,
-            categoryId,
-            categoryPath: pathOf(state, categoryId),
-            rowId: row.id,
-            title,
+        // Keep this receipt as long as the workspace so a retry cannot duplicate an old task.
+        state.taskAdditionReceipts = {
+          ...state.taskAdditionReceipts,
+          [operationId]: {
+            digest: intent,
+            taskAddition: {
+              accountId,
+              deviceId: state.deviceId,
+              categoryId,
+              categoryPath: pathOf(state, categoryId),
+              rowId: row.id,
+              title,
+            },
           },
         }
-        pruneCommandReceipts(state)
         return state
       },
       { shared: true },
     )
-    const addition = state.commandReceipts[operationId]?.taskAddition
+    const addition = taskReceipt(state, operationId)?.taskAddition
     if (!addition) throw new WorkspaceCommandError('command-conflict')
     return { state, addition }
   }
@@ -332,7 +351,7 @@ export class WorkspaceService {
   }: WorkspaceWorkerCalls['findTaskAddition']['input']) {
     // A rename can leave a readable receipt before the directory flush succeeds.
     const state = await this.file.update((current) => current, { shared: true })
-    const receipt = state.commandReceipts[operationId]
+    const receipt = taskReceipt(state, operationId)
     const saved = receipt?.taskAddition
     if (
       !saved ||

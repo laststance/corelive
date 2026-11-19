@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { lstatSync, mkdirSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { Socket } from 'node:net'
-import { basename, dirname, join, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 
 type Adopt = (fd: number) => Socket | undefined
 interface PeerBinding {
@@ -12,16 +12,19 @@ interface PeerBinding {
   close(listener: object): void
 }
 
-/** Resolves profile aliases, including case on case-insensitive volumes, before hashing.
- * Missing profiles use their nearest existing parent until the app creates the directory.
- * @example canonicalProfile('/tmp/new-CoreLive-profile')
+/**
+ * Resolves profile aliases in filesystem order for both socket identity and app launch.
+ * Missing paths keep their suffix, but parent traversal needs an existing prefix to interpret it.
+ * @example const ownerPath = canonicalProfile('/tmp/profiles/link/../CoreLive')
  */
-function canonicalProfile(path: string): string {
+export function canonicalProfile(path: string): string {
+  if (!isAbsolute(path)) return canonicalProfile(process.cwd() + '/' + path)
   try {
     return realpathSync.native(path)
   } catch (error) {
-    if (!hasCode(error, 'ENOENT')) throw error
-    return join(canonicalProfile(dirname(path)), basename(path))
+    const suffix = basename(path)
+    if (!hasCode(error, 'ENOENT') || suffix === '..') throw error
+    return join(canonicalProfile(dirname(path)), suffix)
   }
 }
 
@@ -39,7 +42,7 @@ export function peerEndpoint(profile: string) {
   const uid = process.geteuid?.()
   if (uid === undefined) throw new Error('A local Unix user is required')
   const identity = createHash('sha256')
-    .update(canonicalProfile(resolve(profile)))
+    .update(canonicalProfile(profile))
     .digest('hex')
   const directory = `/private/tmp/corelive-mcp-${uid}`
   return {

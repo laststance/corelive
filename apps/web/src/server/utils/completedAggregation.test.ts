@@ -2,9 +2,9 @@
 import { randomUUID } from 'node:crypto'
 
 import { and, eq, isNotNull } from 'drizzle-orm'
-import { afterEach, expect, test, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, expect, test, vi } from 'vitest'
 
-import { db } from '@/db'
+import type { db as applicationDb } from '@/db'
 import { requireRow } from '@/db/requireRow'
 import {
   categoryTable,
@@ -13,8 +13,9 @@ import {
   userTable,
 } from '@/db/schema'
 import { describeIfDb } from '@/server/procedures/describeIfDb'
+import { createScratchDatabase } from '@/test/scratchDatabase'
 
-import { fetchCompletedEntries } from './completedAggregation'
+import type { fetchCompletedEntries as readCompletions } from './completedAggregation'
 
 /**
  * Real-DB suite for the Todo+Completed UNION behind the heatmap and day
@@ -26,6 +27,8 @@ vi.setConfig({ testTimeout: 30_000 })
 
 const RANGE_START = new Date('2026-05-04T00:00:00.000Z')
 const RANGE_END = new Date('2026-05-10T23:59:59.999Z')
+let db: typeof applicationDb
+let fetchCompletedEntries: typeof readCompletions
 
 /** A seeded account plus the one category its rows are filed under. */
 type SeededOwner = {
@@ -148,6 +151,26 @@ afterEach(async () => {
 })
 
 describeIfDb('fetchCompletedEntries', () => {
+  let scratch: Awaited<ReturnType<typeof createScratchDatabase>> | undefined
+  beforeAll(async () => {
+    // This suite takes an exclusive table lock. Its writers and queries must all use its own database.
+    scratch = await createScratchDatabase()
+    vi.stubEnv('POSTGRES_PRISMA_URL', scratch.url)
+    vi.resetModules()
+    db = (await import('@/db')).db
+    fetchCompletedEntries = (await import('./completedAggregation'))
+      .fetchCompletedEntries
+  })
+
+  afterAll(async () => {
+    try {
+      await db?.$client.end()
+    } finally {
+      vi.unstubAllEnvs()
+      await scratch?.drop()
+    }
+  })
+
   test('returns an empty array when neither table has rows in the range', async () => {
     // Arrange
     const owner = await seedOwner()

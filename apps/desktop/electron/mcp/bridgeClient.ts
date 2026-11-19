@@ -84,7 +84,10 @@ function matchesAddition(
 /** Reports the possible effect when a dispatched request lost its reply.
  * @example interruptedResponse(call)
  */
-function interruptedResponse(call: McpCall): McpResult {
+function interruptedResponse(
+  call: McpCall,
+  code: 'worker-unavailable' | 'request-timeout' = 'worker-unavailable',
+): McpResult {
   const readOnly = coreLiveTools[call.name].readOnly
   const nextAction =
     call.name === 'append_unfinished_task'
@@ -92,12 +95,7 @@ function interruptedResponse(call: McpCall): McpResult {
       : readOnly
         ? 'Reconnect to CoreLive and repeat the read.'
         : 'Reconnect and inspect the saved state before repeating this operation.'
-  return localFailure(
-    call,
-    'worker-unavailable',
-    readOnly ? 'none' : 'unknown',
-    nextAction,
-  )
+  return localFailure(call, code, readOnly ? 'none' : 'unknown', nextAction)
 }
 
 /** A caller can stop waiting before a dispatched write's save effect is known.
@@ -124,7 +122,7 @@ function cancelledResult(call: McpCall, dispatched: boolean): McpResult {
  * @example const result = expiredCall(call, dispatched)
  */
 function expiredCall(call: McpCall, dispatched: boolean): McpResult {
-  if (dispatched) return interruptedResponse(call)
+  if (dispatched) return interruptedResponse(call, 'request-timeout')
   return mcpFailure(
     call.name,
     'request-timeout',

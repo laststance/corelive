@@ -116,6 +116,158 @@ const emptyDevice: DeviceHistory = {
   suppressedIds: [],
 }
 
+test('moving settled history changes its filter before sync and uses the account category after confirmation', async () => {
+  // Arrange
+  const directory = await mkdtemp(join(tmpdir(), 'corelive-history-move-'))
+  const state = buildDeviceWorkspace({
+    boundAccountId: accountId,
+    categoryNames: ['Inbox', 'Source', 'Destination'],
+  })
+  const from = categoryUuid(2)
+  const to = categoryUuid(3)
+  const retiredId = uuid(50)
+  const archivedId = uuid(51)
+  state.retiredCompletions[retiredId] = {
+    completedAt: at,
+    originalCompletedAt: at,
+    originalCategoryId: from,
+    timezone: 'UTC',
+    cancelled: false,
+    revision: 1,
+    remoteRevision: 1,
+  }
+  const file = new AtomicWorkspaceFile({
+    directory,
+    ownerId: DEVICE_OWNER_ID,
+    fileName: DEVICE_WORKSPACE_FILE_NAME,
+    parse: OfflineWorkspaceSchema.parse,
+  })
+  await file.initialize(state)
+  await new AtomicWorkspaceFile({
+    directory,
+    ownerId: DEVICE_OWNER_ID,
+    fileName: DEVICE_ARCHIVE_FILE_NAME,
+    parse: WorkspaceArchiveSchema.parse,
+  }).initialize({
+    version: 1,
+    ownerId: 'device',
+    completions: {
+      [archivedId]: {
+        id: archivedId,
+        originalCategoryId: from,
+        categoryId: from,
+        title: 'Older device title',
+        rawText: 'Older device title',
+        lineId: uuid(52),
+        lineIndex: 0,
+        completedAt: at,
+        originalCompletedAt: at,
+        timezone: 'UTC',
+        revision: 1,
+        undoUntil: at,
+        cancelled: false,
+        restored: false,
+        clearAfter: null,
+        cleared: false,
+        remote: {
+          completionId: archivedId,
+          revision: 1,
+          cancelled: false,
+          categoryId: from,
+          title: 'Older device title',
+          completedAt: at,
+        },
+      },
+    },
+    retiredCompletions: {},
+  })
+  const worker = new WorkspaceWorkerClient({
+    directory,
+    ownerId: DEVICE_OWNER_ID,
+    script: new URL('../offline/workspace-worker.ts', import.meta.url),
+    execArgv: ['--import', 'tsx'],
+  })
+  onTestFinished(async () => {
+    await worker.close()
+    await rm(directory, { recursive: true })
+  })
+  let accountCategory = 2
+  const { history } = historyFixture(
+    async (period) => worker.call('mcpCompletionHistory', period),
+    () =>
+      framesFor(
+        [
+          remoteRow(51, archivedId, 'Current archive title'),
+          remoteRow(50, retiredId, 'Current retired title'),
+        ].map((row) => ({
+          ...row,
+          categoryId: accountCategory,
+          categoryPath: accountCategory === 2 ? 'Source' : 'Inbox',
+        })),
+      ),
+  )
+
+  // Act
+  await worker.call('command', {
+    type: 'categoryDelete',
+    commandId: uuid(53),
+    categoryId: from,
+    destinationId: to,
+  })
+  const moved = await history.list('agent', {
+    startDate: day,
+    endDate: day,
+    categoryId: to,
+  })
+  await worker.call('reconcile', {
+    accountId,
+    displayEmail: null,
+    categories: [
+      {
+        id: 1,
+        name: 'Inbox',
+        color: 'blue',
+        isDefault: true,
+        parentId: null,
+        removed: false,
+      },
+      {
+        id: 3,
+        name: 'Destination',
+        color: 'blue',
+        isDefault: false,
+        parentId: null,
+        removed: false,
+      },
+    ],
+    deletions: [{ sourceId: 2, destinationId: 3 }],
+  })
+  accountCategory = 1
+  const synced = await history.list('agent', { startDate: day, endDate: day })
+
+  // Assert
+  expect(moved).toMatchObject({
+    total: 2,
+    entries: [
+      {
+        title: 'Current archive title',
+        categoryId: to,
+        categoryPath: 'Destination',
+        completedAt: new Date(at + 51).toISOString(),
+      },
+      {
+        title: 'Current retired title',
+        categoryId: to,
+        categoryPath: 'Destination',
+      },
+    ],
+  })
+  expect(synced).toMatchObject({
+    total: 2,
+    entries: [{ categoryPath: 'Inbox' }, { categoryPath: 'Inbox' }],
+  })
+})
+
 test('archived titleless completions retain their place, equal titles remain separate and only verified account identities merge', async () => {
   // Arrange
   const directory = await mkdtemp(join(tmpdir(), 'corelive-mcp-history-'))
@@ -377,6 +529,7 @@ test('a missing terminal record or mismatched membership discards every remote r
         categoryId,
         boundIdentity: true,
         pending: true,
+        categoryMovePending: false,
       },
     ],
   }
@@ -503,6 +656,7 @@ test('category filters include child categories and distinguish unknowable legac
         categoryId: null,
         boundIdentity: false,
         pending: false,
+        categoryMovePending: false,
       },
       {
         id: uuid(21),
@@ -511,6 +665,7 @@ test('category filters include child categories and distinguish unknowable legac
         categoryId: null,
         boundIdentity: false,
         pending: false,
+        categoryMovePending: false,
       },
     ],
   }

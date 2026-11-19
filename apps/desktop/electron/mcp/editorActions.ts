@@ -323,17 +323,32 @@ async function runEditorAction(
   return result
 }
 
+/** Serializes the MCP operations that borrow LiveEditor's input barrier.
+ * The app dispatcher shares this queue between editor commands and reloads.
+ * @example const enqueue = createEditorOperationQueue()
+ */
+export function createEditorOperationQueue() {
+  let tail = Promise.resolve()
+  return async <Result>(run: () => Promise<Result>): Promise<Result> => {
+    const result = tail.then(run)
+    tail = result.then(
+      () => undefined,
+      () => undefined,
+    )
+    return result
+  }
+}
+
 /** Coordinates each agent's draft read or mutation with the live renderer and other MCP clients.
  * @example const dispatch = createEditorDispatcher(controller, ipc)
  */
 export function createEditorDispatcher(
   controller: OfflineEditorController,
   ipc: Pick<OfflineEditorIPC, 'flush' | 'shown'>,
+  enqueue = createEditorOperationQueue(),
 ) {
-  let editorTail = Promise.resolve()
-  return async (call: McpCall): Promise<Record<string, unknown>> => {
-    // Serialize MCP challenges so a second helper cannot release the first helper's typing barrier.
-    const execute = async () => {
+  return async (call: McpCall): Promise<Record<string, unknown>> =>
+    enqueue(async () => {
       const snapshot = await controller.readSnapshot()
       if (snapshot.phase !== 'ready')
         throw new McpActionError(
@@ -375,12 +390,5 @@ export function createEditorDispatcher(
       } finally {
         ipc.shown()
       }
-    }
-    const operation = editorTail.then(execute)
-    editorTail = operation.then(
-      () => undefined,
-      () => undefined,
-    )
-    return operation
-  }
+    })
 }

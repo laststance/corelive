@@ -3,6 +3,7 @@ import { SyncDetailActionSchema } from '@corelive/desktop-contract/category-sync
 import { McpHistoryInputSchema } from '@corelive/desktop-contract/completion-history'
 import { SHORTCUT_OPEN_SOUND_CUES } from '@corelive/desktop-contract/constants'
 import { DashboardThemeSchema } from '@corelive/desktop-contract/dashboard-appearance'
+import { UnassignedPoolPageInputSchema } from '@corelive/desktop-contract/dashboard-skills'
 import {
   LIVE_EDITOR_FONT_FAMILY_IDS,
   LIVE_EDITOR_FONT_SIZE_MIN_PX,
@@ -14,6 +15,7 @@ import {
   LIVE_EDITOR_TOAST_DURATION_MAX_MS,
 } from '@corelive/desktop-contract/live-editor-constants'
 import { DraftRowSchema } from '@corelive/desktop-contract/offline-workspace'
+import { LocalCompletionProjectionSchema } from '@corelive/desktop-contract/offline-workspace-v2'
 import { THEME_IDS } from '@corelive/live-editor/themes'
 import { z } from 'zod'
 
@@ -30,6 +32,15 @@ const id = z.uuid()
 const positiveId = z.number().int().positive()
 const revision = z.number().int().nonnegative()
 const day = z.iso.date()
+const completionTime = z.iso
+  .datetime({ offset: true })
+  .refine(
+    (value) =>
+      LocalCompletionProjectionSchema.shape.completedAt.safeParse(
+        Date.parse(value),
+      ).success,
+  )
+  .describe('An ISO datetime with an offset from 1970 through 9999 UTC.')
 const name = z.string().trim().min(1).max(30)
 const title = z
   .string()
@@ -162,7 +173,7 @@ export const coreLiveTools = {
     z.strictObject({
       ...selected,
       title,
-      completedAt: z.iso.datetime({ offset: true }).optional(),
+      completedAt: completionTime.optional(),
     }),
   ),
   undo_completion: tool(
@@ -185,7 +196,7 @@ export const coreLiveTools = {
     false,
     z.strictObject({
       completionId: id,
-      completedAt: z.iso.datetime({ offset: true }),
+      completedAt: completionTime,
     }),
   ),
   list_categories: tool(
@@ -267,14 +278,14 @@ export const coreLiveTools = {
     }),
   ),
   read_skill_tree: tool(
-    'Read the connected account’s skill tree, node assignments and edges.',
-    true,
+    'Read the connected account’s skill tree, node assignments and edges. Creates and saves the default tree if the account has none.',
+    false,
     empty,
   ),
   list_unassigned_skill_tasks: tool(
-    'List completed tasks eligible for skill assignment.',
+    'List one page of completed, unassigned tasks. The default page has up to 50 tasks, with a maximum pageSize of 100. Pass nextCursor as cursor to continue until it is null.',
     true,
-    empty,
+    UnassignedPoolPageInputSchema,
   ),
   assign_task_to_skill: tool(
     'Assign an eligible completed task to a skill node.',
@@ -703,15 +714,19 @@ export function parseMcpCall(name: string, input: unknown): McpCall {
     )
   const key = name as McpToolName
   const result = coreLiveTools[key].inputSchema.safeParse(input)
-  if (!result.success)
+  if (!result.success) {
+    const fields = result.error.issues.map((issue) => issue.path.join('.'))
     throw new McpActionError(
       'invalid-input',
       key === 'connect_account' || key === 'defer_account_connection'
         ? ACCOUNT_PROMPT_NEXT_ACTION
-        : 'Check the tool input schema and supply valid arguments.',
+        : fields.includes('completedAt')
+          ? 'Supply completedAt as an ISO timestamp with a timezone offset from 1970 through 9999 UTC.'
+          : 'Check the tool input schema and supply valid arguments.',
       'none',
-      { fields: result.error.issues.map((issue) => issue.path.join('.')) },
+      { fields },
     )
+  }
   // Each schema is selected by the same key used for the discriminant.
   return { name: key, args: result.data } as McpCall
 }

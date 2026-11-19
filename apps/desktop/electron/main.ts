@@ -189,6 +189,10 @@ let ipcHandlersInitialized = false
  * - Notifications are event-driven, not needed at launch
  */
 let autoUpdater: AutoUpdaterType | null = null
+let finishUpdaterStartup = (): void => {}
+const updaterStartup = new Promise<void>((resolve) => {
+  finishUpdaterStartup = resolve
+})
 let systemTrayManager: SystemTrayManagerType | null = null
 let finishTrayStartup = (): void => {}
 const trayStartup = new Promise<void>((resolve) => {
@@ -666,7 +670,10 @@ async function openMcpOwner(
     windows,
     config,
     menu: () => menuManager,
-    updater: () => autoUpdater,
+    updater: async () => {
+      if (app.isPackaged && !autoUpdater) await updaterStartup
+      return autoUpdater
+    },
     prepareQuit: prepareForQuit,
   }
   return startMcpOwner(
@@ -811,6 +818,7 @@ async function createWindow(background = false): Promise<void> {
       } else {
         log.info('AutoUpdater initialization skipped outside packaged builds')
       }
+      finishUpdaterStartup()
 
       await loadDeepLinkStack()
 
@@ -819,6 +827,7 @@ async function createWindow(background = false): Promise<void> {
     } catch (error) {
       // A failed tray startup must let waiting requests report the refusal.
       finishTrayStartup()
+      finishUpdaterStartup()
       log.error('❌ Deferred initialization failed:', error)
       // Continue without non-critical components
     }

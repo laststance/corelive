@@ -70,6 +70,30 @@ const UnassignedPoolItemSchema = z.object({
 })
 export const UnassignedPoolSchema = z.array(UnassignedPoolItemSchema)
 
+const UNASSIGNED_POOL_PAGE_SIZE_MAX = 100
+
+const UnassignedPoolCursorSchema = z.strictObject({
+  updatedAt: z.iso.datetime({ precision: 3 }),
+  id: z.number().int().positive().max(2_147_483_647),
+})
+
+/** Lists a bounded slice of eligible tasks, with the previous page's last task as the boundary. */
+export const UnassignedPoolPageInputSchema = z.strictObject({
+  pageSize: z
+    .number()
+    .int()
+    .min(1)
+    .max(UNASSIGNED_POOL_PAGE_SIZE_MAX)
+    .default(50),
+  cursor: UnassignedPoolCursorSchema.optional(),
+})
+
+/** The next cursor is null when this is the last page. */
+export const UnassignedPoolPageSchema = z.strictObject({
+  tasks: UnassignedPoolSchema.max(UNASSIGNED_POOL_PAGE_SIZE_MAX),
+  nextCursor: UnassignedPoolCursorSchema.nullable(),
+})
+
 /** Input for assign/unassign mutations. */
 export const AssignTaskInputSchema = z.object({
   nodeId: z.number().int().positive(),

@@ -18,6 +18,7 @@ import type { WindowManager } from '../WindowManager'
 
 import type { EditorRuntime } from './editorActions'
 import { applyNativeSetting } from './nativeSettings'
+import { OWNER_START_TIMEOUT_MS } from './protocol'
 import { McpActionError } from './result'
 import { dispatchMcpAction, type McpActions, type McpCall } from './tools'
 
@@ -25,7 +26,7 @@ export interface NativeActionContext {
   windows: WindowManager
   config: ConfigManager
   menu: () => MenuManager | null
-  updater: () => AutoUpdater | null
+  updater: () => AutoUpdater | null | Promise<AutoUpdater | null>
   prepareQuit: () => Promise<boolean>
 }
 const sound = new ShortcutOpenSoundPlayer()
@@ -101,8 +102,11 @@ async function applyWindowRole(
     window === 'editor' &&
     (role === 'reload_window' || role === 'force_reload_window')
   if (!reloadsEditor) return runWindowRole(deps, role, window)
+  const { saved, release } = await runtime.ipc.flushForReload(
+    runtime.controller.getSnapshot().generation,
+  )
   try {
-    if (!(await runtime.ipc.flush(runtime.controller.getSnapshot().generation)))
+    if (!saved)
       throw new McpActionError(
         'flush-failed',
         'Save pending LiveEditor writing first.',
@@ -110,7 +114,7 @@ async function applyWindowRole(
     return await runWindowRole(deps, role, window)
   } catch (error) {
     // A reload that could not start leaves the existing renderer in place.
-    runtime.ipc.shown()
+    release()
     throw error
   }
 }
@@ -145,14 +149,22 @@ export async function runNativeAction(
       )
     return { status: 'opened' }
   }
-  const updater = () => {
-    const instance = deps.updater()
-    if (!instance)
-      throw new McpActionError(
-        'updater-unavailable',
-        'Use the installed application and check its update status.',
-      )
-    return instance
+  const updater = async () => {
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    const deadline = new Promise<null>((resolve) => {
+      timeout = setTimeout(() => resolve(null), OWNER_START_TIMEOUT_MS)
+    })
+    try {
+      const instance = await Promise.race([deps.updater(), deadline])
+      if (!instance)
+        throw new McpActionError(
+          'updater-unavailable',
+          'Wait for CoreLive’s update service or check for updates in the application.',
+        )
+      return instance
+    } finally {
+      clearTimeout(timeout)
+    }
   }
   const menu = () => {
     const instance = deps.menu()
@@ -279,8 +291,7 @@ export async function runNativeAction(
       return { status: 'requested' }
     },
     hide_live_editor: async () => {
-      await windows.hideLiveEditor()
-      if (windows.getLiveEditorWindow()?.isVisible())
+      if (!(await windows.hideLiveEditor()))
         throw new McpActionError(
           'flush-failed',
           'Save pending LiveEditor writing and retry hiding the window.',
@@ -302,16 +313,17 @@ export async function runNativeAction(
           '/skill-tree',
         ),
       ),
-    read_update_status: () => ({
+    read_update_status: async () => ({
       version: app.getVersion(),
-      ...updater().getUpdateStatus(),
+      ...(await updater()).getUpdateStatus(),
     }),
     check_for_updates: async () => {
-      await updater().manualCheckForUpdates()
-      return { status: 'checked', ...updater().getUpdateStatus() }
+      const instance = await updater()
+      await instance.manualCheckForUpdates()
+      return { status: 'checked', ...instance.getUpdateStatus() }
     },
-    download_update: () => {
-      if (!updater().startAvailableDownload())
+    download_update: async () => {
+      if (!(await updater()).startAvailableDownload())
         throw new McpActionError(
           'update-unavailable',
           'Check for an available update before downloading.',
@@ -319,7 +331,7 @@ export async function runNativeAction(
       return { status: 'started' }
     },
     restart_to_update: async () => {
-      if (!(await updater().quitAndInstall()))
+      if (!(await (await updater()).quitAndInstall()))
         throw new McpActionError(
           'update-not-applied',
           'Check the downloaded update and save pending writing.',

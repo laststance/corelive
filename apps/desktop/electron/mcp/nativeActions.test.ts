@@ -6,7 +6,13 @@ import { app } from 'electron'
 import { expect, onTestFinished, test, vi } from 'vitest'
 
 import { ConfigManager } from '../ConfigManager'
+import {
+  buildDeviceWorkspace,
+  categoryUuid,
+} from '../offline/deviceWorkspaceFixture'
+import { workspaceView } from '../offline/workspace-worker-protocol'
 
+import { createAppActions } from './appActions'
 import type { EditorRuntime } from './editorActions'
 import { runNativeAction, type NativeActionContext } from './nativeActions'
 import { registerNativeSetting } from './nativeSettings'
@@ -48,12 +54,12 @@ test.each([
     const reload = vi.fn()
     const closeLiveEditor = vi.fn(async () => hidden)
     let acknowledge = (): void => {}
-    const flush = vi.fn(
-      async () =>
-        new Promise<boolean>((resolve) => {
-          acknowledge = (): void => resolve(true)
-        }),
-    )
+    const flushForReload = vi.fn(async () => ({
+      saved: await new Promise<boolean>((resolve) => {
+        acknowledge = (): void => resolve(true)
+      }),
+      release: shown,
+    }))
     const window = {
       isDestroyed: () => false,
       webContents: {
@@ -67,7 +73,7 @@ test.each([
     } as unknown as NativeActionContext
     const runtime = {
       controller: { getSnapshot: () => ({ generation: 1 }) },
-      ipc: { flush, shown },
+      ipc: { flushForReload },
     } as unknown as EditorRuntime
 
     // Act
@@ -115,7 +121,7 @@ test.each(['reload_window', 'force_reload_window'] as const)(
     } as unknown as NativeActionContext
     const runtime = {
       controller: { getSnapshot: () => ({ generation: 1 }) },
-      ipc: { flush: async () => false, shown },
+      ipc: { flushForReload: async () => ({ saved: false, release: shown }) },
     } as unknown as EditorRuntime
 
     // Act
@@ -133,6 +139,77 @@ test.each(['reload_window', 'force_reload_window'] as const)(
     expect(shown).toHaveBeenCalledOnce()
   },
 )
+
+test('an MCP reload waits until another session finishes its task addition save retry', async () => {
+  // Arrange
+  const categoryId = categoryUuid(1)
+  const ready = {
+    phase: 'ready',
+    generation: 1,
+    workspace: workspaceView(buildDeviceWorkspace()),
+  } as const
+  let acknowledge = (): void => {}
+  const retrySaving = new Promise<boolean>((resolve) => {
+    acknowledge = (): void => resolve(true)
+  })
+  const flush = vi
+    .fn<() => Promise<boolean>>()
+    .mockResolvedValueOnce(false)
+    .mockReturnValueOnce(retrySaving)
+  const shown = vi.fn()
+  const releaseReload = vi.fn()
+  const flushForReload = vi.fn(async () => ({
+    saved: false,
+    release: releaseReload,
+  }))
+  const runtime = {
+    ipc: { flush, flushForReload, shown },
+    controller: {
+      mcpAccountBinding: () => null,
+      getSnapshot: () => ready,
+      readSnapshot: async () => ready,
+      appendMcpTask: async () => ({
+        categoryId,
+        categoryPath: 'General',
+        rowId: '00000000-0000-4000-8000-000000000009',
+        title: 'Stay in this note',
+      }),
+    },
+  } as unknown as EditorRuntime
+  const actions = createAppActions({
+    runtime,
+    profileDirectory: '/unused-corelive-test-profile',
+    native: async (call) =>
+      runNativeAction({} as NativeActionContext, runtime, call),
+    signOutDevice: async (run) => run(),
+  })
+
+  // Act
+  const adding = actions.call('adding', 'append_unfinished_task', {
+    operationId: '00000000-0000-4000-8000-000000000018',
+    title: 'Stay in this note',
+  })
+  await vi.waitFor(() => expect(flush).toHaveBeenCalledTimes(2))
+  const reloading = actions.call('reloading', 'reload_window', {})
+  await new Promise<void>((resolve) => setImmediate(resolve))
+
+  // Assert
+  expect(flushForReload).not.toHaveBeenCalled()
+  expect(shown).not.toHaveBeenCalled()
+  expect(releaseReload).not.toHaveBeenCalled()
+  acknowledge()
+  await expect(adding).resolves.toMatchObject({
+    isError: false,
+    structuredContent: { status: 'saved', title: 'Stay in this note' },
+  })
+  await expect(reloading).resolves.toMatchObject({
+    isError: true,
+    structuredContent: { code: 'flush-failed', effect: 'none' },
+  })
+  expect(shown).toHaveBeenCalledOnce()
+  expect(flushForReload).toHaveBeenCalledOnce()
+  expect(releaseReload).toHaveBeenCalledOnce()
+})
 
 // Value: protects=a refused Dock visibility change reports a possible partial effect;
 // fails_when=the MCP route changes a different preference or reports success;
@@ -277,6 +354,90 @@ test('requesting a download without an available update reports a refusal', asyn
     code: 'update-unavailable',
     effect: 'none',
   })
+})
+
+test('update status waits for startup while a separate native action stays available', async () => {
+  // Arrange
+  let ready = (): void => {}
+  const startup = new Promise<void>((resolve) => {
+    ready = resolve
+  })
+  const getUpdateStatus = vi.fn(() => ({
+    updateAvailable: true,
+    updateDownloaded: false,
+    downloadProgress: null,
+    isChecking: false,
+    message: null,
+  }))
+  const showLiveEditor = vi.fn()
+  const context = {
+    windows: { showLiveEditor },
+    updater: async () => {
+      await startup
+      return { getUpdateStatus }
+    },
+  } as unknown as NativeActionContext
+  const runtime = {} as EditorRuntime
+
+  // Act
+  const status = runNativeAction(context, runtime, {
+    name: 'read_update_status',
+    args: {},
+  })
+  const open = await runNativeAction(context, runtime, {
+    name: 'open_live_editor',
+    args: {},
+  })
+
+  // Assert
+  expect(open).toEqual({ status: 'requested' })
+  expect(showLiveEditor).toHaveBeenCalledOnce()
+  expect(getUpdateStatus).not.toHaveBeenCalled()
+  ready()
+  await expect(status).resolves.toEqual({
+    version: '1.0.0',
+    updateAvailable: true,
+    updateDownloaded: false,
+    downloadProgress: null,
+    isChecking: false,
+    message: null,
+  })
+})
+
+test('an updater still starting after fifteen seconds refuses to download even if it later becomes available', async () => {
+  // Arrange
+  vi.useFakeTimers()
+  onTestFinished((): void => {
+    vi.useRealTimers()
+  })
+  let ready = (): void => {}
+  const startup = new Promise<void>((resolve) => {
+    ready = resolve
+  })
+  const startAvailableDownload = vi.fn(() => true)
+  const context = {
+    updater: async () => {
+      await startup
+      return { startAvailableDownload }
+    },
+  } as unknown as NativeActionContext
+
+  // Act
+  const download = runNativeAction(context, {} as EditorRuntime, {
+    name: 'download_update',
+    args: {},
+  })
+  const refused = expect(download).rejects.toMatchObject({
+    code: 'updater-unavailable',
+    effect: 'none',
+  })
+  await vi.advanceTimersByTimeAsync(15_000)
+  await refused
+  ready()
+  await vi.advanceTimersByTimeAsync(0)
+
+  // Assert
+  expect(startAvailableDownload).not.toHaveBeenCalled()
 })
 
 test.each([

@@ -231,9 +231,11 @@ test.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
         effect: 'partial',
         detail: { destinationSaved: false },
       })
-      expect(await readdir(directory)).toEqual([
-        expect.stringMatching(/^\.corelive-.*\.tmp$/),
-      ])
+      const remaining = await readdir(directory)
+      expect(remaining).toEqual([expect.stringMatching(/^\.corelive-.*\.tmp$/)])
+      await expect(result).rejects.toMatchObject({
+        detail: { stagingPath: join(directory, remaining[0]!) },
+      })
       await expect(readFile(target)).rejects.toMatchObject({ code: 'ENOENT' })
     } finally {
       await chmod(directory, 0o700)

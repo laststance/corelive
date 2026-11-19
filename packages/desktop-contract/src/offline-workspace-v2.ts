@@ -256,6 +256,8 @@ export const MigrationReceiptSchema = z.object({
       /** Older receipts cannot establish which account or category maps to this marker. */
       sourceAccountId: z.string().optional(),
       categoryVerified: z.boolean().optional(),
+      /** Original category from the verified v1 owner, kept even before a local mapping exists. */
+      sourceServerCategoryId: z.number().int().optional(),
     }),
   ),
   /** The C34 counts; null before the first migration summary. */
@@ -291,6 +293,11 @@ export const CommandReceiptSchema = z.object({
   revision,
 })
 
+const TaskAdditionReceiptSchema = z.object({
+  digest: z.string(),
+  taskAddition: TaskAdditionSchema,
+})
+
 /** Version 2 of the workspace: one per device, `ownerId: "device"` (D1, C29). */
 export const OfflineWorkspaceSchema = z.object({
   version: z.literal(2),
@@ -308,6 +315,9 @@ export const OfflineWorkspaceSchema = z.object({
   categoryOutbox: z.record(identity, CategoryOutboxEntrySchema).default({}),
   syncHistory: z.array(SyncHistoryItemSchema).default([]),
   commandReceipts: z.record(identity, CommandReceiptSchema),
+  taskAdditionReceipts: z
+    .record(identity, TaskAdditionReceiptSchema)
+    .default({}),
   categoryMoves: z.record(identity, identity),
   binding: AccountBindingSchema.nullable(),
   migration: MigrationReceiptSchema,
@@ -334,6 +344,7 @@ const BULK_RECORD_SCHEMAS = {
   outbox: OutboxEntrySchema,
   categoryOutbox: CategoryOutboxEntrySchema,
   commandReceipts: CommandReceiptSchema,
+  taskAdditionReceipts: TaskAdditionReceiptSchema,
 } as const
 const BULK_RECORD_KEYS = Object.keys(BULK_RECORD_SCHEMAS) as Array<
   keyof typeof BULK_RECORD_SCHEMAS
@@ -344,6 +355,7 @@ const WorkspaceWithoutBulkRecordsSchema = OfflineWorkspaceSchema.omit({
   outbox: true,
   categoryOutbox: true,
   commandReceipts: true,
+  taskAdditionReceipts: true,
 })
 
 /**
@@ -374,6 +386,10 @@ export function validateWorkspaceChange(
     if (typeof container !== 'object' || container === null)
       OfflineWorkspaceSchema.shape[key].parse(container)
     const before: Record<string, unknown> = previous[key]
+    if (container === before) {
+      bulk[key] = before
+      continue
+    }
     const after: Record<string, unknown> = {}
     for (const [id, entry] of Object.entries(container)) {
       after[id] =

@@ -21,7 +21,8 @@ import type {
   AssignTaskInputSchema,
   NodeAssignmentSchema,
   SkillTreeSchema,
-  UnassignedPoolSchema,
+  UnassignedPoolPageInputSchema,
+  UnassignedPoolPageSchema,
 } from '@corelive/desktop-contract/dashboard-skills'
 import {
   AccountWhoamiOutputSchema,
@@ -104,9 +105,9 @@ export type McpAccountClient = {
   }
   skillTree: {
     getMyTree: Endpoint<undefined, z.output<typeof SkillTreeSchema>>
-    getUnassignedPool: Endpoint<
-      undefined,
-      z.output<typeof UnassignedPoolSchema>
+    getUnassignedPoolPage: Endpoint<
+      z.input<typeof UnassignedPoolPageInputSchema>,
+      z.output<typeof UnassignedPoolPageSchema>
     >
     assignTask: Endpoint<
       z.input<typeof AssignTaskInputSchema>,

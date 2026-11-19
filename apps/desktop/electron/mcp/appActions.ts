@@ -7,6 +7,7 @@ import { WorkspaceWorkerError } from '../offline/WorkspaceWorkerClient'
 import { exportActivityPng } from './activityExport'
 import {
   createEditorDispatcher,
+  createEditorOperationQueue,
   workspaceRefusal,
   type EditorRuntime,
 } from './editorActions'
@@ -48,7 +49,8 @@ export function createAppActions(options: ActionOptions) {
   const { runtime, profileDirectory } = options
   const { controller, ipc } = runtime
   const history = createCompletionHistory(runtime)
-  const dispatchEditor = createEditorDispatcher(controller, ipc)
+  const enqueueEditor = createEditorOperationQueue()
+  const dispatchEditor = createEditorDispatcher(controller, ipc, enqueueEditor)
 
   async function endAccount(action: Promise<SignOutResult>) {
     const result = await action
@@ -150,11 +152,10 @@ export function createAppActions(options: ActionOptions) {
           client.skillTree.getMyTree(undefined, { signal }),
         ),
       }),
-      list_unassigned_skill_tasks: async () => ({
-        tasks: await controller.withMcpAccount(async (client, signal) =>
-          client.skillTree.getUnassignedPool(undefined, { signal }),
+      list_unassigned_skill_tasks: async (args) =>
+        controller.withMcpAccount(async (client, signal) =>
+          client.skillTree.getUnassignedPoolPage(args, { signal }),
         ),
-      }),
       assign_task_to_skill: async (args) => ({
         assignment: await controller.withMcpAccount(async (client, signal) =>
           client.skillTree.assignTask(args, { signal }),
@@ -224,11 +225,15 @@ export function createAppActions(options: ActionOptions) {
           beforePublish: assertCurrent,
         }),
     }
-    return (
-      (await dispatchMcpAction(actions, call)) ??
-      (await options.native(call)) ??
-      dispatchEditor(call)
-    )
+    const appResult = await dispatchMcpAction(actions, call)
+    if (appResult) return appResult
+    // A reload waits for the entire editor command, including any save retry and barrier release.
+    const nativeResult =
+      (call.name === 'reload_window' || call.name === 'force_reload_window') &&
+      call.args.window === 'editor'
+        ? await enqueueEditor(async () => options.native(call))
+        : await options.native(call)
+    return nativeResult ?? dispatchEditor(call)
   }
   return {
     async call(
@@ -303,6 +308,7 @@ function actionFailure(
  */
 function accountFailure(name: string, error: McpAccountError) {
   const mutation =
+    name === 'read_skill_tree' ||
     name === 'assign_task_to_skill' ||
     name === 'remove_skill_assignment' ||
     name === 'set_dashboard_appearance'

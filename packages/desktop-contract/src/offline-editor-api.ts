@@ -96,7 +96,8 @@ export interface OfflineEditorAPI {
   recover: (generation: number) => Promise<boolean>
   subscribe: (listener: (snapshot: OfflineEditorSnapshot) => void) => () => void
   onFlush: (listener: (request: OfflineFlushRequest) => void) => () => void
-  onShown: (listener: () => void) => () => void
+  /** A request ID releases just that flush; an ordinary native reveal has no request ID. */
+  onShown: (listener: (requestId?: string) => void) => () => void
   replyFlush: (request: OfflineFlushRequest, saved: boolean) => Promise<boolean>
 }
 

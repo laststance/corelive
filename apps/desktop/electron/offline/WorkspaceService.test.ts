@@ -2311,7 +2311,79 @@ describe('durable task-addition receipts', () => {
     ).toEqual(['Target writing', '- [ ] Keep the original addition'])
   })
 
-  test('looking up an expired or legacy receipt leaves both the saved writing and the workspace revision intact', async () => {
+  test.each(['current', 'legacy'] as const)(
+    'a %s task receipt still prevents duplicate writing after 2,000 ordinary commands and a restart',
+    async (format) => {
+      // Arrange
+      const { file, service, options } = await createWorkspace()
+      const operationId = '00000000-0000-4000-8000-000000000205'
+      const request = {
+        operationId,
+        accountId,
+        categoryId: category2,
+        title: 'Keep exactly one task',
+      }
+      await service.appendTask(request)
+      await file.update((state) => {
+        const next = structuredClone(state)
+        if (format === 'legacy') {
+          const receipt =
+            next.taskAdditionReceipts[operationId] ??
+            next.commandReceipts[operationId]
+          if (!receipt) throw new Error('Missing saved task receipt')
+          next.commandReceipts[operationId] = {
+            ...receipt,
+            revision: 1,
+          }
+          delete next.taskAdditionReceipts[operationId]
+        }
+        // Seed the receipts from the earlier commits; a real command advances the pruning window.
+        for (let index = 1; index < 2_000; index++) {
+          next.revision++
+          next.commandReceipts[randomUUID()] = {
+            digest: 'ordinary-command-' + index,
+            revision: next.revision,
+          }
+        }
+        return next
+      })
+      await service.execute({
+        type: 'select',
+        commandId: randomUUID(),
+        categoryId: category1,
+      })
+      const reopened = new WorkspaceService(new AtomicWorkspaceFile(options))
+
+      // Act
+      const receipt = await reopened.findTaskAddition({
+        operationId,
+        accountId,
+      })
+      await reopened.appendTask(request)
+
+      // Assert
+      expect(receipt).toMatchObject({
+        accountId: 'account-a',
+        categoryId: '00000000-0000-4000-8000-000000000002',
+        title: 'Keep exactly one task',
+      })
+      const persisted = await file.read()
+      expect(persisted.revision).toBe(2_001)
+      expect(persisted.drafts[category2]?.rows.map((row) => row.text)).toEqual([
+        'Target writing',
+        '- [ ] Keep exactly one task',
+      ])
+      await expect(
+        reopened.execute({
+          type: 'select',
+          commandId: operationId,
+          categoryId: category1,
+        }),
+      ).rejects.toMatchObject({ reason: 'command-conflict' })
+    },
+  )
+
+  test('looking up an absent or legacy command receipt leaves the saved writing and workspace revision intact', async () => {
     // Arrange
     const { file, service } = await createWorkspace()
     const legacy = '00000000-0000-4000-8000-000000000202'
@@ -2325,6 +2397,7 @@ describe('durable task-addition receipts', () => {
     await file.update((state) => {
       const next = structuredClone(state)
       delete next.commandReceipts[expired]
+      delete next.taskAdditionReceipts[expired]
       next.commandReceipts[legacy] = {
         digest: 'old-command-digest',
         revision: next.revision,

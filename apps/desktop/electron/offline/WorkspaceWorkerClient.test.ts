@@ -234,8 +234,13 @@ test('draft pages bound worker replies and retain every row identity across a lo
   // Arrange
   const directory = await mkdtemp(join(tmpdir(), 'corelive-draft-page-'))
   const categoryId = categoryUuid(1)
+  const rowIds: string[] = []
+  rowIds[0] = '00000000-0000-4000-8000-000000000234'
+  rowIds[1023] = '00000000-0000-4000-8000-000000000235'
+  rowIds[1024] = '00000000-0000-4000-8000-000000000236'
   const workspace = await initializeDeviceWorkspace(directory, {
     notes: { 1: '😀' + '日'.repeat(200_000) + '\n'.repeat(2048) },
+    rowIds: { 1: rowIds },
   })
   const storedRows = workspace.drafts[categoryId]!.rows
   const client = new WorkspaceWorkerClient({
@@ -269,7 +274,13 @@ test('draft pages bound worker replies and retain every row identity across a lo
     nextOffset: 2,
     revision: 0,
     totalLength: 202_050,
-    rowSpans: [{ id: storedRows[0]!.id, startOffset: 0, endOffset: 200_002 }],
+    rowSpans: [
+      {
+        id: '00000000-0000-4000-8000-000000000234',
+        startOffset: 0,
+        endOffset: 200_002,
+      },
+    ],
   })
   expect(emptyLines).toMatchObject({
     text: '\n'.repeat(1024),
@@ -283,6 +294,16 @@ test('draft pages bound worker replies and retain every row identity across a lo
   })
   const spans = [...emptyLines.rowSpans, ...last.rowSpans]
   expect(spans.map(({ id }) => id)).toEqual(storedRows.map(({ id }) => id))
+  expect(emptyLines.rowSpans.at(-1)).toMatchObject({
+    id: '00000000-0000-4000-8000-000000000235',
+    startOffset: 201_025,
+    endOffset: 201_025,
+  })
+  expect(last.rowSpans[0]).toMatchObject({
+    id: '00000000-0000-4000-8000-000000000236',
+    startOffset: 201_026,
+    endOffset: 201_026,
+  })
   expect(spans.at(-1)).toMatchObject({
     startOffset: 202_050,
     endOffset: 202_050,

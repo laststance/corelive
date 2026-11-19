@@ -4,7 +4,7 @@ import type {
   WorkspaceArchive,
 } from '@corelive/desktop-contract/offline-workspace-v2'
 
-import { pathOf } from '../offline/categoryState'
+import { pathOf, serverToLocalMap } from '../offline/categoryState'
 import { effectiveCategory } from '../offline/effectiveCategory'
 
 export interface DeviceHistoryRow {
@@ -15,6 +15,8 @@ export interface DeviceHistoryRow {
   /** False for a legacy marker whose source account was never recorded. */
   boundIdentity: boolean
   pending: boolean
+  /** A source along the local move still has its account category binding. */
+  categoryMovePending: boolean
 }
 
 export interface DeviceHistory {
@@ -28,6 +30,22 @@ export interface DeviceHistory {
     path: string
     serverId: number | null
   }[]
+}
+
+/** Checks a resolved category chain for a move the account has yet to confirm.
+ * @example const pending = isCategoryMovePending(state, sourceId, destinationId)
+ */
+function isCategoryMovePending(
+  state: OfflineWorkspace,
+  sourceId: string,
+  destinationId: string,
+): boolean {
+  let current: string | undefined = sourceId
+  while (current !== undefined && current !== destinationId) {
+    if (state.binding?.serverCategoryIds[current] !== undefined) return true
+    current = state.categoryMoves[current]
+  }
+  return false
 }
 
 /**
@@ -59,13 +77,18 @@ export function deviceCompletionHistory(
       if (pending && boundIdentity) suppressedIds.push(id)
       return
     }
+    const categoryId = localId && effectiveCategory(state, localId)
     rows.push({
       id,
       title: title ?? null,
       completedAt: at,
-      categoryId: localId && effectiveCategory(state, localId),
+      categoryId,
       boundIdentity,
       pending,
+      categoryMovePending:
+        localId !== null &&
+        categoryId !== null &&
+        isCategoryMovePending(state, localId, categoryId),
     })
   }
   for (const source of [state, archive]) {
@@ -94,16 +117,23 @@ export function deviceCompletionHistory(
   }
   // Older downgrade imports preserved a timestamp but could lose the source of a category.
   // Newly imported markers retain that provenance; a missing field is never inferred.
+  const serverToLocal = state.binding && serverToLocalMap(state.binding)
   for (const [id, row] of Object.entries(state.migration.dashboardOnly)) {
     const matched =
       row.sourceAccountId !== undefined &&
       row.sourceAccountId === state.binding?.accountId
+    let localId: string | null = null
+    if (matched) {
+      if (row.categoryVerified) localId = row.originalCategoryId
+      else if (row.sourceServerCategoryId !== undefined)
+        localId = serverToLocal?.get(row.sourceServerCategoryId) ?? null
+    }
     collect(
       id,
       undefined,
       row.completedAt,
       row.cancelled,
-      row.categoryVerified ? row.originalCategoryId : null,
+      localId,
       matched,
       false,
     )

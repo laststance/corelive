@@ -103,7 +103,56 @@ test('discovers distinct draft and completion tools over stdio while the isolate
     list.tools.find((tool) => tool.name === 'append_unfinished_task')
       ?.inputSchema.required,
   ).toEqual(['title', 'operationId'])
+  expect(
+    list.tools.find((tool) => tool.name === 'read_skill_tree'),
+  ).toMatchObject({
+    description: expect.stringContaining('Creates and saves the default tree'),
+    annotations: { readOnlyHint: false },
+  })
+  expect(
+    list.tools.find((tool) => tool.name === 'list_unassigned_skill_tasks'),
+  ).toMatchObject({
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      properties: { pageSize: { default: 50, maximum: 100 }, cursor: {} },
+    },
+  })
 })
+
+test.each([
+  { dispatched: true, effect: 'unknown' },
+  { dispatched: false, effect: 'none' },
+])(
+  'a lost skill-tree response with dispatched=$dispatched reports $effect for default creation',
+  async ({ dispatched, effect }) => {
+    // Arrange
+    const runtime = {
+      controller: {
+        getSnapshot: () => ({ generation: 1 }),
+        mcpAccountBinding: () => null,
+        withMcpAccount: async () => {
+          throw new McpAccountError('account-unavailable', dispatched)
+        },
+      },
+      ipc: {},
+    } as unknown as EditorRuntime
+    const actions = createAppActions({
+      profileDirectory: isolatedProfile(),
+      runtime,
+      native: async () => undefined,
+      signOutDevice: async (run) => run(),
+    })
+
+    // Act
+    const result = await actions.call('session', 'read_skill_tree', {})
+
+    // Assert
+    expect(result).toMatchObject({
+      isError: true,
+      structuredContent: { code: 'account-unavailable', effect },
+    })
+  },
+)
 
 test('an overlong unknown tool name receives a bounded error and the helper stays connected', async () => {
   // Arrange
@@ -297,6 +346,44 @@ describe.runIf(process.platform === 'darwin')('verified Mac socket', () => {
     }
   })
 
+  test('an explicit profile follows a symlink before parent traversal and keeps missing profile suffixes', async () => {
+    // Arrange
+    const root = isolatedProfile()
+    const profiles = join(root, 'profiles')
+    const tree = join(root, 'qa')
+    const alias = join(profiles, 'link')
+    const stored = join(tree, 'CoreLive')
+    const other = join(profiles, 'CoreLive')
+    mkdirSync(other, { recursive: true })
+    mkdirSync(stored, { recursive: true })
+    mkdirSync(join(tree, 'nested'))
+    symlinkSync(join(tree, 'nested'), alias)
+
+    for (const [profile, text] of [
+      [stored, 'Requested profile'],
+      [other, 'Different profile'],
+    ] as const) {
+      cleanup.push(
+        await startMcpOwner(profile, {
+          call: async () => mcpSuccess({ text }),
+          closeSession: vi.fn(),
+        }),
+      )
+    }
+
+    // Act
+    const { client, transport } = stdioClient(alias + '/../CoreLive')
+    await client.connect(transport)
+    const read = await client.callTool({ name: 'read_draft' })
+
+    // Assert
+    expect(read.structuredContent).toEqual({ text: 'Requested profile' })
+    expect(peerEndpoint(alias + '/../Future')).toEqual(
+      peerEndpoint(join(tree, 'Future')),
+    )
+    expect(() => peerEndpoint(profiles + '/missing/../CoreLive')).toThrow()
+  })
+
   test('a cold helper finds the owner after the profile is created under its canonical spelling', async () => {
     // Arrange
     const root = isolatedProfile()
@@ -343,6 +430,7 @@ describe.runIf(process.platform === 'darwin')('verified Mac socket', () => {
             categoryId: null,
             boundIdentity: false,
             pending: false,
+            categoryMovePending: false,
           })),
           boundAccountId: null,
           categories: [],
@@ -531,6 +619,10 @@ await import(${JSON.stringify(workerURL)});
     })
     await controller.initialize()
     expect(controller.getSnapshot().phase).toBe('ready')
+    // Isolate the dispatcher's ordering from the controller's independent snapshot barrier.
+    vi.spyOn(controller, 'readSnapshot').mockImplementation(async () =>
+      controller.getSnapshot(),
+    )
 
     const ipc = {
       flush: vi.fn(async () => true),
@@ -548,8 +640,10 @@ await import(${JSON.stringify(workerURL)});
       await startMcpOwner(profile, {
         ...actions,
         async call(session, name, args) {
-          if (name === 'read_draft') signals.emit('read')
-          return actions.call(session, name, args)
+          const reply = actions.call(session, name, args)
+          // The IPC and snapshot stubs settle in microtasks, so an unserialized draft would run by this turn.
+          if (name === 'read_draft') setImmediate(() => signals.emit('read'))
+          return reply
         },
       }),
     )
@@ -571,8 +665,9 @@ await import(${JSON.stringify(workerURL)});
     const reading = second.client.callTool({ name: 'read_draft' })
     await reachedOwner
 
-    // Assert that the second session cannot read past the pending write.
-    expect(draft).not.toHaveBeenCalled()
+    const readsBeforeWriteReply = draft.mock.calls.length
+
+    // Assert
     expect(await writing).toMatchObject({
       isError: true,
       structuredContent: {
@@ -611,6 +706,7 @@ await import(${JSON.stringify(workerURL)});
       },
       { timeout: 6_000 },
     )
+    expect(readsBeforeWriteReply).toBe(0)
     expect(await readFile(seen, 'utf8')).toBe('append\n')
   }, 20_000)
 
@@ -687,8 +783,9 @@ globalThis.setTimeout = (callback, ms, ...args) => schedule(callback,
       effect: 'none',
     })
     expect((await dispatchedWrite).structuredContent).toMatchObject({
-      code: 'worker-unavailable',
+      code: 'request-timeout',
       effect: 'unknown',
+      message: 'The CoreLive request did not complete before its deadline.',
       operationId: '00000000-0000-4000-8000-000000000001',
       nextAction: expect.stringContaining('get_task_addition_result'),
     })

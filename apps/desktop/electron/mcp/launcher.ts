@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import { userInfo } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 
+import { canonicalProfile } from './peer'
 import { MCP_BACKGROUND_SWITCH } from './protocol'
 
 /** Resolves the installed app beside its launcher; an explicit QA profile stays on that same owner.
@@ -22,10 +23,6 @@ export function helperLaunch(args: string[]) {
       'Library/Application Support',
       installed ? 'CoreLive' : 'CoreLive Dev',
     )
-  const ownerArgs = [
-    MCP_BACKGROUND_SWITCH,
-    ...(override ? [prefix + resolve(override)] : []),
-  ]
   const bundle = resolve(dirname(process.execPath), '../..')
   return {
     profile,
@@ -36,6 +33,10 @@ export function helperLaunch(args: string[]) {
         throw new Error(
           'Use the bundled Electron executable to wake a development owner',
         )
+      const ownerArgs = [
+        MCP_BACKGROUND_SWITCH,
+        ...(override ? [prefix + canonicalProfile(override)] : []),
+      ]
       const launchArgs = installed
         ? ['-g', '-j', '-n', bundle, '--args', ...ownerArgs]
         : [resolve(__dirname, '../..'), ...ownerArgs]

@@ -27,6 +27,34 @@ function searchKey(text: string): string {
 
 type Category = DeviceHistory['categories'][number]
 
+/** Selects the category fields used by {@link accountEntry} and its filters.
+ * @example const location = accountCategory(row, localCategoryId, categories, byServer)
+ */
+function accountCategory(
+  row: AccountHistoryRow,
+  localCategoryId: string | null,
+  categories: Map<string, Category>,
+  byServer: Map<number, Category>,
+) {
+  if (localCategoryId !== null) {
+    const local = categories.get(localCategoryId)
+    return {
+      categoryId: local?.id ?? null,
+      categoryPath: local?.path ?? row.categoryPath,
+      parentId: local?.parentId ?? null,
+    }
+  }
+  const parent =
+    row.parentCategoryId === null
+      ? undefined
+      : byServer.get(row.parentCategoryId)
+  return {
+    categoryId: byServer.get(row.categoryId)?.id ?? null,
+    categoryPath: row.categoryPath,
+    parentId: parent?.id ?? null,
+  }
+}
+
 /** Overlays only pending local changes on the visible account row with the same proven identity.
  * @example const resolved = accountEntry(row, matchedDeviceRow, categories, serverCategories)
  */
@@ -37,14 +65,17 @@ function accountEntry(
   byServer: Map<number, Category>,
 ) {
   const pending = matched?.pending ? matched : undefined
-  const category = pending?.categoryId
-    ? categories.get(pending.categoryId)
-    : byServer.get(row.categoryId)
-  const parentId = pending
-    ? category?.parentId
-    : row.parentCategoryId === null
-      ? null
-      : byServer.get(row.parentCategoryId)?.id
+  // Settled completions can still have a pending category move.
+  const localCategoryId =
+    matched && (matched.pending || matched.categoryMovePending)
+      ? matched.categoryId
+      : null
+  const { parentId, ...category } = accountCategory(
+    row,
+    localCategoryId,
+    categories,
+    byServer,
+  )
   const entry: HistoryEntry = {
     id: matched ? `device:${matched.id}` : `${row.source}:${row.id}`,
     source: matched ? 'device-and-account' : 'account',
@@ -54,11 +85,10 @@ function accountEntry(
     completedAt: new Date(
       pending?.completedAt ?? row.completedAt,
     ).toISOString(),
-    categoryId: category?.id ?? null,
-    categoryPath: (pending ? category?.path : null) ?? row.categoryPath,
+    ...category,
     accountRow: { source: row.source, id: row.id },
   }
-  return { entry, parentId: parentId ?? null }
+  return { entry, parentId }
 }
 
 /**

@@ -126,7 +126,8 @@ function PreparedEditor({
     refreshWindow,
     reportWindowError,
   )
-  const onNativeShown = useEffectEvent(() => {
+  const onNativeShown = useEffectEvent((requestId?: string) => {
+    if (requestId !== undefined) return
     refreshWindow()
     // Revealing writing restores its caret; an open Details panel retains its own focus.
     if (!details) textarea.current?.focus({ preventScroll: true })

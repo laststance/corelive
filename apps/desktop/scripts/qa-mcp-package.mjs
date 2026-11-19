@@ -184,8 +184,13 @@ async function verifyBundle(bundle, hostedColdStart) {
     await call('record_completed_task', {
       categoryId: draft.categoryId,
       title: 'QA completed work',
+      completedAt: '2026-05-12T12:00:00.000Z',
     })
-    const day = await call('list_completions')
+    // Noon UTC falls on May 12 or May 13 in every Mac timezone, including across the date line.
+    const day = await call('list_completions', {
+      startDate: '2026-05-12',
+      endDate: '2026-05-13',
+    })
     assert.equal(day.scope, 'device')
     assert.deepEqual(
       day.entries.map((entry) => entry.title),
@@ -223,19 +228,11 @@ async function verifyBundle(bundle, hostedColdStart) {
       }) + '\n',
     )
   } finally {
-    if (hostedColdStart && owners().length && client) {
-      // Prefer the ordinary app's flush and quit. The disposable runner can clean up a failed launch.
-      await client
-        .callTool({ name: 'quit_corelive', arguments: {} }, undefined, {
-          timeout: 5_000,
-        })
-        .catch(() => {})
-      const until = Date.now() + 5_000
-      while (owners().length && Date.now() < until) await delay(100)
-      for (const pid of owners()) process.kill(pid, 'SIGTERM')
-    }
-    if (client) await client.close()
-    if (fixture?.connected) {
+    // Run every cleanup in reverse registration order, even if an earlier release fails.
+    const cleanup = new AsyncDisposableStack()
+    cleanup.defer(() => rmSync(profile, { recursive: true, force: true }))
+    cleanup.defer(async () => {
+      if (!fixture?.connected) return
       const exited = once(fixture, 'exit', {
         signal: AbortSignal.timeout(8_000),
       })
@@ -245,8 +242,28 @@ async function verifyBundle(bundle, hostedColdStart) {
       } catch {
         fixture.kill()
       }
-    }
-    rmSync(profile, { recursive: true, force: true })
+    })
+    cleanup.defer(async () => client?.close())
+    cleanup.defer(async () => {
+      if (!hostedColdStart || !client || !owners().length) return
+      // Prefer the ordinary app's flush and quit. The disposable runner can clean up a failed launch.
+      await client
+        .callTool({ name: 'quit_corelive', arguments: {} }, undefined, {
+          timeout: 5_000,
+        })
+        .catch(() => {})
+      const until = Date.now() + 5_000
+      while (owners().length && Date.now() < until) await delay(100)
+      for (const pid of owners()) {
+        try {
+          process.kill(pid, 'SIGTERM')
+        } catch (error) {
+          // Graceful shutdown may finish between enumerating the process and sending the signal.
+          if (!(error instanceof Error && error.code === 'ESRCH')) throw error
+        }
+      }
+    })
+    await cleanup.disposeAsync()
   }
 }
 

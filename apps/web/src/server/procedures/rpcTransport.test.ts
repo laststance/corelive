@@ -5,7 +5,7 @@ import { createORPCClient } from '@orpc/client'
 import { RPCLink } from '@orpc/client/fetch'
 import type { RouterClient } from '@orpc/server'
 import { RPCHandler } from '@orpc/server/fetch'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import { db } from '@/db'
@@ -72,7 +72,7 @@ afterEach(async () => {
 })
 
 describeIfDb('v2 RPC transport with real PostgreSQL', () => {
-  test('preserves all 14 procedure paths and Date inputs/outputs across the five router groups', async () => {
+  test('preserves existing Dashboard procedures and Date values across the RPC transport', async () => {
     // Arrange
     const clerkId = `test_transport_${randomUUID()}`
     createdClerkIds.add(clerkId)
@@ -177,6 +177,42 @@ describeIfDb('v2 RPC transport with real PostgreSQL', () => {
       movedToCategoryId: defaultCategory.id,
       promotedCategoryIds: [],
     })
+  })
+
+  test('the paged unassigned pool carries bounded pages over RPC for a large account', async () => {
+    // Arrange
+    const clerkId = `test_transport_pool_${randomUUID()}`
+    createdClerkIds.add(clerkId)
+    const client = transportClient(clerkId)
+    const { categories } = await client.category.list()
+    const category = categories.find(({ isDefault }) => isDefault)!
+    await db.execute(sql`
+      INSERT INTO "Todo" ("text", "completed", "userId", "categoryId", "updatedAt")
+      SELECT repeat('界', 255), TRUE, ${category.userId}, ${category.id},
+        '2026-10-02T00:00:00.000'::timestamp
+      FROM generate_series(1, 7000)
+    `)
+
+    // Act
+    const first = await client.skillTree.getUnassignedPoolPage({})
+    if (!first.nextCursor) throw new Error('The first page should continue')
+    const second = await client.skillTree.getUnassignedPoolPage({
+      pageSize: 100,
+      cursor: first.nextCursor,
+    })
+
+    // Assert
+    expect(first.tasks).toHaveLength(50)
+    expect(second.tasks).toHaveLength(100)
+    expect(Buffer.byteLength(JSON.stringify(second))).toBeLessThan(100_000)
+    expect(second.tasks[0]?.text).toBe('界'.repeat(255))
+    expect(second.tasks[0]!.id).toBeGreaterThan(first.nextCursor.id)
+    expect(second.nextCursor).toMatchObject({
+      updatedAt: '2026-10-02T00:00:00.000Z',
+    })
+    await expect(
+      client.skillTree.getUnassignedPoolPage({ pageSize: 101 }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
   })
 
   test('delivers the existing UNAUTHORIZED error over the v2 wire for missing authentication', async () => {
