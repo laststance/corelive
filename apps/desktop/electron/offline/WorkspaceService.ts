@@ -330,7 +330,7 @@ export class WorkspaceService {
     original,
   }: WorkspaceWorkerCalls['findTaskAddition']['input']) {
     // A rename can leave a readable receipt before the directory flush succeeds.
-    const state = await this.file.update((current) => current)
+    const state = await this.file.update((current) => current, { shared: true })
     const receipt = state.commandReceipts[operationId]
     const saved = receipt?.taskAddition
     if (
@@ -342,7 +342,7 @@ export class WorkspaceService {
     // An implicit selection and an explicit UUID are different intents even when both resolve to the same category.
     if (original && receipt.digest !== taskAdditionDigest(original, accountId))
       throw new WorkspaceCommandError('command-conflict')
-    return saved
+    return structuredClone(saved)
   }
 
   /**

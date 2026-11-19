@@ -22,6 +22,7 @@ import {
   outboxByCompletion,
   uploadKind,
 } from './completionUpload'
+import { draftTextPage } from './draftTextPage'
 import {
   eligibleUndo,
   workspaceView,
@@ -116,6 +117,7 @@ type CategorySyncType =
   | 'parkCategory'
 type ReadType =
   | 'draft'
+  | 'draftPage'
   | 'pendingTotal'
   | 'syncDetails'
   | 'binding'
@@ -245,6 +247,18 @@ async function dispatchRead(
   switch (request.type) {
     case 'draft':
       return readDraft(request.input.categoryId)
+    case 'draftPage': {
+      const { categoryId, page } = request.input
+      return file.readProjection<WorkspaceWorkerCalls['draftPage']['output']>(
+        (state) => {
+          const id = effectiveCategory(state, categoryId)
+          const draft = state.drafts[id]
+          if (id !== categoryId || !draft)
+            return { status: 'category-unavailable' }
+          return draftTextPage(draft, page)
+        },
+      )
+    }
     case 'pendingTotal':
       return service.pendingTotal()
     case 'syncDetails':

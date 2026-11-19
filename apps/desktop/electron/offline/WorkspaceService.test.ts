@@ -2168,6 +2168,11 @@ describe('durable task-addition receipts', () => {
     })
     expect(other).toBeNull()
     expect(detached).toBeNull()
+    if (!original) throw new Error('Expected the durable receipt')
+    original.title = 'Changed by the lookup caller'
+    await expect(
+      reopened.findTaskAddition({ operationId, accountId }),
+    ).resolves.toMatchObject({ title: 'Send the invoice' })
     await expect(
       reopened.appendTask({ ...request, title: 'Different task' }),
     ).rejects.toMatchObject({ reason: 'command-conflict' })
@@ -2195,9 +2200,11 @@ describe('durable task-addition receipts', () => {
       'Interrupted after rename',
     )
     let barrierAvailable = false
+    let writeAttempts = 0
     const file = new AtomicWorkspaceFile({
       ...options,
       onStage(stage) {
+        if (stage === 'before-write') writeAttempts++
         if (stage === 'directory-flushed' && !barrierAvailable)
           throw new Error('Directory barrier failed')
       },
@@ -2215,11 +2222,13 @@ describe('durable task-addition receipts', () => {
     await expect(reopened.findTaskAddition(lookup)).rejects.toThrow(
       'Directory barrier failed',
     )
+    expect(writeAttempts).toBe(0)
     barrierAvailable = true
     await expect(reopened.findTaskAddition(lookup)).resolves.toMatchObject({
       title: 'Keep the original addition',
       categoryId: '00000000-0000-4000-8000-000000000002',
     })
+    expect(writeAttempts).toBe(0)
     expect(await readFile(file.path)).toEqual(primary)
     expect(await readFile(file.recoveryPath)).toEqual(recovery)
     expect(

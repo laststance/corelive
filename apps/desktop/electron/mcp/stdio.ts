@@ -10,9 +10,34 @@ import { version } from '../../package.json'
 
 import { createMcpClient } from './bridgeClient'
 import { helperLaunch } from './launcher'
-import { MAX_FRAME_BYTES } from './protocol'
-import { McpActionError, mcpFailure } from './result'
+import { MAX_FRAME_BYTES, MAX_MCP_RESULT_BYTES } from './protocol'
+import { McpActionError, mcpFailure, type McpResult } from './result'
 import { coreLiveTools, parseMcpCall } from './tools'
+
+/** Bounds local tool errors so an invalid request cannot disconnect a stdio client.
+ * @example return stdioFailure(params.name, error)
+ */
+function stdioFailure(name: string, error: unknown): McpResult {
+  const nextAction = 'Inspect the input schema and retry the request.'
+  const problem =
+    error instanceof McpActionError
+      ? error
+      : new McpActionError('invalid-arguments', nextAction)
+  try {
+    const result = mcpFailure(
+      name,
+      problem.code,
+      problem.effect,
+      problem.nextAction,
+      problem.detail,
+    )
+    if (Buffer.byteLength(JSON.stringify(result)) <= MAX_MCP_RESULT_BYTES)
+      return result
+  } catch (failure) {
+    if (!(failure instanceof RangeError)) throw failure
+  }
+  return mcpFailure('tools/call', problem.code, problem.effect, nextAction)
+}
 
 /** Runs the bundled local MCP endpoint. Only data calls create an owner connection.
  * @example await serveStdio()
@@ -44,20 +69,7 @@ async function serveStdio(): Promise<void> {
           signal,
         )
       } catch (error) {
-        if (error instanceof McpActionError)
-          return mcpFailure(
-            params.name,
-            error.code,
-            error.effect,
-            error.nextAction,
-            error.detail,
-          )
-        return mcpFailure(
-          params.name,
-          'invalid-arguments',
-          'none',
-          'Inspect the input schema and retry the request.',
-        )
+        return stdioFailure(params.name, error)
       }
     },
   )

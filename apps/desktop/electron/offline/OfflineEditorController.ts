@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 
 import type { CompletionRange } from '@corelive/desktop-contract/completion-history'
@@ -99,6 +100,8 @@ export class OfflineEditorController {
   private loopStatus: LoopStatus = 'syncing'
   /** The verified identity of the session seen in this process run (EA1, state D). */
   private signedIn: { clerkId: string; email: string | null } | null = null
+  /** One app-local identity per restored or newly offered connection prompt. */
+  private connectPromptId = randomUUID()
   private firstUpload: AccountStatus['firstUpload'] = null
   private signOutRun: Promise<SignOutResult> | null = null
   private clearRun: Promise<SignOutResult> | null = null
@@ -187,7 +190,7 @@ export class OfflineEditorController {
 
   /** Invokes an account operation only with a broker credential verified against the attached identity.
    * The owner must check the resulting binding again before later file writes or page delivery.
-   * @throws {McpAccountError} When attachment, authorization or delivery fails.
+   * @throws {@link McpAccountError} when attachment, authorization or delivery fails.
    * @example await controller.withMcpAccount((client, signal) => client.skillTree.getMyTree(undefined, {signal}))
    */
   async withMcpAccount<T>(
@@ -200,6 +203,16 @@ export class OfflineEditorController {
       ? AbortSignal.any([binding.signal, cancellation])
       : binding.signal
     let dispatched = false
+    const assertCurrent = (): void => {
+      signal.throwIfAborted()
+      const current = this.mcpAccountBinding()
+      if (
+        current?.accountId !== binding.accountId ||
+        current.generation !== binding.generation ||
+        current.epoch !== binding.epoch
+      )
+        throw new McpAccountError('account-changed', dispatched)
+    }
     try {
       signal.throwIfAborted()
       const token = await this.options.broker.acquire(
@@ -216,16 +229,15 @@ export class OfflineEditorController {
       const identity = await this.options
         .transport(token.credential.token)
         .whoami(signal)
-      signal.throwIfAborted()
+      // Sign-out hides the binding while the editor saves, before revoking its signal.
+      assertCurrent()
       if (identity.clerkId !== binding.accountId)
         throw new McpAccountError('account-changed', false)
       // Only this callback can dispatch the user's operation. The preceding calls verified identity.
       const client = this.options.mcpClient(token.credential.token)
       dispatched = true
       const result = await work(client, signal)
-      signal.throwIfAborted()
-      if (this.mcpAccountBinding()?.accountId !== binding.accountId)
-        throw new McpAccountError('account-changed', true)
+      assertCurrent()
       return result
     } catch (error) {
       const failure = mcpAccountFailure(error, dispatched)
@@ -470,6 +482,20 @@ export class OfflineEditorController {
       pendingConnect: { accountId: who.clerkId, displayEmail: who.email ?? '' },
       signOutPending: false,
     })
+    this.connectPromptId = randomUUID()
+  }
+
+  /** Projects the prompt that account status, Connect and Not now all address.
+   * @example const pending = this.connectPrompt()
+   */
+  private connectPrompt() {
+    const pending = this.registryState?.pendingConnect
+    if (
+      !pending ||
+      (this.signedIn && this.signedIn.clerkId !== pending.accountId)
+    )
+      return null
+    return { ...pending, promptId: this.connectPromptId }
   }
 
   /**
@@ -547,13 +573,20 @@ export class OfflineEditorController {
   /**
    * Attaches the pending account after the user pressed Connect this Mac (DA4, EA2b). The binding
    * is written by the first sync pass; nothing was sent before this.
-   * @returns Whether a pending Connect existed and was accepted.
-   * @example if (await controller.connect()) showUploading()
+   * @param promptId - The prompt shown by {@link accountStatus}.
+   * @returns Whether that prompt was accepted.
+   * @example if (await controller.connect(promptId)) showUploading()
    */
-  async connect(): Promise<boolean> {
-    const pending = this.registryState?.pendingConnect
+  async connect(promptId: string): Promise<boolean> {
+    const pending = this.connectPrompt()
     const context = this.context
-    if (!pending || !context || this.sessionEnding) return false
+    if (
+      !pending ||
+      pending.promptId !== promptId ||
+      !context ||
+      this.sessionEnding
+    )
+      return false
     const epoch = this.signOutEpoch
     const bound = await context.worker.call('binding', null)
     if (bound && bound.accountId !== pending.accountId) return false
@@ -564,8 +597,9 @@ export class OfflineEditorController {
     const accepted = await this.withSessionLock(async () => {
       if (
         epoch !== this.signOutEpoch ||
-        !this.context ||
-        this.registryState?.pendingConnect?.accountId !== pending.accountId
+        this.context !== context ||
+        this.sessionEnding ||
+        this.connectPrompt()?.promptId !== promptId
       )
         return false
       this.firstUpload = total > 0 ? { state: 'uploading', count: total } : null
@@ -585,18 +619,16 @@ export class OfflineEditorController {
 
   /**
    * Declines the pending Connect (DA4): the prompt is dropped and the session ends locally.
+   * @param promptId - The prompt shown by {@link accountStatus}.
    * @returns The sign-out result; offline, the remote revoke is simply skipped.
-   * @example await controller.notNow()
+   * @throws {@link WorkspaceWorkerError} if the prompt has been replaced or answered.
+   * @example await controller.notNow(promptId)
    */
-  async notNow(): Promise<SignOutResult> {
-    const pending = this.registryState?.pendingConnect?.accountId
-    if (!pending) throw new WorkspaceWorkerError('connection-not-pending')
+  async notNow(promptId: string): Promise<SignOutResult> {
     // Connect and sign-in commit under the same lock. A stale prompt must never end a new session.
     return this.withSessionLock(async () => {
-      if (
-        this.sessionEnding ||
-        this.registryState?.pendingConnect?.accountId !== pending
-      )
+      const pending = this.connectPrompt()
+      if (this.sessionEnding || !pending || pending.promptId !== promptId)
         throw new WorkspaceWorkerError('connection-not-pending')
       return this.startSignOut(async (generation) =>
         this.endSession(generation),
@@ -640,7 +672,7 @@ export class OfflineEditorController {
     const view =
       this.snapshot.phase === 'ready' ? this.snapshot.workspace : null
     const binding = view?.binding ?? null
-    const pending = this.registryState?.pendingConnect ?? null
+    const pending = this.connectPrompt()
     const state = this.accountState(binding)
     return {
       state,
@@ -650,7 +682,9 @@ export class OfflineEditorController {
       waitingCount: view?.pendingCount ?? 0,
       needsALookCount: view?.needsALookCount ?? 0,
       lastSyncedAt: binding?.lastSyncedAt ?? null,
-      pendingConnect: pending ? { displayEmail: pending.displayEmail } : null,
+      pendingConnect: pending
+        ? { displayEmail: pending.displayEmail, promptId: pending.promptId }
+        : null,
       firstUpload: this.firstUpload,
     }
   }
@@ -987,6 +1021,16 @@ export class OfflineEditorController {
    */
   async draft(generation: number, categoryId: string) {
     return this.requireContext(generation).worker.call('draft', { categoryId })
+  }
+
+  /** Reads one revision-bound draft page without transferring the rest of its writing to main.
+   * @example await controller.draftPage(generation, { categoryId, page: { offset: 0, limit: 32768 } })
+   */
+  async draftPage(
+    generation: number,
+    input: WorkspaceWorkerCalls['draftPage']['input'],
+  ) {
+    return this.requireContext(generation).worker.call('draftPage', input)
   }
 
   /** Keeps every eligible restart Undo available beyond the small initial toast projection.

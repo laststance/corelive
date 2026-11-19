@@ -20,6 +20,7 @@ import type {
 import type { DeviceHistory } from '../mcp/historyDevice'
 
 import { waitingCompletionCount } from './completionUpload'
+import type { DraftTextPageInput, DraftTextPageResult } from './draftTextPage'
 import {
   needsALookCount,
   openRecoveryCopyCount,
@@ -64,6 +65,10 @@ export interface WorkspaceWorkerCalls {
     output: WorkspaceView & { writtenDraft: OfflineDraftRecord }
   }
   draft: { input: { categoryId: string }; output: OfflineDraftRecord }
+  draftPage: {
+    input: { categoryId: string; page: DraftTextPageInput }
+    output: DraftTextPageResult | { status: 'category-unavailable' }
+  }
   /** Uncertain entries plus how many derived keeps could be frozen and sent now (capped at `limit`). */
   pending: {
     input: { limit: number }

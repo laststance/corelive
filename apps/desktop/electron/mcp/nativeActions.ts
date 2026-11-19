@@ -96,23 +96,22 @@ async function applyWindowRole(
   role: WindowRole,
   window: CoreLiveWindow,
 ) {
-  const savesEditor =
+  // WindowManager owns the close handshake and releases input on the next reveal.
+  const reloadsEditor =
     window === 'editor' &&
-    ['reload_window', 'force_reload_window', 'close_window'].includes(role)
-  if (!savesEditor) return runWindowRole(deps, role, window)
-  try {
-    // WindowManager owns the save-and-hide handshake for close requests.
-    if (
-      role !== 'close_window' &&
-      !(await runtime.ipc.flush(runtime.controller.getSnapshot().generation))
+    (role === 'reload_window' || role === 'force_reload_window')
+  if (!reloadsEditor) return runWindowRole(deps, role, window)
+  if (!(await runtime.ipc.flush(runtime.controller.getSnapshot().generation)))
+    throw new McpActionError(
+      'flush-failed',
+      'Save pending LiveEditor writing first.',
     )
-      throw new McpActionError(
-        'flush-failed',
-        'Save pending LiveEditor writing first.',
-      )
+  try {
     return await runWindowRole(deps, role, window)
-  } finally {
+  } catch (error) {
+    // A reload that could not start leaves the existing renderer in place.
     runtime.ipc.shown()
+    throw error
   }
 }
 

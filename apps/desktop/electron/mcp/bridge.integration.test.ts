@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { EventEmitter, once } from 'node:events'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -76,6 +76,36 @@ test('discovers distinct draft and completion tools over stdio while the isolate
   ).toEqual(['title', 'operationId'])
 })
 
+test('an overlong unknown tool name receives a bounded error and the helper stays connected', async () => {
+  // Arrange
+  const { client, transport } = stdioClient(isolatedProfile())
+  await client.connect(transport)
+
+  // Act
+  const unknown = await client.callTool({ name: 'unregistered_tool' })
+  const rejected = await client.callTool({ name: 'x'.repeat(6 * 1024 * 1024) })
+  const tools = await client.listTools()
+
+  // Assert
+  expect(unknown).toMatchObject({
+    isError: true,
+    structuredContent: {
+      code: 'unknown-tool',
+      effect: 'none',
+      operation: 'unregistered_tool',
+    },
+  })
+  expect(rejected).toMatchObject({
+    isError: true,
+    structuredContent: {
+      code: 'unknown-tool',
+      effect: 'none',
+      operation: 'tools/call',
+    },
+  })
+  expect(tools.tools.map((tool) => tool.name)).toContain('read_draft')
+})
+
 describe.runIf(process.platform === 'darwin')('verified Mac socket', () => {
   test('the kernel peer check rejects a mismatched effective user and an invalid descriptor', () => {
     // Arrange
@@ -89,7 +119,36 @@ describe.runIf(process.platform === 'darwin')('verified Mac socket', () => {
     expect(() => execFileSync(binary)).not.toThrow()
   })
 
-  test('two separate stdio clients reach one owner without sharing session cursors', async () => {
+  test('the owner closes its listener if the published endpoint cannot be inspected', async () => {
+    // Arrange
+    const profile = isolatedProfile()
+    const peers = await import('./peer')
+    const native = peers.loadPeerBinding()
+    const close = vi.fn(native.close)
+    const useBinding = vi.spyOn(peers, 'loadPeerBinding').mockReturnValue({
+      connect: native.connect,
+      close,
+      listen(path, adopt) {
+        const listener = native.listen(path, adopt)
+        cleanup.push(() => native.close(listener))
+        unlinkSync(path)
+        return listener
+      },
+    })
+    cleanup.push(() => useBinding.mockRestore())
+
+    // Act
+    const failed = startMcpOwner(profile, {
+      call: async () => mcpSuccess({}),
+      closeSession: vi.fn(),
+    })
+
+    // Assert
+    await expect(failed).rejects.toMatchObject({ code: 'ENOENT' })
+    expect(close).toHaveBeenCalledOnce()
+  })
+
+  test('two stdio helpers can read from the same owner with distinct sessions', async () => {
     // Arrange
     const profile = isolatedProfile()
     const sessions = new Set<string>()
@@ -266,6 +325,59 @@ describe.runIf(process.platform === 'darwin')('verified Mac socket', () => {
     expect(next.structuredContent).toEqual({ name: 'read_draft' })
   })
 
+  test('a response deadline reports an unconfirmed write and advances the queue without resending it', async () => {
+    // Arrange
+    const profile = isolatedProfile()
+    const signals = new EventEmitter()
+    const dispatched = once(signals, 'dispatched')
+    const finish = once(signals, 'finish')
+    const received: string[] = []
+    cleanup.push(
+      await startMcpOwner(profile, {
+        async call(_session, name) {
+          received.push(name)
+          if (name === 'append_unfinished_task') {
+            signals.emit('dispatched')
+            await finish
+          }
+          return mcpSuccess({ name })
+        },
+        closeSession: vi.fn(),
+      }),
+    )
+    cleanup.push(() => {
+      signals.emit('finish')
+    })
+    const client = createMcpClient(
+      profile,
+      async () => {
+        throw new Error('Unexpected wake')
+      },
+      undefined,
+      200,
+    )
+    cleanup.push(() => client.close())
+    const write = client.call(
+      parseMcpCall('append_unfinished_task', {
+        title: 'Ship it',
+        operationId: '00000000-0000-4000-8000-000000000001',
+      }),
+    )
+
+    // Act
+    await dispatched
+    const read = client.call(parseMcpCall('read_draft', {}))
+
+    // Assert
+    expect((await write).structuredContent).toMatchObject({
+      code: 'worker-unavailable',
+      effect: 'unknown',
+      operationId: '00000000-0000-4000-8000-000000000001',
+    })
+    expect((await read).structuredContent).toEqual({ name: 'read_draft' })
+    expect(received).toEqual(['append_unfinished_task', 'read_draft'])
+  }, 3_000)
+
   test.each([
     {
       label: 'dispatches an 11 MiB edit',
@@ -366,9 +478,11 @@ describe.runIf(process.platform === 'darwin')('verified Mac socket', () => {
         }),
       )
       const reply = await frames.next()
+      const closed = await frames.next()
 
       // Assert
       expect(reply.value).toEqual({ type: 'incompatible' })
+      expect(closed.done).toBe(true)
       expect(call).not.toHaveBeenCalled()
     },
   )

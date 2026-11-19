@@ -144,7 +144,12 @@ test('Not now declines the pending connect and keeps state A', async () => {
   // Arrange
   const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
   const { fake } = await renderWithSettings(<Harness />, {
-    account: { pendingConnect: { displayEmail: 'raphtalia@example.com' } },
+    account: {
+      pendingConnect: {
+        displayEmail: 'raphtalia@example.com',
+        promptId: '00000000-0000-4000-8000-000000000001',
+      },
+    },
   })
   expect(
     screen.getByText(/Connect this Mac to/).closest('p'),
@@ -161,7 +166,11 @@ test('Not now declines the pending connect and keeps state A', async () => {
   await user.click(screen.getByRole('button', { name: 'Not now' }))
 
   // Assert
-  await waitFor(() => expect(fake.api.account.notNow).toHaveBeenCalledOnce())
+  await waitFor(() =>
+    expect(fake.api.account.notNow).toHaveBeenCalledExactlyOnceWith(
+      '00000000-0000-4000-8000-000000000001',
+    ),
+  )
   expect(fake.api.account.connect).not.toHaveBeenCalled()
   expect(await screen.findByRole('button', { name: 'Sign in' })).toBeVisible()
 })
@@ -170,7 +179,12 @@ test('Connect this Mac sends the connect request, then shows progress and the on
   // Arrange
   const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
   const { fake } = await renderWithSettings(<Harness />, {
-    account: { pendingConnect: { displayEmail: 'raphtalia@example.com' } },
+    account: {
+      pendingConnect: {
+        displayEmail: 'raphtalia@example.com',
+        promptId: '00000000-0000-4000-8000-000000000001',
+      },
+    },
   })
   fake.api.account.connect.mockImplementation(async () => {
     fake.setAccount({
@@ -185,6 +199,9 @@ test('Connect this Mac sends the connect request, then shows progress and the on
   await user.click(screen.getByRole('button', { name: 'Connect this Mac' }))
 
   // Assert: progress
+  expect(fake.api.account.connect).toHaveBeenCalledExactlyOnceWith(
+    '00000000-0000-4000-8000-000000000001',
+  )
   expect(
     await screen.findByText('Sending 12 keeps to your Dashboard…'),
   ).toBeVisible()

@@ -118,6 +118,16 @@ export class AtomicWorkspaceFile<T> {
     return this.serialize(async () => structuredClone(await this.readPrimary()))
   }
 
+  /** Clones only the requested projection while the storage worker holds its serialized read.
+   * @param project - A pure projection that treats the entire committed state as immutable.
+   * @example const count = await file.readProjection((state) => state.revision)
+   */
+  async readProjection<R>(project: (current: Readonly<T>) => R): Promise<R> {
+    return this.serialize(async () =>
+      structuredClone(project(await this.readPrimary())),
+    )
+  }
+
   /**
    * Creates a workspace only after verified online preparation; never overwrites it.
    * A recovery file without a primary is also an existing workspace needing recovery.

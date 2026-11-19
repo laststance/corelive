@@ -388,13 +388,15 @@ export class OfflineEditorIPC {
       this.assertSettings(event)
       return this.accountStatus()
     })
-    typedHandle('settings-window-account-connect', async (event) => {
+    typedHandle('settings-window-account-connect', async (event, promptId) => {
       this.assertSettings(event)
-      return this.controller.connect()
+      return this.controller.connect(promptId)
     })
-    typedHandle('settings-window-account-not-now', async (event) => {
+    typedHandle('settings-window-account-not-now', async (event, promptId) => {
       this.assertSettings(event)
-      return this.deps.signOutDevice(async () => this.controller.notNow())
+      return this.deps.signOutDevice(async () =>
+        this.controller.notNow(promptId),
+      )
     })
     typedHandle('settings-window-account-sign-in', (event) => {
       this.assertSettings(event)

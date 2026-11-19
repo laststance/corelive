@@ -184,13 +184,14 @@ export async function startMcpOwner(
     }
     return socket
   })
-  const published = lstatSync(endpoint.path)
+  let published: Stats | undefined
   const close = (): void => {
     peer.close(listener)
     for (const socket of sockets) socket.destroy()
-    unlinkOwnedSocket(endpoint.path, published)
+    if (published) unlinkOwnedSocket(endpoint.path, published)
   }
   try {
+    published = lstatSync(endpoint.path)
     chmodSync(endpoint.path, 0o600)
     return close
   } catch (error) {

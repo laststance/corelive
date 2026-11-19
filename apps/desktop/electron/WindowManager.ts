@@ -900,10 +900,6 @@ export class WindowManager {
 
     if (this.liveEditorRevealPending) {
       this.cancelPendingLiveEditorReveal()
-      // A user cancel ends any login handoff riding on this load; the next
-      // sign-in must be able to hand off again (the latch only guards a load
-      // that is still in flight).
-      this.loginHandoffPending = false
       return false
     }
 
@@ -1030,12 +1026,15 @@ export class WindowManager {
     }
   }
 
-  /** Cancels a delayed reveal when a shortcut toggles off or shutdown begins.
-   * @example this.cancelPendingLiveEditorReveal()
+  /** Stops an in-flight load from revealing the editor after a hide or shutdown.
+   * @returns True if the pending reveal was cancelled and its window hidden.
+   * @example const hidden = this.cancelPendingLiveEditorReveal()
    */
-  private cancelPendingLiveEditorReveal(): void {
-    this.cancelLiveEditorReveal?.()
-    this.liveEditorRevealPending = false
+  private cancelPendingLiveEditorReveal(): boolean {
+    if (!this.cancelLiveEditorReveal) return false
+    this.cancelLiveEditorReveal()
+    this.loginHandoffPending = false
+    return true
   }
 
   /** Installs main's durable-save handshake before any ordinary hide/close.
@@ -1076,7 +1075,7 @@ export class WindowManager {
         panel.isDestroyed()
       )
         return false
-      panel.hide()
+      if (!this.cancelPendingLiveEditorReveal()) panel.hide()
       return true
     } finally {
       if (request === this.hideRequest) this.hidePending = false

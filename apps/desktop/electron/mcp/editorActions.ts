@@ -11,7 +11,12 @@ import type { OfflineEditorController } from '../offline/OfflineEditorController
 import type { OfflineEditorIPC } from '../offline/OfflineEditorIPC'
 
 import { McpActionError } from './result'
-import { dispatchMcpAction, type McpActions, type McpCall } from './tools'
+import {
+  ACCOUNT_PROMPT_NEXT_ACTION,
+  dispatchMcpAction,
+  type McpActions,
+  type McpCall,
+} from './tools'
 
 export type EditorRuntime = {
   controller: OfflineEditorController
@@ -33,8 +38,7 @@ const nextSteps: Record<string, string> = {
   'undo-expired': 'The Undo window has closed. Read the current completion.',
   'account-changed':
     'Read the current account and category before starting a new request.',
-  'connection-not-pending':
-    'Read the account status. Only a pending connection can be declined.',
+  'connection-not-pending': ACCOUNT_PROMPT_NEXT_ACTION,
   'invalid-row': 'Read the current row IDs and check the editor input limit.',
 }
 
@@ -74,49 +78,6 @@ function additionResult(operationId: string, saved: TaskAddition) {
     categoryPath: saved.categoryPath,
     rowId: saved.rowId,
     title: saved.title,
-  }
-}
-
-/** Checks whether a UTF-16 page boundary cuts a Unicode surrogate pair in half.
- * @example splitsSurrogatePair('A😀B', 2) // => true
- */
-function splitsSurrogatePair(text: string, offset: number): boolean {
-  const first = text.charCodeAt(offset - 1)
-  const second = text.charCodeAt(offset)
-  return (
-    first >= 0xd800 && first <= 0xdbff && second >= 0xdc00 && second <= 0xdfff
-  )
-}
-
-/** Returns a bounded portion of one saved note, using UTF-16 offsets that keep Unicode pairs together.
- * The revision from the first page lets a client detect edits before continuing.
- * @example draftTextPage(text, 3, { offset: 0, limit: 32768 })
- */
-function draftTextPage(
-  text: string,
-  revision: number,
-  page: NonNullable<
-    Extract<McpCall, { name: 'read_draft' }>['args']['textPage']
-  >,
-) {
-  if (page.expectedRevision !== undefined && revision !== page.expectedRevision)
-    throw workspaceRefusal('revision-conflict', {
-      expectedRevision: page.expectedRevision,
-      currentRevision: revision,
-    })
-  if (page.offset > text.length || splitsSurrogatePair(text, page.offset))
-    throw new McpActionError(
-      'invalid-input',
-      'Use a nextOffset from a previous page, or start at zero.',
-    )
-  let end = Math.min(text.length, page.offset + page.limit)
-  // Include the trailing unit of a surrogate pair when the nominal boundary falls inside it.
-  if (splitsSurrogatePair(text, end)) end++
-  return {
-    text: text.slice(page.offset, end),
-    offset: page.offset,
-    nextOffset: end < text.length ? end : null,
-    totalLength: text.length,
   }
 }
 
@@ -183,17 +144,38 @@ async function runEditorAction(
       const id = requireCategory(
         args.categoryId ?? workspace.selectedCategoryId,
       )
+      const categoryPath = paths.get(id)
+      if (args.textPage) {
+        const result = await controller.draftPage(generation, {
+          categoryId: id,
+          page: args.textPage,
+        })
+        switch (result.status) {
+          case 'page':
+            return { categoryId: id, categoryPath, ...result.page }
+          case 'revision-conflict':
+            throw workspaceRefusal('revision-conflict', {
+              expectedRevision: args.textPage.expectedRevision,
+              currentRevision: result.currentRevision,
+            })
+          case 'category-unavailable':
+            throw workspaceRefusal('category-unavailable', { categoryId: id })
+          case 'invalid-offset':
+            throw new McpActionError(
+              'invalid-input',
+              'Use a nextOffset from a previous page, or start at zero.',
+            )
+        }
+      }
       const { categoryId, draft } = await controller.draft(generation, id)
       if (id !== categoryId)
         throw workspaceRefusal('category-unavailable', { categoryId: id })
-      const text = draft.rows.map((row) => row.text).join('\n')
       return {
         categoryId,
-        categoryPath: paths.get(id),
+        categoryPath,
         revision: draft.revision,
-        ...(args.textPage
-          ? draftTextPage(text, draft.revision, args.textPage)
-          : { text, rows: draft.rows }),
+        text: draft.rows.map((row) => row.text).join('\n'),
+        rows: draft.rows,
       }
     },
     append_unfinished_task: async (args) =>

@@ -47,8 +47,8 @@ export interface AccountStatus {
   /** "Needs a look" rows on the Sync details page; the DA3 link shows only when above 0. */
   needsALookCount: number
   lastSyncedAt: number | null
-  /** Set until Connect / Not now after a first sign-in on an unbound Mac (EA2b). */
-  pendingConnect: { displayEmail: string } | null
+  /** The first-connect prompt (EA2b); both actions must echo the prompt ID. */
+  pendingConnect: { displayEmail: string; promptId: string } | null
   /** First-upload progress after Connect (DA4). */
   firstUpload: { state: 'uploading' | 'done'; count: number } | null
   /** The login window's progress, owned by main's sign-in coordinator (DA6). */

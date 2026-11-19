@@ -24,43 +24,68 @@ vi.mock('electron', () => ({
 }))
 vi.mock('../logger', () => ({ log: { error: vi.fn() } }))
 
-// Value: protects=unsaved writing survives an MCP close request;
-// fails_when=close runs after a refused flush or editing stays suspended;
-// why_new=controller tests cover flush but do not invoke native window roles;
-// seam=none; no_claim=Electron window and renderer are simulated.
-test('refusing a close after an unsuccessful save keeps the editor open and resumes editing', async () => {
-  // Arrange
-  const close = vi.fn()
-  const shown = vi.fn()
-  const window = {
-    close,
-    isDestroyed: () => false,
-    webContents: {
+test.each([
+  ['hides', true],
+  ['refuses to hide', false],
+] as const)(
+  'closing LiveEditor %s without releasing a pending reload input barrier',
+  async (_outcome, hidden) => {
+    // Arrange
+    const shown = vi.fn()
+    const reload = vi.fn()
+    const closeLiveEditor = vi.fn(async () => hidden)
+    let acknowledge = (): void => {}
+    const flush = vi.fn(
+      async () =>
+        new Promise<boolean>((resolve) => {
+          acknowledge = (): void => resolve(true)
+        }),
+    )
+    const window = {
       isDestroyed: () => false,
-      getURL: () => 'corelive-editor://app/index.html',
-    },
-  }
-  const context = {
-    windows: {
-      getLiveEditorWindow: () => window,
-      closeLiveEditor: async () => false,
-    },
-  } as unknown as NativeActionContext
-  const runtime = {
-    ipc: { shown },
-  } as unknown as EditorRuntime
+      webContents: {
+        isDestroyed: () => false,
+        getURL: () => 'corelive-editor://app/index.html',
+        reload,
+      },
+    }
+    const context = {
+      windows: { getLiveEditorWindow: () => window, closeLiveEditor },
+    } as unknown as NativeActionContext
+    const runtime = {
+      controller: { getSnapshot: () => ({ generation: 1 }) },
+      ipc: { flush, shown },
+    } as unknown as EditorRuntime
 
-  // Act
-  const closing = runNativeAction(context, runtime, {
-    name: 'close_window',
-    args: { window: 'editor' },
-  })
+    // Act
+    const reloading = runNativeAction(context, runtime, {
+      name: 'reload_window',
+      args: { window: 'editor' },
+    })
+    const closing = runNativeAction(context, runtime, {
+      name: 'close_window',
+      args: { window: 'editor' },
+    })
 
-  // Assert
-  await expect(closing).rejects.toMatchObject({ code: 'flush-failed' })
-  expect(close).not.toHaveBeenCalled()
-  expect(shown).toHaveBeenCalledOnce()
-})
+    // Assert
+    if (hidden)
+      await expect(closing).resolves.toEqual({
+        status: 'hidden',
+        window: 'editor',
+      })
+    else await expect(closing).rejects.toMatchObject({ code: 'flush-failed' })
+    expect(closeLiveEditor).toHaveBeenCalledOnce()
+    expect(reload).not.toHaveBeenCalled()
+    expect(shown).not.toHaveBeenCalled()
+    acknowledge()
+    await expect(reloading).resolves.toEqual({
+      status: 'requested',
+      window: 'editor',
+    })
+    expect(reload).toHaveBeenCalledOnce()
+    expect(shown).not.toHaveBeenCalled()
+  },
+)
 
 // Value: protects=a refused Dock visibility change reports a possible partial effect;
 // fails_when=the MCP route changes a different preference or reports success;

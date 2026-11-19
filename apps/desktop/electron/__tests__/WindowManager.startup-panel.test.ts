@@ -246,6 +246,29 @@ describe('WindowManager bundled startup panel', () => {
     expect(createdWindows).toHaveLength(1)
   })
 
+  test('a successful close during loading prevents the late LiveEditor reveal', async () => {
+    // Arrange
+    const manager = new WindowManager(SERVER_URL)
+    const onShown = vi.fn()
+    manager.showLiveEditor(onShown)
+    const editor = getWindow(0)
+
+    // Act
+    const closed = await manager.closeLiveEditor()
+    editor.fireWebContents('did-finish-load')
+
+    // Assert
+    expect(closed).toBe(true)
+    expect(editor.win.hide).toHaveBeenCalledOnce()
+    expect(editor.win.show).not.toHaveBeenCalled()
+    expect(editor.win.focus).not.toHaveBeenCalled()
+    expect(onShown).not.toHaveBeenCalled()
+
+    manager.showLiveEditor()
+    editor.fireWebContents('did-finish-load')
+    expect(editor.win.show).toHaveBeenCalledOnce()
+  })
+
   test('the native close button intercepts destruction and hides LiveEditor after one save', async () => {
     // Arrange
     let acknowledge = (): void => {}

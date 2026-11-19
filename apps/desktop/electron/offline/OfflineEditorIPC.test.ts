@@ -412,12 +412,15 @@ test('Settings sign-out and Not now run through the one shared sign-out implemen
   )
   await fixture.handler('settings-window-account-not-now')(
     fixture.settingsEvent,
+    '00000000-0000-4000-8000-000000000001',
   )
 
   // Assert
   expect(fixture.signOutDevice).toHaveBeenCalledTimes(2)
   expect(fixture.controller.signOut).toHaveBeenCalledOnce()
-  expect(fixture.controller.notNow).toHaveBeenCalledOnce()
+  expect(fixture.controller.notNow).toHaveBeenCalledExactlyOnceWith(
+    '00000000-0000-4000-8000-000000000001',
+  )
 })
 
 test('Settings sign-in opens the login window and Connect attaches the pending account', async () => {
@@ -430,10 +433,14 @@ test('Settings sign-in opens the login window and Connect attaches the pending a
   )
   const connected = await fixture.handler('settings-window-account-connect')(
     fixture.settingsEvent,
+    '00000000-0000-4000-8000-000000000001',
   )
 
   // Assert
   expect(fixture.windows.showLoginWindow).toHaveBeenCalledOnce()
+  expect(fixture.controller.connect).toHaveBeenCalledExactlyOnceWith(
+    '00000000-0000-4000-8000-000000000001',
+  )
   expect(connected).toBe(true)
 })
 

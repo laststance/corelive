@@ -14,6 +14,7 @@ import {
 import {
   BRIDGE_VERSION,
   MAX_FRAME_BYTES,
+  OWNER_RESPONSE_TIMEOUT_MS,
   OWNER_START_TIMEOUT_MS,
   ReadyFrame,
   bridgeResult,
@@ -111,7 +112,8 @@ function cancelledResult(call: McpCall, dispatched: boolean): McpResult {
 export function createMcpClient(
   profile: string,
   wake: () => Promise<void>,
-  timeoutMs = OWNER_START_TIMEOUT_MS,
+  startTimeoutMs = OWNER_START_TIMEOUT_MS,
+  responseTimeoutMs = OWNER_RESPONSE_TIMEOUT_MS,
 ) {
   let connection: Connection | undefined
   let opening: Socket | undefined
@@ -121,7 +123,7 @@ export function createMcpClient(
   async function connect(): Promise<Connection> {
     const endpoint = peerEndpoint(profile)
     const binding = loadPeerBinding()
-    const deadline = Date.now() + timeoutMs
+    const deadline = Date.now() + startTimeoutMs
     let requestedLaunch = false
     while (!ended && Date.now() < deadline) {
       let socket: Socket
@@ -212,10 +214,15 @@ export function createMcpClient(
       )
     }
     if (signal?.aborted || ended) return cancelledResult(call, state.dispatched)
+    let responseExpired = false
+    const responseTimer = setTimeout(() => {
+      responseExpired = true
+      active.socket.destroy()
+    }, responseTimeoutMs)
     let drainTimeout: ReturnType<typeof setTimeout> | undefined
     // After cancellation, drain the pending reply or close the stalled connection.
     const boundDrain = (): void => {
-      drainTimeout = setTimeout(() => active.socket.destroy(), timeoutMs)
+      drainTimeout = setTimeout(() => active.socket.destroy(), startTimeoutMs)
     }
     signal?.addEventListener('abort', boundDrain, { once: true })
     try {
@@ -224,32 +231,34 @@ export function createMcpClient(
       return bridgeResult((await active.frames.next()).value, id)
     } catch {
       active.socket.destroy()
-      // Only a read-only receipt lookup can confirm a write once the response was lost.
-      if (
-        call.name === 'append_unfinished_task' &&
-        !ended &&
-        !signal?.aborted
-      ) {
-        const lookup = await execute(
-          {
-            name: 'get_task_addition_result',
-            args: {
-              operationId: call.args.operationId,
-              original: {
-                title: call.args.title,
-                categoryId: call.args.categoryId,
-              },
-            },
-          },
-          state,
-        )
-        if (matchesAddition(call.args, lookup)) return lookup
-      }
-      return interruptedResponse(call)
     } finally {
       signal?.removeEventListener('abort', boundDrain)
       clearTimeout(drainTimeout)
+      clearTimeout(responseTimer)
     }
+    // Confirm a write only by its receipt. A stalled owner must release the queue immediately.
+    if (
+      call.name === 'append_unfinished_task' &&
+      !responseExpired &&
+      !ended &&
+      !signal?.aborted
+    ) {
+      const lookup = await execute(
+        {
+          name: 'get_task_addition_result',
+          args: {
+            operationId: call.args.operationId,
+            original: {
+              title: call.args.title,
+              categoryId: call.args.categoryId,
+            },
+          },
+        },
+        state,
+      )
+      if (matchesAddition(call.args, lookup)) return lookup
+    }
+    return interruptedResponse(call)
   }
 
   return {

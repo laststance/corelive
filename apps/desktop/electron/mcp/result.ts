@@ -52,7 +52,8 @@ const messages: Readonly<Record<string, string>> = {
   'flush-failed': 'The editor could not confirm that current typing was saved.',
   'account-changed': 'The account changed during this operation.',
   'account-required': 'This operation needs a connected CoreLive account.',
-  'connection-not-pending': 'The account has no pending connection to decline.',
+  'connection-not-pending':
+    'CoreLive could not match the request to a current connection prompt.',
   'account-unavailable': 'The connected account could not be reached.',
   'history-cursor-unavailable':
     'This history page is no longer available to this session.',

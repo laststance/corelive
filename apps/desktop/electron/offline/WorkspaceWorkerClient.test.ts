@@ -137,6 +137,65 @@ await import(${JSON.stringify(workerURL)});
   },
 )
 
+test('draft pages bound worker replies and retain every row identity across a long line and empty lines', async () => {
+  // Arrange
+  const directory = await mkdtemp(join(tmpdir(), 'corelive-draft-page-'))
+  const categoryId = categoryUuid(1)
+  const workspace = await initializeDeviceWorkspace(directory, {
+    notes: { 1: '😀' + '日'.repeat(200_000) + '\n'.repeat(2048) },
+  })
+  const storedRows = workspace.drafts[categoryId]!.rows
+  const client = new WorkspaceWorkerClient({
+    directory,
+    ownerId: DEVICE_OWNER_ID,
+    script: new URL('./workspace-worker.ts', import.meta.url),
+    execArgv: ['--import', 'tsx'],
+  })
+  onTestFinished(async () => {
+    await client.close()
+    await rm(directory, { recursive: true })
+  })
+  const read = async (offset: number, limit: number) => {
+    const result = await client.call('draftPage', {
+      categoryId,
+      page: { offset, limit, expectedRevision: 0 },
+    })
+    if (result.status !== 'page') throw new Error(result.status)
+    return result.page
+  }
+
+  // Act
+  const first = await read(0, 1)
+  const emptyLines = await read(200_002, 65_536)
+  const last = await read(201_026, 65_536)
+
+  // Assert
+  expect(first).toMatchObject({
+    text: '😀',
+    offset: 0,
+    nextOffset: 2,
+    revision: 0,
+    totalLength: 202_050,
+    rowSpans: [{ id: storedRows[0]!.id, startOffset: 0, endOffset: 200_002 }],
+  })
+  expect(emptyLines).toMatchObject({
+    text: '\n'.repeat(1024),
+    offset: 200_002,
+    nextOffset: 201_026,
+  })
+  expect(last).toMatchObject({
+    text: '\n'.repeat(1024),
+    offset: 201_026,
+    nextOffset: null,
+  })
+  const spans = [...emptyLines.rowSpans, ...last.rowSpans]
+  expect(spans.map(({ id }) => id)).toEqual(storedRows.map(({ id }) => id))
+  expect(spans.at(-1)).toMatchObject({
+    startOffset: 202_050,
+    endOffset: 202_050,
+  })
+})
+
 test('the actual storage worker persists commands and returns a bounded projection across restart', async () => {
   // Arrange
   const directory = await mkdtemp(join(tmpdir(), 'corelive-worker-'))

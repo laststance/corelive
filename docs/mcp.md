@@ -115,10 +115,11 @@ Paste this request into the agent chat.
 ## Everyday requests
 
 - “Show the draft in Work / CoreLive, then add ‘Check the invoice’ to that category.”
-- A long note can be read in parts. When `read_draft` reports `result-too-large`, request `textPage` with offset zero. Carry the returned category ID, revision and next offset into each later call. A changed revision asks the agent to start again.
+- A long note can be read in parts. When `read_draft` reports `result-too-large`, request `textPage` with offset zero. Carry the returned category ID, revision and next offset into each later call. Start again if the revision changes. To edit the note, join the page text in order and use each distinct `rowSpans` ID once. A row may span multiple pages. Its `startOffset` and `endOffset` mark the UTF-16 range in the assembled text, excluding the separating newline. Keep its original ID and any completion ID in the edit.
 - “Create a category called Planning under Work.”
 - “Export my workspace to corelive-backup.json.” `save_workspace_backup` writes a JSON copy for inspection and manual recovery and returns its path, even when the inline export reports `result-too-large`. To restore CoreLive on a Mac, back up the entire `offline/` directory, including the device registry and checksummed workspace files. [Back up or move CoreLive to a new Mac](./offline-liveeditor.md#backup-and-moving-to-a-new-mac)
 - “Set my dashboard appearance to Harbor dark.” This changes the connected account. Other browsers load the saved theme when you open or refocus the dashboard. LiveEditor keeps its own appearance.
+- To connect this Mac or choose Not now, read the pending account with `read_account_status`. After confirming the account, pass its `pendingConnect.promptId` to `connect_account` or `defer_account_connection`. If the prompt has changed, read the account status again before acting.
 - “Show this week's completed tasks in Work, including tasks from child categories.”
 - “Save today's activity card as activity.png.” Choose a day with completed activity on the connected Dashboard. A filename alone goes under the active profile's `Exports`. A standard installation uses `~/Library/Application Support/CoreLive/Exports`. You can also give an absolute path. The answer includes the actual path after saving. An occupied filename requires an explicit overwrite instruction.
 

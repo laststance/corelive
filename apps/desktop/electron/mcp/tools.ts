@@ -21,6 +21,7 @@ import {
   LiveEditorWindowDimensionSchema,
   ShortcutAcceleratorSchema,
 } from '../ipc/ipc-schemas'
+import { DraftTextPageInputSchema } from '../offline/draftTextPage'
 
 import { McpActionError } from './result'
 
@@ -50,6 +51,13 @@ const assignment = { nodeId: positiveId, todoId: positiveId }
 const flag = { enabled: z.boolean() }
 const target = { window: z.enum(['editor', 'settings']).default('editor') }
 const empty = z.strictObject({})
+const accountPrompt = z.strictObject({
+  promptId: id.describe(
+    'The pendingConnect.promptId from read_account_status.',
+  ),
+})
+export const ACCOUNT_PROMPT_NEXT_ACTION =
+  'Call read_account_status and confirm the intended account before using its pendingConnect.promptId.'
 // An agent patch must contain only explicitly supplied settings; storage defaults belong to initial creation.
 const editorPatch = z
   .strictObject({
@@ -86,18 +94,12 @@ function tool<S extends z.ZodObject>(
 
 export const coreLiveTools = {
   read_draft: tool(
-    'Read saved text, row IDs, revision and category path, including pending typing. For a large note request textPage starting at offset 0. For each continuation, supply the first page’s categoryId and revision as expectedRevision, and use the previous nextOffset as offset.',
+    'Read saved text, row IDs, revision and category path, including pending typing. For a large note request textPage starting at offset 0. Continue with the first page’s categoryId and revision as expectedRevision, and the previous nextOffset as offset. Each page gives rowSpans with original IDs and UTF-16 offsets into the complete text. Keep each distinct row ID when editing.',
     true,
     z
       .strictObject({
         ...selected,
-        textPage: z
-          .strictObject({
-            offset: revision,
-            limit: positiveId.max(65536).default(32768),
-            expectedRevision: revision.optional(),
-          })
-          .optional(),
+        textPage: DraftTextPageInputSchema.optional(),
       })
       .refine(
         ({ categoryId, textPage }) =>
@@ -385,7 +387,7 @@ export const coreLiveTools = {
     empty,
   ),
   read_account_status: tool(
-    'Read CoreLive’s account attachment and pending connection state.',
+    'Read the account attachment and pending connection. Use pendingConnect.promptId to act on that prompt.',
     true,
     empty,
   ),
@@ -400,14 +402,14 @@ export const coreLiveTools = {
     empty,
   ),
   connect_account: tool(
-    'Connect the device workspace to the verified pending account.',
+    'Connect the device workspace to the pending account identified by the promptId from read_account_status.',
     false,
-    empty,
+    accountPrompt,
   ),
   defer_account_connection: tool(
-    'Choose Not now for the pending account connection.',
+    'Choose Not now for the pending account identified by the promptId from read_account_status.',
     false,
-    empty,
+    accountPrompt,
   ),
   acknowledge_first_upload: tool(
     'Acknowledge the first-upload notice in account settings.',
@@ -697,7 +699,9 @@ export function parseMcpCall(name: string, input: unknown): McpCall {
   if (!result.success)
     throw new McpActionError(
       'invalid-input',
-      'Check the tool input schema and supply valid arguments.',
+      key === 'connect_account' || key === 'defer_account_connection'
+        ? ACCOUNT_PROMPT_NEXT_ACTION
+        : 'Check the tool input schema and supply valid arguments.',
       'none',
       { fields: result.error.issues.map((issue) => issue.path.join('.')) },
     )

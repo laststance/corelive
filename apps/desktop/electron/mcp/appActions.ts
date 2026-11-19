@@ -49,15 +49,8 @@ export function createAppActions(options: ActionOptions) {
   const history = createCompletionHistory(runtime)
   const dispatchEditor = createEditorDispatcher(controller, ipc)
 
-  async function endAccount(
-    which:
-      'sign_out' | 'clear_local_session_again' | 'defer_account_connection',
-  ) {
-    const result = await (which === 'clear_local_session_again'
-      ? controller.clearAgain()
-      : options.signOutDevice(async () =>
-          which === 'sign_out' ? controller.signOut() : controller.notNow(),
-        ))
+  async function endAccount(action: Promise<SignOutResult>) {
+    const result = await action
     if (result.status === 'flush-failed')
       throw new McpActionError(
         'flush-failed',
@@ -185,20 +178,23 @@ export function createAppActions(options: ActionOptions) {
         ipc.signIn.cancel()
         return { status: 'closed' }
       },
-      connect_account: async () =>
-        requireSave(
-          await controller.connect(),
-          'Read the pending account connection before trying again.',
-        ),
+      connect_account: async ({ promptId }) => {
+        if (!(await controller.connect(promptId)))
+          throw workspaceRefusal('connection-not-pending')
+        return { status: 'saved' }
+      },
       acknowledge_first_upload: () => {
         controller.acknowledgeFirstUpload()
         return { status: 'acknowledged' }
       },
-      defer_account_connection: async () =>
-        endAccount('defer_account_connection'),
-      sign_out: async () => endAccount('sign_out'),
+      defer_account_connection: async ({ promptId }) =>
+        endAccount(
+          options.signOutDevice(async () => controller.notNow(promptId)),
+        ),
+      sign_out: async () =>
+        endAccount(options.signOutDevice(async () => controller.signOut())),
       clear_local_session_again: async () =>
-        endAccount('clear_local_session_again'),
+        endAccount(controller.clearAgain()),
       retry_sync: () => {
         controller.retrySync()
         return { status: 'requested' }

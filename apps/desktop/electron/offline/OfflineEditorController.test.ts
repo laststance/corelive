@@ -18,7 +18,15 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
-import { afterEach, describe, expect, onTestFinished, test, vi } from 'vitest'
+import {
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  onTestFinished,
+  test,
+  vi,
+} from 'vitest'
 
 import { DurableEditorStore } from '../../renderer/editor/DurableEditorStore'
 import { createAppActions } from '../mcp/appActions'
@@ -231,6 +239,15 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) await cleanup()
 })
 
+/** Reads the prompt as an account client would before responding to it.
+ * @example const promptId = pendingPromptId(controller)
+ */
+function pendingPromptId(controller: OfflineEditorController): string {
+  const prompt = controller.accountStatus().pendingConnect
+  if (!prompt) throw new Error('Expected a pending account connection')
+  return prompt.promptId
+}
+
 test('a scoped account read revokes all previously retained pages when the broker reports a different account', async () => {
   // Arrange
   const fixture = await createFixture({
@@ -301,6 +318,56 @@ test('a known refusal and an interrupted account mutation have different redacte
     dispatched: true,
     definiteRefusal: false,
   })
+})
+
+test('sign-out that is still saving the editor prevents a verified account mutation from being sent', async () => {
+  // Arrange
+  const mcpClient = vi.fn((token: string) =>
+    createMcpAccountClient('http://127.0.0.1', token),
+  )
+  const fixture = await createFixture({
+    bound: 'account-a',
+    attached: true,
+    override: { mcpClient },
+  })
+  await fixture.controller.initialize()
+  const verifying = deferred()
+  const verified = deferred()
+  fixture.transport.whoami.mockImplementation(async (signal) => {
+    if (signal) {
+      verifying.resolve()
+      await verified.promise
+    }
+    return { clerkId: 'account-a', email: 'me@example.com' }
+  })
+  const saving = deferred()
+  const saved = deferred()
+  fixture.requestFlush.mockImplementationOnce(async () => {
+    saving.resolve()
+    await saved.promise
+    return true
+  })
+  const send = vi.fn(async () => 'updated')
+
+  // Act
+  const mutation = fixture.controller.withMcpAccount(send)
+  await verifying.promise
+  const signingOut = fixture.controller.signOut()
+  await saving.promise
+  verified.resolve()
+
+  // Assert
+  try {
+    await expect(mutation).rejects.toMatchObject({
+      code: 'account-changed',
+      dispatched: false,
+    })
+    expect(mcpClient).not.toHaveBeenCalled()
+    expect(send).not.toHaveBeenCalled()
+  } finally {
+    saved.resolve()
+    await signingOut
+  }
 })
 
 /** Holds a specific worker boundary until a concurrency test releases it.
@@ -789,6 +856,7 @@ test('the pending Connect prompt survives a relaunch', async () => {
   const first = await createFixture()
   await first.controller.initialize()
   await first.controller.authenticated('account-a')
+  const oldPrompt = pendingPromptId(first.controller)
   await first.controller.shutdown()
   const relaunched = new OfflineEditorController({
     ...first.options,
@@ -799,9 +867,10 @@ test('the pending Connect prompt survives a relaunch', async () => {
   await relaunched.initialize()
 
   // Assert
-  expect(relaunched.accountStatus().pendingConnect).toEqual({
+  expect(relaunched.accountStatus().pendingConnect).toMatchObject({
     displayEmail: 'me@example.com',
   })
+  expect(pendingPromptId(relaunched)).not.toBe(oldPrompt)
   await relaunched.shutdown()
 })
 
@@ -828,7 +897,7 @@ test('connecting a Mac with no pending keeps shows no first-upload notice', asyn
   await fixture.controller.authenticated('account-a')
 
   // Act
-  await fixture.controller.connect()
+  await fixture.controller.connect(pendingPromptId(fixture.controller))
 
   // Assert
   expect(fixture.controller.accountStatus().firstUpload).toBeNull()
@@ -848,7 +917,9 @@ test('Connect this Mac binds the account, uploads and reports the Mac as synced'
   await fixture.controller.authenticated('account-a')
 
   // Act
-  const accepted = await fixture.controller.connect()
+  const accepted = await fixture.controller.connect(
+    pendingPromptId(fixture.controller),
+  )
 
   // Assert
   expect(accepted).toBe(true)
@@ -876,7 +947,9 @@ test('Not now ends the session locally and keeps the Mac unbound', async () => {
   await fixture.controller.authenticated('account-a')
 
   // Act
-  const result = await fixture.controller.notNow()
+  const result = await fixture.controller.notNow(
+    pendingPromptId(fixture.controller),
+  )
 
   // Assert
   expect(result).toEqual({ status: 'signed-out' })
@@ -889,22 +962,88 @@ test('Not now ends the session locally and keeps the Mac unbound', async () => {
   expect(syncCalls(fixture.transport)).toBe(0)
 })
 
-test('declining a connection after another client accepted it keeps the account attached', async () => {
+test('a decline queued while Connect is saving keeps the accepted account attached', async () => {
   // Arrange
   const fixture = await createFixture()
   await fixture.controller.initialize()
   await fixture.controller.authenticated('account-a')
-  await fixture.controller.connect()
+  const promptId = pendingPromptId(fixture.controller)
+  const saving = deferred()
+  const saved = deferred()
+  const update = fixture.registry.update.bind(fixture.registry)
+  vi.spyOn(fixture.registry, 'update').mockImplementationOnce(async (patch) => {
+    saving.resolve()
+    await saved.promise
+    return update(patch)
+  })
+  const connecting = fixture.controller.connect(promptId)
+  await saving.promise
 
   // Act
-  const stalePrompt = fixture.controller.notNow()
+  const refused = expect(
+    fixture.controller.notNow(promptId),
+  ).rejects.toMatchObject({ reason: 'connection-not-pending' })
+  saved.resolve()
 
   // Assert
-  await expect(stalePrompt).rejects.toMatchObject({
-    reason: 'connection-not-pending',
-  })
+  await expect(connecting).resolves.toBe(true)
+  await refused
   expect(fixture.controller.accountStatus().state).toBe('attached')
+  expect(fixture.controller.accountStatus().pendingConnect).toBeNull()
   expect(fixture.endLocalSession).not.toHaveBeenCalled()
+})
+
+test('account actions require the displayed prompt and cannot act on a replacement account', async () => {
+  // Arrange
+  const identity = { clerkId: 'account-a', email: 'me@example.com' }
+  const transport = createTransport(identity)
+  transport.whoami.mockImplementation(async () => ({ ...identity }))
+  const fixture = await createFixture({ identity, transport })
+  const { actionsFor } = deviceMcpFixture(fixture.directory)
+  const actions = await actionsFor(fixture.controller)
+  await fixture.controller.authenticated('account-a')
+  const oldPromptId = pendingPromptId(fixture.controller)
+  const first = await actions.call('client-a', 'read_account_status', {})
+  expect(first.structuredContent).toMatchObject({
+    pendingConnect: { displayEmail: 'me@example.com', promptId: oldPromptId },
+  })
+  identity.clerkId = 'account-b'
+  identity.email = 'b@example.com'
+  await fixture.controller.authenticated('account-b')
+  const currentPromptId = pendingPromptId(fixture.controller)
+
+  // Act and Assert
+  for (const action of ['connect_account', 'defer_account_connection']) {
+    const missing = await actions.call('client-a', action, {})
+    expect(missing.structuredContent).toMatchObject({
+      code: 'invalid-input',
+      effect: 'none',
+      nextAction: expect.stringContaining('read_account_status'),
+    })
+    const stale = await actions.call('client-a', action, {
+      promptId: oldPromptId,
+    })
+    expect(stale.structuredContent).toMatchObject({
+      code: 'connection-not-pending',
+      effect: 'none',
+      nextAction: expect.stringContaining('read_account_status'),
+    })
+  }
+  const current = await actions.call('client-b', 'read_account_status', {})
+  expect(current.structuredContent).toMatchObject({
+    state: 'never-attached',
+    pendingConnect: {
+      displayEmail: 'b@example.com',
+      promptId: currentPromptId,
+    },
+  })
+  expect(fixture.endLocalSession).not.toHaveBeenCalled()
+  expect(syncCalls(transport)).toBe(0)
+  const declined = await actions.call('client-b', 'defer_account_connection', {
+    promptId: currentPromptId,
+  })
+  expect(declined.structuredContent).toMatchObject({ status: 'signed-out' })
+  expect(fixture.endLocalSession).toHaveBeenCalledOnce()
 })
 
 test('a different account signed in over the bound one stays detached, sends nothing and keeps editing', async () => {
@@ -1454,14 +1593,12 @@ test('a sign-out whose final detach write fails still finishes and keeps the jou
   expect(fixture.controller.accountStatus().state).toBe('signed-out')
 })
 
-/** Builds the real stdio helper for a fresh device workspace and supplies the ordinary app dispatcher.
+const desktop = fileURLToPath(new URL('../../', import.meta.url))
+
+/** Starts isolated clients and supplies the ordinary app dispatcher for a test device workspace.
  * @example const {actionsFor,connect} = deviceMcpFixture(directory)
  */
 function deviceMcpFixture(directory: string) {
-  const desktop = fileURLToPath(new URL('../../', import.meta.url))
-  execFileSync(process.execPath, ['scripts/build-mcp.mjs'], {
-    cwd: desktop,
-  })
   const noWindows = {
     getLiveEditorWindow: () => null,
     getSettingsWindow: () => null,
@@ -1683,6 +1820,17 @@ describe('MCP operations in the device workspace', () => {
     expect(preference.revision).toBe(1)
     expect(secondPreference.revision).toBe(2)
   })
+})
+
+describe('MCP over macOS stdio', () => {
+  // The helper builds two native slices, which need a separate budget on cold runners.
+  beforeAll(() => {
+    if (process.platform !== 'darwin') return
+    execFileSync(process.execPath, ['scripts/build-mcp.mjs'], {
+      cwd: desktop,
+      timeout: 55_000,
+    })
+  }, 60_000)
 
   test.runIf(process.platform === 'darwin')(
     'a standard stdio client reads a nine-megabyte draft and pages a larger note at one revision',
@@ -1691,10 +1839,13 @@ describe('MCP operations in the device workspace', () => {
       const { directory, controller } = await createFixture({ existing: false })
       const inlineText = '日'.repeat(750_000)
       const huge = '🌸' + '本'.repeat(930_000)
-      await initializeDeviceWorkspace(join(directory, 'workspaces'), {
-        categoryCount: 2,
-        notes: { 1: inlineText, 2: huge },
-      })
+      const saved = await initializeDeviceWorkspace(
+        join(directory, 'workspaces'),
+        {
+          categoryCount: 2,
+          notes: { 1: inlineText, 2: huge },
+        },
+      )
       const { actionsFor, connect } = deviceMcpFixture(directory)
       onTestFinished(
         await startMcpOwner(directory, await actionsFor(controller)),
@@ -1740,9 +1891,25 @@ describe('MCP operations in the device workspace', () => {
         categoryId,
         textPage: { offset: 1, limit: 1, expectedRevision: 0 },
       })
+      const [row] = DraftRowSchema.pick({ id: true })
+        .array()
+        .parse(page?.rowSpans)
+      const edit = await client.callTool({
+        name: 'edit_draft',
+        arguments: {
+          categoryId: page?.categoryId,
+          baseRevision: page?.revision,
+          rows: [{ id: row?.id, text: huge.slice(0, -1) + '語' }],
+        },
+      })
+      const edited = await read({
+        categoryId,
+        textPage: { offset: 930_001, expectedRevision: 1 },
+      })
 
       // Assert
       expect(full.structuredContent).toMatchObject({ text: inlineText })
+      expect(full.structuredContent).not.toHaveProperty('rowSpans')
       expect(refused.structuredContent).toMatchObject({
         code: 'result-too-large',
         categoryId,
@@ -1759,6 +1926,13 @@ describe('MCP operations in the device workspace', () => {
         text: '🌸',
         nextOffset: 2,
         revision: 0,
+        rowSpans: [
+          {
+            id: saved.drafts[categoryId]!.rows[0]!.id,
+            startOffset: 0,
+            endOffset: 930_002,
+          },
+        ],
       })
       expect(next.structuredContent).toMatchObject({
         text: '本本',
@@ -1779,6 +1953,15 @@ describe('MCP operations in the device workspace', () => {
           effect: 'none',
         })
       }
+      expect(edit.structuredContent).toMatchObject({
+        status: 'saved',
+        revision: 1,
+      })
+      expect(edited.structuredContent).toMatchObject({
+        text: '語',
+        revision: 1,
+        rowSpans: [{ id: saved.drafts[categoryId]!.rows[0]!.id }],
+      })
     },
     30_000,
   )
@@ -2000,7 +2183,9 @@ describe('MCP operations in the device workspace', () => {
     },
     30000,
   )
+})
 
+describe('MCP additions in the device workspace', () => {
   test('adding a task keeps pending typing in Work and a later category switch cannot redirect it to Personal', async () => {
     // Arrange
     const { controller } = await createFixture({
@@ -2103,10 +2288,13 @@ describe('MCP operations in the device workspace', () => {
     expect(String(draft.text).split('- [ ] Repeated title').length - 1).toBe(2)
   })
 
-  test('an unresolved save never follows a category rename or a failed typing flush with a second write', async () => {
+  test('a failed typing flush leaves the saved draft unchanged and confirms no task addition', async () => {
     // Arrange
     const { controller } = await createFixture()
     await controller.initialize()
+    const { generation } = controller.getSnapshot()
+    const categoryId = categoryUuid(1)
+    const before = await controller.draft(generation, categoryId)
     const flush = vi.fn(async () => false)
     const dispatch = createEditorDispatcher(controller, {
       flush,
@@ -2127,6 +2315,7 @@ describe('MCP operations in the device workspace', () => {
       dispatch(parseMcpCall('get_task_addition_result', { operationId })),
     ).rejects.toMatchObject({ code: 'result-unknown', effect: 'unknown' })
     expect(flush).toHaveBeenCalledTimes(2)
+    expect(await controller.draft(generation, categoryId)).toEqual(before)
   })
 
   test('direct completion enters history once and leaves the unfinished draft untouched', async () => {
@@ -2208,7 +2397,9 @@ test('Connect attaches nothing when a newer sign-in replaced the prompt while it
       return realCall.call(this, type, input)
     })
   onTestFinished(() => callSpy.mockRestore())
-  const connecting = fixture.controller.connect()
+  const connecting = fixture.controller.connect(
+    pendingPromptId(fixture.controller),
+  )
   await vi.waitFor(() => expect(totalAsked).toHaveBeenCalledOnce())
   fixture.broker.acquire.mockImplementation(
     async (expectedAccountId, generation) => ({
@@ -2354,7 +2545,7 @@ test('another account signing in right after Connect, before the binding exists,
     async () => new Promise<never>(() => undefined),
   )
   await fixture.controller.authenticated('account-a')
-  await fixture.controller.connect()
+  await fixture.controller.connect(pendingPromptId(fixture.controller))
   // The identity check asks with no expected account; a woken sync loop asks for account-a.
   fixture.broker.acquire.mockImplementation(
     async (expectedAccountId, generation) => ({
@@ -2382,7 +2573,7 @@ test('another account signing in right after Connect, before the binding exists,
     attachedAccountId: null,
     pendingConnect: { accountId: 'account-b' },
   })
-  expect(fixture.controller.accountStatus().pendingConnect).toEqual({
+  expect(fixture.controller.accountStatus().pendingConnect).toMatchObject({
     displayEmail: 'b@example.com',
   })
 })
