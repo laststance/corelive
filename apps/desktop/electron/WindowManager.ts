@@ -825,15 +825,14 @@ export class WindowManager {
       }
     })
 
-    // 'close' fires before destruction — capture bounds while the window
-    // is still alive.
     this.liveEditorWindow.on('close', (event) => {
-      this.saveWindowState()
-      // Ordinary close keeps the current writing available until its save is acknowledged.
-      if (!this.closingForQuit) {
-        event.preventDefault()
-        void this.hideLiveEditor()
+      if (this.closingForQuit) {
+        this.saveWindowState()
+        return
       }
+      // Ordinary close reuses the editor after saving; stop Electron from destroying it.
+      event.preventDefault()
+      void this.closeLiveEditor()
     })
 
     this.liveEditorWindow.on('closed', () => {
@@ -1053,21 +1052,32 @@ export class WindowManager {
     this.onEditorShown = callback
   }
 
+  /** Saves window bounds and awaits the writing save for ordinary native and MCP closes.
+   * @example const hidden = await windowManager.closeLiveEditor()
+   */
+  async closeLiveEditor(): Promise<boolean> {
+    this.saveWindowState()
+    return this.hideLiveEditor()
+  }
+
   /** Saves the live draft before hiding; a failed save leaves recovery actions visible.
+   * @returns Whether the window was hidden or is already absent.
    * @example await windowManager.hideLiveEditor()
    */
-  async hideLiveEditor(): Promise<void> {
+  async hideLiveEditor(): Promise<boolean> {
     const panel = this.liveEditorWindow
-    if (!panel || panel.isDestroyed()) return
+    if (!panel || panel.isDestroyed()) return true
     const request = ++this.hideRequest
     this.hidePending = true
     try {
       if (
-        (await this.beforeEditorHide()) &&
-        request === this.hideRequest &&
-        !panel.isDestroyed()
+        !(await this.beforeEditorHide()) ||
+        request !== this.hideRequest ||
+        panel.isDestroyed()
       )
-        panel.hide()
+        return false
+      panel.hide()
+      return true
     } finally {
       if (request === this.hideRequest) this.hidePending = false
     }

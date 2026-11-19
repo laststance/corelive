@@ -10,6 +10,7 @@ import { version } from '../../package.json'
 
 import { createMcpClient } from './bridgeClient'
 import { helperLaunch } from './launcher'
+import { MAX_FRAME_BYTES } from './protocol'
 import { McpActionError, mcpFailure } from './result'
 import { coreLiveTools, parseMcpCall } from './tools'
 
@@ -61,7 +62,10 @@ async function serveStdio(): Promise<void> {
     },
   )
   server.onclose = (): void => owner.close()
-  const transport = new StdioServerTransport()
+  const transport = new StdioServerTransport(undefined, undefined, {
+    // Leave room for the JSON-RPC envelope and requests we can reject at the tool boundary.
+    maxBufferSize: MAX_FRAME_BYTES + 1024 * 1024,
+  })
   process.stdin.once('end', () => {
     owner.close()
     void server.close()

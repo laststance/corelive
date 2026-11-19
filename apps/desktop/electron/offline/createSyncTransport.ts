@@ -45,6 +45,8 @@ import { createORPCClient, type Client } from '@orpc/client'
 import { RPCLink } from '@orpc/client/fetch'
 import type { z } from 'zod'
 
+const ACCOUNT_REQUEST_TIMEOUT_MS = 15_000
+
 type SyncClient = {
   category: {
     syncApply: Client<
@@ -193,7 +195,52 @@ export function createMcpAccountClient(
   return createORPCClient<McpAccountClient>(accountLink(origin, token, fetcher))
 }
 
-/** Pins credentials to the configured dashboard origin and enforces the per-request network deadline.
+/**
+ * Bounds the wait for history headers and gaps in the body while allowing long transfers.
+ * The account link uses this for history reads so an active stream can verify its terminal frame.
+ * @example const response = await fetchAccountHistory(fetcher, url, request)
+ */
+async function fetchAccountHistory(
+  fetcher: typeof fetch,
+  url: string,
+  init: RequestInit,
+): Promise<Response> {
+  const deadline = new AbortController()
+  const signal = init.signal
+    ? AbortSignal.any([init.signal, deadline.signal])
+    : deadline.signal
+  const timer = setTimeout(() => {
+    deadline.abort(
+      new DOMException('Account history transfer timed out', 'TimeoutError'),
+    )
+  }, ACCOUNT_REQUEST_TIMEOUT_MS).unref()
+  const clearDeadline = (): void => clearTimeout(timer)
+
+  try {
+    const response = await fetcher(url, { ...init, signal })
+    if (!response.body) {
+      clearDeadline()
+      return response
+    }
+    // Header receipt starts the first body deadline. Any incoming bytes refresh it.
+    timer.refresh()
+    const traffic = new TransformStream<Uint8Array, Uint8Array>({
+      transform(bytes, stream) {
+        timer.refresh()
+        stream.enqueue(bytes)
+      },
+    })
+    void response.body
+      .pipeTo(traffic.writable, { signal })
+      .then(clearDeadline, clearDeadline)
+    return new Response(traffic.readable, response)
+  } catch (error) {
+    clearDeadline()
+    throw error
+  }
+}
+
+/** Pins credentials to the configured dashboard origin and applies the appropriate network deadline.
  * @example const link = accountLink(origin, token, fetch)
  */
 function accountLink(origin: string, token: string, fetcher: typeof fetch) {
@@ -212,13 +259,18 @@ function accountLink(origin: string, token: string, fetcher: typeof fetch) {
     origin: target,
     url: '/api/orpc',
     headers: { Authorization: `Bearer ${token}` },
-    fetch: async (url, init) =>
-      fetcher(url, {
+    fetch: async (url, init, _options, [router, procedure]) => {
+      if (router === 'completed' && procedure === 'historyRange') {
+        return fetchAccountHistory(fetcher, url, { ...init, redirect: 'error' })
+      }
+      const deadline = AbortSignal.timeout(ACCOUNT_REQUEST_TIMEOUT_MS)
+      return fetcher(url, {
         ...init,
         redirect: 'error',
-        signal: init?.signal
-          ? AbortSignal.any([init.signal, AbortSignal.timeout(15000)])
-          : AbortSignal.timeout(15000),
-      }),
+        signal: init.signal
+          ? AbortSignal.any([init.signal, deadline])
+          : deadline,
+      })
+    },
   })
 }

@@ -34,6 +34,8 @@ export function mcpSuccess(result: Record<string, unknown>): McpResult {
 }
 
 const messages: Readonly<Record<string, string>> = {
+  'request-too-large':
+    'The tool arguments exceed the local request size limit.',
   'result-too-large':
     'The complete tool result exceeds the inline MCP response size limit.',
   'invalid-input': 'The supplied arguments do not match this operation.',

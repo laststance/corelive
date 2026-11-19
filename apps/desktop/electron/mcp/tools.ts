@@ -17,6 +17,11 @@ import { DraftRowSchema } from '@corelive/desktop-contract/offline-workspace'
 import { THEME_IDS } from '@corelive/live-editor/themes'
 import { z } from 'zod'
 
+import {
+  LiveEditorWindowDimensionSchema,
+  ShortcutAcceleratorSchema,
+} from '../ipc/ipc-schemas'
+
 import { McpActionError } from './result'
 
 const id = z.uuid()
@@ -81,18 +86,29 @@ function tool<S extends z.ZodObject>(
 
 export const coreLiveTools = {
   read_draft: tool(
-    'Read saved text, row IDs, revision and category path, including pending typing. For a large note request textPage starting at offset 0. Continue with its categoryId, nextOffset and expectedRevision.',
+    'Read saved text, row IDs, revision and category path, including pending typing. For a large note request textPage starting at offset 0. For each continuation, supply the first page’s categoryId and revision as expectedRevision, and use the previous nextOffset as offset.',
     true,
-    z.strictObject({
-      ...selected,
-      textPage: z
-        .strictObject({
-          offset: revision,
-          limit: positiveId.max(65536).default(32768),
-          expectedRevision: revision.optional(),
-        })
-        .optional(),
-    }),
+    z
+      .strictObject({
+        ...selected,
+        textPage: z
+          .strictObject({
+            offset: revision,
+            limit: positiveId.max(65536).default(32768),
+            expectedRevision: revision.optional(),
+          })
+          .optional(),
+      })
+      .refine(
+        ({ categoryId, textPage }) =>
+          !textPage ||
+          textPage.offset === 0 ||
+          (categoryId !== undefined && textPage.expectedRevision !== undefined),
+        {
+          path: ['textPage'],
+          message: 'A continuation requires categoryId and expectedRevision.',
+        },
+      ),
   ),
   append_unfinished_task: tool(
     'Append one unfinished task to the draft. Generate a fresh UUID for this request. Keep it for get_task_addition_result after an interrupted response. Pass the categoryId from read_draft for a combined request.',
@@ -296,8 +312,8 @@ export const coreLiveTools = {
     z.strictObject({
       x: z.int(),
       y: z.int(),
-      width: positiveId,
-      height: positiveId,
+      width: LiveEditorWindowDimensionSchema.int(),
+      height: LiveEditorWindowDimensionSchema.int(),
     }),
   ),
   set_editor_always_on_top: tool(
@@ -315,7 +331,7 @@ export const coreLiveTools = {
     false,
     z.strictObject({
       slot: z.enum(['primary', 'secondary']),
-      accelerator: z.string().max(100),
+      accelerator: ShortcutAcceleratorSchema,
     }),
   ),
   set_shortcut_sound_enabled: tool(
@@ -618,7 +634,7 @@ export const coreLiveTools = {
     z.strictObject(target),
   ),
   close_window: tool(
-    'Close the window in the chosen CoreLive window.',
+    'Close Settings, or save pending writing and hide LiveEditor.',
     false,
     z.strictObject(target),
   ),

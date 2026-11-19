@@ -6,14 +6,16 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { McpHistoryInputSchema } from '@corelive/desktop-contract/completion-history'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest'
 
 import { createMcpClient } from './bridgeClient'
 import { startMcpOwner } from './bridgeOwner'
+import { createCompletionHistory } from './history'
 import { adoptPeer, loadPeerBinding, peerEndpoint } from './peer'
-import { BRIDGE_VERSION, readFrames, writeFrame } from './protocol'
+import { BRIDGE_VERSION, encodeFrame, readFrames, writeFrame } from './protocol'
 import { mcpSuccess } from './result'
 import { parseMcpCall } from './tools'
 
@@ -125,6 +127,221 @@ describe.runIf(process.platform === 'darwin')('verified Mac socket', () => {
     await vi.waitFor(() => expect(closeSession).toHaveBeenCalled())
   })
 
+  test('cancelling a draft read lets the helper continue its frozen history read', async () => {
+    // Arrange
+    const profile = isolatedProfile()
+    const draft = new EventEmitter()
+    const dispatched = once(draft, 'dispatched')
+    const finishDraft = once(draft, 'finish')
+    const history = createCompletionHistory({
+      controller: {
+        mcpDeviceHistory: async ({ from }) => ({
+          rows: ['Earlier work', 'Later work'].map((title, index) => ({
+            id: String(index + 1),
+            title,
+            completedAt: from + index,
+            categoryId: null,
+            boundIdentity: false,
+            pending: false,
+          })),
+          boundAccountId: null,
+          categories: [],
+          suppressedIds: [],
+        }),
+        mcpAccountBinding: () => null,
+        withMcpAccount: async () => {
+          throw new Error('No account attached')
+        },
+      },
+    })
+    cleanup.push(
+      await startMcpOwner(profile, {
+        async call(sessionId, name, args) {
+          if (name === 'list_completions') {
+            return mcpSuccess(
+              await history.list(sessionId, McpHistoryInputSchema.parse(args)),
+            )
+          }
+          draft.emit('dispatched')
+          await finishDraft
+          return mcpSuccess({ text: 'Cancelled draft' })
+        },
+        closeSession: history.closeSession,
+      }),
+    )
+    cleanup.push(() => {
+      draft.emit('finish')
+    })
+    const { client, transport } = stdioClient(profile)
+    await client.connect(transport)
+    const first = await client.callTool({
+      name: 'list_completions',
+      arguments: { pageSize: 1 },
+    })
+    const page = first.structuredContent
+    const cursor =
+      typeof page === 'object' && page !== null && 'nextCursor' in page
+        ? page.nextCursor
+        : undefined
+    expect(cursor).toEqual(expect.any(String))
+
+    // Act
+    const cancel = new AbortController()
+    const pendingDraft = client.callTool({ name: 'read_draft' }, undefined, {
+      signal: cancel.signal,
+    })
+    const rejected = expect(pendingDraft).rejects.toThrow(
+      'Draft read cancelled',
+    )
+    await dispatched
+    cancel.abort(new Error('Draft read cancelled'))
+    await rejected
+    // A ping confirms the helper has processed the preceding cancellation notification.
+    await client.ping()
+    const next = client.callTool({
+      name: 'list_completions',
+      arguments: { cursor },
+    })
+    draft.emit('finish')
+
+    // Assert
+    expect(await next).toMatchObject({
+      isError: false,
+      structuredContent: {
+        entries: [{ title: 'Earlier work' }],
+        nextCursor: null,
+        total: 2,
+      },
+    })
+  })
+
+  test('the helper serves a new call when a cancelled write never replies', async () => {
+    // Arrange
+    const profile = isolatedProfile()
+    const signals = new EventEmitter()
+    const dispatched = once(signals, 'dispatched')
+    const finishWrite = once(signals, 'finish')
+    cleanup.push(
+      await startMcpOwner(profile, {
+        call: async (_session, name) => {
+          if (name === 'append_unfinished_task') {
+            signals.emit('dispatched')
+            await finishWrite
+          }
+          return mcpSuccess({ name })
+        },
+        closeSession: vi.fn(),
+      }),
+    )
+    cleanup.push(() => {
+      signals.emit('finish')
+    })
+    const client = createMcpClient(
+      profile,
+      async () => {
+        throw new Error('Unexpected wake')
+      },
+      200,
+    )
+    cleanup.push(() => client.close())
+    const operationId = '00000000-0000-4000-8000-000000000001'
+    const signal = new AbortController()
+    const write = client.call(
+      parseMcpCall('append_unfinished_task', { title: 'Ship it', operationId }),
+      signal.signal,
+    )
+
+    // Act
+    await dispatched
+    signal.abort()
+    const cancelled = await write
+    const next = await client.call(parseMcpCall('read_draft', {}))
+
+    // Assert
+    expect(cancelled.structuredContent).toMatchObject({
+      code: 'cancelled',
+      effect: 'unknown',
+      operationId: '00000000-0000-4000-8000-000000000001',
+    })
+    expect(next.structuredContent).toEqual({ name: 'read_draft' })
+  })
+
+  test.each([
+    {
+      label: 'dispatches an 11 MiB edit',
+      text: 'x',
+      repeats: 11 * 1024 * 1024,
+      errors: false,
+    },
+    {
+      label: 'declines an edit whose UTF-8 bridge frame exceeds 32 MiB',
+      text: 'é',
+      repeats: 16 * 1024 * 1024,
+      errors: true,
+    },
+  ])(
+    'the helper $label and still accepts the next call',
+    async ({ text, repeats, errors }) => {
+      // Arrange
+      const profile = isolatedProfile()
+      const received: string[] = []
+      cleanup.push(
+        await startMcpOwner(profile, {
+          call: async (_session, name, args) => {
+            received.push(name)
+            const call = parseMcpCall(name, args)
+            return mcpSuccess(
+              call.name === 'edit_draft'
+                ? {
+                    textBytes: Buffer.byteLength(call.args.rows[0]?.text ?? ''),
+                  }
+                : { text: 'Still connected' },
+            )
+          },
+          closeSession: vi.fn(),
+        }),
+      )
+      const { client, transport } = stdioClient(profile)
+      await client.connect(transport)
+
+      // Act
+      const edit = await client.callTool(
+        {
+          name: 'edit_draft',
+          arguments: {
+            categoryId: '00000000-0000-4000-8000-000000000001',
+            baseRevision: 0,
+            rows: [
+              {
+                id: '00000000-0000-4000-8000-000000000002',
+                text: text.repeat(repeats),
+              },
+            ],
+          },
+        },
+        undefined,
+        { timeout: 8_000 },
+      )
+      const read = await client.callTool({ name: 'read_draft' })
+
+      // Assert
+      expect(edit.isError).toBe(errors)
+      if (errors) {
+        expect(edit.structuredContent).toMatchObject({
+          code: 'request-too-large',
+          effect: 'none',
+          limitBytes: 33_554_432,
+        })
+        expect(received).toEqual(['read_draft'])
+      } else {
+        expect(edit.structuredContent).toEqual({ textBytes: 11_534_336 })
+        expect(received).toEqual(['edit_draft', 'read_draft'])
+      }
+      expect(read.structuredContent).toEqual({ text: 'Still connected' })
+    },
+    15_000,
+  )
+
   test.each(['profile', 'version'])(
     'a mismatched %s is refused before a call can reach the workspace',
     async (mismatch) => {
@@ -142,12 +359,15 @@ describe.runIf(process.platform === 'darwin')('verified Mac socket', () => {
       const frames = readFrames(socket)
 
       // Act
-      await writeFrame(socket, {
-        type: 'hello',
-        profile:
-          mismatch === 'profile' ? 'a-different-profile' : endpoint.identity,
-        version: mismatch === 'version' ? BRIDGE_VERSION + 1 : BRIDGE_VERSION,
-      })
+      await writeFrame(
+        socket,
+        encodeFrame({
+          type: 'hello',
+          profile:
+            mismatch === 'profile' ? 'a-different-profile' : endpoint.identity,
+          version: mismatch === 'version' ? BRIDGE_VERSION + 1 : BRIDGE_VERSION,
+        }),
+      )
       const reply = await frames.next()
 
       // Assert

@@ -329,7 +329,8 @@ export class WorkspaceService {
     accountId,
     original,
   }: WorkspaceWorkerCalls['findTaskAddition']['input']) {
-    const state = await this.file.read()
+    // A rename can leave a readable receipt before the directory flush succeeds.
+    const state = await this.file.update((current) => current)
     const receipt = state.commandReceipts[operationId]
     const saved = receipt?.taskAddition
     if (

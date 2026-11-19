@@ -13,9 +13,11 @@ import {
 } from './peer'
 import {
   BRIDGE_VERSION,
+  MAX_FRAME_BYTES,
   OWNER_START_TIMEOUT_MS,
   ReadyFrame,
   bridgeResult,
+  encodeFrame,
   readFrames,
   writeFrame,
 } from './protocol'
@@ -83,6 +85,26 @@ function interruptedResponse(call: McpCall): McpResult {
   )
 }
 
+/** A caller can stop waiting before a dispatched write's save effect is known.
+ * @example const cancelled = cancelledResult(call, dispatched)
+ */
+function cancelledResult(call: McpCall, dispatched: boolean): McpResult {
+  const uncertainWrite = dispatched && !coreLiveTools[call.name].readOnly
+  return mcpFailure(
+    call.name,
+    'cancelled',
+    uncertainWrite ? 'unknown' : 'none',
+    uncertainWrite
+      ? 'Inspect the saved state before repeating this operation.'
+      : dispatched
+        ? 'Repeat the read if needed.'
+        : 'The request was cancelled before it reached CoreLive.',
+    'operationId' in call.args
+      ? { operationId: call.args.operationId }
+      : undefined,
+  )
+}
+
 /** Opens this helper's private session on its first data call. Discovery never opens the workspace.
  * @example const owner = createMcpClient(profile, wakeOrdinaryApp)
  */
@@ -128,11 +150,14 @@ export function createMcpClient(
         Math.max(1, deadline - Date.now()),
       )
       try {
-        await writeFrame(socket, {
-          type: 'hello',
-          profile: endpoint.identity,
-          version: BRIDGE_VERSION,
-        })
+        await writeFrame(
+          socket,
+          encodeFrame({
+            type: 'hello',
+            profile: endpoint.identity,
+            version: BRIDGE_VERSION,
+          }),
+        )
         const ready = ReadyFrame.safeParse((await frames.next()).value)
         if (!ready.success || ready.data.profile !== endpoint.identity)
           throw new Error('incompatible-owner')
@@ -153,16 +178,21 @@ export function createMcpClient(
 
   async function execute(
     call: McpCall,
-    signal?: AbortSignal,
+    state: { signal?: AbortSignal; dispatched: boolean },
   ): Promise<McpResult> {
-    const cancelled = () =>
-      mcpFailure(
+    const { signal } = state
+    if (signal?.aborted || ended) return cancelledResult(call, state.dispatched)
+    const id = randomUUID()
+    const frame = encodeFrame({ id, name: call.name, args: call.args })
+    if (!frame) {
+      return mcpFailure(
         call.name,
-        'cancelled',
+        'request-too-large',
         'none',
-        'The request was cancelled before it reached CoreLive.',
+        'Reduce the size of the tool arguments and retry.',
+        { limitBytes: MAX_FRAME_BYTES },
       )
-    if (signal?.aborted || ended) return cancelled()
+    }
     let active: Connection
     try {
       active =
@@ -181,14 +211,16 @@ export function createMcpClient(
         'Open the matching CoreLive app and retry. No operation was dispatched.',
       )
     }
-    if (signal?.aborted || ended) return cancelled()
-    const id = randomUUID()
-    const stopWaiting = (): void => {
-      active.socket.destroy()
+    if (signal?.aborted || ended) return cancelledResult(call, state.dispatched)
+    let drainTimeout: ReturnType<typeof setTimeout> | undefined
+    // Keep the serial slot until this ID's reply is drained. A stalled owner cannot hold the slot forever.
+    const boundDrain = (): void => {
+      drainTimeout = setTimeout(() => active.socket.destroy(), timeoutMs)
     }
-    signal?.addEventListener('abort', stopWaiting, { once: true })
+    signal?.addEventListener('abort', boundDrain, { once: true })
     try {
-      await writeFrame(active.socket, { id, name: call.name, args: call.args })
+      state.dispatched = true
+      await writeFrame(active.socket, frame)
       return bridgeResult((await active.frames.next()).value, id)
     } catch {
       active.socket.destroy()
@@ -209,22 +241,34 @@ export function createMcpClient(
               },
             },
           },
-          signal,
+          state,
         )
         if (matchesAddition(call.args, lookup)) return lookup
       }
       return interruptedResponse(call)
     } finally {
-      signal?.removeEventListener('abort', stopWaiting)
+      signal?.removeEventListener('abort', boundDrain)
+      clearTimeout(drainTimeout)
     }
   }
 
   return {
     async call(call: McpCall, signal?: AbortSignal): Promise<McpResult> {
       // One outstanding frame per connection. Each request receives its own ID and response.
-      const result = previous.then(async () => execute(call, signal))
+      if (signal?.aborted || ended) return cancelledResult(call, false)
+      const state = { signal, dispatched: false }
+      const result = previous.then(async () => execute(call, state))
       previous = result.catch(() => undefined)
-      return result
+      if (!signal) return result
+      return new Promise<McpResult>((resolve, reject) => {
+        const stopWaiting = (): void => {
+          resolve(cancelledResult(call, state.dispatched))
+        }
+        signal.addEventListener('abort', stopWaiting, { once: true })
+        void result
+          .then(resolve, reject)
+          .finally(() => signal.removeEventListener('abort', stopWaiting))
+      })
     },
     close(): void {
       ended = true

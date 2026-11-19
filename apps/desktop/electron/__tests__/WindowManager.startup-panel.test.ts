@@ -12,10 +12,20 @@
  * @example
  *   pnpm test:electron -- WindowManager.startup-panel
  */
+import { EventEmitter } from 'node:events'
+
 // The mocked electron `dialog`, asserted on by the recovery tests (the
 // `vi.mock('electron')` factory below is hoisted above this import by Vitest).
 import { BrowserWindow, dialog, nativeTheme, type WebContents } from 'electron'
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi,
+  type Mock,
+} from 'vitest'
 
 type Spy = ReturnType<typeof vi.fn>
 
@@ -34,13 +44,14 @@ interface MockBrowserWindow {
   getOpacity: Spy
   setVisibleOnAllWorkspaces: Spy
   loadURL: Spy
-  close: Spy
+  close: Mock<() => void>
   removeListener: Spy
   on: Spy
   once: Spy
   webContents: {
     on: Spy
     removeListener: Spy
+    isDestroyed: Spy
     loadURL: Spy
     reload: Spy
     send: Spy
@@ -55,6 +66,7 @@ interface MockBrowserWindow {
  */
 interface CapturedMockWindow {
   win: MockBrowserWindow
+  preventClose: Spy
   fireWebContents: (event: string, ...args: unknown[]) => void
 }
 
@@ -64,7 +76,9 @@ const createdWindows: CapturedMockWindow[] = []
 // listeners WindowManager registers, so tests can fire did-navigate/did-fail-load.
 vi.mock('electron', () => ({
   BrowserWindow: vi.fn(function () {
+    const windowEvents = new EventEmitter()
     const webHandlers: Record<string, Array<(...args: unknown[]) => void>> = {}
+    const preventClose = vi.fn()
     let currentUrl = ''
     const win: MockBrowserWindow = {
       show: vi.fn(),
@@ -83,10 +97,12 @@ vi.mock('electron', () => ({
         currentUrl = url
         return Promise.resolve()
       }),
-      close: vi.fn(),
-      removeListener: vi.fn(),
-      on: vi.fn(),
-      once: vi.fn(),
+      close: vi.fn(() => {
+        windowEvents.emit('close', { preventDefault: preventClose })
+      }),
+      removeListener: vi.fn(windowEvents.removeListener.bind(windowEvents)),
+      on: vi.fn(windowEvents.on.bind(windowEvents)),
+      once: vi.fn(windowEvents.once.bind(windowEvents)),
       webContents: {
         on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
           const handlers = webHandlers[event] ?? []
@@ -103,6 +119,7 @@ vi.mock('electron', () => ({
             }
           },
         ),
+        isDestroyed: vi.fn(() => false),
         loadURL: vi.fn(async (url: string) => {
           currentUrl = url
           return Promise.resolve()
@@ -115,6 +132,7 @@ vi.mock('electron', () => ({
     }
     createdWindows.push({
       win,
+      preventClose,
       fireWebContents: (event: string, ...args: unknown[]) => {
         const navigatedUrl = args[1]
         if (event === 'did-navigate' && typeof navigatedUrl === 'string') {
@@ -147,7 +165,10 @@ vi.mock('../logger', () => ({
 }))
 
 // Imported after the mocks so WindowManager's `import { BrowserWindow }` is stubbed.
+import type { EditorRuntime } from '../mcp/editorActions'
+import { runNativeAction, type NativeActionContext } from '../mcp/nativeActions'
 import { WindowManager } from '../WindowManager'
+import type { WindowStateManager } from '../WindowStateManager'
 
 const SERVER_URL = 'https://corelive.app'
 const LIVE_EDITOR_URL = 'corelive-editor://app/index.html'
@@ -223,6 +244,98 @@ describe('WindowManager bundled startup panel', () => {
       'corelive-editor://app/index.html',
     )
     expect(createdWindows).toHaveLength(1)
+  })
+
+  test('the native close button intercepts destruction and hides LiveEditor after one save', async () => {
+    // Arrange
+    let acknowledge = (): void => {}
+    const save = new Promise<boolean>((resolve) => {
+      acknowledge = (): void => resolve(true)
+    })
+    const flush = vi.fn(async () => save)
+    const windowState = {
+      applyWindowState: vi.fn(),
+      getWindowOptions: () => ({ width: 480, height: 800 }),
+      updateWindowState: vi.fn(),
+    }
+    const manager = new WindowManager(
+      SERVER_URL,
+      null,
+      windowState as unknown as WindowStateManager,
+    )
+    manager.showLiveEditor()
+    const editor = getWindow(0)
+    editor.fireWebContents('did-finish-load')
+    manager.setBeforeEditorHide(flush)
+
+    // Act
+    editor.win.close()
+    expect(editor.win.hide).not.toHaveBeenCalled()
+    acknowledge()
+
+    // Assert
+    await vi.waitFor(() => expect(editor.win.hide).toHaveBeenCalledOnce())
+    expect(editor.preventClose).toHaveBeenCalledOnce()
+    expect(flush).toHaveBeenCalledOnce()
+    expect(windowState.updateWindowState).toHaveBeenCalledExactlyOnceWith(
+      'liveEditor',
+      editor.win,
+    )
+  })
+
+  test('MCP confirms that LiveEditor is hidden after the native writing save completes once', async () => {
+    // Arrange
+    let acknowledge = (): void => {}
+    const save = new Promise<boolean>((resolve) => {
+      acknowledge = (): void => resolve(true)
+    })
+    const flush = vi
+      .fn<() => Promise<boolean>>()
+      .mockReturnValueOnce(save)
+      .mockResolvedValue(false)
+    const windowState = {
+      applyWindowState: vi.fn(),
+      getWindowOptions: () => ({ width: 480, height: 800 }),
+      updateWindowState: vi.fn(),
+    }
+    const manager = new WindowManager(
+      SERVER_URL,
+      null,
+      windowState as unknown as WindowStateManager,
+    )
+    manager.showLiveEditor()
+    const editor = getWindow(0)
+    editor.fireWebContents('did-finish-load')
+    manager.setBeforeEditorHide(flush)
+    const runtime = {
+      controller: { getSnapshot: () => ({ generation: 1 }) },
+      ipc: { flush, shown: vi.fn() },
+    } as unknown as EditorRuntime
+
+    // Act
+    const closing = runNativeAction(
+      { windows: manager } as NativeActionContext,
+      runtime,
+      { name: 'close_window', args: { window: 'editor' } },
+    )
+    const confirmed = vi.fn()
+    void closing.then(confirmed, confirmed)
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    expect(confirmed).not.toHaveBeenCalled()
+    expect(editor.win.hide).not.toHaveBeenCalled()
+    acknowledge()
+
+    // Assert
+    await expect(closing).resolves.toEqual({
+      status: 'hidden',
+      window: 'editor',
+    })
+    expect(editor.win.hide).toHaveBeenCalledOnce()
+    expect(flush).toHaveBeenCalledOnce()
+    expect(windowState.updateWindowState).toHaveBeenCalledExactlyOnceWith(
+      'liveEditor',
+      editor.win,
+    )
   })
 
   test('reopening after a renderer crash reloads bundled assets instead of waiting for an impossible flush', () => {

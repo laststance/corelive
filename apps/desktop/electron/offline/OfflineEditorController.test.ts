@@ -1544,6 +1544,48 @@ describe('MCP operations in the device workspace', () => {
     expect(saved.draft.rows[1]?.text).toBe('New note')
   })
 
+  test('a stale edit stays rejected when the current revision cannot be read', async () => {
+    // Arrange
+    const { controller } = await createFixture()
+    await controller.initialize()
+    const categoryId = categoryUuid(1)
+    const dispatch = createEditorDispatcher(controller, {
+      flush: async () => true,
+      shown: () => {},
+    })
+    const id = '00000000-0000-4000-8000-000000000118'
+    const change = async (text: string) =>
+      dispatch(
+        parseMcpCall('edit_draft', {
+          categoryId,
+          baseRevision: 0,
+          rows: [{ id, text }],
+        }),
+      )
+    await change('Saved writing')
+    vi.spyOn(controller, 'draft').mockRejectedValueOnce(
+      new Error('worker-exit'),
+    )
+
+    // Act
+    const stale = change('Stale writing')
+
+    // Assert
+    await expect(stale).rejects.toMatchObject({
+      code: 'revision-conflict',
+      effect: 'none',
+      detail: { categoryId, expectedRevision: 0 },
+    })
+    await expect(change('Stale retry')).rejects.toMatchObject({
+      code: 'revision-conflict',
+      effect: 'none',
+      detail: { categoryId, expectedRevision: 0, currentRevision: 1 },
+    })
+    await expect(
+      dispatch(parseMcpCall('read_draft', { categoryId })),
+    ).resolves.toMatchObject({ text: 'Saved writing', revision: 1 })
+  })
+
   test('a resident app uses the current Mac time zone for each new dashboard day request', async () => {
     // Arrange
     const dayDetail = vi.fn(async () => ({}))
@@ -1665,13 +1707,19 @@ describe('MCP operations in the device workspace', () => {
       // Act
       const full = await read({ categoryId: categoryUuid(1) })
       const refused = await read({ categoryId })
+      const selected = await read({ textPage: { offset: 0, limit: 2 } })
       const first = await read({
         categoryId,
         textPage: { offset: 0, limit: 1 },
       })
+      const page = CallToolResultSchema.parse(first).structuredContent
       const next = await read({
-        categoryId,
-        textPage: { offset: 2, limit: 2, expectedRevision: 0 },
+        categoryId: page?.categoryId,
+        textPage: {
+          offset: page?.nextOffset,
+          limit: 2,
+          expectedRevision: page?.revision,
+        },
       })
       const last = await read({
         categoryId,
@@ -1681,6 +1729,17 @@ describe('MCP operations in the device workspace', () => {
         categoryId,
         textPage: { offset: 2, expectedRevision: 1 },
       })
+      const missingRevision = await read({
+        categoryId,
+        textPage: { offset: 2 },
+      })
+      const missingCategory = await read({
+        textPage: { offset: 2, expectedRevision: 0 },
+      })
+      const splitEmoji = await read({
+        categoryId,
+        textPage: { offset: 1, limit: 1, expectedRevision: 0 },
+      })
 
       // Assert
       expect(full.structuredContent).toMatchObject({ text: inlineText })
@@ -1689,6 +1748,12 @@ describe('MCP operations in the device workspace', () => {
         categoryId,
         revision: 0,
         nextAction: expect.stringContaining('textPage'),
+      })
+      expect(selected.structuredContent).toMatchObject({
+        categoryId: categoryUuid(1),
+        text: '日日',
+        nextOffset: 2,
+        revision: 0,
       })
       expect(first.structuredContent).toMatchObject({
         text: '🌸',
@@ -1707,6 +1772,13 @@ describe('MCP operations in the device workspace', () => {
         code: 'revision-conflict',
         currentRevision: 0,
       })
+      for (const invalid of [missingRevision, missingCategory, splitEmoji]) {
+        expect(invalid.isError).toBe(true)
+        expect(invalid.structuredContent).toMatchObject({
+          code: 'invalid-input',
+          effect: 'none',
+        })
+      }
     },
     30_000,
   )
@@ -2027,7 +2099,7 @@ describe('MCP operations in the device workspace', () => {
     expect(saved).toEqual(firstSave)
     expect(replay).toEqual(firstSave)
     expect(firstSave.rowId).not.toBe(secondSave.rowId)
-    expect(saved.categoryPath).not.toBe('Renamed')
+    expect(saved.categoryPath).toBe('Personal')
     expect(String(draft.text).split('- [ ] Repeated title').length - 1).toBe(2)
   })
 

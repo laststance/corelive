@@ -4,10 +4,15 @@ import { useAuth } from '@clerk/nextjs'
 import type { DashboardTheme } from '@corelive/desktop-contract/dashboard-appearance'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTheme } from 'next-themes'
-import { createContext, useContext, type ReactNode } from 'react'
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useEffectEvent,
+  type ReactNode,
+} from 'react'
 import { toast } from 'sonner'
 
-import { useCycleEffect } from '@/hooks/use-cycle-effect'
 import { createClient } from '@/lib/orpc/create-client'
 import { normalizeThemePreference } from '@/lib/themes/registry'
 
@@ -91,7 +96,10 @@ function BoundAppearance({
     },
   })
   const visibleTheme = choice.isPending ? choice.variables : saved.data?.theme
-  useCycleEffect(() => {
+  const applyAccountTheme = useEffectEvent((value: DashboardTheme) => {
+    if (value !== theme) setTheme(value)
+  })
+  useEffect(() => {
     if (!visibleTheme) return
     // Storage can be disabled in a browser; the authenticated account still owns the preference.
     try {
@@ -99,8 +107,9 @@ function BoundAppearance({
     } catch {
       /* Browser storage is optional. */
     }
-    if (visibleTheme !== theme) setTheme(visibleTheme)
-  }, [userId, visibleTheme, theme, setTheme])
+    // A storage event from another tab already applied its theme. Only an account change writes back.
+    applyAccountTheme(visibleTheme)
+  }, [userId, visibleTheme])
 
   return (
     <AccountThemeWriter.Provider

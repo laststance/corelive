@@ -3,7 +3,14 @@ import type {
   SetDashboardAppearance,
 } from '@corelive/desktop-contract/dashboard-appearance'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { beforeEach, expect, test, vi } from 'vitest'
 
 import { useNextThemesPersistence } from '@/hooks/useThemeAxis'
@@ -62,6 +69,43 @@ beforeEach(() => {
   window.localStorage.clear()
   account.get.mockReset()
   account.set.mockReset()
+})
+
+test('a second tab accepts a theme change while the first tab is saving it', async () => {
+  // Arrange
+  let remote: DashboardTheme = 'light'
+  const pending = Promise.withResolvers<{ theme: DashboardTheme }>()
+  account.get.mockImplementation(async () => ({ theme: remote }))
+  account.set.mockImplementation(async () => pending.promise)
+  const first = within(openDashboard().container)
+  const second = within(openDashboard().container)
+  await waitFor(() => {
+    expect(first.getByTestId('theme')).toHaveTextContent('light')
+    expect(second.getByTestId('theme')).toHaveTextContent('light')
+  })
+
+  // Act
+  fireEvent.click(first.getByRole('button', { name: 'Use Harbor dark' }))
+  await waitFor(() =>
+    expect(window.localStorage.getItem('corelive-theme')).toBe('harbor-dark'),
+  )
+  fireEvent(
+    window,
+    new StorageEvent('storage', {
+      key: 'corelive-theme',
+      newValue: 'harbor-dark',
+    }),
+  )
+
+  // Assert
+  expect(second.getByTestId('theme')).toHaveTextContent('harbor-dark')
+  expect(window.localStorage.getItem('corelive-theme')).toBe('harbor-dark')
+  await act(async () => {
+    remote = 'harbor-dark'
+    pending.resolve({ theme: 'harbor-dark' })
+    await pending.promise
+  })
+  expect(account.set).toHaveBeenCalledTimes(1)
 })
 
 test('a returning browser imports its legacy theme once and another browser reads the change made in Settings', async () => {

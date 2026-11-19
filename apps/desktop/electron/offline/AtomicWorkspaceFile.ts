@@ -220,12 +220,13 @@ export class AtomicWorkspaceFile<T> {
     }))
   }
 
-  /** Exports exact bytes from this account's partition when the primary cannot be opened.
-   * The worker calls this only for recovery export; no file is rewritten or promoted.
+  /** Packages exact partition bytes for the worker when the primary cannot be opened.
    * Known foreign-owner envelopes are excluded, and invalid bytes are labelled as unvalidated.
-   * @example const archive = await file.exportRecoveryFiles()
+   * @returns The recovery data, or null when neither file exists.
+   * @throws {@link WorkspaceFileError} if every surviving file declares a foreign owner.
+   * @example const recovery = await file.exportRecoveryFiles()
    */
-  async exportRecoveryFiles(): Promise<string> {
+  async exportRecoveryFiles() {
     return this.serialize(async () => {
       const files: {
         name: string
@@ -257,19 +258,18 @@ export class AtomicWorkspaceFile<T> {
         }
         files.push({ name, contentBase64: bytes.toString('base64'), integrity })
       }
-      if (!files.length) throw new WorkspaceFileError('recovery-missing')
-      return JSON.stringify(
-        {
-          format: 'corelive-recovery-files',
-          version: 1,
-          ownerId: this.ownerId,
-          exportedAt: new Date().toISOString(),
-          files,
-          excluded,
-        },
-        null,
-        2,
-      )
+      if (!files.length) {
+        if (excluded.length) throw new WorkspaceFileError('recovery-missing')
+        return null
+      }
+      return {
+        format: 'corelive-recovery-files',
+        version: 1,
+        ownerId: this.ownerId,
+        exportedAt: new Date().toISOString(),
+        files,
+        excluded,
+      }
     })
   }
 

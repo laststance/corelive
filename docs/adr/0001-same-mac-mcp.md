@@ -123,10 +123,10 @@ Each client documents how to start a local program. The table identifies where a
 
 ### Last step in each client's registration instructions
 
-All seven registration paths above end with this same copyable request. Show the full text at the bottom of each client guide. Send it in the chosen agent's chat as written, or replace just the task title inside 「」. The agent reads the selected draft, then passes the returned category ID to the append (CEO D2). The separate standalone-add check covers the default category when an add is the first action.
+All seven registration paths above end with this same copyable request. Show the full text at the bottom of each client guide. Send it in the chosen agent's chat as written, or replace just the task title in quotation marks. The agent reads the selected draft, then passes the returned category ID to the append (CEO D2). The separate standalone-add check covers the default category when an add is the first action.
 
 ```text
-今のメモを読んで、「請求書を送る」をタスクに追加して。今日終えたことも教えて。
+Read my current note, add “Send the invoice” as a task, and tell me what I finished today.
 ```
 
 ### Journey from setup to upgrade
@@ -373,14 +373,14 @@ The product owner selected A in CEO D2. The comparison records the alternatives 
 The following is the user-facing copy for the owner's question. The two outcomes express different product preferences.
 
 ```text
-Question: CEO D2（MCP-DEST）　「今のメモを読んで、請求書を送るタスクを追加して」と頼みました。エージェントが「仕事」を読んだ直後、保存する前に、自分が LiveEditor を「個人」に切り替えたら、タスクはどちらに入れますか？
+Question: CEO D2 (MCP-DEST). You ask the agent to read your current note and add “Send the invoice.” It reads Work, then you switch LiveEditor to Personal before the save. Where should the task go?
 
-A を推します。一度の依頼で読んだメモと保存先がそろうためです。タスクの追加だけを頼んだときは、どちらを選んでも、その時点で選択中のカテゴリに入ります。
-Header: タスクの追加先
-A) 読んだ「仕事」に追加 (Recommended)
-「仕事」に1件保存し、返答に「仕事」と表示します。別件で「個人」を開いても保存先はずれません。切り替え先に入れたいときは「個人に追加」と指定します。
-B) 追加時の「個人」に追加
-「個人」に1件保存し、返答に「個人」と表示します。依頼の後からでもアプリで追加先を変えられます。別件で切り替えたときも、タスクは「個人」に入ります。
+Recommendation: A keeps the task with the note you asked the agent to read. For a standalone add, both options use the category selected at that time.
+Header: Task destination
+A) Append to Work, the category read (recommended)
+Save one task in Work and name Work in the response. Opening Personal for another reason does not redirect the save. Ask for Personal explicitly to use it.
+B) Append to Personal, selected at save time
+Save one task in Personal and name Personal in the response. This lets you redirect the task after making the request, including when you switched for unrelated work.
 ```
 
 ### Section 2. Errors and recovery
@@ -417,16 +417,16 @@ The case concerns a requested filename that is already occupied. It can occur on
 The alternatives specify different outcomes. The common checks still require an eligible day, valid PNG bytes and accurate file effects.
 
 ```text
-Question: CEO D3（PNG-EXISTS）　「今日の活動を activity.png に保存して」と頼んだとき、同じ場所に activity.png がすでにあり、上書きの指示がなければ、どうしますか？
+Question: CEO D3 (PNG-EXISTS). You ask to save today's activity as activity.png. A file by that name exists and you did not request replacement. What should happen?
 
-A を推します。指定した名前と実際の保存先が食い違わず、既存の画像も守れます。ダッシュボードでは保存をブラウザに任せていますが、MCP は実際に保存したパスを返すので、ここでの動作を決める必要があります。
-Header: 同名のPNG
-A　保存せず知らせる (recommended)
-今ある画像を残し、「同名ファイルがあるため未保存」と返します。別名で依頼すれば保存できます。
-B　別名で保存する
-今ある画像を残し、たとえば activity-2.png に保存して、その実際のパスを返します。依頼で指定したファイル名は変わります。
-C　指定した名前で上書きする
-新しい画像を activity.png に保存して同じパスを返します。その場所にあった以前の画像は置き換わります。
+Recommendation: A protects the existing image and preserves the requested name. The Dashboard delegates saving to the browser, while MCP returns the path it actually wrote.
+Header: Existing PNG
+A) Report the collision without saving (recommended)
+Keep the image and report that the name is occupied. The user can request a different filename.
+B) Save under a different name
+Keep the existing image, write a name such as activity-2.png, and return that path. It differs from the name requested.
+C) Overwrite the requested filename
+Write the new image to activity.png, replacing the previous image, and return the same path.
 ```
 
 ### Section 3. Security and privacy
@@ -496,14 +496,14 @@ The page schedules are examples derived from the current journal SQL. Each page 
 These alternatives use different reference times for the same facts. Neither assumes a shared clock or transaction across the Mac and the account database.
 
 ```text
-Question: CEO D4（HISTORY-AS-OF）　「今日終えたこと」を調べ始めたとき、アカウントの完了は3件でした。たとえば2件ずつ読み取る途中で、別の Mac からもう1件届いたら、今回の返答は3件と4件のどちらにしますか？
+Question: CEO D4 (HISTORY-AS-OF). The account has three completions when the agent starts reading today's history in pages of two. A fourth arrives from another Mac during the read. How many should this answer report?
 
-A を推します。読み始めた時点で一覧をそろえると、取得中に並びが変わっても、もともとあった完了を飛ばさず数えられます。この Mac の未同期分を含める取り決めは共通です。
-Header: 完了履歴の集計時点
-A　今回は3件、次回は4件 (recommended)
-最初にアカウント履歴を読み取った時点で固定します。読み取り中に届いた1件は、次の依頼で返します。
-B　更新を検知したら読み直して4件
-変更を検知したら1回だけ一覧を取り直し、その時点の件数を返します。新着を今回の返答に入れられる分、応答は遅くなります。
+Recommendation: A fixes membership when the read begins, so changes in order cannot hide an original completion. Both choices include this Mac's unsynced completions.
+Header: History observation time
+A) Three this time, four next time (recommended)
+Freeze account history on the first read. Include the new completion in the next request.
+B) Read again once and report four
+When a change is detected, fetch the list once more and report its total. Including the latest arrival delays the response.
 ```
 
 ### Section 5. Code quality
@@ -623,18 +623,18 @@ The options differ in kind. Coverage scores do not apply.
 **Decision record.** The owner selected A in CEO D5. The comparison above and prompt below record the alternatives at the time of the decision.
 
 ```text
-Question: CEO D5（履歴の保持先）　長い完了履歴を何回かに分けて返すとき、最初に読み取った一覧は、この Mac のメモリに一時的に持つ設計でよいですか？
+Question: CEO D5 (history retention). When returning a long completion history in several pages, may the Mac temporarily retain the initial list in memory?
 
-A を推します。アカウントから指定期間を一度読み、続きは Mac から返せるので、クラウドにもう一組の履歴を保存せずに済みます。長い期間を指定したときの通信量とメモリ使用量は実測が必要です。どの選択でも、D4 の「今回は3件、次回は4件」と、この Mac の未同期分を含める条件は同じです。
-Header: 履歴の保持先
-A　この Mac に一時保持する (recommended)
-同じ一覧から最後まで返し、読み終えたら解放します。クラウドに作業用コピーは増えませんが、長期間の履歴ほど Mac のメモリを使います。
-B　保持方法は実装担当に任せる
-最初の時点の件数と内容を返す条件だけを固定します。実装の選択肢は残り、どこに一時保持するかは後で決まります。
-C　長い履歴で比較してから決める
-Mac 側に持つ方式とサーバーに一時保持する方式の通信量、メモリ、応答時間を比較します。選択は測定後になります。
-D　Mac に保持する提案を保留する
-初版の履歴機能と D4 は維持します。この提案を採るかどうかは未決事項として残します。
+Recommendation: A reads the requested account period once and serves later pages locally, so the cloud needs no working copy. Measure transfer size and memory for long ranges. All options retain D4's three-now, four-next-time behavior and include unsynced local completions.
+Header: Where to retain history
+A) Retain it temporarily on this Mac (recommended)
+Serve all pages from the same list, then release it. Longer ranges use more Mac memory.
+B) Leave retention to the implementer
+Fix the count and contents as of the first read and choose the storage location during implementation.
+C) Compare with long histories first
+Measure traffic, memory and response time for Mac- and server-side retention before choosing.
+D) Defer the Mac retention proposal
+Keep history and D4 in the first release and leave the retention location undecided.
 ```
 
 There are no remaining scope additions, backlog proposals or unanswered product questions. The six implementation tasks carry the release checks for the scope the owner selected.
@@ -710,7 +710,7 @@ The two unverified premises are signed-client compatibility and the five-minute 
 ### Scope record
 
 - **Feature answers:** The owner's original all-operations request and CEO D1 (HOLD SCOPE) keep every user-facing operation in the first release for all seven clients. No feature cuts or deferrals were proposed.
-- **Structure:** Eng D1, A (Original arrangement). The owner replied `aで` to the structure selector. Keep the shared tool definitions (operation names, input and response contracts) in a source file separate from the stdio entry point. All clients still register one bundled command.
+- **Structure:** Eng D1, A (Original arrangement). The owner selected option A in the structure selector. Keep the shared tool definitions (operation names, input and response contracts) in a source file separate from the stdio entry point. All clients still register one bundled command.
 - **Accepted scope:** The working estimate is 22 changed files. Count four for packaging and startup, six for the MCP entry, local connection, tool definitions and workspace integration, four for the Mac and account sides of history and PNG, six for verification, and two guides. Both arrangements estimated two runtime roles (the stdio helper and an endpoint inside the existing Electron owner) and assumed zero new classes. The smaller arrangement combined the entry point and definitions in one file (21 estimated). These are planning estimates. D1 changed only the file arrangement.
 - **Engineering decisions:** Eng D2 A settled R1, the packaged helper runtime. Eng D3 A settled R2, handing the verified local connection to Node.js. Under Eng D4 A (R3), the ordinary app keeps each read's frozen account history and gives the helper only the requested pages. Eng D5 A (R4) reuses the dashboard exporter's PNG data URL and decodes it in the ordinary app before saving. Eng D6 A (R5) places the card and its DOM tests in the existing shared UI package. Eng D7 A (R6) includes verified older completions without titles in the same chronology as named rows. Eng D8 A (R7) sends an entire account range over the existing authenticated oRPC stream before the Mac serves its pages. Eng D9 A (R8) chooses the current profile's `Exports` directory for a PNG requested by filename alone.
 
@@ -1023,37 +1023,37 @@ Comparison grid:
 
 ```text
 Question D2:
-Eng D2 — CoreLive に同梱する MCP プログラムは、どの実行方式にしますか？
+Eng D2 — Which runtime should execute the MCP program shipped with CoreLive?
 
-Project/branch/task: CoreLive / codex/corelive-mcp / Mac 用の同梱プログラム。
-ELI10: この Mac に入っている署名済み CoreLive 0.30.1 では、内蔵 Electron を画面のない JavaScript 実行用プロセスとして使える設定が有効でした。これを使えば、エージェントは専用コマンドを1つ登録するだけです。
-Stakes if we pick wrong: アプリは macOS 13.0 対応ですが、開発用 Node.js 26.12.1 の実行ファイルは 13.5 からです。そのまま同梱すると 13.0〜13.4 で MCP だけ起動できません（apps/desktop/electron-builder.json:86）。
-Recommendation: A。既存の実行環境と TypeScript の操作定義を共有でき、追加ランタイムを配布する負担を省けます。
+Project/branch/task: CoreLive / codex/corelive-mcp / bundled Mac executable.
+ELI10: The signed CoreLive 0.30.1 installed on this Mac can run its embedded Electron as a headless JavaScript process. An agent can register one dedicated command.
+Stakes: The app supports macOS 13.0, but the development Node.js 26.12.1 binary requires 13.5. Bundling it would leave MCP unavailable on 13.0–13.4 (apps/desktop/electron-builder.json:86).
+Recommendation: A reuses the installed runtime and TypeScript tool definitions and avoids distributing another runtime.
 Note: options differ in kind, not coverage — no completeness score.
-Pros / cons: 3案とも macOS 13.0、Intel と Apple Silicon、7つのエージェント、全操作を維持し、署名済みパッケージでの起動と更新を検証します。
-Net: 現在の Electron の起動機能を使い続けるか、別の実行環境や実装言語を保守するかを選びます。
-Header: 同梱方式
+All three options retain macOS 13.0, Intel and Apple Silicon, seven agents and all operations. Verify startup and updates with signed packages.
+Decision: Keep Electron's existing launch mode or maintain a separate runtime or language.
+Header: Bundled runtime
 Options:
-A) 同梱 Electron を再利用 (recommended)
-見積もりは人2日／エージェント5時間。リスクは中です。
-✅ 専用ランチャーがアプリ内の固定された MCP コードを実行するので、利用者は追加のインストールや環境設定をせずに使えます。
-✅ 既存の TypeScript の操作定義を共有でき、別の JavaScript 実行環境をアプリのダウンロードに加えずに済みます。
-❌ 将来 Electron のこのモードを無効にする際は、登録済みのコマンドを保ったまま内部の実行方式を切り替える必要があります。
-B) Bun で専用実行ファイルを同梱
-見積もりは人2.5日／エージェント6時間。リスクは中です。
-✅ 同じ TypeScript の操作定義を使いながら、Electron の起動設定を変えても MCP の入口を独立して保守できます。
-✅ エージェントが直接起動できる実行ファイルを Intel 版と Apple Silicon 版のそれぞれに同梱できます。
-❌ Bun の実行環境も配布物に含まれ、ビルド用のバージョン管理とアプリのダウンロードサイズへの影響を引き受けます。
-C) Swift で専用実行ファイルを同梱
-見積もりは人3日／エージェント8時間。リスクは中です。
-✅ 公式 Swift SDK は macOS 13.0 を対象とし、エージェントとの標準入出力による通信をサポートしています。
-✅ Electron の起動設定から独立でき、MCP のためにもう一つの JavaScript 実行環境を同梱せずに済みます。
-❌ Swift のビルドと、TypeScript 側と同じ操作定義を Swift から使う部分を、今後のリリースでも保守します。
+A) Reuse bundled Electron (recommended)
+Estimate: two developer days or five agent hours. Medium risk.
+✅ The launcher runs the app's fixed MCP entry without additional user installation or configuration.
+✅ The launcher shares the TypeScript tool definitions and adds no separate JavaScript runtime to the download.
+❌ Disabling this Electron mode later requires changing the implementation behind the registered command.
+B) Bundle a dedicated Bun executable
+Estimate: 2.5 developer days or six agent hours. Medium risk.
+✅ The MCP entry can reuse TypeScript definitions independently of Electron launch settings.
+✅ Each architecture can include an executable that agents start directly.
+❌ Bun increases the download size and adds a build dependency to version and maintain.
+C) Bundle a dedicated Swift executable
+Estimate: three developer days or eight agent hours. Medium risk.
+✅ The official Swift SDK targets macOS 13.0 and supports stdio communication with agents.
+✅ The helper runs independently of Electron's launch settings and needs no second JavaScript runtime.
+❌ Future releases must maintain the Swift build and its access to the shared TypeScript tool contracts.
 ```
 
 State: approved
 
-Actual answer: Eng D2, A) 同梱 Electron を再利用 (recommended). The owner selected the dedicated launcher using CoreLive's embedded Electron.
+Actual answer: Eng D2, A. The owner selected the dedicated launcher using CoreLive's embedded Electron.
 
 Accepted scope: All seven local clients register one stable stdio command in the signed app. Its dedicated launcher runs only CoreLive's fixed MCP entry using the existing bundled Electron in Node mode, with no separately distributed JavaScript runtime or user runtime configuration. Keep Eng D1's separate TypeScript tool definitions, all app operations and the ordinary Electron app as the sole workspace writer. The helper's process mode must not carry over when it starts the owner. Retain macOS 13.0, Intel and Apple Silicon. Verify the runtime mode and signatures in the signed DMG and ZIP on both architectures, discovery with the app closed, real cold and warm data calls, focus and an in-place update through the original registration. If Electron's runtime policy changes, replace the internal runtime behind that command. T1 remains an estimated two engineer-days or five coding-agent hours, medium risk, separate from the seven timed human trials.
 
@@ -1081,32 +1081,32 @@ Comparison grid:
 
 ```text
 Question D3:
-Eng D3 — 接続相手を確認した後、CoreLive のデータをどのコードで送受信しますか？
+Eng D3 — Which code should exchange CoreLive data after verifying the peer?
 
-Project/branch/task: CoreLive / codex/corelive-mcp / Mac 内の接続。
-ELI10: 製品版と開発版ではメモの保存先が違います。どちらの案も、接続の両端で Mac のユーザーを確認し、相手の保存先と通信バージョンが合ってからメモやタスクを扱います（apps/desktop/electron/devUserData.ts:30）。
-Stakes if we pick wrong: 接続を閉じる責任が曖昧だと、アプリの再起動後にエージェントの依頼が応答待ちのまま残り得ます。
-Recommendation: A。相手の確認には macOS の機能を使い、その後の読み書きと切断は Node.js の標準機能に任せられます。
+Project/branch/task: CoreLive / codex/corelive-mcp / same-Mac connection.
+ELI10: Production and development store notes separately. Both options verify the Mac user at both ends, the profile and the protocol version before handling notes or tasks (apps/desktop/electron/devUserData.ts:30).
+Stakes: Unclear ownership of a connection can leave an agent waiting after an app restart.
+Recommendation: A uses macOS for peer verification and Node.js for subsequent I/O and disconnection.
 Note: options differ in kind, not coverage — no completeness score.
-Pros / cons: 7つのエージェントの登録方法、操作範囲、承認方法は両案で同じです。
-Net: 違いは、接続確認後の送受信まで CoreLive が Mac 専用コードとして保守するかどうかです。
-Header: 接続の受け渡し
+Both options retain the registration, operations and approval flow for all seven agents.
+Decision: How much connection handling should CoreLive maintain as Mac-specific code?
+Header: Verified connection handoff
 Options:
-A) 確認後は Node.js (recommended)
-設計・実装の目安は人1〜2日／実装エージェント3〜5時間。リスクは中です。
-✅ macOS 専用コードが同じユーザーと確認した接続をそのまま渡し、以後の送受信は Node.js の標準機能で扱えます。
-✅ 通信相手が途中で終了した場合も標準の切断処理を使えるので、普段の TypeScript 側で原因を追えます。
-❌ 接続を渡す瞬間に失敗しても二重に閉じたり開いたままにしたりしないことを、署名済みのアプリで確かめる必要があります。
-B) 切断まで macOS 側で管理
-設計・実装の目安は人2〜3日／実装エージェント5〜8時間。リスクは中です。
-✅ 接続相手の確認から切断まで同じ部品が受け持つため、開いた接続を途中で別の実装へ渡す手順を省けます。
-✅ TypeScript 側は送受信と切断を頼むだけで済み、Mac 側で開いた接続の識別番号を管理する必要がありません。
-❌ 読み手が遅いときの待機や相手が終了したときの後始末まで、Mac 専用コードで実装し、更新のたびに検証します。
+A) Hand off to Node.js after verification (recommended)
+Estimate: one to two developer days or three to five agent hours. Medium risk.
+✅ Mac-specific code hands over the same verified connection. Node.js handles subsequent I/O.
+✅ Normal disconnect handling lets developers diagnose a peer's exit in TypeScript.
+❌ Signed-app tests must confirm a failed handoff neither leaks the connection nor closes it twice.
+B) Keep macOS code responsible through disconnect
+Estimate: two to three developer days or five to eight agent hours. Medium risk.
+✅ One component handles both peer verification and disconnection without transferring the open connection.
+✅ TypeScript requests I/O and closure without tracking native file descriptors.
+❌ Mac-specific code must handle slow readers and peer termination and be verified with each release.
 ```
 
 State: approved
 
-Actual answer: Eng D3, A) 確認後は Node.js (recommended). The owner selected the verified connection handoff to Node.js.
+Actual answer: Eng D3, A. The owner selected the verified connection handoff to Node.js.
 
 Accepted scope: In the same two processes, the in-process Mac component on each end checks the connected peer's effective UID and hands the same open connection to the standard Node stream. Node owns reading, writing, backpressure and closure after a successful handoff. Each side must have exactly one owner responsible for closing its connection, including if the handoff fails. The expected profile and compatible protocol are checked on that channel before any workspace read or write. Preserve the private per-profile endpoint, the app's active account selection, each client's approvals, all operations and all seven approved registration paths. Verify peer acceptance and refusal, installed/development/isolated QA profile separation, version mismatch, single closure, orderly disconnect and a fresh connection after app restart in the signed Intel and Apple Silicon packages. The R2 implementation estimate is 1–2 engineer-days or 3–5 coding-agent hours, medium risk, separate from T1 packaging. R3 and R4 remain open.
 
@@ -1134,32 +1134,32 @@ Comparison grid:
 
 ```text
 Question D4:
-Eng D4 — 完了履歴を数ページに分けて返す間、読み始めに確定したアカウントの一覧を、Mac 上のどこに持ちますか？
+Eng D4 — Which Mac process should retain the initial account observation as an agent pages through completion history?
 
-Project/branch/task: CoreLive / codex/corelive-mcp / 履歴のページ送り。
-ELI10: たとえば Claude Code が今週の完了履歴を2件ずつ読みます。最初の一覧を持っておく場所は、アカウントを管理する CoreLive 本体か、Claude Code が起動した MCP ヘルパーのどちらかです。
-Stakes if we pick wrong: 途中で別のアカウントに切り替わってもメモ帳は開いたままなので、元のアカウントの2ページ目を誤って返すおそれがあります（apps/desktop/electron/offline/OfflineEditorController.ts:276）。
-Recommendation: A。本体がアカウントを確認して必要なページだけを渡せるので、履歴全件をヘルパーへ転送する手間も省けます。
+Project/branch/task: CoreLive / codex/corelive-mcp / paged history.
+ELI10: Claude Code reads this week's completions two at a time. Either the ordinary app that owns the account or the MCP helper that Claude Code started can hold the initial list.
+Stakes: The editor can stay open during an account switch. A later page must not expose the previous account's history (apps/desktop/electron/offline/OfflineEditorController.ts:276).
+Recommendation: A lets the app verify the active account and send only the requested page.
 Note: options differ in kind, not coverage — no completeness score.
-Pros / cons: 両案とも、アカウントから読むのは1回で、途中で届いた完了は次の依頼に入ります。この Mac の未同期分も回答に含め、読み終わるかセッションが終わったら一覧を解放します。
-Net: 一覧の保持と後始末を本体に集めるか、依頼を受けたヘルパーごとに持たせるかの選択です。
-Header: 履歴の保持先
+Both options read the account once, include this Mac's unsynced completions, leave later arrivals for the next request and release the list at exhaustion or session end.
+Decision: Keep the list and its cleanup in the ordinary app or in the helper for each agent.
+Header: History retention
 Options:
-A) CoreLive 本体 (recommended)
-この部分の目安は人0.5〜1日／実装エージェント1〜2時間。リスクは中です。
-✅ 本体がその時点のアカウントを確認してから次のページを返せるので、履歴とそのアクセス条件を一か所で管理できます。
-✅ ヘルパーへ渡すのは要求されたページ分だけです。1ページで依頼が終われば、残りの履歴はヘルパーへ送りません。
-❌ 複数のエージェントが長い期間を同時に読むと、本体にそれぞれの一覧が残るため、途中終了時も依頼ごとに解放する必要があります。
-B) 各エージェントの MCP ヘルパー
-この部分の目安は人1〜1.5日／実装エージェント2〜4時間。リスクは中です。
-✅ 本体が一覧を一度渡せば、以後の保管とページの切り出しは、その依頼を受けたヘルパーで引き受けられます。
-✅ ヘルパーが終了すると、そのプロセスが持っていた一覧のメモリも解放され、ほかのエージェントの読み取りは続けられます。
-❌ 最初に全件をヘルパーへ転送します。以後もアカウント履歴を返す前には、本体に元のアカウントが有効か確認する通信が必要です。
+A) The ordinary CoreLive app (recommended)
+Estimate: half to one developer day or one to two agent hours. Medium risk.
+✅ The app checks the current account before returning another page and owns the access conditions alongside the records.
+✅ A helper receives only the requested page. A one-page request transfers no further records to that helper.
+❌ Concurrent long reads retain separate lists. The app must release each one when its request ends early.
+B) Each agent's MCP helper
+Estimate: one to 1.5 developer days or two to four agent hours. Medium risk.
+✅ Once the app sends the list, the helper can retain and page it independently.
+✅ Exiting one helper frees its list and lets other agents continue their reads.
+❌ The entire list must go to the helper up front. Subsequent account pages still require the app to confirm the original account.
 ```
 
 State: approved
 
-Actual answer: Eng D4, A) CoreLive 本体 (recommended). The owner selected the ordinary CoreLive app to retain each frozen account range.
+Actual answer: Eng D4, A. The owner selected the ordinary CoreLive app to retain each frozen account range.
 
 Accepted scope: The ordinary Electron app retains the immutable result of one authenticated account-range read, including the sync identities, in Mac memory for the initiating read. Verify the original account binding before releasing each account page. Send the helper only the requested page, and invalidate the old account result when the binding changes. Include eligible local unsynced completions, deduplicate proven sync copies and preserve the device-only fallback. Release a range after final consumption or session disposal, including a helper that exits midway. Overlapping reads retain their own views and can raise app memory use. Check three completions during one read and four on a fresh read after an intervening arrival, preservation of earlier page contents, account changes, independent concurrent reads and cleanup. Measure local transfer and peak Mac memory for a long range. The retention and paging portion of T3 is estimated at 0.5–1 engineer-day or 1–2 coding-agent hours, medium risk. The two process roles, verified Node stream, registrations, all operations and seven clients carry forward. R4 is open.
 
@@ -1189,32 +1189,32 @@ Comparison grid:
 
 ```text
 Question D5:
-Eng D5 — 活動カードを描いたあと、どの形式で CoreLive 本体の保存処理に渡しますか？
+Eng D5 — In what format should the rendered activity card reach the native file writer?
 
-Project/branch/task: CoreLive / codex/corelive-mcp / 日別 PNG の保存。
-ELI10: 「今日の活動を activity.png に保存して」と頼むと、アプリ内でダッシュボードと同じカードを描き、CoreLive 本体がファイルを書きます。今の描画関数を1枚で試すと、62,838 バイトの PNG が、画像そのものを表す 83,806 文字の文字列として返りました（apps/web/src/lib/export-day-as-image.ts:278）。
-Stakes if we pick wrong: この文字列をそのままファイルに書くと、拡張子が .png でも画像として開けません。
-Recommendation: A。ダッシュボードで使っている描画関数をそのまま呼び、本体で一度だけ PNG のバイト列に戻せます。
+Project/branch/task: CoreLive / codex/corelive-mcp / daily PNG export.
+ELI10: A request for activity.png renders the Dashboard card inside the app and lets the main process write it. One sample of the existing renderer returned a 62,838-byte PNG as an 83,806-character string (apps/web/src/lib/export-day-as-image.ts:278).
+Stakes: Writing that string directly produces a file a PNG reader cannot open.
+Recommendation: A reuses the Dashboard renderer and decodes the PNG once in the main process.
 Note: options differ in kind, not coverage — no completeness score.
-Pros / cons: 両案とも、同名ファイルの上書きを頼んでいなければ元の画像を保護し、7つのどのエージェントから頼んでも、保存が完了したときだけ依頼元に実際の保存先を返します。
-Net: 既存の文字列出力を再利用するか、MCP 用にバイト列の出力を加えて渡すかを選びます。
-Header: PNG の受け渡し
+Both options protect existing files unless overwrite was explicit. All seven clients receive the actual path only after saving finishes.
+Decision: Reuse the current text output or add a binary output for MCP.
+Header: PNG handoff
 Options:
-A) 現行の文字列で渡す (recommended)
-受け渡し部分の目安は人半日／実装エージェント1〜2時間。リスクは低めです。
-✅ 現在のカード描画関数をそのまま使えるので、ダッシュボードと Mac アプリで同じ出力を使い続けられます。
-✅ 保存先と PNG への復号を CoreLive 本体で扱えます。描画側は今と同じ文字列を返すだけで済みます。
-❌ バイト列より長い文字列をアプリ内で渡し、本体で保存用のバイト列に戻すため、一時的に両方のデータを持ちます。
-B) PNG のバイト列で渡す
-受け渡し部分の目安は人0.5〜1日／実装エージェント2〜3時間。リスクは中です。
-✅ 同じカードから画像のバイト列を直接取り出して渡せるので、アプリ内でより長い文字列を運ぶ手間を省けます。
-✅ 保存を担当する本体は受け取ったバイト列をそのまま検証でき、文字列の形式や復号エラーを扱う処理が減ります。
-❌ ダッシュボードの文字列出力と MCP のバイト出力について、同じ日付・件数・カテゴリの画像が得られるかを継続して検証します。
+A) Pass the current string (recommended)
+Estimate: half a developer day or one to two agent hours. Low risk.
+✅ The Dashboard and Mac app keep using the same renderer and output.
+✅ The main process owns destination selection and decoding. The renderer returns its usual string.
+❌ The app briefly holds both the encoded string and the decoded bytes.
+B) Pass PNG bytes
+Estimate: half to one developer day or two to three agent hours. Medium risk.
+✅ The renderer sends the image bytes directly and avoids transferring a longer string.
+✅ The main process validates the received bytes without handling string formats or decoding failures.
+❌ Tests must keep the Dashboard text output and MCP binary output consistent for the same dates, counts and categories.
 ```
 
 State: approved
 
-Actual answer: Eng D5, A) 現行の文字列で渡す (recommended). The owner selected the current PNG data URL for the renderer-to-main handoff.
+Actual answer: Eng D5, A. The owner selected the current PNG data URL for the renderer-to-main handoff.
 
 Accepted scope: For an eligible account day, use the present dashboard card, capture settings and renderer API. Return its existing in-memory PNG data URL from the app-controlled renderer to the ordinary CoreLive app. The app decodes that payload once and gives its native writer the encoded PNG bytes. Missing or malformed output and conversion failures cannot publish a file or report a saved path. Report the actual absolute path to the requesting agent after a successful save. The image payload stays within CoreLive. Preserve the existing dashboard browser download and the approved explicit-filename collision behavior, including concurrent exports. Verify the decoded file's day, count, top category and dimensions, and cover capture, conversion and write failures through the packaged path. The larger string and the byte buffer can coexist during decoding. The handoff portion of T4 is estimated at half an engineer-day or 1–2 coding-agent hours, lower risk. Retain the two process roles, all app operations and all seven approved registration paths.
 
@@ -1241,37 +1241,37 @@ Comparison grid:
 
 ```text
 Question D6:
-Eng D6 — ダッシュボードと Mac アプリで使う「活動カードを PNG にする関数」は、どこで管理しますか？
+Eng D6 — Where should the Dashboard and Mac app share the activity-card PNG renderer?
 
-Project/branch/task: CoreLive / codex/corelive-mcp / 活動カードのコード共有。
-ELI10: 今この関数を呼ぶのは、ダッシュボードの日別画面の1か所です。MCP を追加すると Mac アプリが2つ目の利用先になります。両アプリにはすでに日付やヒートマップの部品を読み込む共通パッケージがあります（README.md:80）。
-Stakes if we pick wrong: カードを直しても片方のビルドに必要なコードが入らず、Mac の書き出しだけが失敗するおそれがあります。
-Recommendation: A。既存の共通 UI パッケージに活動カードを1つ追加すれば、どちらの次のビルドにも同じ修正が入ります。
+Project/branch/task: CoreLive / codex/corelive-mcp / sharing the activity card.
+ELI10: The Dashboard's day view was the only caller. MCP makes the Mac app a second caller. Both already consume a package for dates and heatmaps (README.md:80).
+Stakes: A renderer change might reach only one build and break Mac exports.
+Recommendation: A puts the activity card in the existing shared UI package, so both builds receive the same fixes.
 Note: options differ in kind, not coverage — no completeness score.
-Pros / cons: 3案とも共有するのはカードの描画関数です。Web はダッシュボード、LiveEditor の編集画面は Electron に置きます。
-Net: 既存の共有場所を使うか、Web のビルドで配るか、カード専用の共有場所を作るかを選びます。
-Header: 活動カードの配置
+All three options share the card renderer. The Dashboard remains in the browser and the LiveEditor editing surface in Electron.
+Decision: Use the existing shared package, bundle a Dashboard build artifact, or create a card-specific package.
+Header: Activity-card source
 Options:
-A) 既存の共通 UI に置く (recommended)
-配置とその検証の目安は人半日／実装エージェント1〜2時間。リスクは低めです。
-✅ 両アプリが利用中の共通 UI パッケージに活動カードを追加するので、描画関数とテストを一か所で保守できます。
-✅ Web が取り込める機能に活動カードだけを追加し、デスクトップ専用エディターを読み込ませない既存のテストを使えます。
-❌ 関数と DOM を使うテストを Web 側から移し、共通パッケージで描画ライブラリとテスト環境を管理する必要があります。
-B) Web で生成して同梱
-配置とその検証の目安は人1〜1.5日／実装エージェント3〜5時間。リスクは中です。
-✅ 今の関数とテストはダッシュボード側に置いたまま、Mac のビルド時に同じソースからブラウザ用のファイルを生成できます。
-✅ 生成したファイルは署名済みの Mac アプリに入るため、MCP で描画するたびに Web からコードを取りに行く必要がありません。
-❌ Mac のビルドに生成・取り込み手順が増え、古いファイルや描画に必要なファイルの入れ忘れを検出する確認も要ります。
-C) カード専用の内部パッケージ
-配置とその検証の目安は人1日／実装エージェント2〜4時間。リスクは低〜中です。
-✅ 活動カードだけの小さな内部パッケージを両アプリが使うので、画像の依存関係とテストをその中で完結できます。
-✅ カードの変更を確認したい開発者が、テーマやエディター用の部品を調べずに、担当するコードとテストを見つけられます。
-❌ 新しいパッケージを両アプリの依存関係と Web ビルド、リポジトリ全体の型チェックとテストの対象に加える必要があります。
+A) Use the existing shared UI package (recommended)
+Estimate: half a developer day or one to two agent hours. Low risk.
+✅ Both apps already consume this package. One location holds the renderer and its tests.
+✅ The existing boundary test can allow the card while keeping the desktop-only editor out of the Dashboard.
+❌ Move the renderer and DOM tests from the Dashboard and maintain their dependency and test environment in the shared package.
+B) Generate a Dashboard artifact for the Mac package
+Estimate: one to 1.5 developer days or three to five agent hours. Medium risk.
+✅ The function and tests can stay in the Dashboard. The Mac build generates a browser artifact from the same source.
+✅ The signed Mac app includes the artifact and can render without fetching code from the Dashboard.
+❌ The Mac build gains generation and inclusion steps and must detect stale or incomplete artifacts.
+C) Create an internal activity-card package
+Estimate: one developer day or two to four agent hours. Low to medium risk.
+✅ A small package can contain the image dependencies and tests for both apps.
+✅ Developers can find card code and tests independently of theme and editor components.
+❌ Both apps, the Dashboard build and workspace-wide type checks and tests must include a new package.
 ```
 
 State: approved
 
-Actual answer: Eng D6, A) 既存の共通 UI に置く (recommended). The owner chose the existing shared UI package for the activity-card renderer.
+Actual answer: Eng D6, A. The owner chose the existing shared UI package for the activity-card renderer.
 
 Accepted scope: Move the authored renderer and its DOM tests into the existing shared UI package. Give both the dashboard and the planned Electron renderer a narrow public card entry, provisionally `@corelive/live-editor/activity-card`. Declare the lazy image dependency and DOM test environment with the package. Permit only the new card subpath in the Web import boundary and preserve its existing desktop-only editor exclusions. Migrate the Web caller and connect the Electron caller. Both use the same date, count, optional top-category input, capture settings, cleanup, error behavior and PNG data URL. Eligibility and category ranking stay with their data owners, Web owns its existing download and the ordinary Mac app decodes and writes the file. Run shared DOM tests and exercise both consumers in their own builds, including the confirmed native path and explicit-filename collision cases. All app operations and seven client registrations retain their approved behavior. The placement and its verification are estimated at half an engineer-day or 1–2 coding-agent hours, lower risk, within the scope of T4.
 
@@ -1296,28 +1296,28 @@ Runtime evidence: Three existing focused cases passed for the old-build import, 
 
 ```text
 Question D7:
-Eng D7 — オフラインで「この日の完了を全部見せて」と頼み、3件のうち1件だけ旧版の Mac にタスク名が残っていない場合、どう返しますか？
+Eng D7 — An offline request asks for all three completions on a day. An older Mac retained the time but not the title for one of them. How should that record appear?
 
-CoreLive / codex/corelive-mcp の完了履歴が対象です。旧版の実データ形式では、完了日時が残っていてもタイトルが空欄になり得ます（packages/desktop-contract/src/offline-workspace-v2.ts:114）。今回の例では3件とも完了したことを確認でき、名前での絞り込みはありません。
-どちらも合計は3件です。名前は推測せず、接続後に同じ完了だと確認できれば実名を1回だけ返します。
-A を推します。エージェントが日時順に読むだけで、名前が分かる2件と分からない1件をそのまま説明できます。選ぶのは、名前がない1件を通常の時系列に含めるか、同じ返答の別欄に出すかです。
-Header: 旧版の完了履歴
+Scope: CoreLive / codex/corelive-mcp / completion history. The legacy format permits an empty title alongside a confirmed completion time (packages/desktop-contract/src/offline-workspace-v2.ts:114). This request has no title filter.
+Both options count all three completions. Leave the missing title unknown. If the connected account confirms the same completion, return its actual title once.
+Recommendation: A lets an agent describe two named records and one unnamed record in chronological order. The choice is whether the unnamed record appears in that list or in a separate field.
+Header: Legacy completions
 Options:
-A) 時系列に含める (recommended)
-人半日／実装エージェント1〜2時間の見積もり。リスクは低めです。
-✅ 元の位置に日時付きの1件を置き、「この Mac では名前を確認できない」と明示します。3件すべてを順番に読めます。
-✅ 7クライアントとも同じ一覧をたどればよく、名前を確認できた記録と同じ操作で各完了の詳細を参照できます。
-❌ 履歴を表示・要約する側では、タスク名が空欄になる場合を扱い、推測で別の名前を付けないようにする必要があります。
-B) 同じ返答の別欄に出す
-人0.5〜1日／実装エージェント2〜3時間の見積もり。リスクは低〜中です。
-✅ 通常の一覧には名前が分かる2件を載せ、別欄に名前を確認できない1件の日時と識別情報を残せます。
-✅ どのクライアントでも、依頼への回答に「完了3件、そのうち名前を読めたのは2件」と明示する材料がそろいます。
-❌ 3件をまとめて日時順に説明するには、エージェントがページごとに通常の一覧と別欄の両方を読む必要があります。
+A) Include the record in chronological order (recommended)
+Estimate: half a developer day or one to two agent hours. Low risk.
+✅ Keep the timestamp in its original place and say the title is unavailable on this Mac. All three records remain in order.
+✅ All seven clients can use the same list and the same detail operation for named and unnamed completions.
+❌ Consumers must handle an absent title without guessing one.
+B) Include a separate field in the same response
+Estimate: half to one developer day or two to three agent hours. Low to medium risk.
+✅ Keep the two known titles in the regular list and retain the remaining timestamp and identity separately.
+✅ Every client has enough information to report three completions and two readable titles.
+❌ To explain all three in date order, an agent must read and combine both fields for each page.
 ```
 
 State: approved
 
-Actual answer: Eng D7, A) 時系列に含める (recommended). The owner selected a single chronological list in response to the saved D7 question.
+Actual answer: Eng D7, A. The owner selected a single chronological list.
 
 Accepted scope: On an unfiltered local-day read, return the two named completions and the one eligible, title-unavailable completion together in time order. Include its verified identity and completion time with an explicit unavailable-title status. Page by logical completions and return three as the total. All seven clients can read the same collection. Consumers must handle a missing title without guessing a name. On a fresh connected read, one authorized identity match may supply the missing title without adding another completion. Preserve current scopes, filters, account authorization, the underlying migration and the Settings history display. A record lacking title evidence cannot prove a literal title match. The change and its fixtures are estimated at half an engineer-day or 1–2 coding-agent hours within T3, lower risk. Prior engineering decisions and packaged and client checks still apply.
 
@@ -1342,28 +1342,28 @@ Runtime evidence: A 36,500-row synthetic fixture encoded as journal-shaped JSON 
 
 ```text
 Question D8:
-Eng D8 — 長い完了履歴を一度の依頼で最後まで Mac に届けるため、どの通信方式を使いますか？
+Eng D8 — Which transport should deliver a complete long history range to the Mac in one request?
 
-CoreLive / codex/corelive-mcp のアカウント履歴が対象です。36,500件のテスト用データは約6.49 MBになり、Vercel の通常の応答上限4.5 MBを超えました。少しずつ送る応答ならこの上限は適用されません。今の Mac アプリが使う通信ライブラリでも、ローカルで6 MBを最後まで受け取れました（apps/desktop/electron/offline/createSyncTransport.ts:99）。
-A を推します。既存の通信経路を使え、専用の読み取り処理を新たに保守する手間が少なくなります。
-両案とも、利用者は期間を分けずに一度だけ依頼します。読み始めのアカウント履歴を固定し、通信が切れたら端末で確認できた履歴だけを、その範囲を明示して返します。
-Header: 履歴の転送方式
+Scope: CoreLive / codex/corelive-mcp / account history. A synthetic 36,500-record result measured about 6.49 MB, above Vercel's 4.5 MB buffered limit. Streaming avoids that limit. The Mac's current client received a complete 6 MB local stream (apps/desktop/electron/offline/createSyncTransport.ts:99).
+Recommendation: A reuses the existing transport and requires less new reader code.
+Both options accept one date range, freeze account membership at the initial read and return only verified device history with its source identified if the transfer fails.
+Header: History transport
 Options:
-A) 既存の通信経路を使う (recommended)
-転送部分の見積もりは人0.5〜1日／実装エージェント1〜3時間。リスクは低〜中です。
-✅ 既存の oRPC で履歴を順に受け取るため、デスクトップとサーバーでデータ形式と認証の仕組みを共有できます。
-✅ 既存ライブラリで最後まで届いたことを確認できるので、途中までの一覧を「アカウントの全件」と誤って返すのを防げます。
-❌ 本番と同じ配信経路でも大きな応答が途中でまとめ直されたり、時間切れになったりしないかを検証する必要があります。
-B) 履歴専用の通信経路を作る
-転送部分の見積もりは人1〜1.5日／実装エージェント3〜5時間。リスクは中です。
-✅ 履歴専用の認証済みの宛先で、1行ずつ JSON を送るので、開発者が転送内容や最後の完了通知を独立して調べられます。
-✅ 履歴の読み取り処理は今の oRPC のストリーミング機能に依存しないため、その機能が変更されても個別に保守できます。
-❌ 途中で切れた行や完了通知を検出する処理、認証の接続、Mac の読み取り処理と本番相当の検証が別途必要になります。
+A) Use the existing transport (recommended)
+Estimate: half to one developer day or one to three agent hours. Low to medium risk.
+✅ oRPC streams the records in order and shares the data contract and authentication between desktop and server.
+✅ The client can verify the terminal frame and avoid reporting an incomplete list as the full account history.
+❌ A hosted transfer must confirm that a large response is neither buffered nor cut short by a timeout.
+B) Build a history-specific transport
+Estimate: one to 1.5 developer days or three to five agent hours. Medium risk.
+✅ An authenticated endpoint can send JSON lines so the data and completion message are independently inspectable.
+✅ A dedicated reader can evolve independently of oRPC's streaming implementation.
+❌ The team must implement partial-line and terminal detection, authentication and a Mac reader, and verify the hosted path.
 ```
 
 State: approved
 
-Actual answer: Eng D8, A) 既存の通信経路を使う (recommended). The owner chose the existing authenticated oRPC route in reply to D8.
+Actual answer: Eng D8, A. The owner chose the existing authenticated oRPC route.
 
 Accepted scope: The ordinary CoreLive app receives one coherent account result in finite batches over authenticated oRPC. Include the sync identities and verify the terminal record, expected membership and current binding before making an account-inclusive page available. Release database resources before the agent requests subsequent pages. Keep the verified result in Mac memory for this read. If the transfer is cancelled, times out or ends early, discard all partial account data. Return the verified device history with device-only scope if it can be read. A device-read failure uses the existing tool error. Keep the agreed period, the chronological representation for titleless completions, all seven registrations and the signed-package checks. Exercise an archive-sized response above the 4.5 MB buffered limit over a representative hosted route with the Mac reader, including a clipped or interrupted stream, subsequent paging and elapsed time through the last byte. Estimated transfer work within T3 is 0.5–1 engineer-day or 1–3 coding-agent hours with low-to-medium risk. This decision sets no new numeric timeout or maximum range.
 
@@ -1386,37 +1386,37 @@ Runtime evidence: The signed app's product name is CoreLive. The ordinary app al
 
 ```text
 Question D9:
-Eng D9 — 「今日の活動を activity.png に保存して」と、ファイル名だけ指定したとき、どのフォルダに保存しますか？
+Eng D9 — Where should the app save today's activity card when the request supplies only activity.png?
 
-CoreLive の Web ダッシュボードではブラウザが保存場所を決めます。Mac の MCP は保存後に実際の絶対パスを返すので、フォルダを省略した場合の扱いが必要です（DayDetailDialog.tsx:235）。
-A を推します。CoreLive 用の書き出しフォルダなら、7つのエージェントで保存先がそろい、追加のやり取りなしで画像を開けます。フォルダも指定した依頼ではその場所を使い、同名のファイルがすでにあれば、従来の合意どおり上書きせず知らせます。
-Header: PNGの保存先
+The browser chooses the Dashboard download destination. Mac MCP returns an absolute path after saving, so it needs a rule for requests without a directory (DayDetailDialog.tsx:235).
+Recommendation: A gives all seven agents a consistent location and lets them open the image without another question. Respect explicit paths and report existing files unless the user requested overwriting them.
+Header: PNG destination
 Options:
-A) CoreLiveのExportsに保存 (recommended)
-各プロファイルのアプリデータ内にある Exports を使います。通常の製品版なら ~/Library/Application Support/CoreLive/Exports/activity.png です。実装と確認は人半日／エージェント1〜2時間の見積もりで、リスクは低めです。
-✅ ファイル名だけで書き出しが完了し、エージェントは回答に含まれた絶対パスを使って画像を開いたり次の依頼に渡したりできます。
-✅ どのエージェントが起動しても同じ CoreLive のフォルダを使い、開いているプロジェクトの場所に左右されません。
-❌ Finder の「ダウンロード」には並ばないため、利用者は回答にあるパスから画像を開くことになります。
-B) 保存先を指定して使う
-既定フォルダを設けず、保存先を明示する現在の方式を使います。案内と確認は人1〜2時間／エージェント30分程度の見積もりで、リスクは低めです。
-✅ 毎回利用者が選んだフォルダへ書くので、プロジェクトに画像をまとめたいときに置き場所が明確です。
-✅ アプリデータ内に利用者向けの書き出しフォルダを増やすことなく、保存済み画像のパスを返せます。
-❌ ファイル名だけの依頼では、保存前にエージェントが書き出し先を確認するやり取りが一度増えます。
-C) 比較してから選ぶ
-隔離した Mac で既定フォルダと明示先から画像を開く流れを各1回比較し、結果を見て選びます。比較だけなら人30分程度／エージェント約15分の見積もりです。
-✅ 置き場所の好みを想像で決めず、回答から画像を開いて別の作業へ渡す手順を具体的に比べられます。
-✅ 比較には使い捨ての画像を使えるため、既存の利用者データや同名ファイルに変更を加える必要がありません。
-❌ 比較が済んでも保存方式は未決定です。どちらを初版に入れるかは別途選ぶ必要があります。
-D) 既定先の決定を保留
-既定の書き出しフォルダを設ける提案だけを保留します。今回追加する作業は人・エージェントとも0時間です。未指定時の動作は未決です。
-✅ 場所を指定して PNG を書き出す仕様と、既存ファイルを保護して結果を返す検証はそのまま進められます。
-✅ 7クライアントの登録や完了履歴の通信について確定した設計を、この選択のために変更する必要がありません。
-❌ ファイル名だけで頼まれたときの動作を登録ガイドに記載するには、保存先について再度判断が必要です。
+A) Use CoreLive's Exports folder (recommended)
+Use Exports under the active profile's app data. The standard product path is ~/Library/Application Support/CoreLive/Exports/activity.png. Estimate: half a developer day or one to two agent hours. Low risk.
+✅ A filename is enough to complete the export. The agent can open the absolute path or pass it to a later request.
+✅ Each agent uses the same CoreLive folder regardless of its current project.
+❌ The file does not appear in Finder's Downloads. Users open it from the returned path.
+B) Require an explicit destination
+Keep the current requirement to specify the folder. Estimate: one to two developer hours or about 30 agent minutes. Low risk.
+✅ The user picks the folder each time and can keep images alongside the project.
+✅ The app returns the written path without adding a user-facing directory under app data.
+❌ A filename-only request requires another exchange before the agent can write the image.
+C) Compare the workflows first
+On an isolated Mac, open an image once from the default directory and once from an explicit destination. Estimate: 30 developer minutes or about 15 agent minutes.
+✅ Compare the actual steps from the answer to the next task before deciding.
+✅ Disposable images keep existing user files intact.
+❌ The comparison leaves the initial release behavior for a later decision.
+D) Defer the default directory decision
+Defer the proposed default only. This adds no implementation time and leaves filename-only behavior undecided.
+✅ Exporting to explicit paths, protecting existing files and returning the result can proceed.
+✅ Registration for seven clients and the history transport retain their agreed designs.
+❌ The guide needs a further decision before it can describe filename-only exports.
 ```
 
 State: approved
 
-Actual answer: Eng D9, A) CoreLiveのExportsに保存 (recommended). The owner chose the current CoreLive profile's Exports folder for an activity PNG requested by filename alone.
+Actual answer: Eng D9, A. The owner chose the current profile's Exports folder when the request supplies only a filename.
 
 Accepted scope: For a supplied basename such as `activity.png`, resolve the ordinary app's active profile with `app.getPath('userData')` and publish under its `Exports` subdirectory, creating that directory when first needed. All seven clients use the same directory for the same CoreLive profile. The expected standard production location is `~/Library/Application Support/CoreLive/Exports/activity.png`. A separately specified destination takes precedence. Apply CEO D3's existing-file rule after resolving either destination. Return the actual absolute path only after a successful write. On refusal, preserve an existing file and report that no PNG was saved. The user can open an app-managed export via the returned path. Verify a basename-only call from two different client working directories, an explicit directory, and a collision. This part of T4 is estimated at half an engineer-day or 1–2 coding-agent hours, lower risk.
 

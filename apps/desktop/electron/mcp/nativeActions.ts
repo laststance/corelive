@@ -36,7 +36,7 @@ type WindowRole = Extract<McpCall, { args: { window: CoreLiveWindow } }>['name']
 /** Applies an Electron menu role to one CoreLive document after checking its origin.
  * @example runWindowRole(deps, 'copy_selection', 'editor')
  */
-function runWindowRole(
+async function runWindowRole(
   deps: NativeActionContext,
   role: WindowRole,
   target: CoreLiveWindow,
@@ -57,6 +57,14 @@ function runWindowRole(
       'window-unavailable',
       'Open the requested CoreLive window first.',
     )
+  if (target === 'editor' && role === 'close_window') {
+    if (!(await deps.windows.closeLiveEditor()))
+      throw new McpActionError(
+        'flush-failed',
+        'Save pending LiveEditor writing first.',
+      )
+    return { status: 'hidden', window: target }
+  }
   const contents = win.webContents
   const roles: Record<WindowRole, () => void> = {
     undo_edit: () => contents.undo(),
@@ -88,17 +96,21 @@ async function applyWindowRole(
   role: WindowRole,
   window: CoreLiveWindow,
 ) {
-  const flush =
+  const savesEditor =
     window === 'editor' &&
     ['reload_window', 'force_reload_window', 'close_window'].includes(role)
-  if (!flush) return runWindowRole(deps, role, window)
+  if (!savesEditor) return runWindowRole(deps, role, window)
   try {
-    if (!(await runtime.ipc.flush(runtime.controller.getSnapshot().generation)))
+    // WindowManager owns the save-and-hide handshake for close requests.
+    if (
+      role !== 'close_window' &&
+      !(await runtime.ipc.flush(runtime.controller.getSnapshot().generation))
+    )
       throw new McpActionError(
         'flush-failed',
         'Save pending LiveEditor writing first.',
       )
-    return runWindowRole(deps, role, window)
+    return await runWindowRole(deps, role, window)
   } finally {
     runtime.ipc.shown()
   }
@@ -227,9 +239,15 @@ export async function runNativeAction(
       return { status: 'applied', bounds: win.getBounds() }
     },
     set_shortcut_sound_enabled: (args) =>
-      saved(config.set('behavior.shortcutOpenSoundEnabled', args.enabled)),
+      saved(
+        config.set('behavior.shortcutOpenSoundEnabled', args.enabled),
+        'partial',
+      ),
     set_shortcut_sound: (args) =>
-      saved(config.set('behavior.shortcutOpenSoundSelection', args.selection)),
+      saved(
+        config.set('behavior.shortcutOpenSoundSelection', args.selection),
+        'partial',
+      ),
     preview_shortcut_sound: (args) => {
       if (!isShortcutOpenSoundSelection(args.selection))
         throw new McpActionError(

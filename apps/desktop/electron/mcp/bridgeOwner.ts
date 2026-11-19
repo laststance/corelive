@@ -16,6 +16,7 @@ import {
   OWNER_START_TIMEOUT_MS,
   readFrames,
   RequestFrame,
+  encodeFrame,
   writeFrame,
 } from './protocol'
 import { mcpFailure, type McpResult } from './result'
@@ -109,15 +110,14 @@ async function servePeer(
       hello.data.profile !== profile ||
       hello.data.version !== BRIDGE_VERSION
     ) {
-      await writeFrame(socket, { type: 'incompatible' })
+      await writeFrame(socket, encodeFrame({ type: 'incompatible' }))
       return
     }
     socket.setTimeout(0)
-    await writeFrame(socket, {
-      type: 'ready',
-      version: BRIDGE_VERSION,
-      profile,
-    })
+    await writeFrame(
+      socket,
+      encodeFrame({ type: 'ready', version: BRIDGE_VERSION, profile }),
+    )
     for await (const frame of frames) {
       const request = RequestFrame.parse(frame)
       // Serial dispatch preserves action order and provides write backpressure on this session.
@@ -132,10 +132,13 @@ async function servePeer(
           ),
         )
       if (closed || socket.destroyed) break
-      await writeFrame(socket, {
-        id: request.id,
-        result: stdioResult(request.name, result),
-      })
+      await writeFrame(
+        socket,
+        encodeFrame({
+          id: request.id,
+          result: stdioResult(request.name, result),
+        }),
+      )
     }
   } finally {
     socket.destroy()

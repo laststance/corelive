@@ -8,7 +8,7 @@ import type { McpResult } from './result'
 export const BRIDGE_VERSION = 2
 export const OWNER_START_TIMEOUT_MS = 15_000
 export const MCP_BACKGROUND_SWITCH = '--corelive-mcp-background'
-const MAX_FRAME_BYTES = 32 * 1024 * 1024
+export const MAX_FRAME_BYTES = 32 * 1024 * 1024
 // The SDK's default stdio client accepts a 10 MiB JSON-RPC message. Reserve room for its envelope.
 export const MAX_MCP_RESULT_BYTES = 10 * 1024 * 1024 - 4096
 
@@ -46,16 +46,22 @@ export function bridgeResult(frame: unknown, id: string): McpResult {
   return response.result
 }
 
-/** Sends one complete JSON line, observing Node's write completion before sending the next.
- * @example await writeFrame(socket, { type: 'hello', version: 1, profile })
+/** Encodes a local frame before dispatch so callers can decline oversized requests without writing.
+ * @example const frame = encodeFrame({ type: 'hello', version: BRIDGE_VERSION, profile })
+ */
+export function encodeFrame(frame: object): Buffer | undefined {
+  const body = Buffer.from(JSON.stringify(frame) + '\n')
+  return body.length - 1 <= MAX_FRAME_BYTES ? body : undefined
+}
+
+/** Writes a frame prepared by {@link encodeFrame} and waits for Node to flush it.
+ * @example await writeFrame(socket, encodeFrame({ type: 'incompatible' }))
  */
 export async function writeFrame(
   socket: Socket,
-  frame: unknown,
+  body: Buffer | undefined,
 ): Promise<void> {
-  const body = Buffer.from(JSON.stringify(frame) + '\n')
-  if (body.length - 1 > MAX_FRAME_BYTES)
-    throw new Error('Local message exceeds the per-call size limit')
+  if (!body) throw new Error('Local message exceeds the per-call size limit')
   await new Promise<void>((resolve, reject) => {
     socket.write(body, (error) => (error ? reject(error) : resolve()))
   })

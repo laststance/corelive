@@ -14,7 +14,7 @@ export const HomeBootstrapInputSchema = z.object({
   journal: CompletedJournalInputSchema,
 })
 
-/** Keeps the three hydrated client-cache payloads type-safe at the single Home bootstrap boundary. @example `{ category: { categories: [] }, heatmap: { data: [], streaks: { current: 0, longest: 0 }, total: 0 }, journal: { entries: [], total: 0, hasMore: false } }` */
+/** Keeps the three hydrated client-cache payloads type-safe at the single Home bootstrap boundary. @example `{ category: { categories: [] }, heatmap: { throughDate: '2026-03-24', data: [], streaks: { current: 0, longest: 0 }, total: 0 }, journal: { entries: [], total: 0, hasMore: false } }` */
 export const HomeBootstrapResponseSchema = z.object({
   category: CategoryListResponseSchema,
   heatmap: HeatmapResponseSchema,

@@ -5,7 +5,6 @@ import type {
 import { sql } from 'drizzle-orm'
 
 import { db } from '@/db'
-import { parseUtcTimestamp } from '@/db/parseUtcTimestamp'
 import type { DayDetailTask } from '@/server/schemas/completed'
 
 /**
@@ -77,7 +76,7 @@ export async function fetchCompletedEntries(
       source: row.source,
       id: row.id,
       title: row.title,
-      completedAt: parseUtcTimestamp(row.completed_at),
+      completedAt: new Date(row.completed_at_ms),
       category: {
         id: row.category_id,
         name: row.category_name,
@@ -113,7 +112,7 @@ export async function fetchCompletionHistoryRange(
     id: row.id,
     completionId: row.completion_id,
     title: row.title,
-    completedAt: parseUtcTimestamp(row.completed_at).getTime(),
+    completedAt: row.completed_at_ms,
     categoryId: row.category_id,
     parentCategoryId: row.parent_id,
     categoryPath:
@@ -127,7 +126,7 @@ type CompletionRow = {
   source: CompletedEntry['source']
   id: number
   title: string
-  completed_at: string
+  completed_at_ms: number
   category_id: number
   category_name: string
   category_color: string
@@ -173,7 +172,8 @@ async function fetchRangeRows(
         AND ((cp."completedAt" BETWEEN ${start} AND ${end})
           OR (cp."completedAt" IS NULL AND cp."createdAt" BETWEEN ${start} AND ${end}))
     )
-    SELECT e.source, e.id, e.title, e.completed_at,
+    SELECT e.source, e.id, e.title,
+           (EXTRACT(EPOCH FROM e.completed_at) * 1000)::double precision AS completed_at_ms,
            c.id AS category_id, c.name AS category_name, c.color AS category_color,
            p.id AS parent_id, p.name AS parent_name, p.color AS parent_color,
            ${identity} AS completion_id

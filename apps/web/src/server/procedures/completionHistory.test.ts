@@ -77,6 +77,10 @@ describeIfDb('attached Mac history from PostgreSQL', () => {
     // Arrange
     const owner = await seedOwner(130),
       other = await seedOwner(1)
+    await db
+      .update(completedTable)
+      .set({ title: 'Original title' })
+      .where(eq(completedTable.userId, owner.userId))
     const completionId = randomUUID()
     const state = {
       revision: 1,
@@ -108,15 +112,19 @@ describeIfDb('attached Mac history from PostgreSQL', () => {
     const frames = await call(historyRange, during, { context })
     const first = await frames.next()
     expect(first.value).toMatchObject({ type: 'rows', offset: 0 })
+    if (first.done || first.value.type !== 'rows')
+      throw new Error('Expected the first history page')
+    const firstPageIds = new Set(first.value.entries.map((row) => row.id))
+    const [toUpdate, toDelete] = owner.ids.filter((id) => !firstPageIds.has(id))
+    if (toUpdate === undefined || toDelete === undefined)
+      throw new Error('Expected two unread rows')
 
     // Act
     await db
       .update(completedTable)
       .set({ title: 'Changed mid-read' })
-      .where(eq(completedTable.id, owner.ids[129]!))
-    await db
-      .delete(completedTable)
-      .where(eq(completedTable.id, owner.ids[128]!))
+      .where(eq(completedTable.id, toUpdate))
+    await db.delete(completedTable).where(eq(completedTable.id, toDelete))
     const original = await readAccountFrames(
       (async function* () {
         yield first.value
@@ -140,9 +148,17 @@ describeIfDb('attached Mac history from PostgreSQL', () => {
       original.find((row) => row.id === owner.ids[1])?.completionId,
     ).toBeNull()
     expect(original.some((row) => row.id === other.ids[0])).toBe(false)
-    expect(original.some((row) => row.title === 'Changed mid-read')).toBe(false)
+    expect(original.find((row) => row.id === toUpdate)?.title).toBe(
+      'Original title',
+    )
+    expect(original.find((row) => row.id === toDelete)?.title).toBe(
+      'Original title',
+    )
     expect(next).toHaveLength(129)
-    expect(next.some((row) => row.title === 'Changed mid-read')).toBe(true)
+    expect(next.find((row) => row.id === toUpdate)?.title).toBe(
+      'Changed mid-read',
+    )
+    expect(next.some((row) => row.id === toDelete)).toBe(false)
   }, 30_000)
 
   test('the ordinary Mac transport verifies every member of a 36,500-row account range over a streamed HTTP response larger than 4.5 MB', async () => {
@@ -220,7 +236,13 @@ describeIfDb('attached Mac history from PostgreSQL', () => {
 
   test('the full supported local calendar covers UTC instants just outside four-digit years', async () => {
     // Arrange
-    const owner = await seedOwner(1)
+    const owner = await seedOwner(3)
+    await db.execute(
+      sql`UPDATE "Completed" SET "completedAt" = '0001-12-31 16:00:00 BC'::timestamp WHERE id = ${owner.ids[0]}`,
+    )
+    await db.execute(
+      sql`UPDATE "Completed" SET "completedAt" = '10000-01-01 04:00:00'::timestamp WHERE id = ${owner.ids[2]}`,
+    )
     const context = {
       headers: new Headers({ Authorization: `Bearer ${owner.clerkId}` }),
     }
@@ -234,6 +256,8 @@ describeIfDb('attached Mac history from PostgreSQL', () => {
     const rows = await readAccountFrames(frames, owner.clerkId, entireCalendar)
 
     // Assert
-    expect(rows.map((row) => row.id)).toEqual(owner.ids)
+    expect(rows.map((row) => row.completedAt).sort((a, b) => a - b)).toEqual([
+      -62135625600000, 1778580000000, 253402315200000,
+    ])
   })
 })

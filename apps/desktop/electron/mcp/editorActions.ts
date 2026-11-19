@@ -77,6 +77,17 @@ function additionResult(operationId: string, saved: TaskAddition) {
   }
 }
 
+/** Checks whether a UTF-16 page boundary cuts a Unicode surrogate pair in half.
+ * @example splitsSurrogatePair('A😀B', 2) // => true
+ */
+function splitsSurrogatePair(text: string, offset: number): boolean {
+  const first = text.charCodeAt(offset - 1)
+  const second = text.charCodeAt(offset)
+  return (
+    first >= 0xd800 && first <= 0xdbff && second >= 0xdc00 && second <= 0xdfff
+  )
+}
+
 /** Returns a bounded portion of one saved note, using UTF-16 offsets that keep Unicode pairs together.
  * The revision from the first page lets a client detect edits before continuing.
  * @example draftTextPage(text, 3, { offset: 0, limit: 32768 })
@@ -93,15 +104,14 @@ function draftTextPage(
       expectedRevision: page.expectedRevision,
       currentRevision: revision,
     })
-  if (page.offset > text.length)
+  if (page.offset > text.length || splitsSurrogatePair(text, page.offset))
     throw new McpActionError(
       'invalid-input',
       'Use a nextOffset from a previous page, or start at zero.',
     )
   let end = Math.min(text.length, page.offset + page.limit)
   // Include the trailing unit of a surrogate pair when the nominal boundary falls inside it.
-  const nextUnit = text.charCodeAt(end)
-  if (nextUnit >= 0xdc00 && nextUnit <= 0xdfff) end++
+  if (splitsSurrogatePair(text, end)) end++
   return {
     text: text.slice(page.offset, end),
     offset: page.offset,
@@ -141,15 +151,13 @@ async function runEditorAction(
         ...(outcome.detail ? { detail: outcome.detail } : {}),
       }
       if (outcome.reason === 'revision-conflict' && 'baseRevision' in intent) {
-        const { draft, categoryId } = await controller.draft(
-          generation,
-          intent.categoryId,
-        )
-        if (categoryId === intent.categoryId)
-          Object.assign(detail, {
-            expectedRevision: intent.baseRevision,
-            currentRevision: draft.revision,
-          })
+        detail.expectedRevision = intent.baseRevision
+        // The refusal is final even if the worker stops before it can report the current revision.
+        const current = await controller
+          .draft(generation, intent.categoryId)
+          .catch(() => undefined)
+        if (current?.categoryId === intent.categoryId)
+          detail.currentRevision = current.draft.revision
       }
       throw workspaceRefusal(outcome.reason, detail)
     }

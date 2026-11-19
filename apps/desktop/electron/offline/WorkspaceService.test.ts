@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -2140,7 +2140,7 @@ describe('durable task-addition receipts', () => {
       title: 'Send the invoice',
     }
     // Act
-    const { addition } = await service.appendTask(request)
+    await service.appendTask(request)
     const reopened = new WorkspaceService(new AtomicWorkspaceFile(options))
     const original = await reopened.findTaskAddition({ operationId, accountId })
     const other = await reopened.findTaskAddition({
@@ -2152,15 +2152,79 @@ describe('durable task-addition receipts', () => {
       accountId: null,
     })
     // Assert
-    expect(original).toEqual(addition)
+    const state = await file.read()
+    const rows = state.drafts[category2]?.rows
+    expect(rows?.map((row) => row.text)).toEqual([
+      'Target writing',
+      '- [ ] Send the invoice',
+    ])
+    expect(original).toEqual({
+      accountId: 'account-a',
+      deviceId: state.deviceId,
+      categoryId: '00000000-0000-4000-8000-000000000002',
+      categoryPath: 'Category 2',
+      rowId: rows?.[1]?.id,
+      title: 'Send the invoice',
+    })
     expect(other).toBeNull()
     expect(detached).toBeNull()
     await expect(
       reopened.appendTask({ ...request, title: 'Different task' }),
     ).rejects.toMatchObject({ reason: 'command-conflict' })
+    expect(await file.read()).toEqual(state)
+  })
+
+  test('an interrupted task addition is only confirmed after the directory barrier succeeds without another write', async () => {
+    // Arrange
+    const { options } = await createWorkspace()
+    const writer = new WorkspaceService(
+      new AtomicWorkspaceFile({
+        ...options,
+        onStage(stage) {
+          if (stage === 'replaced') throw new Error('Interrupted after rename')
+        },
+      }),
+    )
+    const request = {
+      operationId: '00000000-0000-4000-8000-000000000204',
+      accountId,
+      categoryId: category2,
+      title: 'Keep the original addition',
+    }
+    await expect(writer.appendTask(request)).rejects.toThrow(
+      'Interrupted after rename',
+    )
+    let barrierAvailable = false
+    const file = new AtomicWorkspaceFile({
+      ...options,
+      onStage(stage) {
+        if (stage === 'directory-flushed' && !barrierAvailable)
+          throw new Error('Directory barrier failed')
+      },
+    })
+    const reopened = new WorkspaceService(file)
+    const lookup = {
+      operationId: request.operationId,
+      accountId,
+      original: { title: request.title, categoryId: category2 },
+    }
+    const primary = await readFile(file.path)
+    const recovery = await readFile(file.recoveryPath)
+
+    // Act / Assert
+    await expect(reopened.findTaskAddition(lookup)).rejects.toThrow(
+      'Directory barrier failed',
+    )
+    barrierAvailable = true
+    await expect(reopened.findTaskAddition(lookup)).resolves.toMatchObject({
+      title: 'Keep the original addition',
+      categoryId: '00000000-0000-4000-8000-000000000002',
+    })
+    expect(await readFile(file.path)).toEqual(primary)
+    expect(await readFile(file.recoveryPath)).toEqual(recovery)
     expect(
       (await file.read()).drafts[category2]?.rows.map((row) => row.text),
-    ).toEqual(['Target writing', '- [ ] Send the invoice'])
+    ).toEqual(['Target writing', '- [ ] Keep the original addition'])
   })
 
   test('looking up an expired or legacy receipt leaves both the saved writing and the workspace revision intact', async () => {

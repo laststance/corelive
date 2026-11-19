@@ -4,11 +4,10 @@ import { z } from 'zod'
 
 // Electron accelerator strings are short tokens like "CommandOrControl+Shift+B".
 // 64 is generous and bounds memory/log noise from malformed payloads.
-const SHORTCUT_ACCELERATOR_MAX_LENGTH = 64
+export const ShortcutAcceleratorSchema = z.string().max(64)
 // Window dimension floor matches `WindowStateManager` minWidth/minHeight (320).
 // Ceiling is loose enough for 8K displays but rejects runaway values.
-const LIVE_EDITOR_WINDOW_DIMENSION_MIN = 320
-const LIVE_EDITOR_WINDOW_DIMENSION_MAX = 8192
+export const LiveEditorWindowDimensionSchema = z.number().min(320).max(8192)
 
 const RENDERER_READABLE_LIVE_EDITOR_CONFIG_PATHS = new Set([
   'liveEditor.width',
@@ -180,25 +179,17 @@ export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
       // x/y can be negative on multi-monitor setups (left/above primary display).
       x: z.number().finite(),
       y: z.number().finite(),
-      width: z
-        .number()
-        .min(LIVE_EDITOR_WINDOW_DIMENSION_MIN)
-        .max(LIVE_EDITOR_WINDOW_DIMENSION_MAX),
-      height: z
-        .number()
-        .min(LIVE_EDITOR_WINDOW_DIMENSION_MIN)
-        .max(LIVE_EDITOR_WINDOW_DIMENSION_MAX),
+      width: LiveEditorWindowDimensionSchema,
+      height: LiveEditorWindowDimensionSchema,
     }),
   ]),
   'live-editor-get-visible-on-all-workspaces': z.tuple([]),
   'live-editor-set-visible-on-all-workspaces': z.tuple([z.boolean()]),
 
   'live-editor-config-get-shortcut': z.tuple([]),
-  'live-editor-config-set-shortcut': z.tuple([
-    z.string().max(SHORTCUT_ACCELERATOR_MAX_LENGTH),
-  ]),
+  'live-editor-config-set-shortcut': z.tuple([ShortcutAcceleratorSchema]),
   'live-editor-config-get-shortcut-secondary': z.tuple([]),
   'live-editor-config-set-shortcut-secondary': z.tuple([
-    z.string().max(SHORTCUT_ACCELERATOR_MAX_LENGTH),
+    ShortcutAcceleratorSchema,
   ]),
 }

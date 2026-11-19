@@ -4,7 +4,7 @@ Install the CoreLive Mac app that includes the MCP helper. Keep it in Applicatio
 
 Drafts and device history work offline. A connected account adds dashboard data, skills and activity-card export. CoreLive starts in the background on the first data call. Your agent manages tool approvals. A chat that runs entirely on a remote computer cannot reach this Mac’s device workspace.
 
-Choose your agent below. Each guide ends with the same request. Replace only **請求書を送る** with the title you want. In the answer, look for a summary of the note, the category where the unfinished task was saved, and today's completions with their source. An empty history is a valid result. Reading a category and then adding to it keeps the original destination even if you select another category in LiveEditor.
+Choose your agent below. Each guide ends with the same request. Replace only **Send the invoice** with the title you want. In the answer, look for a summary of the note, the category where the unfinished task was saved, and today's completions with their source. An empty history is a valid result. Reading a category and then adding to it keeps the original destination even if you select another category in LiveEditor.
 
 ## Claude Code
 
@@ -16,7 +16,7 @@ claude mcp add --scope user --transport stdio corelive -- "/Applications/CoreLiv
 
 Paste this request into the agent chat.
 
-> 今のメモを読んで、「請求書を送る」をタスクに追加して。今日終えたことも教えて。
+> Read my current note, add “Send the invoice” as a task, and tell me what I finished today.
 
 ## Codex
 
@@ -28,7 +28,7 @@ codex mcp add corelive -- "/Applications/CoreLive.app/Contents/Helpers/corelive-
 
 Paste this request into the agent chat.
 
-> 今のメモを読んで、「請求書を送る」をタスクに追加して。今日終えたことも教えて。
+> Read my current note, add “Send the invoice” as a task, and tell me what I finished today.
 
 ## Muse
 
@@ -48,7 +48,7 @@ In the user settings file `~/.config/muse/settings.json` (or `$XDG_CONFIG_HOME/m
 
 Paste this request into the agent chat.
 
-> 今のメモを読んで、「請求書を送る」をタスクに追加して。今日終えたことも教えて。
+> Read my current note, add “Send the invoice” as a task, and tell me what I finished today.
 
 ## Devin CLI
 
@@ -60,7 +60,7 @@ devin mcp add -s user corelive -- "/Applications/CoreLive.app/Contents/Helpers/c
 
 Paste this request into the agent chat.
 
-> 今のメモを読んで、「請求書を送る」をタスクに追加して。今日終えたことも教えて。
+> Read my current note, add “Send the invoice” as a task, and tell me what I finished today.
 
 ## Cursor
 
@@ -79,7 +79,7 @@ Add this server to `~/.cursor/mcp.json` on the Mac. Merge the `corelive` entry i
 
 Paste this request into the agent chat.
 
-> 今のメモを読んで、「請求書を送る」をタスクに追加して。今日終えたことも教えて。
+> Read my current note, add “Send the invoice” as a task, and tell me what I finished today.
 
 ## GitHub Copilot CLI
 
@@ -91,7 +91,7 @@ copilot mcp add corelive -- "/Applications/CoreLive.app/Contents/Helpers/coreliv
 
 Paste this request into the agent chat.
 
-> 今のメモを読んで、「請求書を送る」をタスクに追加して。今日終えたことも教えて。
+> Read my current note, add “Send the invoice” as a task, and tell me what I finished today.
 
 ## Gemini (Antigravity CLI)
 
@@ -110,14 +110,14 @@ For Google's local Antigravity CLI, add `corelive` to `mcpServers` in `~/.gemini
 
 Paste this request into the agent chat.
 
-> 今のメモを読んで、「請求書を送る」をタスクに追加して。今日終えたことも教えて。
+> Read my current note, add “Send the invoice” as a task, and tell me what I finished today.
 
 ## Everyday requests
 
 - “Show the draft in Work / CoreLive, then add ‘Check the invoice’ to that category.”
 - A long note can be read in parts. When `read_draft` reports `result-too-large`, request `textPage` with offset zero. Carry the returned category ID, revision and next offset into each later call. A changed revision asks the agent to start again.
 - “Create a category called Planning under Work.”
-- “Save a complete backup of my workspace to corelive-backup.json.” The app returns the saved file's path. Use `save_workspace_backup` when an inline export reports `result-too-large`.
+- “Export my workspace to corelive-backup.json.” `save_workspace_backup` writes a JSON copy for inspection and manual recovery and returns its path, even when the inline export reports `result-too-large`. To restore CoreLive on a Mac, back up the entire `offline/` directory, including the device registry and checksummed workspace files. [Back up or move CoreLive to a new Mac](./offline-liveeditor.md#backup-and-moving-to-a-new-mac)
 - “Set my dashboard appearance to Harbor dark.” This changes the connected account. Other browsers load the saved theme when you open or refocus the dashboard. LiveEditor keeps its own appearance.
 - “Show this week's completed tasks in Work, including tasks from child categories.”
 - “Save today's activity card as activity.png.” Choose a day with completed activity on the connected Dashboard. A filename alone goes under the active profile's `Exports`. A standard installation uses `~/Library/Application Support/CoreLive/Exports`. You can also give an absolute path. The answer includes the actual path after saving. An occupied filename requires an explicit overwrite instruction.

@@ -1,14 +1,22 @@
 import { randomUUID } from 'node:crypto'
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import {
+  mkdtemp,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  writeFile,
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import {
+  DEVICE_ARCHIVE_FILE_NAME,
   DEVICE_OWNER_ID,
   DEVICE_WORKSPACE_FILE_NAME,
   OfflineWorkspaceSchema,
 } from '@corelive/desktop-contract/offline-workspace-v2'
-import { expect, test } from 'vitest'
+import { expect, onTestFinished, test } from 'vitest'
 
 import { AtomicWorkspaceFile } from './AtomicWorkspaceFile'
 import {
@@ -258,9 +266,23 @@ test('a corrupt device workspace can export its exact damaged file and validated
   }
 })
 
-test('an archived completion survives a restart and travels with the export', async () => {
-  // Arrange: a five-year-old completion that the idle roll moves out of the keep-path file.
+/**
+ * Moves an old completion out of the workspace using the real worker, then opens a fresh worker for export tests.
+ * @example const { client } = await createArchivedWorkspace()
+ */
+async function createArchivedWorkspace() {
   const directory = await mkdtemp(join(tmpdir(), 'corelive-worker-archive-'))
+  const options = {
+    directory,
+    ownerId: DEVICE_OWNER_ID,
+    script: new URL('./workspace-worker.ts', import.meta.url),
+    execArgv: ['--import', 'tsx'],
+  }
+  const first = new WorkspaceWorkerClient(options)
+  onTestFinished(async () => {
+    await first.close()
+    await rm(directory, { recursive: true })
+  })
   const id = randomUUID()
   const old = Date.now() - 5 * 365 * 24 * 60 * 60 * 1000
   const workspace = buildDeviceWorkspace({ categoryCount: 1 })
@@ -289,32 +311,101 @@ test('an archived completion survives a restart and travels with the export', as
     fileName: DEVICE_WORKSPACE_FILE_NAME,
     parse: OfflineWorkspaceSchema.parse,
   }).initialize(workspace)
-  const options = {
-    directory,
-    ownerId: 'device' as const,
-    script: new URL('./workspace-worker.ts', import.meta.url),
-    execArgv: ['--import', 'tsx'],
-  }
-  const first = new WorkspaceWorkerClient(options)
-  try {
-    await first.call('open', null)
+  const { archived } = await first.call('archive', null)
+  expect(archived).toBe(1)
+  await first.close()
+  const client = new WorkspaceWorkerClient(options)
+  onTestFinished(async () => client.close())
+  return { client, directory, id }
+}
+
+test('an archived completion survives a restart and travels with the export', async () => {
+  // Arrange
+  const { client, id } = await createArchivedWorkspace()
+
+  // Act
+  const exported = JSON.parse(await client.call('export', null)) as unknown
+
+  // Assert
+  expect(exported).not.toHaveProperty(['completions', id])
+  expect(exported).toHaveProperty(
+    ['archive', 'completions', id, 'title'],
+    'Five years ago',
+  )
+})
+
+test('an export of a damaged workspace includes the surviving archive and recovery files together', async () => {
+  // Arrange
+  const { client, directory, id } = await createArchivedWorkspace()
+  const path = join(directory, 'device.json')
+  const recoveryPath = join(directory, 'device.recovery.json')
+  const recovery = await readFile(recoveryPath)
+  await writeFile(path, Buffer.from([0x7b, 0x00, 0xff]))
+
+  // Act
+  const exported = JSON.parse(await client.call('export', null)) as unknown
+
+  // Assert
+  expect(exported).toMatchObject({
+    format: 'corelive-recovery-files',
+    version: 1,
+    ownerId: 'device',
+    files: [
+      { name: 'workspace.json', contentBase64: 'ewD/', integrity: 'invalid' },
+      {
+        name: 'recovery.json',
+        contentBase64: recovery.toString('base64'),
+        integrity: 'valid',
+      },
+    ],
+    archive: { completions: { [id]: { title: 'Five years ago' } } },
+  })
+})
+
+test.each([
+  { primary: 'missing', damagedBytes: null, rawFiles: [] },
+  {
+    primary: 'corrupt',
+    damagedBytes: Buffer.from([0x7b, 0x00, 0xff]),
+    rawFiles: [
+      { name: 'workspace.json', contentBase64: 'ewD/', integrity: 'invalid' },
+    ],
+  },
+])(
+  'export includes exact archive recovery bytes when the primary archive is $primary',
+  async ({ damagedBytes, rawFiles }) => {
+    // Arrange
+    const { client, directory } = await createArchivedWorkspace()
+    const path = join(directory, `${DEVICE_ARCHIVE_FILE_NAME}.json`)
+    const recoveryPath = join(
+      directory,
+      `${DEVICE_ARCHIVE_FILE_NAME}.recovery.json`,
+    )
+    await rename(path, recoveryPath)
+    const recovery = await readFile(recoveryPath)
+    if (damagedBytes) await writeFile(path, damagedBytes)
 
     // Act
-    const { archived } = await first.call('archive', null)
-    await first.close()
-    const second = new WorkspaceWorkerClient(options)
-    const exported = JSON.parse(await second.call('export', null)) as {
-      completions: Record<string, unknown>
-      archive: { completions: Record<string, { title: string }> }
-    }
-    await second.close()
+    const exported = JSON.parse(await client.call('export', null)) as unknown
 
     // Assert
-    expect(archived).toBe(1)
-    expect(exported.completions[id]).toBeUndefined()
-    expect(exported.archive.completions[id]?.title).toBe('Five years ago')
-  } finally {
-    await first.close()
-    await rm(directory, { recursive: true })
-  }
-})
+    expect(exported).toMatchObject({
+      version: 2,
+      archiveRecoveryFiles: {
+        format: 'corelive-recovery-files',
+        version: 1,
+        ownerId: 'device',
+        files: [
+          ...rawFiles,
+          {
+            name: 'recovery.json',
+            contentBase64: recovery.toString('base64'),
+            integrity: 'valid',
+          },
+        ],
+      },
+    })
+    expect(exported).not.toHaveProperty('archive')
+    expect(await readFile(recoveryPath)).toEqual(recovery)
+  },
+)

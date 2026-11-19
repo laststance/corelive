@@ -1,4 +1,11 @@
-import { expect, test, vi } from 'vitest'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+import { app } from 'electron'
+import { expect, onTestFinished, test, vi } from 'vitest'
+
+import { ConfigManager } from '../ConfigManager'
 
 import type { EditorRuntime } from './editorActions'
 import { runNativeAction, type NativeActionContext } from './nativeActions'
@@ -6,12 +13,16 @@ import { registerNativeSetting } from './nativeSettings'
 import { parseMcpCall } from './tools'
 
 vi.mock('electron', () => ({
-  app: {},
+  app: {
+    getPath: vi.fn(),
+    getVersion: () => '1.0.0',
+    getLoginItemSettings: () => ({ openAtLogin: false }),
+  },
   ipcMain: { handle: vi.fn() },
   Menu: {},
   shell: {},
 }))
-vi.mock('../logger', () => ({ log: {} }))
+vi.mock('../logger', () => ({ log: { error: vi.fn() } }))
 
 // Value: protects=unsaved writing survives an MCP close request;
 // fails_when=close runs after a refused flush or editing stays suspended;
@@ -30,11 +41,13 @@ test('refusing a close after an unsuccessful save keeps the editor open and resu
     },
   }
   const context = {
-    windows: { getLiveEditorWindow: () => window },
+    windows: {
+      getLiveEditorWindow: () => window,
+      closeLiveEditor: async () => false,
+    },
   } as unknown as NativeActionContext
   const runtime = {
-    controller: { getSnapshot: () => ({ generation: 1 }) },
-    ipc: { flush: async () => false, shown },
+    ipc: { shown },
   } as unknown as EditorRuntime
 
   // Act
@@ -75,6 +88,60 @@ test('a refused Dock visibility change tells the client the setting may already 
   })
   expect(setHidden).toHaveBeenCalledWith(true)
 })
+
+test.each([
+  [
+    { name: 'set_shortcut_sound_enabled', args: { enabled: true } },
+    'behavior.shortcutOpenSoundEnabled',
+    false,
+    { enabled: true },
+  ],
+  [
+    {
+      name: 'set_shortcut_sound',
+      args: { selection: 'balanced-deep-thock' },
+    },
+    'behavior.shortcutOpenSoundSelection',
+    'shuffle',
+    { selection: 'balanced-deep-thock' },
+  ],
+] as const)(
+  '%j reports partial when the sound setting changes in the app but cannot be saved',
+  async (call, path, previous, shortcutSound) => {
+    // Arrange
+    const directory = mkdtempSync(join(tmpdir(), 'corelive-mcp-config-'))
+    onTestFinished(() => rmSync(directory, { recursive: true }))
+    vi.mocked(app.getPath).mockReturnValue(directory)
+    const config = new ConfigManager()
+    expect(config.set(path, previous)).toBe(true)
+    mkdirSync(join(directory, 'config.json.tmp'))
+    const context = {
+      config,
+      windows: {
+        getLiveEditorOpacity: () => 1,
+        getLiveEditorAlwaysOnTop: () => false,
+        getLiveEditorVisibleOnAllWorkspaces: () => false,
+        getLiveEditorWindow: () => null,
+      },
+    } as unknown as NativeActionContext
+    const runtime = {
+      controller: { getSnapshot: () => ({ phase: 'opening' }) },
+    } as unknown as EditorRuntime
+
+    // Act
+    const change = runNativeAction(context, runtime, call)
+
+    // Assert
+    await expect(change).rejects.toMatchObject({
+      code: 'operation-refused',
+      effect: 'partial',
+    })
+    await expect(
+      runNativeAction(context, runtime, { name: 'read_settings', args: {} }),
+    ).resolves.toMatchObject({ shortcutSound })
+    expect(new ConfigManager().get(path)).toBe(previous)
+  },
+)
 
 // Value: protects=an unavailable update cannot be reported as downloading;
 // fails_when=the download action ignores the updater refusal;

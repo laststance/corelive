@@ -368,41 +368,42 @@ async function readHistoryArchive() {
   }
 }
 
-/** Keeps ordinary workspace exports compatible and offers preserved raw files after corruption.
+/** Combines workspace writing and settled history for export, recovering raw files independently.
+ * @throws Storage failures, or {@link WorkspaceFileError} if no workspace files can be exported.
  * @example const json = await exportWriting()
  */
 async function exportWriting(): Promise<string> {
-  let workspace
-  try {
-    workspace = await file.read()
-  } catch (error) {
+  const workspace = await file.read().catch(async (error: unknown) => {
     if (!(error instanceof WorkspaceFileError)) throw error
-    return file.exportRecoveryFiles()
-  }
-  // C28/C29: settled history lives in the archive file and must travel with the export.
+    const recovery = await file.exportRecoveryFiles()
+    if (!recovery) throw new WorkspaceFileError('recovery-missing')
+    return recovery
+  })
+  // The archive roll writes history to the archive before removing it from the workspace.
+  const history = await exportArchive()
+  return JSON.stringify({ ...workspace, ...history }, null, 2)
+}
+
+/** Provides settled history or its surviving raw files for {@link exportWriting}.
+ * @example const history = await exportArchive()
+ */
+async function exportArchive() {
   try {
     const archived = await archive.read()
     if (
       Object.keys(archived.completions).length ||
       Object.keys(archived.retiredCompletions).length
     )
-      return JSON.stringify({ ...workspace, archive: archived }, null, 2)
+      return { archive: archived }
   } catch (error) {
     if (!(error instanceof WorkspaceFileError)) throw error
-    // A missing archive is normal; an unreadable one is exported as raw files, never dropped.
-    if (error.reason === 'invalid')
-      return JSON.stringify(
-        {
-          ...workspace,
-          archiveRecoveryFiles: JSON.parse(
-            await archive.exportRecoveryFiles(),
-          ) as unknown,
-        },
-        null,
-        2,
-      )
+    // The primary may be gone while its recovery copy still holds history.
+    const recovery = await archive.exportRecoveryFiles()
+    if (recovery) return { archiveRecoveryFiles: recovery }
+    if (error.reason !== 'missing')
+      throw new WorkspaceFileError('recovery-missing')
   }
-  return JSON.stringify(workspace, null, 2)
+  return {}
 }
 
 /** Reads the owned effective category draft without changing the selection.
