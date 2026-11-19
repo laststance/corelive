@@ -161,11 +161,19 @@ describe('IPC contract', () => {
     })
 
     test.each([
-      ['primary', 'live-editor-config-set-shortcut'],
-      ['secondary', 'live-editor-config-set-shortcut-secondary'],
+      [
+        'primary',
+        'live-editor-config-set-shortcut',
+        { slot: 'primary', accelerator: '' },
+      ],
+      [
+        'secondary',
+        'live-editor-config-set-shortcut-secondary',
+        { slot: 'secondary', accelerator: '' },
+      ],
     ] as const)(
       'both IPC and MCP can clear the %s shortcut and reject overlong accelerators',
-      (slot, channel) => {
+      (slot, channel, expected) => {
         // Arrange
         const setShortcut = IPC_ARG_SCHEMAS[channel]
         const invalid = 'x'.repeat(65)
@@ -174,7 +182,7 @@ describe('IPC contract', () => {
         expect(setShortcut.parse([''])).toEqual([''])
         expect(
           parseMcpCall('set_editor_shortcut', { slot, accelerator: '' }).args,
-        ).toEqual({ slot, accelerator: '' })
+        ).toEqual(expected)
         expect(() =>
           setShortcut.parse(['CommandOrControl+Shift+B']),
         ).not.toThrow()
@@ -195,8 +203,13 @@ describe('IPC contract', () => {
       // Act + Assert
       expect(
         IPC_ARG_SCHEMAS['live-editor-window-set-bounds'].parse([bounds]),
-      ).toEqual([bounds])
-      expect(parseMcpCall('set_editor_bounds', bounds).args).toEqual(bounds)
+      ).toEqual([{ x: -200, y: -160, width: 320, height: 8192 }])
+      expect(parseMcpCall('set_editor_bounds', bounds).args).toEqual({
+        x: -200,
+        y: -160,
+        width: 320,
+        height: 8192,
+      })
     })
 
     test.each([

@@ -44,6 +44,7 @@ function AppearanceControls() {
     <>
       <output data-testid="theme">{value}</output>
       <button onClick={() => setValue('harbor-dark')}>Use Harbor dark</button>
+      <button onClick={() => setValue('light')}>Use light</button>
     </>
   )
 }
@@ -106,6 +107,43 @@ test('a second tab accepts a theme change while the first tab is saving it', asy
     await pending.promise
   })
   expect(account.set).toHaveBeenCalledTimes(1)
+})
+
+test('choosing the cached light theme after another tab selects dark immediately restores light', async () => {
+  // Arrange
+  const saving = Promise.withResolvers<{ theme: DashboardTheme }>()
+  account.get.mockResolvedValue({ theme: 'light' })
+  account.set.mockReturnValue(saving.promise)
+  openDashboard()
+  await waitFor(() =>
+    expect(screen.getByTestId('theme')).toHaveTextContent('light'),
+  )
+  window.localStorage.setItem('corelive-theme', 'harbor-dark')
+  fireEvent(
+    window,
+    new StorageEvent('storage', {
+      key: 'corelive-theme',
+      newValue: 'harbor-dark',
+    }),
+  )
+  expect(screen.getByTestId('theme')).toHaveTextContent('harbor-dark')
+  expect(account.set).not.toHaveBeenCalled()
+
+  // Act
+  fireEvent.click(screen.getByRole('button', { name: 'Use light' }))
+
+  // Assert
+  expect(screen.getByTestId('theme')).toHaveTextContent('light')
+  expect(window.localStorage.getItem('corelive-theme')).toBe('light')
+  await act(async () => {
+    saving.resolve({ theme: 'light' })
+    await saving.promise
+  })
+  expect(account.set).toHaveBeenCalledExactlyOnceWith({
+    expectedAccountId: 'account-a',
+    theme: 'light',
+  })
+  expect(screen.getByTestId('theme')).toHaveTextContent('light')
 })
 
 test('a returning browser imports its legacy theme once and another browser reads the change made in Settings', async () => {

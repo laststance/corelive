@@ -113,7 +113,11 @@ function BoundAppearance({
 
   return (
     <AccountThemeWriter.Provider
-      value={(value) => choice.mutate(normalizeThemePreference(value))}
+      value={(value) => {
+        const selected = normalizeThemePreference(value)
+        if (selected !== theme) setTheme(selected)
+        choice.mutate(selected)
+      }}
     >
       {children}
     </AccountThemeWriter.Provider>
