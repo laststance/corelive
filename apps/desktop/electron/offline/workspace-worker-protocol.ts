@@ -1,4 +1,5 @@
 import type { SyncOutcome } from '@corelive/desktop-contract/category-sync'
+import type { CompletionRange } from '@corelive/desktop-contract/completion-history'
 import type { OfflineRecoveryPreview } from '@corelive/desktop-contract/offline-editor-api'
 import type {
   CountCheckpoint,
@@ -12,10 +13,14 @@ import type {
   OfflineWorkspace,
   OfflineWorkspaceView as WorkspaceView,
   OutboxEntry,
+  TaskAddition,
   WorkspaceCommand,
 } from '@corelive/desktop-contract/offline-workspace-v2'
 
+import type { DeviceHistory } from '../mcp/historyDevice'
+
 import { waitingCompletionCount } from './completionUpload'
+import type { DraftTextPageInput, DraftTextPageResult } from './draftTextPage'
 import {
   needsALookCount,
   openRecoveryCopyCount,
@@ -31,13 +36,44 @@ export type BindingInfo = Pick<
   'accountId' | 'displayEmail' | 'lastSyncedAt'
 >
 
+/** A storage milestone or an operation that finished and has already attempted to send its reply. */
+export type WorkspaceWorkerActivity =
+  | { activity: 'storage-progress' }
+  | { activity: 'request-settled'; requestId: string }
+
 export interface WorkspaceWorkerCalls {
   open: { input: null; output: WorkspaceView }
+  mcpCompletionHistory: { input: CompletionRange; output: DeviceHistory }
+  appendTask: {
+    input: {
+      operationId: string
+      categoryId?: string
+      selectedAtStart?: string
+      title: string
+      accountId: string | null
+    }
+    output: { view: WorkspaceView; addition: TaskAddition }
+  }
+  findTaskAddition: {
+    input: {
+      operationId: string
+      accountId: string | null
+      original?: Pick<
+        WorkspaceWorkerCalls['appendTask']['input'],
+        'categoryId' | 'title'
+      >
+    }
+    output: TaskAddition | null
+  }
   command: {
     input: WorkspaceCommand
     output: WorkspaceView & { writtenDraft: OfflineDraftRecord }
   }
   draft: { input: { categoryId: string }; output: OfflineDraftRecord }
+  draftPage: {
+    input: { categoryId: string; page: DraftTextPageInput }
+    output: DraftTextPageResult | { status: 'category-unavailable' }
+  }
   /** Uncertain entries plus how many derived keeps could be frozen and sent now (capped at `limit`). */
   pending: {
     input: { limit: number }

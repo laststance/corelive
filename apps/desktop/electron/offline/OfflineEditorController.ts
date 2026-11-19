@@ -1,5 +1,7 @@
+import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 
+import type { CompletionRange } from '@corelive/desktop-contract/completion-history'
 import type {
   AccountState,
   AccountStatus,
@@ -17,11 +19,22 @@ import {
   type WorkspaceCommand,
 } from '@corelive/desktop-contract/offline-workspace-v2'
 
+import {
+  McpAccountError,
+  mcpAccountFailure,
+  type McpAccountBinding,
+  type McpAccountWork,
+} from '../mcp/historyAuthority'
+
+import type { McpAccountClient } from './createSyncTransport'
 import { migrateWorkspaceV1 } from './migrateWorkspaceV1'
 import { OfflineAccountRegistry } from './OfflineAccountRegistry'
 import { SyncLoop, type SyncAccountContext } from './SyncLoop'
 import type { TokenBroker } from './TokenBroker'
-import type { WorkspaceView } from './workspace-worker-protocol'
+import type {
+  WorkspaceView,
+  WorkspaceWorkerCalls,
+} from './workspace-worker-protocol'
 import {
   WorkspaceWorkerClient,
   WorkspaceWorkerError,
@@ -36,6 +49,7 @@ type ControllerOptions = {
   workerScript: string | URL
   broker: Pick<TokenBroker, 'acquire' | 'reset' | 'revoke'>
   transport: (token: string) => CompletionSyncTransport
+  mcpClient?: (token: string) => McpAccountClient
   /** Pre-offline plaintext notes, imported once by the v1 migration (D7). */
   legacyNotes: () => Record<string, string>
   requestFlush: (generation: number) => Promise<boolean>
@@ -86,9 +100,13 @@ export class OfflineEditorController {
   private loopStatus: LoopStatus = 'syncing'
   /** The verified identity of the session seen in this process run (EA1, state D). */
   private signedIn: { clerkId: string; email: string | null } | null = null
+  /** One app-local identity per restored or newly offered connection prompt. */
+  private connectPromptId = randomUUID()
   private firstUpload: AccountStatus['firstUpload'] = null
   private signOutRun: Promise<SignOutResult> | null = null
   private clearRun: Promise<SignOutResult> | null = null
+  /** Queued and verifying login notifications can temporarily block an older connection prompt. */
+  private readonly pendingSignIns = new Set<{ clerkId: string }>()
   /** Set while a sign-out or Clear again runs; resolves to whether it actually ended the session. */
   private sessionEnding: Promise<boolean> | null = null
   /** Settles {@link sessionEnding} early, once the sweep is done; logins after it are new sessions. */
@@ -98,6 +116,8 @@ export class OfflineEditorController {
   private sessionLock: Promise<unknown> = Promise.resolve()
   /** Bumped just before a session is ended; an attach decided earlier is dropped. */
   private signOutEpoch = 0
+  private mcpEpoch = 0
+  private mcpAbort = new AbortController()
   private snapshot: OfflineEditorSnapshot = {
     phase: 'opening',
     generation: 0,
@@ -117,6 +137,8 @@ export class OfflineEditorController {
       onView: (view, generation) => this.publishView(view, generation),
       onStatus: (status, generation) => {
         if (generation !== this.generation) return
+        if (status === 'sign-in-required' && this.loopStatus !== status)
+          this.invalidateMcpAccount()
         this.loopStatus = status
         this.publishSync()
       },
@@ -139,6 +161,112 @@ export class OfflineEditorController {
       generation: this.context.generation,
       worker: this.context.worker,
     }
+  }
+
+  /** Identifies the current attachment and lets pending reads immediately drop revoked account data.
+   * @example const binding = controller.mcpAccountBinding()
+   */
+  mcpAccountBinding(): McpAccountBinding | null {
+    const context = this.syncContext()
+    if (
+      !context ||
+      this.sessionEnding ||
+      (this.signedIn && this.signedIn.clerkId !== context.ownerId)
+    )
+      return null
+    return {
+      accountId: context.ownerId,
+      generation: context.generation,
+      epoch: this.mcpEpoch,
+      signal: this.mcpAbort.signal,
+    }
+  }
+
+  /** Reads the device and archive for MCP through the single storage owner.
+   * @example const history = await controller.mcpDeviceHistory({from, before})
+   */
+  async mcpDeviceHistory(range: CompletionRange) {
+    const context = this.requireContext(this.generation)
+    return context.worker.call('mcpCompletionHistory', range)
+  }
+
+  /** Invokes an account operation only with a broker credential verified against the attached identity.
+   * The owner must check the resulting binding again before later file writes or page delivery.
+   * @throws {@link McpAccountError} when attachment, authorization or delivery fails.
+   * @example await controller.withMcpAccount((client, signal) => client.skillTree.getMyTree(undefined, {signal}))
+   */
+  async withMcpAccount<T>(
+    work: McpAccountWork<T>,
+    cancellation?: AbortSignal,
+  ): Promise<T> {
+    const binding = this.mcpAccountBinding()
+    if (!binding) throw new McpAccountError('account-required', false)
+    const signal = cancellation
+      ? AbortSignal.any([binding.signal, cancellation])
+      : binding.signal
+    let dispatched = false
+    const assertCurrent = (): void => {
+      signal.throwIfAborted()
+      const current = this.mcpAccountBinding()
+      if (
+        current?.accountId !== binding.accountId ||
+        current.generation !== binding.generation ||
+        current.epoch !== binding.epoch
+      )
+        throw new McpAccountError('account-changed', dispatched)
+    }
+    try {
+      signal.throwIfAborted()
+      const token = await this.options.broker.acquire(
+        binding.accountId,
+        binding.generation,
+      )
+      signal.throwIfAborted()
+      if (token.status === 'signed-out')
+        throw new McpAccountError('account-required', false)
+      if (token.status !== 'ready' || !this.options.mcpClient)
+        throw new McpAccountError('account-unavailable', false)
+      if (token.credential.accountId !== binding.accountId)
+        throw new McpAccountError('account-changed', false)
+      const identity = await this.options
+        .transport(token.credential.token)
+        .whoami(signal)
+      // Sign-out hides the binding while the editor saves, before revoking its signal.
+      assertCurrent()
+      if (identity.clerkId !== binding.accountId)
+        throw new McpAccountError('account-changed', false)
+      // Only this callback can dispatch the user's operation. The preceding calls verified identity.
+      const client = this.options.mcpClient(token.credential.token)
+      dispatched = true
+      const result = await work(client, signal)
+      assertCurrent()
+      return result
+    } catch (error) {
+      const failure = mcpAccountFailure(error, dispatched)
+      if (binding.signal.aborted)
+        throw new McpAccountError(
+          'account-changed',
+          dispatched,
+          failure.definiteRefusal,
+        )
+      // A caller disconnecting cancels only its read. A revoked credential invalidates every stored account page.
+      if (
+        !cancellation?.aborted &&
+        (failure.code === 'account-required' ||
+          failure.code === 'account-changed')
+      )
+        this.invalidateMcpAccount()
+      throw failure
+    }
+  }
+
+  /** Revokes pending account calls and all cached pages before another attachment can serve them.
+   * @example this.invalidateMcpAccount()
+   */
+  private invalidateMcpAccount(): void {
+    this.mcpEpoch++
+    this.mcpAbort.abort()
+    this.mcpAbort = new AbortController()
   }
 
   /**
@@ -185,6 +313,79 @@ export class OfflineEditorController {
     return this.snapshot
   }
 
+  /** Pins a task receipt to the workspace generation and account that issued the request.
+   * @example const scope = this.captureMcpTaskScope(generation)
+   */
+  private captureMcpTaskScope(generation: number) {
+    const accountId = this.mcpAccountBinding()?.accountId ?? null
+    const epoch = this.mcpEpoch
+    return {
+      accountId,
+      isCurrent: () =>
+        !this.sessionEnding &&
+        this.generation === generation &&
+        this.mcpEpoch === epoch &&
+        (this.mcpAccountBinding()?.accountId ?? null) === accountId,
+    }
+  }
+
+  /** Commits an agent's addition under the session lock, then publishes the new revision to LiveEditor.
+   * @throws {@link WorkspaceWorkerError} with an unknown result if the account changes after the write.
+   * @example await controller.appendMcpTask(generation, {operationId, title, categoryId})
+   */
+  async appendMcpTask(
+    generation: number,
+    input: Omit<WorkspaceWorkerCalls['appendTask']['input'], 'accountId'>,
+  ) {
+    const scope = this.captureMcpTaskScope(generation)
+    return this.withSessionLock(async () => {
+      const context = this.requireContext(generation)
+      if (!scope.isCurrent()) throw new WorkspaceWorkerError('account-changed')
+      this.pendingCommands++
+      try {
+        const { view, addition } = await context.worker.call('appendTask', {
+          ...input,
+          accountId: scope.accountId,
+        })
+        this.publishView(view, generation)
+        // The local write already committed. A changed account can only make its reply uncertain.
+        if (!scope.isCurrent()) throw new WorkspaceWorkerError('result-unknown')
+        return addition
+      } finally {
+        this.finishCommand()
+      }
+    })
+  }
+
+  /** Reads the stored addition in the account that entered the queue. Automatic recovery also verifies the original request.
+   * @param original - The title and the explicit or implicit category choice from the interrupted call.
+   * @example await controller.findMcpTask(generation, operationId)
+   */
+  async findMcpTask(
+    generation: number,
+    operationId: string,
+    original?: WorkspaceWorkerCalls['findTaskAddition']['input']['original'],
+  ) {
+    const scope = this.captureMcpTaskScope(generation)
+    const assertCurrent = (): void => {
+      if (!scope.isCurrent()) throw new WorkspaceWorkerError('account-changed')
+    }
+    return this.withSessionLock(async () => {
+      const context = this.requireContext(generation)
+      assertCurrent()
+      try {
+        return await context.worker.call('findTaskAddition', {
+          operationId,
+          accountId: scope.accountId,
+          original,
+        })
+      } finally {
+        // Revocation also invalidates the worker's outcome when it arrives during the read.
+        assertCurrent()
+      }
+    })
+  }
+
   /**
    * Hands a replacement renderer the outcome of every already accepted command.
    * {@link OfflineEditorIPC} holds its initial read and notifications while this
@@ -208,16 +409,21 @@ export class OfflineEditorController {
    * @example await controller.authenticated('user_123')
    */
   async authenticated(clerkId: string): Promise<void> {
-    // One arriving while a sign-out or Clear again runs waits for it outside the queue; it is dropped
-    // only when that run actually ended the session (not when cancelled or when nothing was cleared).
-    const ending = this.sessionEnding
-    if (ending && (await ending)) return
-    // A notification queued before a session end belongs to the session that ended.
-    const epoch = this.signOutEpoch
-    this.sessionTail = this.sessionTail
-      .then(async () => this.handleSession(clerkId, epoch))
-      .catch(() => undefined)
-    await this.sessionTail
+    const notification = { clerkId }
+    this.pendingSignIns.add(notification)
+    try {
+      // One arriving while a sign-out or Clear again runs waits for its outcome outside the queue.
+      const ending = this.sessionEnding
+      if (ending && (await ending)) return
+      // A notification queued before a session end belongs to the session that ended.
+      const epoch = this.signOutEpoch
+      this.sessionTail = this.sessionTail
+        .then(async () => this.handleSession(clerkId, epoch))
+        .catch(() => undefined)
+      await this.sessionTail
+    } finally {
+      this.pendingSignIns.delete(notification)
+    }
   }
 
   /** Verifies the identity and routes it; see {@link authenticated}. */
@@ -259,6 +465,7 @@ export class OfflineEditorController {
   ): Promise<void> {
     if (epoch !== this.signOutEpoch) return
     const attached = this.registryState?.attachedAccountId
+    if (attached !== who.clerkId) this.invalidateMcpAccount()
     this.signedIn = who
     // A Connect that attached before the first sync pass wrote its binding still counts as bound.
     const boundTo = bound?.accountId ?? attached ?? null
@@ -297,6 +504,32 @@ export class OfflineEditorController {
       pendingConnect: { accountId: who.clerkId, displayEmail: who.email ?? '' },
       signOutPending: false,
     })
+    this.connectPromptId = randomUUID()
+  }
+
+  /** Projects the prompt that account status, Connect and Not now all address.
+   * @example const pending = this.connectPrompt()
+   */
+  private connectPrompt() {
+    const pending = this.registryState?.pendingConnect
+    if (
+      !pending ||
+      (this.signedIn && this.signedIn.clerkId !== pending.accountId)
+    )
+      return null
+    return { ...pending, promptId: this.connectPromptId }
+  }
+
+  /** Checks the displayed prompt immediately before Connect or Not now may change the session.
+   * @example const pending = this.matchingConnectPrompt(promptId)
+   */
+  private matchingConnectPrompt(promptId: string) {
+    const pending = this.connectPrompt()
+    if (!pending || pending.promptId !== promptId) return null
+    // A different login may already hold the browser session while its identity is being verified.
+    for (const { clerkId } of this.pendingSignIns)
+      if (clerkId !== pending.accountId) return null
+    return pending
   }
 
   /**
@@ -374,11 +607,12 @@ export class OfflineEditorController {
   /**
    * Attaches the pending account after the user pressed Connect this Mac (DA4, EA2b). The binding
    * is written by the first sync pass; nothing was sent before this.
-   * @returns Whether a pending Connect existed and was accepted.
-   * @example if (await controller.connect()) showUploading()
+   * @param promptId - The prompt shown by {@link accountStatus}.
+   * @returns Whether that prompt was accepted.
+   * @example if (await controller.connect(promptId)) showUploading()
    */
-  async connect(): Promise<boolean> {
-    const pending = this.registryState?.pendingConnect
+  async connect(promptId: string): Promise<boolean> {
+    const pending = this.matchingConnectPrompt(promptId)
     const context = this.context
     if (!pending || !context || this.sessionEnding) return false
     const epoch = this.signOutEpoch
@@ -391,8 +625,9 @@ export class OfflineEditorController {
     const accepted = await this.withSessionLock(async () => {
       if (
         epoch !== this.signOutEpoch ||
-        !this.context ||
-        this.registryState?.pendingConnect?.accountId !== pending.accountId
+        this.context !== context ||
+        this.sessionEnding ||
+        !this.matchingConnectPrompt(promptId)
       )
         return false
       this.firstUpload = total > 0 ? { state: 'uploading', count: total } : null
@@ -412,12 +647,23 @@ export class OfflineEditorController {
 
   /**
    * Declines the pending Connect (DA4): the prompt is dropped and the session ends locally.
+   * @param promptId - The prompt shown by {@link accountStatus}.
    * @returns The sign-out result; offline, the remote revoke is simply skipped.
-   * @example await controller.notNow()
+   * @throws {@link WorkspaceWorkerError} if the prompt has been replaced or answered.
+   * @example await controller.notNow(promptId)
    */
-  async notNow(): Promise<SignOutResult> {
-    this.registryState = await this.registry.update({ pendingConnect: null })
-    return this.signOut()
+  async notNow(promptId: string): Promise<SignOutResult> {
+    // Connect and sign-in commit under the same lock. A stale prompt must never end a new session.
+    return this.withSessionLock(async () => {
+      if (this.sessionEnding || !this.matchingConnectPrompt(promptId))
+        throw new WorkspaceWorkerError('connection-not-pending')
+      return this.startSignOut(async (generation) => {
+        // A sign-in notification can arrive while the editor confirms its flush.
+        if (!this.matchingConnectPrompt(promptId))
+          throw new WorkspaceWorkerError('connection-not-pending')
+        return this.endSession(generation)
+      })
+    })
   }
 
   /**
@@ -456,7 +702,7 @@ export class OfflineEditorController {
     const view =
       this.snapshot.phase === 'ready' ? this.snapshot.workspace : null
     const binding = view?.binding ?? null
-    const pending = this.registryState?.pendingConnect ?? null
+    const pending = this.connectPrompt()
     const state = this.accountState(binding)
     return {
       state,
@@ -466,7 +712,9 @@ export class OfflineEditorController {
       waitingCount: view?.pendingCount ?? 0,
       needsALookCount: view?.needsALookCount ?? 0,
       lastSyncedAt: binding?.lastSyncedAt ?? null,
-      pendingConnect: pending ? { displayEmail: pending.displayEmail } : null,
+      pendingConnect: pending
+        ? { displayEmail: pending.displayEmail, promptId: pending.promptId }
+        : null,
       firstUpload: this.firstUpload,
     }
   }
@@ -487,9 +735,32 @@ export class OfflineEditorController {
     // finish, then sign out. Concurrent sign-outs share one run.
     const clearing = this.clearRun
     if (clearing) await clearing.catch(() => undefined)
+    while (this.signOutRun) {
+      try {
+        return await this.signOutRun
+      } catch (error) {
+        // A stale Not now prompt can refuse its own request before clearing any session.
+        if (
+          !(error instanceof WorkspaceWorkerError) ||
+          error.reason !== 'connection-not-pending'
+        )
+          throw error
+      }
+    }
+    return this.startSignOut(async (generation) =>
+      this.withSessionLock(async () => this.endSession(generation)),
+    )
+  }
+
+  /** Shares one flush and session end between callers. A pending prompt already holds the session lock.
+   * @example return this.startSignOut(async (generation) => this.endSession(generation))
+   */
+  private async startSignOut(
+    end: (generation: number) => Promise<SignOutResult>,
+  ): Promise<SignOutResult> {
     this.signOutRun ??= this.beginSessionEnd(async () => {
       try {
-        const result = await this.runSignOut()
+        const result = await this.runSignOut(end)
         return { result, ended: result.status !== 'flush-failed' }
       } finally {
         this.signOutRun = null
@@ -498,7 +769,9 @@ export class OfflineEditorController {
     return this.signOutRun
   }
 
-  private async runSignOut(): Promise<SignOutResult> {
+  private async runSignOut(
+    end: (generation: number) => Promise<SignOutResult>,
+  ): Promise<SignOutResult> {
     const generation = this.generation
     const flushed = await this.options
       .requestFlush(generation)
@@ -506,7 +779,7 @@ export class OfflineEditorController {
     if (!flushed || generation !== this.generation) return this.flushFailed()
     // Sign-out keeps the editor open, so its flush must not leave editing blocked.
     this.options.releaseEditorBarrier?.()
-    return this.withSessionLock(async () => this.endSession(generation))
+    return end(generation)
   }
 
   /**
@@ -527,6 +800,7 @@ export class OfflineEditorController {
     // Only a sign-out that goes ahead (its journal is on disk) invalidates logins decided before it;
     // under the lock, an attach that committed first is then ended by the steps below.
     this.signOutEpoch += 1
+    this.invalidateMcpAccount()
     await this.loop.stop()
     try {
       this.registryState = await this.registry.update({
@@ -664,6 +938,7 @@ export class OfflineEditorController {
    * @example controller.sessionUnavailable()
    */
   sessionUnavailable(): void {
+    this.invalidateMcpAccount()
     this.options.broker.reset()
     if (this.isAttached()) {
       this.loopStatus = 'sign-in-required'
@@ -720,7 +995,11 @@ export class OfflineEditorController {
         error instanceof WorkspaceWorkerError ? error.reason : 'storage-failed'
       const detail =
         error instanceof WorkspaceWorkerError ? error.detail : undefined
-      if (command.type === 'save' && reason !== 'revision-conflict') {
+      if (
+        command.type === 'save' &&
+        !command.requireActiveCategory &&
+        reason !== 'revision-conflict'
+      ) {
         this.failedDrafts.set(context.ownerId, command)
         // A replacement renderer must receive rescued writing before any later refresh.
         if (this.snapshot.phase === 'ready')
@@ -784,6 +1063,16 @@ export class OfflineEditorController {
    */
   async draft(generation: number, categoryId: string) {
     return this.requireContext(generation).worker.call('draft', { categoryId })
+  }
+
+  /** Reads one revision-bound draft page without transferring the rest of its writing to main.
+   * @example await controller.draftPage(generation, { categoryId, page: { offset: 0, limit: 32768 } })
+   */
+  async draftPage(
+    generation: number,
+    input: WorkspaceWorkerCalls['draftPage']['input'],
+  ) {
+    return this.requireContext(generation).worker.call('draftPage', input)
   }
 
   /** Keeps every eligible restart Undo available beyond the small initial toast projection.
@@ -871,6 +1160,7 @@ export class OfflineEditorController {
       !this.canLeaveWithoutRenderer(generation)
     )
       return false
+    this.invalidateMcpAccount()
     this.generation++
     this.context = null
     if (this.clearTimer) clearTimeout(this.clearTimer)

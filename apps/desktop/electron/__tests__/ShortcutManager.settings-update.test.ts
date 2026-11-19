@@ -1,6 +1,7 @@
 import { BrowserWindow, globalShortcut } from 'electron'
 import { beforeEach, expect, test, vi } from 'vitest'
 
+import type { ConfigManager } from '../ConfigManager'
 import { ShortcutManager } from '../ShortcutManager'
 import type { WindowManager } from '../WindowManager'
 
@@ -116,3 +117,27 @@ test('disabling one focused-window shortcut preserves the other without substitu
   )
   expect(globalShortcut.register).not.toHaveBeenCalled()
 })
+
+test.each([
+  ['toggleLiveEditor', 'shortcuts.toggleLiveEditor'],
+  ['toggleLiveEditorSecondary', 'shortcuts.toggleLiveEditorSecondary'],
+] as const)(
+  'reports that %s was not saved when writing the config fails',
+  (slot, expectedKey) => {
+    // Arrange
+    const set = vi.fn(() => false)
+    const config = {
+      getSection: () => ({ enabled: true }),
+      get: (_key: string, fallback?: unknown) => fallback,
+      set,
+    } as unknown as ConfigManager
+    const manager = new ShortcutManager({} as WindowManager, null, config)
+
+    // Act
+    const saved = manager.updateShortcuts({ [slot]: 'Control+Shift+B' })
+
+    // Assert
+    expect(saved).toBe(false)
+    expect(set).toHaveBeenCalledWith(expectedKey, 'Control+Shift+B')
+  },
+)

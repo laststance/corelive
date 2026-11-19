@@ -13,36 +13,19 @@
  * the picker, chart.tsx, and styles/base.css.
  */
 
-/** A theme's light/dark axis. Drives `color-scheme` and the `dark:` variant. */
-export type ThemeMode = 'light' | 'dark'
+import type {
+  ThemeFamilyId,
+  ThemeId,
+  ThemeMode,
+} from '@corelive/desktop-contract/theme-identity'
 
-/**
- * A color identity. Each family ships a light + dark pair. `default` is the stock
- * shadcn/ui neutral palette, verbatim, listed first in the picker, and owns the
- * flat `light`/`dark` ids. The brand "cathedral" family (Warm Cathedral) is one
- * selectable option with `cathedral-*` ids; the colored families tint neutrals toward their accent hue and re-aim the heatmap's
- * rest→warm-apex hue path, while the heatmap L/C ramp and the warm
- * chart/destructive identity stay fixed across every family (design decision #15).
- */
-export type ThemeFamilyId =
-  | 'default'
-  | 'cathedral'
-  | 'harbor'
-  | 'grove'
-  | 'rose-tea'
-  | 'iris'
-  | 'graphite'
-
-/**
- * Stored theme id — the value next-themes persists to localStorage and writes
- * to the `data-theme` attribute. The Default family owns the flat `light`/`dark`
- * ids (so next-themes' System resolves to it); every other family, Warm Cathedral
- * included, uses the `${family}-${mode}` shape (the template auto-expands when a
- * family is added to `ThemeFamilyId`). `default-light`/`default-dark` are NOT
- * ids: they are legacy aliases, see {@link LEGACY_THEME_ID_ALIASES}.
- */
-export type ThemeId =
-  'light' | 'dark' | `${Exclude<ThemeFamilyId, 'default'>}-${ThemeMode}`
+export {
+  getThemeId,
+  THEME_FAMILY_IDS,
+  type ThemeFamilyId,
+  type ThemeId,
+  type ThemeMode,
+} from '@corelive/desktop-contract/theme-identity'
 
 /** Identity + picker metadata carried by every theme, preserved or derived. */
 interface ThemeBase {
@@ -580,24 +563,6 @@ export function getThemeMode(id: string | undefined): ThemeMode {
 }
 
 /**
- * Builds the stored id for a (family, mode) pair, so the two-axis picker (T8) can
- * turn a family choice + the current mode into a registry id without string
- * templating at the call site. Default uses the flat `light`/`dark` ids; every
- * other family (Warm Cathedral included) uses `${family}-${mode}`.
- * @param family - A theme family id.
- * @param mode - The light/dark axis.
- * @returns the stored theme id for that family and mode.
- * @example
- * getThemeId('default', 'dark')   // => 'dark'
- * getThemeId('cathedral', 'dark') // => 'cathedral-dark'
- * getThemeId('harbor', 'light')   // => 'harbor-light'
- */
-export function getThemeId(family: ThemeFamilyId, mode: ThemeMode): ThemeId {
-  if (family === 'default') return mode
-  return `${family}-${mode}`
-}
-
-/**
  * Human-readable family names for the two-axis theme picker (T8). The brand
  * family carries the name "Warm Cathedral" — its theme names are
  * "Warm Cathedral Light/Dark", so the label is spelled out rather than derived.
@@ -618,13 +583,3 @@ export const THEME_FAMILY_LABEL: Record<ThemeFamilyId, string> = {
   iris: 'Iris',
   graphite: 'Graphite',
 }
-
-/**
- * All theme family ids in picker order (Default first) — the family axis of the T8 picker. The
- * cast is required because `Object.keys` widens to `string[]`; the `Record<
- * ThemeFamilyId, …>` type guarantees the keys are exactly the family ids (same
- * documented pattern as `THEME_META` in ThemeProvider).
- */
-export const THEME_FAMILY_IDS = Object.keys(
-  THEME_FAMILY_LABEL,
-) as ThemeFamilyId[]

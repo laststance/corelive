@@ -55,7 +55,8 @@ function mountEditor(
   placeholderName?: string,
   selectPlaceholder = false,
 ) {
-  const shown = new Set<() => void>()
+  const shown = new Set<Parameters<OfflineEditorAPI['onShown']>[0]>()
+  const flushes = new Set<Parameters<OfflineEditorAPI['onFlush']>[0]>()
   const snapshot: OfflineEditorSnapshot = {
     phase: 'ready',
     generation: 1,
@@ -160,7 +161,10 @@ function mountEditor(
     }),
     recover: async () => false,
     subscribe: () => () => undefined,
-    onFlush: () => () => undefined,
+    onFlush: (listener) => {
+      flushes.add(listener)
+      return () => flushes.delete(listener)
+    },
     replyFlush: async () => true,
     onShown: (listener) => {
       shown.add(listener)
@@ -187,8 +191,11 @@ function mountEditor(
   return {
     host,
     store,
-    show: (): void => {
-      for (const listener of shown) listener()
+    flush: (requestId: string): void => {
+      for (const listener of flushes) listener({ requestId, generation: 1 })
+    },
+    show: (requestId?: string): void => {
+      for (const listener of shown) listener(requestId)
     },
   }
 }
@@ -322,6 +329,30 @@ test('revealing the native editor returns focus to its writing while keeping the
   expect(field.selectionStart).toBe(3)
 })
 
+test('only the matching reload release restores the writing caret after the field is enabled', async () => {
+  // Arrange
+  const fixture = mountEditor()
+  const field = await screen.findByRole<HTMLTextAreaElement>('textbox', {
+    name: 'Write one thing',
+  })
+  field.setSelectionRange(3, 3)
+  await act(async () => fixture.flush('first'))
+  await act(async () => fixture.flush('second'))
+  const details = screen.getByRole('button', { name: 'Details' })
+  details.focus()
+
+  // Act and assert the stale release leaves the current focus and barrier intact.
+  await act(async () => fixture.show('first'))
+  expect(field).toBeDisabled()
+  expect(details).toHaveFocus()
+
+  // Act and assert typing can resume at the original caret without another click.
+  await act(async () => fixture.show('second'))
+  expect(field).toBeEnabled()
+  expect(field).toHaveFocus()
+  expect(field.selectionStart).toBe(3)
+})
+
 test('revealing an open Details panel keeps its focus instead of moving to the hidden writing field', async () => {
   // Arrange
   const fixture = mountEditor()
@@ -333,6 +364,9 @@ test('revealing an open Details panel keeps its focus instead of moving to the h
   await waitFor(() => expect(heading).toHaveFocus())
 
   // Act
+  await act(async () => fixture.flush('reload'))
+  await act(async () => fixture.show('reload'))
+  expect(heading).toHaveFocus()
   await act(async () => fixture.show())
 
   // Assert

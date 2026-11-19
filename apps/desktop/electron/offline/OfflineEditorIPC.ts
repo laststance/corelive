@@ -36,6 +36,7 @@ import { SignInCoordinator } from './SignInCoordinator'
 type PendingFlush = {
   request: OfflineFlushRequest
   sender: Electron.WebContents
+  shared: boolean
   promise: Promise<boolean>
   resolve: (saved: boolean) => void
   timer: ReturnType<typeof setTimeout>
@@ -87,7 +88,7 @@ export function isTrustedAuthSender(
 export class OfflineEditorIPC {
   private pending: PendingFlush | null = null
   private snapshotReaders = 0
-  private readonly signIn: SignInCoordinator
+  readonly signIn: SignInCoordinator
 
   constructor(
     private readonly windows: WindowManager,
@@ -274,10 +275,10 @@ export class OfflineEditorIPC {
     }
   }
 
-  /** Releases the renderer's exit barrier when a native reveal supersedes a pending hide.
+  /** Releases a specific flush barrier, or restores input after an ordinary reveal.
    * @example ipc.shown()
    */
-  shown(): void {
+  shown(requestId?: string): void {
     const editor = this.windows.getLiveEditorWindow()
     if (
       editor &&
@@ -287,7 +288,7 @@ export class OfflineEditorIPC {
       !editor.webContents.isCrashed() &&
       isLocalEditorDocument(editor.webContents.getURL())
     )
-      typedSend(editor.webContents, 'offline-editor-shown')
+      typedSend(editor.webContents, 'offline-editor-shown', requestId)
   }
 
   /** Sends no data in the notification; Settings re-reads through its verified capability.
@@ -308,6 +309,33 @@ export class OfflineEditorIPC {
    * @example const saved = await ipc.flush(generation)
    */
   async flush(generation: number): Promise<boolean> {
+    const attempt = this.requestFlush(generation)
+    if (typeof attempt === 'boolean') return attempt
+    attempt.shared = true
+    return attempt.promise
+  }
+
+  /** Gives a failed reload authority to release its own renderer challenge.
+   * The successful save can also belong to an ordinary exit that still holds the barrier.
+   * @example const { saved, release } = await ipc.flushForReload(generation)
+   */
+  async flushForReload(generation: number) {
+    const attempt = this.requestFlush(generation)
+    if (typeof attempt === 'boolean')
+      return { saved: attempt, release: (): void => {} }
+    const saved = await attempt.promise
+    return {
+      saved,
+      release: (): void => {
+        if (!saved || !attempt.shared) this.shown(attempt.request.requestId)
+      },
+    }
+  }
+
+  /** Reuses the current renderer challenge or starts one for the requested generation.
+   * @example const attempt = this.requestFlush(generation)
+   */
+  private requestFlush(generation: number): PendingFlush | boolean {
     // An opening replacement cannot acknowledge writing still owned by main.
     if (this.snapshotReaders > 0) return false
     const editor = this.windows.getLiveEditorWindow()
@@ -326,7 +354,7 @@ export class OfflineEditorIPC {
       this.pending?.request.generation === generation &&
       this.pending.sender === editor.webContents
     )
-      return this.pending.promise
+      return this.pending
     this.finishFlush(false)
     let resolve: PendingFlush['resolve'] = () => undefined
     const promise = new Promise<boolean>((done) => {
@@ -335,15 +363,17 @@ export class OfflineEditorIPC {
     const request = { requestId: randomUUID(), generation }
     const timer = setTimeout(() => this.finishFlush(false), 15000)
     timer.unref?.()
-    this.pending = {
+    const attempt: PendingFlush = {
       request,
       sender: editor.webContents,
+      shared: false,
       promise,
       resolve,
       timer,
     }
+    this.pending = attempt
     typedSend(editor.webContents, 'offline-editor-flush', request)
-    return promise
+    return attempt
   }
 
   /** Registers the bundled Settings capabilities; each handler verifies the exact window and document first.
@@ -388,13 +418,15 @@ export class OfflineEditorIPC {
       this.assertSettings(event)
       return this.accountStatus()
     })
-    typedHandle('settings-window-account-connect', async (event) => {
+    typedHandle('settings-window-account-connect', async (event, promptId) => {
       this.assertSettings(event)
-      return this.controller.connect()
+      return this.controller.connect(promptId)
     })
-    typedHandle('settings-window-account-not-now', async (event) => {
+    typedHandle('settings-window-account-not-now', async (event, promptId) => {
       this.assertSettings(event)
-      return this.deps.signOutDevice(async () => this.controller.notNow())
+      return this.deps.signOutDevice(async () =>
+        this.controller.notNow(promptId),
+      )
     })
     typedHandle('settings-window-account-sign-in', (event) => {
       this.assertSettings(event)
@@ -428,7 +460,7 @@ export class OfflineEditorIPC {
   /** The controller's account status plus the login window's progress (DA6).
    * @example const account = this.accountStatus()
    */
-  private accountStatus(): AccountStatus {
+  accountStatus(): AccountStatus {
     return { ...this.controller.accountStatus(), signIn: this.signIn.state }
   }
 

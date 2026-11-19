@@ -82,3 +82,59 @@ describe('packaged Electron bundles the leaf deps electron-builder+pnpm would dr
     expect(declaredUiohookRange).toBeTruthy()
   })
 })
+
+test('a Mac build is verified through the bundled MCP launcher before its artifacts are uploaded', () => {
+  // Arrange
+  const workflow = readFileSync(
+    new URL(
+      '../../../../.github/workflows/build-and-release.yml',
+      import.meta.url,
+    ),
+    'utf8',
+  )
+  const buildJob =
+    workflow.split(/^  build:\s*$/m)[1]?.split(/^  [\w-]+:\s*$/m)[0] ?? ''
+  const steps = buildJob.split(/^      - name: /m)
+  // Act
+  const build = steps.findIndex((step) =>
+    step.includes('run: pnpm electron:build:dir'),
+  )
+  const check = steps.findIndex((step) =>
+    step.includes('run: pnpm --filter @corelive/desktop qa:mcp-package'),
+  )
+  const upload = steps.findIndex((step) =>
+    step.startsWith('Upload build artifacts'),
+  )
+  // Assert
+  expect(build).toBeGreaterThan(-1)
+  expect(check).toBeGreaterThan(build)
+  expect(upload).toBeGreaterThan(check)
+  expect(steps[check]).not.toMatch(/^        (?:if|continue-on-error):/m)
+})
+
+test('tag publication waits for an Apple Silicon runner to open the signed archive from that same build', () => {
+  // Arrange
+  const workflow = readFileSync(
+    new URL(
+      '../../../../.github/workflows/build-and-release.yml',
+      import.meta.url,
+    ),
+    'utf8',
+  )
+  const signedJob = workflow
+    .split('  signed-mac-package:\n')[1]
+    ?.split('\n  release:\n')[0]
+
+  // Act
+  const release = workflow
+    .split('\n  release:\n')[1]
+    ?.split('\n  security-scan:\n')[0]
+
+  // Assert
+  expect(signedJob).toContain('needs: build')
+  expect(signedJob).toContain('runs-on: macos-26\n')
+  expect(signedJob).toContain('name: electron-app-macos')
+  expect(signedJob).toContain('CoreLive-${GITHUB_REF_NAME#v}-arm64-mac.zip')
+  expect(signedJob).toContain('qa:mcp-package "$app" --hosted-cold-start')
+  expect(release).toContain('needs: [build, signed-mac-package]')
+})

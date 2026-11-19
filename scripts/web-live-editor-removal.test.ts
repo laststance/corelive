@@ -35,10 +35,6 @@ const ALLOWED_REFERENCES: ReadonlyArray<{ path: string; reason: string }> = [
     path: 'scripts/web-live-editor-removal.test.ts',
     reason: 'this guard names every removed path it checks',
   },
-  {
-    path: 'apps/web/src/nextConfigRedirects.test.ts',
-    reason: 'asserts the redirects that replaced /write and /live-editor',
-  },
 ]
 
 const SCANNED_EXTENSIONS = new Set([
@@ -336,11 +332,11 @@ describe('the removal guard explains each violation', () => {
     ])
   })
 
-  test('ignores redirect strings and non-source files', () => {
+  test('ignores URL literals and non-source files', () => {
     // Arrange
     const sources: Record<string, string> = {
-      'apps/web/next.config.js':
-        "{ source: '/live-editor', destination: '/home', permanent: false }\n",
+      'apps/web/src/nextConfigRedirects.test.ts':
+        "const path = '/live-editor'\n",
       'apps/web/public/notes.txt': 'preload-live-editor\n',
     }
 
@@ -359,7 +355,7 @@ describe('the removal guard explains each violation', () => {
     const violatingLine =
       "import { NOTE_KEY } from '@/lib/live-editor/constants' // preload-live-editor\n"
     const sources: Record<string, string> = {
-      'apps/web/src/nextConfigRedirects.test.ts': violatingLine,
+      'scripts/web-live-editor-removal.test.ts': violatingLine,
       'apps/web/src/hooks/useDraft.ts': violatingLine,
     }
 

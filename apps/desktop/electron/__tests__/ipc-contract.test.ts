@@ -17,6 +17,7 @@ import { describe, expect, test } from 'vitest'
 import { ZodError } from 'zod'
 
 import { IPC_ARG_SCHEMAS } from '../ipc/ipc-schemas'
+import { parseMcpCall } from '../mcp/tools'
 
 describe('IPC contract', () => {
   describe('IPC_ARG_SCHEMAS exhaustiveness', () => {
@@ -159,16 +160,144 @@ describe('IPC contract', () => {
       expect(() => setOpacity.parse(['0.5'])).toThrow(ZodError)
     })
 
-    test('accepts empty string (disable shortcut) for live-editor-config-set-shortcut', () => {
-      const setShortcut = IPC_ARG_SCHEMAS['live-editor-config-set-shortcut']
-      expect(() => setShortcut.parse([''])).not.toThrow()
-      expect(() =>
-        setShortcut.parse(['CommandOrControl+Shift+B']),
-      ).not.toThrow()
-      // An over-length accelerator (> SHORTCUT_ACCELERATOR_MAX_LENGTH) is
-      // rejected, so a malicious renderer can't smuggle an unbounded string in.
-      expect(() => setShortcut.parse(['x'.repeat(65)])).toThrow(ZodError)
-      expect(() => setShortcut.parse([null])).toThrow(ZodError)
+    test.each([
+      ['record_completed_task', { title: 'Finished work' }],
+      [
+        'correct_completion_time',
+        { completionId: '70000000-0000-4000-8000-000000000001' },
+      ],
+    ] as const)(
+      '%s refuses completion times outside the stored UTC range',
+      (name, args) => {
+        // Arrange
+        const beforeEpoch = '1970-01-01T00:30:00+01:00'
+        const afterLastYear = '9999-12-31T23:59:59-01:00'
+
+        // Act
+        const parse = (completedAt: string) =>
+          parseMcpCall(name, { ...args, completedAt })
+
+        // Assert
+        expect(() => parse(beforeEpoch)).toThrow(
+          expect.objectContaining({
+            code: 'invalid-input',
+            effect: 'none',
+            detail: { fields: ['completedAt'] },
+          }),
+        )
+        expect(() => parse(afterLastYear)).toThrow(
+          expect.objectContaining({ code: 'invalid-input' }),
+        )
+        expect(parse('1970-01-01T00:00:00.000Z').args).toMatchObject({
+          completedAt: '1970-01-01T00:00:00.000Z',
+        })
+        expect(parse('9999-12-31T23:59:59.999Z').args).toMatchObject({
+          completedAt: '9999-12-31T23:59:59.999Z',
+        })
+      },
+    )
+
+    test.each([
+      [
+        'primary',
+        'live-editor-config-set-shortcut',
+        { slot: 'primary', accelerator: '' },
+      ],
+      [
+        'secondary',
+        'live-editor-config-set-shortcut-secondary',
+        { slot: 'secondary', accelerator: '' },
+      ],
+    ] as const)(
+      'both IPC and MCP can clear the %s shortcut and reject overlong accelerators',
+      (slot, channel, expected) => {
+        // Arrange
+        const setShortcut = IPC_ARG_SCHEMAS[channel]
+        const invalid = 'x'.repeat(65)
+
+        // Act + Assert
+        expect(setShortcut.parse([''])).toEqual([''])
+        expect(
+          parseMcpCall('set_editor_shortcut', { slot, accelerator: '' }).args,
+        ).toEqual(expected)
+        expect(() =>
+          setShortcut.parse(['CommandOrControl+Shift+B']),
+        ).not.toThrow()
+        expect(() => setShortcut.parse([invalid])).toThrow(ZodError)
+        expect(() => setShortcut.parse([null])).toThrow(ZodError)
+        expect(() =>
+          parseMcpCall('set_editor_shortcut', { slot, accelerator: invalid }),
+        ).toThrow(
+          expect.objectContaining({ code: 'invalid-input', effect: 'none' }),
+        )
+      },
+    )
+
+    test('moving LiveEditor to a display above or to the left accepts negative coordinates', () => {
+      // Arrange
+      const bounds = { x: -200, y: -160, width: 320, height: 8192 }
+
+      // Act + Assert
+      expect(
+        IPC_ARG_SCHEMAS['live-editor-window-set-bounds'].parse([bounds]),
+      ).toEqual([{ x: -200, y: -160, width: 320, height: 8192 }])
+      expect(parseMcpCall('set_editor_bounds', bounds).args).toEqual({
+        x: -200,
+        y: -160,
+        width: 320,
+        height: 8192,
+      })
     })
+
+    test.each([
+      { width: 319, height: 600 },
+      { width: 10000, height: 600 },
+      { width: 600, height: 319 },
+      { width: 600, height: 8193 },
+    ])('IPC and MCP reject a LiveEditor resize to $width × $height', (size) => {
+      // Arrange
+      const bounds = { x: 0, y: 0, ...size }
+
+      // Act + Assert
+      expect(() =>
+        IPC_ARG_SCHEMAS['live-editor-window-set-bounds'].parse([bounds]),
+      ).toThrow(ZodError)
+      expect(() => parseMcpCall('set_editor_bounds', bounds)).toThrow(
+        expect.objectContaining({ code: 'invalid-input', effect: 'none' }),
+      )
+    })
+
+    test('MCP accepts the minimum documented origin and an exact maximum bottom edge', () => {
+      // Arrange
+      const bounds = { x: -16_777_216, y: 16_769_024, width: 320, height: 8192 }
+
+      // Act
+      const call = parseMcpCall('set_editor_bounds', bounds)
+
+      // Assert
+      expect(call.args).toEqual({
+        x: -16_777_216,
+        y: 16_769_024,
+        width: 320,
+        height: 8192,
+      })
+    })
+
+    test.each([
+      { x: 16_777_217, y: 0 },
+      { x: 0, y: -16_777_217 },
+      { x: 0, y: 16_769_025 },
+    ])(
+      'MCP rejects coordinates outside the exact native bounds at $x, $y',
+      (origin) => {
+        // Arrange
+        const bounds = { ...origin, width: 480, height: 8192 }
+
+        // Act + Assert
+        expect(() => parseMcpCall('set_editor_bounds', bounds)).toThrow(
+          expect.objectContaining({ code: 'invalid-input', effect: 'none' }),
+        )
+      },
+    )
   })
 })

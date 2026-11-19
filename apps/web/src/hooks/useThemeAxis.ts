@@ -8,6 +8,7 @@ import type {
 import { useTheme } from 'next-themes'
 
 import { useMounted } from '@/hooks/use-mounted'
+import { useDashboardThemeWriter } from '@/providers/DashboardAppearanceProvider'
 
 export type { ThemeAxis, ThemePersistence }
 
@@ -24,11 +25,12 @@ export type { ThemeAxis, ThemePersistence }
 export function useNextThemesPersistence(): ThemePersistence {
   const { theme, resolvedTheme, systemTheme, setTheme } = useTheme()
   const mounted = useMounted()
+  const writeAccountTheme = useDashboardThemeWriter()
   return {
     value: theme,
     resolvedValue: resolvedTheme,
     systemValue: systemTheme,
-    setValue: setTheme,
+    setValue: writeAccountTheme ?? setTheme,
     mounted,
   }
 }

@@ -577,6 +577,50 @@ describe('AutoUpdater update dialogs', () => {
     vi.useRealTimers()
   })
 
+  test('checks for updates automatically only after a background launch gains a window', async () => {
+    // Arrange
+    const check = electronMocks.mockAutoUpdater.checkForUpdatesAndNotify
+    check.mockClear()
+    check.mockImplementationOnce(async () => {
+      electronMocks.mockAutoUpdater.emit('update-available', {
+        version: '1.2.4',
+      })
+    })
+    const updater = new AutoUpdater(undefined, false)
+
+    // Act: the app stays in the background past the normal startup check.
+    await vi.advanceTimersByTimeAsync(3000)
+
+    // Assert: status is readable without a network check or consent popup.
+    expect(updater.getUpdateStatus().updateAvailable).toBe(false)
+    expect(check).not.toHaveBeenCalled()
+    expect(electronMocks.mockShowMessageBox).not.toHaveBeenCalled()
+
+    // Act: a person opens a window. Repeated activation leaves one schedule.
+    updater.enableAutomaticChecks()
+    updater.enableAutomaticChecks()
+    await vi.advanceTimersByTimeAsync(3000)
+
+    // Assert
+    expect(check).toHaveBeenCalledOnce()
+    expect(electronMocks.mockShowMessageBox).toHaveBeenCalledOnce()
+    updater.cleanup()
+  })
+
+  test('checking for updates explicitly works during a background launch', async () => {
+    // Arrange
+    const check = electronMocks.mockAutoUpdater.checkForUpdatesAndNotify
+    check.mockClear()
+    const updater = new AutoUpdater(undefined, false)
+
+    // Act
+    await updater.manualCheckForUpdates()
+
+    // Assert
+    expect(check).toHaveBeenCalledOnce()
+    updater.cleanup()
+  })
+
   test('keeps one consent prompt open until the user decides, then allows a later check', async () => {
     // Arrange
     let finishDialog!: (choice: { response: number }) => void

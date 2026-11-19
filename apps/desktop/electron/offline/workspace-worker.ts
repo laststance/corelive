@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { parentPort, workerData } from 'node:worker_threads'
 
+import { CompletionRangeSchema } from '@corelive/desktop-contract/completion-history'
 import {
   DEVICE_ARCHIVE_FILE_NAME,
   DEVICE_OWNER_ID,
@@ -13,17 +14,21 @@ import {
 } from '@corelive/desktop-contract/offline-workspace-v2'
 import { z } from 'zod'
 
+import { deviceCompletionHistory } from '../mcp/historyDevice'
+
 import { AtomicWorkspaceFile, WorkspaceFileError } from './AtomicWorkspaceFile'
 import {
   buildOperation,
   outboxByCompletion,
   uploadKind,
 } from './completionUpload'
+import { draftTextPage } from './draftTextPage'
 import {
   eligibleUndo,
   workspaceView,
   type WorkspaceView,
   type WorkspaceWorkerRequest,
+  type WorkspaceWorkerActivity,
   type WorkspaceWorkerCalls,
 } from './workspace-worker-protocol'
 import { checkpointIdentities } from './workspaceCounts'
@@ -36,9 +41,20 @@ import {
 const options = z
   .object({ directory: z.string(), ownerId: z.literal(DEVICE_OWNER_ID) })
   .parse(workerData as unknown)
+/** Gives main evidence of actual storage progress while an operation owns the file queue.
+ * @example progress()
+ */
+function progress(): void {
+  parentPort?.postMessage({
+    activity: 'storage-progress',
+  } satisfies WorkspaceWorkerActivity)
+}
+
 const file = new AtomicWorkspaceFile({
   directory: options.directory,
   ownerId: options.ownerId,
+  onOperationStart: progress,
+  onStage: progress,
   fileName: DEVICE_WORKSPACE_FILE_NAME,
   parse: (value) => {
     const state = OfflineWorkspaceSchema.parse(value)
@@ -53,6 +69,8 @@ const file = new AtomicWorkspaceFile({
 const archive = new AtomicWorkspaceFile({
   directory: options.directory,
   ownerId: options.ownerId,
+  onOperationStart: progress,
+  onStage: progress,
   fileName: DEVICE_ARCHIVE_FILE_NAME,
   parse: WorkspaceArchiveSchema.parse,
 })
@@ -113,6 +131,7 @@ type CategorySyncType =
   | 'parkCategory'
 type ReadType =
   | 'draft'
+  | 'draftPage'
   | 'pendingTotal'
   | 'syncDetails'
   | 'binding'
@@ -121,7 +140,12 @@ type ReadType =
   | 'details'
   | 'tracked'
 type HistoryType =
-  'recoveryCopies' | 'undoHistory' | 'export' | 'previewRecovery' | 'recover'
+  | 'recoveryCopies'
+  | 'undoHistory'
+  | 'export'
+  | 'previewRecovery'
+  | 'recover'
+  | 'mcpCompletionHistory'
 
 /** Executes trusted main-process requests in the same process's dedicated storage thread.
  * Domain commands and persisted inputs still cross runtime validation boundaries.
@@ -131,6 +155,12 @@ type HistoryType =
  */
 async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
   switch (request.type) {
+    case 'appendTask': {
+      const { state, addition } = await service.appendTask(request.input)
+      return { view: view(state), addition }
+    }
+    case 'findTaskAddition':
+      return service.findTaskAddition(request.input)
     case 'open': {
       // Files written before uploads were derived may hold never-sent entries (#216 D1).
       await service.dropDerivableEntries()
@@ -231,6 +261,18 @@ async function dispatchRead(
   switch (request.type) {
     case 'draft':
       return readDraft(request.input.categoryId)
+    case 'draftPage': {
+      const { categoryId, page } = request.input
+      return file.readProjection<WorkspaceWorkerCalls['draftPage']['output']>(
+        (state) => {
+          const id = effectiveCategory(state, categoryId)
+          const draft = state.drafts[id]
+          if (id !== categoryId || !draft)
+            return { status: 'category-unavailable' }
+          return draftTextPage(draft, page)
+        },
+      )
+    }
     case 'pendingTotal':
       return service.pendingTotal()
     case 'syncDetails':
@@ -274,6 +316,13 @@ async function dispatchHistory(
   request: RequestOf<HistoryType>,
 ): Promise<unknown> {
   switch (request.type) {
+    case 'mcpCompletionHistory': {
+      const range = CompletionRangeSchema.parse(request.input)
+      // Capture hot storage before the archive roll can remove its copies. Neither projection mutates it.
+      const state = await file.update((current) => current, { shared: true })
+      const archived = await readHistoryArchive()
+      return deviceCompletionHistory(state, archived, range)
+    }
     case 'recoveryCopies': {
       const { offset, limit } = pageSchema.parse(request.input)
       const state = await file.read()
@@ -322,41 +371,69 @@ async function dispatchHistory(
   }
 }
 
-/** Keeps ordinary workspace exports compatible and offers preserved raw files after corruption.
+/** An archive that has never been created is empty. A surviving backup only means its primary is missing.
+ * @example const archived = await readHistoryArchive()
+ */
+async function readHistoryArchive() {
+  try {
+    // The read-only projector needs no clone of the entire multi-year archive.
+    return await archive.update((current) => current, { shared: true })
+  } catch (error) {
+    if (!(error instanceof WorkspaceFileError) || error.reason !== 'missing')
+      throw error
+    const recovery = await archive
+      .previewRecoveryInfo()
+      .catch((cause: unknown) => {
+        if (
+          cause instanceof WorkspaceFileError &&
+          cause.reason === 'recovery-missing'
+        )
+          return null
+        throw cause
+      })
+    if (recovery) throw error
+    return null
+  }
+}
+
+/** Combines workspace writing and settled history for export, recovering raw files independently.
+ * @throws Storage errors, including {@link WorkspaceFileError} when a damaged partition has no readable owned files.
  * @example const json = await exportWriting()
  */
 async function exportWriting(): Promise<string> {
-  let workspace
-  try {
-    workspace = await file.read()
-  } catch (error) {
+  const workspace = await file.read().catch(async (error: unknown) => {
     if (!(error instanceof WorkspaceFileError)) throw error
-    return file.exportRecoveryFiles()
-  }
-  // C28/C29: settled history lives in the archive file and must travel with the export.
+    const result = await file.exportRecoveryFiles()
+    if (result.status !== 'available')
+      throw new WorkspaceFileError('recovery-missing')
+    return result.recovery
+  })
+  // Read the workspace first so a completion moved into the archive during export is still included.
+  const history = await exportArchive()
+  return JSON.stringify({ ...workspace, ...history }, null, 2)
+}
+
+/** Provides settled history or its surviving raw files for {@link exportWriting}.
+ * @example const history = await exportArchive()
+ */
+async function exportArchive() {
   try {
     const archived = await archive.read()
     if (
       Object.keys(archived.completions).length ||
       Object.keys(archived.retiredCompletions).length
     )
-      return JSON.stringify({ ...workspace, archive: archived }, null, 2)
+      return { archive: archived }
   } catch (error) {
     if (!(error instanceof WorkspaceFileError)) throw error
-    // A missing archive is normal; an unreadable one is exported as raw files, never dropped.
-    if (error.reason === 'invalid')
-      return JSON.stringify(
-        {
-          ...workspace,
-          archiveRecoveryFiles: JSON.parse(
-            await archive.exportRecoveryFiles(),
-          ) as unknown,
-        },
-        null,
-        2,
-      )
+    // The primary may be gone while its recovery copy still holds history.
+    const result = await archive.exportRecoveryFiles()
+    if (result.status !== 'missing')
+      return { archiveRecoveryFiles: result.recovery }
+    if (error.reason !== 'missing')
+      throw new WorkspaceFileError('recovery-missing')
   }
-  return JSON.stringify(workspace, null, 2)
+  return {}
 }
 
 /** Reads the owned effective category draft without changing the selection.
@@ -444,27 +521,35 @@ async function readDetails(
 
 // The serialized file queue orders state changes; replies contain projections instead of the full history.
 parentPort?.on('message', (request: WorkspaceWorkerRequest) => {
-  void dispatch(request).then(
-    (result) =>
+  void dispatch(request)
+    .then(
+      (result) =>
+        parentPort?.postMessage({
+          requestId: request.requestId,
+          ok: true,
+          result,
+        }),
+      (error: unknown) => {
+        const reason =
+          error instanceof WorkspaceFileError ||
+          error instanceof WorkspaceCommandError
+            ? error.reason
+            : 'storage-failed'
+        parentPort?.postMessage({
+          requestId: request.requestId,
+          ok: false,
+          reason,
+          ...(error instanceof WorkspaceCommandError && error.detail
+            ? { detail: error.detail }
+            : {}),
+        })
+      },
+    )
+    .finally(() => {
+      // Port ordering lets main distinguish a lost reply from still-running work.
       parentPort?.postMessage({
+        activity: 'request-settled',
         requestId: request.requestId,
-        ok: true,
-        result,
-      }),
-    (error: unknown) => {
-      const reason =
-        error instanceof WorkspaceFileError ||
-        error instanceof WorkspaceCommandError
-          ? error.reason
-          : 'storage-failed'
-      parentPort?.postMessage({
-        requestId: request.requestId,
-        ok: false,
-        reason,
-        ...(error instanceof WorkspaceCommandError && error.detail
-          ? { detail: error.detail }
-          : {}),
-      })
-    },
-  )
+      } satisfies WorkspaceWorkerActivity)
+    })
 })

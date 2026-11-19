@@ -159,7 +159,7 @@ Read a fresh snapshot before using its element references. For example, replace
 pnpm qa:browser snapshot
 pnpm qa:browser click e12
 pnpm qa:browser snapshot
-pnpm qa:browser goto http://localhost:4991/write   # redirects to /home, then /login while signed out
+pnpm qa:browser goto http://localhost:4991/write   # retired editor URL, returns 404
 ```
 
 Writing happens only in the desktop app; exercise the LiveEditor renderer through
@@ -274,6 +274,18 @@ events while they work. Hammerspoon is already installed on this machine; no
 host Hammerspoon configuration was changed for this setup.
 
 ## Isolate native QA
+
+For the MCP activity card, run the following from an isolated Linux guest with
+Xvfb, Electron's sandbox requirements and the workspace dependencies installed:
+
+```bash
+pnpm --filter @corelive/desktop electron:build:ts
+xvfb-run -a pnpm --filter @corelive/desktop qa:mcp-activity
+```
+
+The second command opens the built renderer in the guest using a temporary
+profile and a synthetic day. It verifies a 960 × 1200 PNG, one successful
+save when two captures request the same filename, and zero native windows.
 
 Apple-silicon macOS supports macOS guests through Apple's Virtualization
 framework. Two practical runners are Lume and Tart:

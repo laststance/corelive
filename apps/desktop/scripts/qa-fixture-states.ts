@@ -134,7 +134,12 @@ export const SETTINGS_FIXTURE_STATES: readonly SettingsStateSpec[] = [
     name: 'connect-confirm',
     description: 'First-connect confirmation before anything is bound or sent',
     readyText: 'Connect this Mac',
-    account: { pendingConnect: { displayEmail: BOUND_EMAIL } },
+    account: {
+      pendingConnect: {
+        displayEmail: BOUND_EMAIL,
+        promptId: '00000000-0000-4000-8000-000000000001',
+      },
+    },
   },
   {
     name: 'connect-uploading',

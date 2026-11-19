@@ -112,7 +112,7 @@ export class DurableEditorStore {
   private initializing = false
   private selectionRevision = 0
   private notice: CompletionNotice | null = null
-  private exitPending = false
+  private exitRequestId: string | null = null
 
   constructor(readonly host: OfflineEditorAPI) {}
 
@@ -153,25 +153,17 @@ export class DurableEditorStore {
         this.receive(snapshot)
       }),
       this.host.onFlush((request) => {
-        this.exitPending = true
+        this.exitRequestId = request.requestId
         this.publish()
+        const release = (): void => this.releaseFlush(request.requestId)
         void this.flush(request.generation)
           .then(async (saved) => {
             const accepted = await this.host.replyFlush(request, saved)
-            if (!saved || !accepted) {
-              this.exitPending = false
-              this.publish()
-            }
+            if (!saved || !accepted) release()
           })
-          .catch(() => {
-            this.exitPending = false
-            this.publish()
-          })
+          .catch(release)
       }),
-      this.host.onShown(() => {
-        this.exitPending = false
-        this.publish()
-      }),
+      this.host.onShown((requestId) => this.releaseFlush(requestId)),
     ]
     try {
       const snapshot = await this.host.snapshot()
@@ -796,6 +788,17 @@ export class DurableEditorStore {
     }
   }
 
+  /** Releases only the matching challenge when an old reply or failed reload arrives.
+   * An ordinary native reveal clears the barrier without a request ID.
+   * @example this.releaseFlush(request.requestId)
+   */
+  private releaseFlush(requestId?: string): void {
+    if (requestId === undefined || requestId === this.exitRequestId) {
+      this.exitRequestId = null
+      this.publish()
+    }
+  }
+
   /** Keeps account transitions private and ignores obsolete startup reads/status messages.
    * @example this.receive(snapshot)
    */
@@ -819,7 +822,7 @@ export class DurableEditorStore {
       this.cancelAutosave()
       this.notice = null
       this.deferred = null
-      this.exitPending = false
+      this.exitRequestId = null
     }
     this.main = snapshot
     if (snapshot.phase !== 'ready') {
@@ -1081,7 +1084,7 @@ export class DurableEditorStore {
           : 'saved',
       error: buffer?.error ?? null,
       busy: this.queued > 0,
-      exitPending: this.exitPending,
+      exitPending: this.exitRequestId !== null,
       unsavedCategoryCount: owned.filter(
         (item) => item.edits.length > 0 || item.saveFailed,
       ).length,

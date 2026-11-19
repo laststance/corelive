@@ -272,17 +272,17 @@ test('authentication rejection pauses synchronization while the durable local wr
 test('a receipt that arrives after the account detached retires its own operation without publishing to the editor', async () => {
   // Arrange
   const fixture = await createFixture()
-  let deliver!: () => Promise<void>
-  fixture.transport.apply.mockImplementationOnce(
-    async (input) =>
-      new Promise((resolve) => {
-        deliver = async (): Promise<void> => {
-          resolve(await fixture.commit(input))
-        }
-      }),
-  )
+  const delivery = new Promise<() => Promise<void>>((dispatched) => {
+    fixture.transport.apply.mockImplementationOnce(
+      async (input) =>
+        new Promise((acknowledge) => {
+          dispatched(async () => acknowledge(await fixture.commit(input)))
+        }),
+    )
+  })
   fixture.loop.wake()
-  await vi.waitFor(() => expect(fixture.transport.apply).toHaveBeenCalledOnce())
+  const deliver = await delivery
+  expect(fixture.transport.apply).toHaveBeenCalledOnce()
   fixture.onView.mockClear()
 
   // Act

@@ -47,6 +47,8 @@ type WorkspaceFileOptions<T> = {
    * v1 layout, which hashes the owner id into the path.
    */
   fileName?: string
+  /** Reports when an operation leaves the serialized file queue and starts running. */
+  onOperationStart?: () => void
   /** Fault injection and timing observations; never receives writing or credentials. */
   onStage?: (stage: WorkspaceWriteStage) => void | Promise<void>
 }
@@ -78,6 +80,7 @@ export class AtomicWorkspaceFile<T> {
   private readonly ownerId: string
   private readonly parse: (value: unknown) => T
   private readonly validateChange: WorkspaceFileOptions<T>['validateChange']
+  private readonly onOperationStart: WorkspaceFileOptions<T>['onOperationStart']
   private readonly onStage: WorkspaceFileOptions<T>['onStage']
   private tail: Promise<void> = Promise.resolve()
   private committedBytes: string | undefined
@@ -94,6 +97,7 @@ export class AtomicWorkspaceFile<T> {
     this.ownerId = options.ownerId
     this.parse = options.parse
     this.validateChange = options.validateChange
+    this.onOperationStart = options.onOperationStart
     this.onStage = options.onStage
     if (
       options.fileName !== undefined &&
@@ -116,6 +120,16 @@ export class AtomicWorkspaceFile<T> {
   async read(): Promise<T> {
     // Clone: the cached generation must never be mutated by a caller.
     return this.serialize(async () => structuredClone(await this.readPrimary()))
+  }
+
+  /** Clones only the requested projection while the storage worker holds its serialized read.
+   * @param project - A pure projection that treats the entire committed state as immutable.
+   * @example const count = await file.readProjection((state) => state.revision)
+   */
+  async readProjection<R>(project: (current: Readonly<T>) => R): Promise<R> {
+    return this.serialize(async () =>
+      structuredClone(project(await this.readPrimary())),
+    )
   }
 
   /**
@@ -220,12 +234,13 @@ export class AtomicWorkspaceFile<T> {
     }))
   }
 
-  /** Exports exact bytes from this account's partition when the primary cannot be opened.
-   * The worker calls this only for recovery export; no file is rewritten or promoted.
+  /** Packages exact partition bytes for the worker when the primary cannot be opened.
    * Known foreign-owner envelopes are excluded, and invalid bytes are labelled as unvalidated.
-   * @example const archive = await file.exportRecoveryFiles()
+   * A foreign-only result carries exclusion metadata and no file bytes.
+   * @throws Filesystem errors when an existing source cannot be read.
+   * @example const recovery = await file.exportRecoveryFiles()
    */
-  async exportRecoveryFiles(): Promise<string> {
+  async exportRecoveryFiles() {
     return this.serialize(async () => {
       const files: {
         name: string
@@ -257,9 +272,11 @@ export class AtomicWorkspaceFile<T> {
         }
         files.push({ name, contentBase64: bytes.toString('base64'), integrity })
       }
-      if (!files.length) throw new WorkspaceFileError('recovery-missing')
-      return JSON.stringify(
-        {
+      if (!files.length && !excluded.length)
+        return { status: 'missing' } as const
+      return {
+        status: files.length ? 'available' : 'foreign-account',
+        recovery: {
           format: 'corelive-recovery-files',
           version: 1,
           ownerId: this.ownerId,
@@ -267,9 +284,7 @@ export class AtomicWorkspaceFile<T> {
           files,
           excluded,
         },
-        null,
-        2,
-      )
+      } as const
     })
   }
 
@@ -334,7 +349,10 @@ export class AtomicWorkspaceFile<T> {
    * @example return this.serialize(async () => this.readPrimary())
    */
   private async serialize<R>(operation: () => Promise<R>): Promise<R> {
-    const result = this.tail.then(operation)
+    const result = this.tail.then(async () => {
+      this.onOperationStart?.()
+      return operation()
+    })
     this.tail = result.then(
       () => undefined,
       () => undefined,

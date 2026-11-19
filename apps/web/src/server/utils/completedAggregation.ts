@@ -1,7 +1,10 @@
+import type {
+  AccountHistoryRow,
+  CompletionRange,
+} from '@corelive/desktop-contract/completion-history'
 import { sql } from 'drizzle-orm'
 
 import { db } from '@/db'
-import { parseUtcTimestamp } from '@/db/parseUtcTimestamp'
 import type { DayDetailTask } from '@/server/schemas/completed'
 
 /**
@@ -67,52 +70,13 @@ export async function fetchCompletedEntries(
   startDate: Date,
   endDate: Date,
 ): Promise<CompletedEntry[]> {
-  type CompletionRow = {
-    source: CompletedEntry['source']
-    id: number
-    title: string
-    completed_at: string
-    category_id: number
-    category_name: string
-    category_color: string
-    parent_id: number | null
-    parent_name: string | null
-    parent_color: string | null
-  }
-  // One statement pins both legacy and kept entries to the same hierarchy snapshot.
-  // ISO text parameters preserve UTC wall-clock comparisons for timestamp-without-zone columns.
-  const { rows } = await db.execute<CompletionRow>(sql`
-    WITH entries AS (
-      SELECT 'todo'::text AS source, t.id, t.text AS title,
-             COALESCE(t."completedAt", t."updatedAt") AS completed_at,
-             t."categoryId" AS category_id
-      FROM "Todo" t
-      WHERE t."userId" = ${userId} AND t.completed = true
-        AND ((t."completedAt" BETWEEN ${startDate.toISOString()} AND ${endDate.toISOString()})
-          OR (t."completedAt" IS NULL AND t."updatedAt" BETWEEN ${startDate.toISOString()} AND ${endDate.toISOString()}))
-      UNION ALL
-      SELECT 'completed'::text AS source, cp.id, cp.title,
-             COALESCE(cp."completedAt", cp."createdAt") AS completed_at,
-             cp."categoryId" AS category_id
-      FROM "Completed" cp
-      WHERE cp."userId" = ${userId} AND cp.archived = false
-        AND ((cp."completedAt" BETWEEN ${startDate.toISOString()} AND ${endDate.toISOString()})
-          OR (cp."completedAt" IS NULL AND cp."createdAt" BETWEEN ${startDate.toISOString()} AND ${endDate.toISOString()}))
-    )
-    SELECT e.source, e.id, e.title, e.completed_at,
-           c.id AS category_id, c.name AS category_name, c.color AS category_color,
-           p.id AS parent_id, p.name AS parent_name, p.color AS parent_color
-    FROM entries e
-    INNER JOIN "Category" c ON c.id = e.category_id AND c."userId" = ${userId}
-    LEFT JOIN "Category" p ON p.id = c."parentId" AND p."userId" = c."userId"
-  `)
-  // Preserve the established source/id tie order after parsing raw UTC timestamps.
+  const rows = await fetchRangeRows(userId, startDate, endDate, false)
   return rows
     .map((row) => ({
       source: row.source,
       id: row.id,
       title: row.title,
-      completedAt: parseUtcTimestamp(row.completed_at),
+      completedAt: new Date(row.completed_at_ms),
       category: {
         id: row.category_id,
         name: row.category_name,
@@ -128,6 +92,106 @@ export async function fetchCompletedEntries(
       },
     }))
     .sort(compareCompletedEntries)
+}
+
+/** Reads display values and their proven sync identities in one database statement per MCP read.
+ * @example await fetchCompletionHistoryRange(userId, { from, before })
+ */
+export async function fetchCompletionHistoryRange(
+  userId: number,
+  range: CompletionRange,
+): Promise<AccountHistoryRow[]> {
+  const rows = await fetchRangeRows(
+    userId,
+    new Date(range.from),
+    new Date(range.before - 1),
+    true,
+  )
+  return rows.map((row) => ({
+    source: row.source,
+    id: row.id,
+    completionId: row.completion_id,
+    title: row.title,
+    completedAt: row.completed_at_ms,
+    categoryId: row.category_id,
+    parentCategoryId: row.parent_id,
+    categoryPath:
+      row.parent_name === null
+        ? row.category_name
+        : `${row.parent_name} / ${row.category_name}`,
+  }))
+}
+
+type CompletionRow = {
+  source: CompletedEntry['source']
+  id: number
+  title: string
+  completed_at_ms: number
+  category_id: number
+  category_name: string
+  category_color: string
+  parent_id: number | null
+  parent_name: string | null
+  parent_color: string | null
+  completion_id: string | null
+}
+/** Shares the dashboard's time/category predicates with an optional account-owned identity join.
+ * @example const rows = await fetchRangeRows(userId, firstInstant, lastInstant, true)
+ */
+async function fetchRangeRows(
+  userId: number,
+  startDate: Date,
+  endDate: Date,
+  includeIdentity: boolean,
+) {
+  const start = postgresUtcBoundary(startDate)
+  const end = postgresUtcBoundary(endDate)
+  const identity = includeIdentity ? sql`s."completionId"` : sql`NULL::text`
+  const identityJoin = includeIdentity
+    ? sql`
+    LEFT JOIN "CompletionSyncState" s ON e.source = 'completed' AND s."completedId" = e.id
+      AND s."userId" = ${userId} AND s.cancelled = false`
+    : sql``
+  // One statement pins both legacy and kept entries to the same hierarchy snapshot.
+  // ISO text parameters preserve UTC wall-clock comparisons for timestamp-without-zone columns.
+  const { rows } = await db.execute<CompletionRow>(sql`
+    WITH entries AS (
+      SELECT 'todo'::text AS source, t.id, t.text AS title,
+             COALESCE(t."completedAt", t."updatedAt") AS completed_at,
+             t."categoryId" AS category_id
+      FROM "Todo" t
+      WHERE t."userId" = ${userId} AND t.completed = true
+        AND ((t."completedAt" BETWEEN ${start} AND ${end})
+          OR (t."completedAt" IS NULL AND t."updatedAt" BETWEEN ${start} AND ${end}))
+      UNION ALL
+      SELECT 'completed'::text AS source, cp.id, cp.title,
+             COALESCE(cp."completedAt", cp."createdAt") AS completed_at,
+             cp."categoryId" AS category_id
+      FROM "Completed" cp
+      WHERE cp."userId" = ${userId} AND cp.archived = false
+        AND ((cp."completedAt" BETWEEN ${start} AND ${end})
+          OR (cp."completedAt" IS NULL AND cp."createdAt" BETWEEN ${start} AND ${end}))
+    )
+    SELECT e.source, e.id, e.title,
+           (EXTRACT(EPOCH FROM e.completed_at) * 1000)::double precision AS completed_at_ms,
+           c.id AS category_id, c.name AS category_name, c.color AS category_color,
+           p.id AS parent_id, p.name AS parent_name, p.color AS parent_color,
+           ${identity} AS completion_id
+    FROM entries e
+    INNER JOIN "Category" c ON c.id = e.category_id AND c."userId" = ${userId}
+    LEFT JOIN "Category" p ON p.id = c."parentId" AND p."userId" = c."userId"
+    ${identityJoin}
+  `)
+  return rows
+}
+
+/** Preserves the UTC wall clock at the edges of a four-digit local date range in PostgreSQL's year syntax.
+ * @example postgresUtcBoundary(new Date('+010000-01-01T00:00:00Z')) // '10000-01-01T00:00:00.000Z'
+ */
+function postgresUtcBoundary(instant: Date): string {
+  const utc = instant.toISOString()
+  if (utc.startsWith('0000-')) return `0001${utc.slice(4, -1)} BC`
+  return utc.replace(/^\+0*/, '')
 }
 
 /**

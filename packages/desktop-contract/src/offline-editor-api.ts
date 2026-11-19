@@ -96,7 +96,8 @@ export interface OfflineEditorAPI {
   recover: (generation: number) => Promise<boolean>
   subscribe: (listener: (snapshot: OfflineEditorSnapshot) => void) => () => void
   onFlush: (listener: (request: OfflineFlushRequest) => void) => () => void
-  onShown: (listener: () => void) => () => void
+  /** A request ID releases just that flush; an ordinary native reveal has no request ID. */
+  onShown: (listener: (requestId?: string) => void) => () => void
   replyFlush: (request: OfflineFlushRequest, saved: boolean) => Promise<boolean>
 }
 
@@ -145,8 +146,8 @@ export interface SettingsWindowAPI {
   }
   account: {
     status: () => Promise<AccountStatus>
-    connect: () => Promise<boolean>
-    notNow: () => Promise<SignOutResult>
+    connect: (promptId: string) => Promise<boolean>
+    notNow: (promptId: string) => Promise<SignOutResult>
     /** Opens the login window unless the Mac is offline (DA6). */
     signIn: () => Promise<SignInStartResult>
     /** Closes the login window opened by {@link signIn} (DA6 Cancel). */
@@ -223,8 +224,11 @@ export interface OfflineIPCChannels {
     response: OfflineSyncDetails
   }
   'settings-window-account-status': { request: void; response: AccountStatus }
-  'settings-window-account-connect': { request: void; response: boolean }
-  'settings-window-account-not-now': { request: void; response: SignOutResult }
+  'settings-window-account-connect': { request: string; response: boolean }
+  'settings-window-account-not-now': {
+    request: string
+    response: SignOutResult
+  }
   'settings-window-account-sign-in': {
     request: void
     response: SignInStartResult
@@ -297,8 +301,8 @@ export const OFFLINE_IPC_ARGUMENT_SCHEMAS = {
   ]),
   'settings-window-sync-details': z.tuple([generation]),
   'settings-window-account-status': z.tuple([]),
-  'settings-window-account-connect': z.tuple([]),
-  'settings-window-account-not-now': z.tuple([]),
+  'settings-window-account-connect': z.tuple([z.uuid()]),
+  'settings-window-account-not-now': z.tuple([z.uuid()]),
   'settings-window-account-sign-in': z.tuple([]),
   'settings-window-account-cancel-sign-in': z.tuple([]),
   'settings-window-account-clear-again': z.tuple([]),

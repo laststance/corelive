@@ -1,5 +1,6 @@
 'use client'
 
+import type { HeatmapCategory } from '@corelive/live-editor/activity-card'
 import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 
@@ -13,14 +14,7 @@ import { orpc } from '@/lib/orpc/client-query'
  * @example
  * { id: 1, name: "Work", color: "blue", count: 3 }
  */
-export type HeatmapCategory = {
-  id: number
-  name: string
-  color: string
-  count: number
-  /** Current hierarchy, also returned for historical completions. */
-  parent?: { id: number; name: string; color: string } | null
-}
+export type { HeatmapCategory } from '@corelive/live-editor/activity-card'
 
 /**
  * Single day entry in the heatmap data.

@@ -46,7 +46,7 @@ import {
   noteReceiptQuery,
   parkOperations,
 } from './categoryReceipts'
-import { clearMarker, type CategoryContext } from './categoryState'
+import { clearMarker, pathOf, type CategoryContext } from './categoryState'
 import {
   buildOperation,
   selectUploads,
@@ -55,6 +55,7 @@ import {
 } from './completionUpload'
 import { effectiveCategory } from './effectiveCategory'
 import { applySyncDetailAction, buildSyncDetails } from './syncDetails'
+import type { WorkspaceWorkerCalls } from './workspace-worker-protocol'
 import { WorkspaceCommandError } from './WorkspaceCommandError'
 
 export { WorkspaceCommandError, effectiveCategory }
@@ -84,7 +85,7 @@ export const ARCHIVE_MIN_AGE_MS = 48 * 60 * 60 * 1000
  * keep commands.
  *
  * @param current - The committed state; never mutated.
- * @returns A state safe to hand to {@link WorkspaceService.apply} for save and complete.
+ * @returns A state safe for typing and completion creation in {@link WorkspaceService.apply}.
  * @example const state = forkWorkspace(current)
  */
 function forkWorkspace(current: OfflineWorkspace): OfflineWorkspace {
@@ -94,6 +95,7 @@ function forkWorkspace(current: OfflineWorkspace): OfflineWorkspace {
     outbox,
     categoryOutbox,
     commandReceipts,
+    taskAdditionReceipts,
     ...small
   } = current
   return {
@@ -103,11 +105,13 @@ function forkWorkspace(current: OfflineWorkspace): OfflineWorkspace {
     outbox: { ...outbox },
     categoryOutbox: { ...categoryOutbox },
     commandReceipts: { ...commandReceipts },
+    taskAdditionReceipts,
   }
 }
 
 /**
- * Drops receipts older than {@link COMMAND_RECEIPT_WINDOW} commits (by workspace revision).
+ * Drops ordinary receipts older than {@link COMMAND_RECEIPT_WINDOW} commits (by workspace revision).
+ * Older builds embedded task receipts here; their operation IDs still protect committed writing.
  *
  * @param state - The candidate state, already at its new revision; mutated in place.
  * @example pruneCommandReceipts(state)
@@ -116,9 +120,21 @@ function pruneCommandReceipts(state: OfflineWorkspace): void {
   const receipts = Object.keys(state.commandReceipts)
   if (receipts.length <= COMMAND_RECEIPT_WINDOW) return
   const oldest = state.revision - COMMAND_RECEIPT_WINDOW
-  for (const id of receipts)
-    if (state.commandReceipts[id]!.revision <= oldest)
+  for (const id of receipts) {
+    const receipt = state.commandReceipts[id]
+    if (receipt && !receipt.taskAddition && receipt.revision <= oldest)
       delete state.commandReceipts[id]
+  }
+}
+
+/** Looks up an operation ID for appending or confirming a task, including older snapshots.
+ * @example const receipt = taskReceipt(state, operationId)
+ */
+function taskReceipt(state: OfflineWorkspace, operationId: string) {
+  return (
+    state.taskAdditionReceipts[operationId] ??
+    state.commandReceipts[operationId]
+  )
 }
 
 /**
@@ -199,18 +215,27 @@ export class WorkspaceService {
     const commandDigest = digest(JSON.stringify(command))
     return this.file.update(
       (current) => {
+        if (current.taskAdditionReceipts[command.commandId])
+          throw new WorkspaceCommandError('command-conflict')
         const receipt = current.commandReceipts[command.commandId]
         if (receipt) {
           if (receipt.digest !== commandDigest)
             throw new WorkspaceCommandError('command-conflict')
           return current
         }
-        // Typing and keeping only touch drafts and add records, so they fork cheaply; every
-        // other command deep-clones.
+        // These commands update drafts and add or replace map entries. Other reducers can mutate existing records.
         const state =
-          command.type === 'save' || command.type === 'complete'
+          command.type === 'save' ||
+          command.type === 'complete' ||
+          command.type === 'recordCompletedTask'
             ? forkWorkspace(current)
             : structuredClone(current)
+        if (
+          ('requireActiveCategory' in command &&
+            command.requireActiveCategory) ||
+          command.type === 'recordCompletedTask'
+        )
+          this.requireActiveCategory(state, command.categoryId)
         this.apply(state, command)
         // Trusted reducers can preserve larger documents; normal saves cannot grant themselves capacity.
         for (const [id, draft] of Object.entries(state.drafts)) {
@@ -231,6 +256,113 @@ export class WorkspaceService {
       },
       { shared: true },
     )
+  }
+
+  /** Refuses a retired category at commit time so simultaneous deletion cannot redirect an agent's edit.
+   * @example this.requireActiveCategory(state, categoryId)
+   */
+  private requireActiveCategory(
+    state: OfflineWorkspace,
+    categoryId: string,
+  ): void {
+    if (
+      !state.categories.some(
+        (category) =>
+          category.id === categoryId &&
+          !category.removed &&
+          !category.historical,
+      )
+    )
+      throw new WorkspaceCommandError('category-unavailable')
+  }
+
+  /**
+   * Appends to the latest committed draft and writes its durable answer in the same transaction.
+   * The main process supplies the verified account. Only a lookup may resolve an interrupted call.
+   * @example await service.appendTask({ operationId, title: 'Send the invoice', accountId: null })
+   */
+  async appendTask(input: WorkspaceWorkerCalls['appendTask']['input']) {
+    const { operationId, categoryId: requested, accountId, title } = input
+    const intent = taskAdditionDigest(input, accountId)
+    const state = await this.file.update(
+      (current) => {
+        const receipt = taskReceipt(current, operationId)
+        if (receipt) {
+          if (
+            receipt.digest !== intent ||
+            !receipt.taskAddition ||
+            receipt.taskAddition.deviceId !== current.deviceId
+          )
+            throw new WorkspaceCommandError('command-conflict')
+          return current
+        }
+        const categoryId =
+          requested ?? input.selectedAtStart ?? current.selectedCategoryId
+        // Deleted categories may redirect ordinary editor commands; an explicit MCP target must never redirect.
+        this.requireActiveCategory(current, categoryId)
+        const state = forkWorkspace(current)
+        const draft = this.draft(state, categoryId)
+        const blank =
+          draft.rows.length === 1 && draft.rows[0]?.text === ''
+            ? draft.rows[0]
+            : undefined
+        const row = { id: blank?.id ?? this.nextId(), text: '- [ ] ' + title }
+        const rows = blank ? [row] : [...draft.rows, row]
+        this.saveDraft(state, {
+          type: 'save',
+          commandId: operationId,
+          categoryId,
+          baseRevision: draft.revision,
+          rows,
+        })
+        draft.inputLimit = getDraftInputLimit(draft)
+        state.revision++
+        // Keep this receipt as long as the workspace so a retry cannot duplicate an old task.
+        state.taskAdditionReceipts = {
+          ...state.taskAdditionReceipts,
+          [operationId]: {
+            digest: intent,
+            taskAddition: {
+              accountId,
+              deviceId: state.deviceId,
+              categoryId,
+              categoryPath: pathOf(state, categoryId),
+              rowId: row.id,
+              title,
+            },
+          },
+        }
+        return state
+      },
+      { shared: true },
+    )
+    const addition = taskReceipt(state, operationId)?.taskAddition
+    if (!addition) throw new WorkspaceCommandError('command-conflict')
+    return { state, addition }
+  }
+
+  /** Looks up a durable addition without resubmitting it or matching draft text.
+   * @example await service.findTaskAddition({ operationId, accountId: null })
+   */
+  async findTaskAddition({
+    operationId,
+    accountId,
+    original,
+  }: WorkspaceWorkerCalls['findTaskAddition']['input']) {
+    // A rename can leave a readable receipt before the directory flush succeeds.
+    const state = await this.file.update((current) => current, { shared: true })
+    const receipt = taskReceipt(state, operationId)
+    const saved = receipt?.taskAddition
+    if (
+      !saved ||
+      saved.deviceId !== state.deviceId ||
+      saved.accountId !== accountId
+    )
+      return null
+    // An implicit selection and an explicit UUID are different intents even when both resolve to the same category.
+    if (original && receipt.digest !== taskAdditionDigest(original, accountId))
+      throw new WorkspaceCommandError('command-conflict')
+    return structuredClone(saved)
   }
 
   /**
@@ -881,6 +1013,8 @@ export class WorkspaceService {
         return this.saveDraft(state, command)
       case 'complete':
         return this.completeLine(state, command)
+      case 'recordCompletedTask':
+        return this.recordCompletedTask(state, command)
       case 'undo':
         return this.undoCompletion(state, command)
       case 'clear':
@@ -917,6 +1051,46 @@ export class WorkspaceService {
       case 'restoreRecovery':
         return this.restoreRecoveryCopy(state, command)
     }
+  }
+
+  /** Records completed work directly in history while preserving the current unfinished draft.
+   * @example this.recordCompletedTask(state, command)
+   */
+  private recordCompletedTask(
+    state: OfflineWorkspace,
+    command: Extract<WorkspaceCommand, { type: 'recordCompletedTask' }>,
+  ): void {
+    const rows = state.drafts[command.categoryId]?.rows
+    if (!rows) throw new WorkspaceCommandError('category-unavailable')
+    if (
+      state.completions[command.completionId] ||
+      state.retiredCompletions[command.completionId]
+    )
+      throw new WorkspaceCommandError('command-conflict')
+    // A directly recorded completion has no visible draft row; Undo can restore its captured text.
+    const completion: OfflineCompletion = {
+      id: command.completionId,
+      categoryId: command.categoryId,
+      originalCategoryId: command.categoryId,
+      title: command.title,
+      rawText: command.title,
+      lineId: this.nextId(),
+      lineIndex: rows.length,
+      previousRowId: rows.at(-1)?.id,
+      completedAt: command.completedAt,
+      originalCompletedAt: command.completedAt,
+      timezone: command.timezone,
+      revision: 1,
+      undoUntil:
+        this.now() + state.preferences.settings.liveEditorToastDurationMs,
+      cancelled: false,
+      restored: false,
+      remote: null,
+      clearAfter: null,
+      cleared: true,
+    }
+    state.completions[completion.id] = completion
+    this.supersedeUnsent(state, completion)
   }
 
   /** Applies the save command inside the account's durable transaction.
@@ -1694,4 +1868,24 @@ function checkedText(raw: string): string {
  */
 function digest(value: string): string {
   return createHash('sha256').update(value).digest('hex')
+}
+
+/** Matches the on-disk intent written by {@link WorkspaceService.appendTask}, including earlier app versions.
+ * @example taskAdditionDigest({title: 'Send the invoice'}, accountId)
+ */
+function taskAdditionDigest(
+  input: Pick<
+    WorkspaceWorkerCalls['appendTask']['input'],
+    'categoryId' | 'title'
+  >,
+  accountId: string | null,
+): string {
+  return digest(
+    JSON.stringify([
+      'appendTask',
+      accountId,
+      input.categoryId ?? null,
+      input.title,
+    ]),
+  )
 }

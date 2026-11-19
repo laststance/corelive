@@ -14,14 +14,22 @@ import {
   OfflineWorkspaceV1Schema,
   type OfflineWorkspaceV1,
 } from '@corelive/desktop-contract/offline-workspace'
+import {
+  DEVICE_OWNER_ID,
+  DEVICE_WORKSPACE_FILE_NAME,
+  OfflineWorkspaceSchema,
+} from '@corelive/desktop-contract/offline-workspace-v2'
 import { UserSettingsStateSchema } from '@corelive/desktop-contract/settings'
 import { afterEach, describe, expect, test } from 'vitest'
 import type { z } from 'zod'
+
+import { deviceCompletionHistory } from '../mcp/historyDevice'
 
 import { AtomicWorkspaceFile } from './AtomicWorkspaceFile'
 import { migrateWorkspaceV1, type MigrationStage } from './migrateWorkspaceV1'
 import { REGISTRY_OWNER_ID, registrySchema } from './OfflineAccountRegistry'
 import { workspaceView } from './workspace-worker-protocol'
+import { WorkspaceService } from './WorkspaceService'
 
 const directories: string[] = []
 const NOW = 1_800_000_000_000
@@ -299,6 +307,15 @@ describe('v1 to v2 workspace migration', () => {
     expect(result.registry.attachedAccountId).toBe('user_a')
     expect(result.registry.deviceId).toBe(uid(1))
     expect(workspace.commandReceipts[uid(701)]?.revision).toBe(5)
+    const history = deviceCompletionHistory(workspace, null, {
+      from: NOW,
+      before: NOW + 1,
+    })
+    expect(history.rows.find((row) => row.id === uid(103))).toMatchObject({
+      completedAt: NOW,
+      title: null,
+      boundIdentity: true,
+    })
   })
 
   test('keeps references to categories that no longer exist as historical categories', async () => {
@@ -710,6 +727,119 @@ describe('v1 to v2 migration crash points', () => {
 })
 
 describe('downgrade round trip (DX8, EA13a)', () => {
+  test('an imported retirement and its earlier snapshot resolve their original category only after a same-account sync', async () => {
+    // Arrange
+    const directory = await installV1([{ id: 'user_a' }])
+    await migrateWorkspaceV1({ directory, now: () => NOW })
+    const workspaces = join(directory, 'workspaces')
+    const v1File = new AtomicWorkspaceFile({
+      directory: workspaces,
+      ownerId: 'user_a',
+      parse: OfflineWorkspaceV1Schema.parse,
+    })
+    const importedId = uid(106)
+    const existingId = uid(107)
+    const otherAccountId = uid(108)
+    await v1File.update((state) => ({
+      ...state,
+      retiredCompletions: {
+        ...state.retiredCompletions,
+        [importedId]: {
+          ...state.retiredCompletions[uid(103)]!,
+          originalCategoryId: 42,
+        },
+        [existingId]: {
+          ...state.retiredCompletions[uid(103)]!,
+          originalCategoryId: 42,
+        },
+      },
+    }))
+    const olderFiles = await v1Bytes(directory)
+    const imported = await migrateWorkspaceV1({ directory, now: () => NOW + 1 })
+    if (!imported.ok) throw new Error('migration failed')
+    const file = new AtomicWorkspaceFile({
+      directory: workspaces,
+      ownerId: DEVICE_OWNER_ID,
+      fileName: DEVICE_WORKSPACE_FILE_NAME,
+      parse: OfflineWorkspaceSchema.parse,
+    })
+    await file.update((state) => {
+      const next = structuredClone(state)
+      const existing = next.migration.dashboardOnly[existingId]
+      if (!existing) throw new Error('missing retirement')
+      delete existing.sourceServerCategoryId
+      next.migration.dashboardOnly[otherAccountId] = {
+        ...existing,
+        sourceAccountId: 'user_b',
+        sourceServerCategoryId: 42,
+      }
+      return next
+    })
+    const service = new WorkspaceService(
+      file,
+      () => NOW,
+      () => uid(961),
+    )
+    const range = { from: NOW - 1, before: NOW + 1 }
+
+    // Act
+    const reopened = await migrateWorkspaceV1({ directory, now: () => NOW + 2 })
+    if (!reopened.ok) throw new Error('migration failed')
+    const before = deviceCompletionHistory(reopened.workspace, null, range)
+    const synced = await service.reconcileCategories({
+      accountId: 'user_a',
+      displayEmail: null,
+      categories: [
+        ...v1Workspace('user_a').categories.filter(
+          (category) => !category.removed,
+        ),
+        {
+          id: 42,
+          name: 'Earlier category',
+          color: 'blue',
+          isDefault: false,
+          parentId: null,
+          removed: false,
+        },
+      ],
+      deletions: [],
+    })
+    const after = deviceCompletionHistory(synced, null, range)
+
+    // Assert
+    expect(
+      imported.workspace.migration.dashboardOnly[importedId],
+    ).toMatchObject({
+      sourceAccountId: 'user_a',
+      sourceServerCategoryId: 42,
+      categoryVerified: false,
+    })
+    expect(
+      reopened.workspace.migration.dashboardOnly[existingId],
+    ).toMatchObject({
+      sourceAccountId: 'user_a',
+      sourceServerCategoryId: 42,
+      categoryVerified: false,
+    })
+    expect(reopened.importedFromOlderVersion).toBe(0)
+    expect(
+      before.rows.find((row) => row.id === importedId)?.categoryId,
+    ).toBeNull()
+    expect(
+      before.rows.find((row) => row.id === existingId)?.categoryId,
+    ).toBeNull()
+    expect(after.rows.find((row) => row.id === importedId)?.categoryId).toBe(
+      '00000000-0000-4000-8000-000000000961',
+    )
+    expect(after.rows.find((row) => row.id === existingId)?.categoryId).toBe(
+      '00000000-0000-4000-8000-000000000961',
+    )
+    expect(
+      after.rows.find((row) => row.id === otherAccountId)?.categoryId,
+    ).toBeNull()
+    expect(await v1Bytes(directory)).toEqual(olderFiles)
+  })
+
   test('writing added by an older build becomes recovery copies once and queues nothing', async () => {
     // Arrange
     const directory = await installV1([{ id: 'user_a' }])

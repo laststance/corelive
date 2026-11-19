@@ -1,6 +1,13 @@
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import {
+  GetDashboardAppearanceSchema,
+  SetDashboardAppearanceSchema,
+  type DashboardTheme,
+} from '@corelive/desktop-contract/dashboard-appearance'
+import { os } from '@orpc/server'
+import { RPCHandler } from '@orpc/server/node'
 import { createServer } from 'vite'
 
 /** Views served by `qa-dashboard/main.tsx`; keep in sync with its `VIEWS`. */
@@ -13,7 +20,7 @@ Usage: pnpm qa:dashboard [--help]
 Views (select with ?view=<name> on the printed URL):
   home        Dashboard and category sidebar against an in-page fake oRPC router (default)
               Add &activity=empty for an empty account or &activity=retry for one failed heatmap request.
-  appearance  The Dashboard Appearance settings (/settings)
+  appearance  The Dashboard Appearance settings (/settings) with a synthetic account shared across browser sessions
 
 Stdout: one JSON line {"url","pid","views"} once the server listens. Diagnostics go to stderr.
 Desktop Settings has its own fixture: pnpm qa:settings.
@@ -35,10 +42,37 @@ if (args.length > 0) {
 
 // Test-only entry, outside Next's app tree; no real auth, native windows or account API.
 const directory = fileURLToPath(new URL('./qa-dashboard', import.meta.url))
+// One synthetic account per fixture process lets independent browser contexts observe each other's preference.
+let theme: DashboardTheme | null = null
+const appearance = new RPCHandler({
+  dashboardAppearance: {
+    get: os.input(GetDashboardAppearanceSchema).handler(() => ({ theme })),
+    set: os.input(SetDashboardAppearanceSchema).handler(({ input }) => {
+      if (!input.initializeOnly || theme === null) theme = input.theme
+      return { theme }
+    }),
+  },
+})
 const server = await createServer({
   configFile: false,
   envDir: false,
   root: directory,
+  plugins: [
+    {
+      name: 'synthetic-account-appearance',
+      configureServer(dev): void {
+        dev.middlewares.use((request, response, next) => {
+          if (!request.url?.startsWith('/api/orpc/dashboardAppearance/'))
+            return next()
+          void appearance
+            .handle(request, response, { prefix: '/api/orpc', context: {} })
+            .then((result) => {
+              if (!result.matched) next()
+            }, next)
+        })
+      },
+    },
+  ],
   resolve: {
     alias: {
       '@': resolve(directory, '../../src'),

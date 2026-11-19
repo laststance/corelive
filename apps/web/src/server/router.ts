@@ -10,23 +10,33 @@ import {
   syncCategoryReceipts,
 } from './procedures/categorySync'
 import { getDayDetail, getHeatmap, getJournal } from './procedures/completed'
+import { historyRange } from './procedures/completionHistory'
 import {
   syncApply,
   syncBootstrap,
   syncCheckpoint,
   syncReceipts,
 } from './procedures/completionSync'
+import {
+  getDashboardAppearance,
+  setDashboardAppearance,
+} from './procedures/dashboardAppearance'
 import { bootstrapHome } from './procedures/home'
 import {
   assignTask,
   getMyTree,
   getUnassignedPool,
+  getUnassignedPoolPage,
   unassignTask,
 } from './procedures/skillTree'
 
 export const router = {
   account: {
     whoami,
+  },
+  dashboardAppearance: {
+    get: getDashboardAppearance,
+    set: setDashboardAppearance,
   },
   home: {
     bootstrap: bootstrapHome,
@@ -46,11 +56,13 @@ export const router = {
     syncBootstrap,
     heatmap: getHeatmap,
     dayDetail: getDayDetail,
+    historyRange,
     journal: getJournal,
   },
   skillTree: {
     getMyTree,
     getUnassignedPool,
+    getUnassignedPoolPage,
     assignTask,
     unassignTask,
   },

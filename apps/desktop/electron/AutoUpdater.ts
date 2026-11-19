@@ -129,6 +129,7 @@ export class AutoUpdater {
 
   constructor(
     private readonly beforeInstall: () => Promise<boolean> = async () => true,
+    scheduleAutomaticChecks = true,
   ) {
     this.updateAvailable = false
     this.updateDownloaded = false
@@ -149,10 +150,11 @@ export class AutoUpdater {
     autoUpdater.autoDownload = false
 
     this.setupAutoUpdater()
+    if (scheduleAutomaticChecks) this.enableAutomaticChecks()
   }
 
   /**
-   * Configures auto-updater event handlers and scheduling.
+   * Configures auto-updater event handlers for both manual and scheduled checks.
    */
   setupAutoUpdater(): void {
     autoUpdater.on('checking-for-update', () => {
@@ -218,6 +220,15 @@ export class AutoUpdater {
         log.error('Failed to show update downloaded dialog:', err)
       })
     })
+  }
+
+  /**
+   * Starts automatic update checks when CoreLive opens in the foreground.
+   * A background-only MCP launch keeps manual update actions available.
+   * @example updater.enableAutomaticChecks()
+   */
+  enableAutomaticChecks(): void {
+    if (this.periodicCheckInterval) return
 
     // Initial check after startup
     this.initialCheckTimeout = setTimeout(() => {
@@ -305,24 +316,42 @@ export class AutoUpdater {
       })
 
       if (result.response === 0) {
-        this.sendDownloadProgress({
-          percent: UPDATE_PROGRESS_PERCENT_MIN,
-          bytesPerSecond: 0,
-          transferred: 0,
-          total: 0,
-        })
-        // Handle async rejection from downloadUpdate Promise
-        void autoUpdater.downloadUpdate().catch((error) => {
-          log.error('Failed to download update:', error)
-          this.clearDownloadProgress()
-          this.logUpdaterStatus('Failed to download update')
-        })
+        this.startDownload()
       } else {
         this.logUpdaterStatus('Update postponed')
       }
     } finally {
       this.updatePromptPending = false
     }
+  }
+
+  /** Starts the update selected from the Mac tool or its native download prompt exactly once.
+   * @example updater.startAvailableDownload()
+   */
+  startAvailableDownload(): boolean {
+    if (!this.updateAvailable || this.updateDownloaded || this.downloadProgress)
+      return false
+    this.startDownload()
+    return true
+  }
+
+  /** Begins the updater transfer after a user-authorized download and publishes its progress.
+   * @example this.startDownload()
+   */
+  private startDownload(): void {
+    // The native prompt can resolve after the same transfer was started from a client.
+    if (this.downloadProgress || this.updateDownloaded) return
+    this.sendDownloadProgress({
+      percent: UPDATE_PROGRESS_PERCENT_MIN,
+      bytesPerSecond: 0,
+      transferred: 0,
+      total: 0,
+    })
+    void autoUpdater.downloadUpdate().catch((error) => {
+      log.error('Failed to download update:', error)
+      this.clearDownloadProgress()
+      this.logUpdaterStatus('Failed to download update')
+    })
   }
 
   /**

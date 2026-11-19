@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./activity-card": "./src/activity-card.ts",
     "./day": "./src/toLocalDayKey.ts",
     "./hooks/*": "./src/hooks/*.ts",
     "./ui/button": "./src/ui/button.tsx",
@@ -51,6 +52,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "html-to-image": "^1.11.13",
     "lucide-react": "^1.73.0",
     "tailwind-merge": "^3.7.0"
   },
@@ -62,6 +64,7 @@
     "@types/node": "catalog:",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "happy-dom": "^21.0.4",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

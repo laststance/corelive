@@ -184,17 +184,17 @@ export function AccountSection({
       await api.account.cancelSignIn()
       await reread()
     })
-  const connect = async (): Promise<void> =>
+  const connect = async (promptId: string): Promise<void> =>
     guarded(async () => {
       setUi({ kind: 'busy' })
-      await api.account.connect()
+      await api.account.connect(promptId)
       setUi({ kind: 'idle' })
       await reread()
     })
-  const notNow = async (): Promise<void> =>
+  const notNow = async (promptId: string): Promise<void> =>
     guarded(async () => {
       setUi({ kind: 'busy' })
-      const result = await api.account.notNow()
+      const result = await api.account.notNow(promptId)
       await reread()
       if (result.status === 'flush-failed') applySignOut(result)
       else setUi({ kind: 'idle' })
@@ -306,30 +306,29 @@ export function AccountSection({
   })()
 
   let body: React.ReactNode
-  if (account.pendingConnect && account.signIn !== 'in-progress') {
+  const pending = account.pendingConnect
+  if (pending && account.signIn !== 'in-progress') {
     // DA4: nothing is bound or sent until Connect this Mac.
     body = (
       <>
         <p>
           Connect this Mac to{' '}
-          <MiddleTruncate
-            text={account.pendingConnect.displayEmail || 'your account'}
-          />
-          ? Your keeps and categories on this Mac will appear on the Dashboard.
-          Your writing stays on this Mac.
+          <MiddleTruncate text={pending.displayEmail || 'your account'} />? Your
+          keeps and categories on this Mac will appear on the Dashboard. Your
+          writing stays on this Mac.
         </p>
         <div className="flex flex-wrap gap-2">
           <Button
             data-primary="true"
             disabled={working}
-            onClick={() => void connect()}
+            onClick={() => void connect(pending.promptId)}
           >
             Connect this Mac
           </Button>
           <Button
             variant="outline"
             disabled={working}
-            onClick={() => void notNow()}
+            onClick={() => void notNow(pending.promptId)}
           >
             Not now
           </Button>

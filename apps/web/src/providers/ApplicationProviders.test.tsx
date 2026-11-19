@@ -16,6 +16,12 @@ vi.mock('@/lib/orpc/electron-auth-provider', () => ({
     return <>{children}</>
   },
 }))
+vi.mock('@/providers/DashboardAppearanceProvider', () => ({
+  DashboardAppearanceProvider: ({ children }: { children: ReactNode }) => {
+    state.mounted('appearance')
+    return <>{children}</>
+  },
+}))
 vi.mock('@/providers/QueryClientProvider', () => ({
   QueryClientProvider: ({ children }: { children: ReactNode }) => (
     <>{children}</>
@@ -60,6 +66,20 @@ describe('broker route isolation', () => {
 
     // Assert
     expect(screen.getByText('Home page')).toBeVisible()
-    expect(state.mounted.mock.calls).toEqual([['auth']])
+    expect(state.mounted.mock.calls).toEqual([['appearance'], ['auth']])
   })
+
+  test.each(['/login-shell', '/oauth/callback', '/login'])(
+    'opening %s for desktop sign-in leaves the account theme available for the dashboard to initialize',
+    (path) => {
+      // Arrange
+      state.path = path
+
+      // Act
+      render(<ApplicationProviders>Sign in</ApplicationProviders>)
+
+      // Assert
+      expect(state.mounted.mock.calls).toEqual([['auth']])
+    },
+  )
 })

@@ -132,10 +132,11 @@ export default defineConfig({
       minify: true,
       sourcemap: true,
       rollupOptions: {
-        // Two bundled documents (D5): the editor and the Settings window.
+        // Only app-owned documents can receive the editor, Settings or activity-card preload.
         input: {
           index: resolve(import.meta.dirname, 'renderer/index.html'),
           settings: resolve(import.meta.dirname, 'renderer/settings.html'),
+          activity: resolve(import.meta.dirname, 'renderer/activity.html'),
         },
       },
     },

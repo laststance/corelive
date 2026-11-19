@@ -5,8 +5,10 @@ import {
   desc,
   eq,
   exists,
+  gt,
   type SQL,
   isNull,
+  lt,
   notExists,
   or,
   sql,
@@ -34,6 +36,8 @@ import {
   AssignTaskInputSchema,
   NodeAssignmentSchema,
   SkillTreeSchema,
+  UnassignedPoolPageInputSchema,
+  UnassignedPoolPageSchema,
   UnassignedPoolSchema,
 } from '../schemas/skillTree'
 
@@ -255,6 +259,24 @@ export const getMyTree = authMiddleware
     }
   })
 
+/** Shares the eligibility rules between the Dashboard and paged tool queries.
+ * @example query.where(unassignedPoolFilter(userId))
+ */
+function unassignedPoolFilter(userId: number) {
+  return and(
+    eq(todoTable.userId, userId),
+    eq(todoTable.completed, true),
+    notExists(
+      db
+        .select({ one: sql`1` })
+        .from(nodeAssignmentTable)
+        .where(eq(nodeAssignmentTable.todoId, todoTable.id)),
+    ),
+  )
+}
+
+const unassignedPoolOrder = [desc(todoTable.updatedAt), asc(todoTable.id)]
+
 /**
  * Lists completed Todos the user has not yet assigned to any skill node.
  * Returns a narrow `{id, text}` shape — the skill tree UI doesn't need the
@@ -270,26 +292,63 @@ export const getUnassignedPool = authMiddleware
       return await db
         .select({ id: todoTable.id, text: todoTable.text })
         .from(todoTable)
-        .where(
-          and(
-            eq(todoTable.userId, context.user.id),
-            eq(todoTable.completed, true),
-            // No assignment row points at this todo yet.
-            notExists(
-              db
-                .select({ one: sql`1` })
-                .from(nodeAssignmentTable)
-                .where(eq(nodeAssignmentTable.todoId, todoTable.id)),
-            ),
-          ),
-        )
-        // `id` breaks updatedAt ties so equal timestamps still list in a stable insertion order.
-        .orderBy(desc(todoTable.updatedAt), asc(todoTable.id))
+        .where(unassignedPoolFilter(context.user.id))
+        .orderBy(...unassignedPoolOrder)
     } catch (error) {
       if (error instanceof ORPCError) throw error
       log.error({ error }, 'Error in getUnassignedPool')
       throw new ORPCError('INTERNAL_SERVER_ERROR', {
         message: 'Failed to fetch unassigned pool',
+        cause: error,
+      })
+    }
+  })
+
+/**
+ * Reads one authenticated page for local MCP clients; a cursor remains usable if its task leaves the pool.
+ * @example await call(getUnassignedPoolPage, { pageSize: 25 }, session)
+ */
+export const getUnassignedPoolPage = authMiddleware
+  .input(UnassignedPoolPageInputSchema)
+  .output(UnassignedPoolPageSchema)
+  .handler(async ({ context, input }) => {
+    try {
+      let after: SQL | undefined
+      if (input.cursor) {
+        const updatedAt = new Date(input.cursor.updatedAt)
+        // The ID follows ascending order only when two tasks share the same timestamp.
+        after = or(
+          lt(todoTable.updatedAt, updatedAt),
+          and(
+            eq(todoTable.updatedAt, updatedAt),
+            gt(todoTable.id, input.cursor.id),
+          ),
+        )
+      }
+      const rows = await db
+        .select({
+          id: todoTable.id,
+          text: todoTable.text,
+          updatedAt: todoTable.updatedAt,
+        })
+        .from(todoTable)
+        .where(and(unassignedPoolFilter(context.user.id), after))
+        .orderBy(...unassignedPoolOrder)
+        .limit(input.pageSize + 1)
+      const page = rows.slice(0, input.pageSize)
+      const last = page.at(-1)
+      return {
+        tasks: page.map(({ id, text }) => ({ id, text })),
+        nextCursor:
+          rows.length > input.pageSize && last
+            ? { id: last.id, updatedAt: last.updatedAt.toISOString() }
+            : null,
+      }
+    } catch (error) {
+      if (error instanceof ORPCError) throw error
+      log.error({ error }, 'Error in getUnassignedPoolPage')
+      throw new ORPCError('INTERNAL_SERVER_ERROR', {
+        message: 'Failed to fetch unassigned pool page',
         cause: error,
       })
     }

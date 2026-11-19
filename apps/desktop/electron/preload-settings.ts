@@ -64,8 +64,10 @@ export function createSettingsBridge(): SettingsWindowAPI {
     },
     account: {
       status: async () => typedInvoke('settings-window-account-status'),
-      connect: async () => typedInvoke('settings-window-account-connect'),
-      notNow: async () => typedInvoke('settings-window-account-not-now'),
+      connect: async (promptId) =>
+        typedInvoke('settings-window-account-connect', promptId),
+      notNow: async (promptId) =>
+        typedInvoke('settings-window-account-not-now', promptId),
       signIn: async () => typedInvoke('settings-window-account-sign-in'),
       cancelSignIn: async (): Promise<void> =>
         typedInvoke('settings-window-account-cancel-sign-in'),

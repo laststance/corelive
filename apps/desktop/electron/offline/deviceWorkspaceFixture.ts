@@ -25,6 +25,8 @@ export interface DeviceWorkspaceFixtureInput {
   categoryCount?: number
   /** Draft text by category index (1-based). */
   notes?: Record<number, string>
+  /** Optional row UUIDs in line order, keyed by the 1-based category index. */
+  rowIds?: Readonly<Record<number, readonly string[]>>
   /** Attach the fixture to an account: category n gets server id n. */
   boundAccountId?: string
   displayEmail?: string | null
@@ -98,7 +100,10 @@ export function buildDeviceWorkspace(
           revision: 0,
           rows: (input.notes?.[index + 1] ?? '')
             .split('\n')
-            .map((text) => ({ id: randomUUID(), text })),
+            .map((text, rowIndex) => ({
+              id: input.rowIds?.[index + 1]?.[rowIndex] ?? randomUUID(),
+              text,
+            })),
         },
       ]),
     ),

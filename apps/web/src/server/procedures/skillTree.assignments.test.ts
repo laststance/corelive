@@ -19,6 +19,7 @@ import {
   assignTask,
   getMyTree,
   getUnassignedPool,
+  getUnassignedPoolPage,
   unassignTask,
 } from './skillTree'
 
@@ -86,6 +87,8 @@ async function arrangeAccount() {
     clerkId,
     nodeIds: [firstNode!.id, secondNode!.id] as const,
     todoIds: todos.map((todo) => todo.id),
+    userId: user!.id,
+    categoryId: category!.id,
   }
 }
 
@@ -238,6 +241,77 @@ describeIfDb('skill tree assignments (real PostgreSQL)', () => {
     expect(poolAfterUnassign.map((todo) => todo.id)).toEqual([
       todoIds[0],
       todoIds[1],
+    ])
+  })
+
+  test('unassigned pages keep timestamp ties stable and continue after the previous boundary leaves the pool', async () => {
+    // Arrange
+    const { clerkId, nodeIds, todoIds, userId, categoryId } =
+      await arrangeAccount()
+    await arrangeAccount()
+    const [assigned] = await db
+      .insert(todoTable)
+      .values(
+        [
+          {
+            text: 'Already assigned',
+            completed: true,
+            updatedAt: new Date('2026-06-05T00:00:00.000Z'),
+          },
+          {
+            text: 'Still open',
+            completed: false,
+            updatedAt: new Date('2026-06-05T00:00:00.000Z'),
+          },
+          {
+            text: 'Most recent',
+            completed: true,
+            updatedAt: new Date('2026-06-04T00:00:00.000Z'),
+          },
+          {
+            text: 'Oldest eligible',
+            completed: true,
+            updatedAt: new Date('2026-06-02T00:00:00.000Z'),
+          },
+        ].map((todo) => ({ ...todo, userId, categoryId })),
+      )
+      .returning({ id: todoTable.id })
+    await call(
+      assignTask,
+      { nodeId: nodeIds[0], todoId: assigned!.id },
+      authContext(clerkId),
+    )
+
+    // Act
+    const context = authContext(clerkId)
+    const first = await call(getUnassignedPoolPage, { pageSize: 2 }, context)
+    if (!first.nextCursor) throw new Error('The first page should continue')
+    await db.delete(todoTable).where(eq(todoTable.id, todoIds[0]!))
+    const second = await call(
+      getUnassignedPoolPage,
+      { pageSize: 2, cursor: first.nextCursor },
+      context,
+    )
+    const dashboard = await call(getUnassignedPool, undefined, context)
+
+    // Assert
+    expect(first.tasks.map(({ text }) => text)).toEqual([
+      'Most recent',
+      'read the docs',
+    ])
+    expect(first.nextCursor).toEqual({
+      id: todoIds[0],
+      updatedAt: '2026-06-03T14:30:00.000Z',
+    })
+    expect(second.tasks.map(({ text }) => text)).toEqual([
+      'ship the fix',
+      'Oldest eligible',
+    ])
+    expect(second.nextCursor).toBeNull()
+    expect(dashboard.map(({ text }) => text)).toEqual([
+      'Most recent',
+      'ship the fix',
+      'Oldest eligible',
     ])
   })
 

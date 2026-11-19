@@ -30,6 +30,7 @@ import {
   envelopeSchema,
   WorkspaceFileError,
 } from './AtomicWorkspaceFile'
+import { serverToLocalMap } from './categoryState'
 import { REGISTRY_OWNER_ID, registrySchema } from './OfflineAccountRegistry'
 
 /** Points where a test can kill the migration to prove it converges (EA9). */
@@ -1080,24 +1081,63 @@ async function importOlderVersionChanges(
   const changed = v1Files.filter(
     (v1File) => current.migration.v1Files[v1File.fileName] !== v1File.checksum,
   )
-  if (!changed.length) return current
+  const recoveredCategories = recoverOlderCategoryIds(current, v1Files)
+  if (!changed.length && !recoveredCategories.size) return current
   // Settled history lives in the archive file; those identities are not "missing" from v2.
-  const archivedIds = await readArchivedIds(workspacesDirectory)
+  const archivedIds = changed.length
+    ? await readArchivedIds(workspacesDirectory)
+    : null
   return file.update((state) => {
     const next = structuredClone(state)
-    const context: OlderImportContext = {
-      knownLines: collectKnownLines(next),
-      defaultCategoryId:
-        next.categories.find(
-          (category) => category.isDefault && !category.removed,
-        )?.id ?? next.categories[0]!.id,
-      archivedIds,
-      now,
+    for (const [id, serverId] of recoveredCategories) {
+      const marker = next.migration.dashboardOnly[id]
+      if (marker && marker.sourceServerCategoryId === undefined)
+        marker.sourceServerCategoryId = serverId
     }
-    for (const v1File of changed) importOlderFile(next, v1File, context)
+    if (archivedIds) {
+      const context: OlderImportContext = {
+        knownLines: collectKnownLines(next),
+        defaultCategoryId:
+          next.categories.find(
+            (category) => category.isDefault && !category.removed,
+          )?.id ?? next.categories[0]!.id,
+        archivedIds,
+        now,
+      }
+      for (const v1File of changed) importOlderFile(next, v1File, context)
+    }
     next.revision++
     return next
   })
+}
+
+/** Recovers original server categories for markers made before that field was persisted.
+ * Startup uses only retained, verified v1 files and requires the original owner and occurrence.
+ * @example const categories = recoverOlderCategoryIds(workspace, v1Files)
+ */
+function recoverOlderCategoryIds(
+  state: OfflineWorkspace,
+  v1Files: V1File[],
+): Map<string, number> {
+  const sourceByAccount = new Map<string, OfflineWorkspaceV1>()
+  for (const file of v1Files)
+    if (file.valid) sourceByAccount.set(file.workspace.ownerId, file.workspace)
+  const recovered = new Map<string, number>()
+  for (const [id, marker] of Object.entries(state.migration.dashboardOnly)) {
+    if (
+      marker.sourceServerCategoryId !== undefined ||
+      marker.sourceAccountId === undefined
+    )
+      continue
+    const retired = sourceByAccount.get(marker.sourceAccountId)
+      ?.retiredCompletions[id]
+    if (
+      retired?.completedAt === marker.completedAt &&
+      retired.cancelled === marker.cancelled
+    )
+      recovered.set(id, retired.originalCategoryId)
+  }
+  return recovered
 }
 
 /** Every draft row, recovery-copy line and completion text already stored in v2. */
@@ -1151,12 +1191,10 @@ function importOlderFile(
     return
   }
   const workspace = v1File.workspace
-  const reverse = new Map<number, string>()
-  if (next.binding?.accountId === workspace.ownerId)
-    for (const [localId, serverId] of Object.entries(
-      next.binding.serverCategoryIds,
-    ))
-      reverse.set(serverId, localId)
+  const reverse =
+    next.binding?.accountId === workspace.ownerId
+      ? serverToLocalMap(next.binding)
+      : new Map<number, string>()
   const { defaultCategoryId, archivedIds } = context
   const preserved: string[] = []
   const push = (categoryId: string, text: string): void => {
@@ -1190,8 +1228,14 @@ function importOlderFile(
   }
   for (const [id, retired] of Object.entries(workspace.retiredCompletions)) {
     if (holdsCompletionIdentity(next, archivedIds, id)) continue
+    const previousOwner = next.migration.dashboardOnly[id]?.sourceAccountId
+    if (previousOwner !== undefined && previousOwner !== workspace.ownerId)
+      continue
     next.migration.dashboardOnly[id] = {
       completedAt: retired.completedAt,
+      sourceAccountId: workspace.ownerId,
+      sourceServerCategoryId: retired.originalCategoryId,
+      categoryVerified: reverse.has(retired.originalCategoryId),
       originalCategoryId:
         reverse.get(retired.originalCategoryId) ?? defaultCategoryId,
       cancelled: retired.cancelled,

@@ -23,6 +23,7 @@ const DESKTOP_ONLY_MODULES: Record<string, string> = {
 
 /** Subpath prefixes that stay in the shared package (D6 "Stays in the package" + DA10). */
 const SHARED_SUBPATHS = [
+  'activity-card',
   'day',
   'ui/',
   // Generic lifecycle-effect hooks shared by the web and the desktop Settings renderer (#216 D5).

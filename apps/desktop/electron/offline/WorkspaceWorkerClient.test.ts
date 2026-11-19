@@ -1,14 +1,23 @@
 import { randomUUID } from 'node:crypto'
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  writeFile,
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import {
+  DEVICE_ARCHIVE_FILE_NAME,
   DEVICE_OWNER_ID,
   DEVICE_WORKSPACE_FILE_NAME,
   OfflineWorkspaceSchema,
 } from '@corelive/desktop-contract/offline-workspace-v2'
-import { expect, test } from 'vitest'
+import { expect, onTestFinished, test } from 'vitest'
 
 import { AtomicWorkspaceFile } from './AtomicWorkspaceFile'
 import {
@@ -128,6 +137,178 @@ await import(${JSON.stringify(workerURL)});
     }
   },
 )
+
+test('a progressing file write and the queued write behind it both finish past the idle threshold', async () => {
+  // Arrange
+  const directory = await mkdtemp(join(tmpdir(), 'corelive-worker-progress-'))
+  const script = join(directory, 'progress.mjs')
+  const workspaceFile = new URL('./AtomicWorkspaceFile.ts', import.meta.url)
+    .href
+  await writeFile(
+    script,
+    `import { parentPort, workerData } from 'node:worker_threads';
+import { setTimeout as delay } from 'node:timers/promises';
+import { AtomicWorkspaceFile } from ${JSON.stringify(workspaceFile)};
+let writing = false;
+const progress = () => parentPort.postMessage({ activity: 'storage-progress' });
+const file = new AtomicWorkspaceFile({
+  directory: workerData.directory,
+  ownerId: workerData.ownerId,
+  fileName: 'progress',
+  parse: value => value,
+  onOperationStart: progress,
+  onStage: async () => {
+    progress();
+    if (writing) await delay(450);
+  },
+});
+parentPort.on('message', async ({ requestId, type }) => {
+  if (type === 'archive') writing = true;
+  const state = type === 'open'
+    ? await file.initialize({ count: 0 })
+    : await file.update(current => ({ count: current.count + 1 }));
+  parentPort.postMessage({ requestId, ok: true, result: { archived: state.count } });
+  parentPort.postMessage({ requestId, activity: 'request-settled' });
+});
+`,
+  )
+  const client = new WorkspaceWorkerClient({
+    directory,
+    ownerId: 'device',
+    script,
+    execArgv: ['--import', 'tsx'],
+    idleTimeoutMs: 1_200,
+  })
+  onTestFinished(async () => {
+    await client.close()
+    await rm(directory, { recursive: true })
+  })
+  await client.call('open', null)
+
+  // Act
+  const began = performance.now()
+  const first = client.call('archive', null)
+  const second = client.call('archive', null)
+
+  // Assert
+  await expect(first).resolves.toEqual({ archived: 1 })
+  expect(performance.now() - began).toBeGreaterThan(1_200)
+  await expect(second).resolves.toEqual({ archived: 2 })
+}, 20_000)
+
+test('a completed operation whose reply was lost releases its waiter without restarting a healthy worker', async () => {
+  // Arrange
+  const directory = await mkdtemp(join(tmpdir(), 'corelive-worker-settled-'))
+  const script = join(directory, 'lost-reply.mjs')
+  await writeFile(
+    script,
+    `import { parentPort } from 'node:worker_threads';
+let count = 0;
+parentPort.on('message', ({ requestId, type }) => {
+  if (type === 'clearDue') count++;
+  else parentPort.postMessage({ requestId, ok: true, result: { archived: count } });
+  parentPort.postMessage({ requestId, activity: 'request-settled' });
+});
+`,
+  )
+  const client = new WorkspaceWorkerClient({
+    directory,
+    ownerId: 'device',
+    script,
+  })
+  onTestFinished(async () => {
+    await client.close()
+    await rm(directory, { recursive: true })
+  })
+
+  // Act
+  const missing = client.call('clearDue', null)
+  const next = client.call('archive', null)
+
+  // Assert
+  await expect(missing).rejects.toMatchObject({ reason: 'worker-unavailable' })
+  await expect(next).resolves.toEqual({ archived: 1 })
+})
+
+test('draft pages bound worker replies and retain every row identity across a long line and empty lines', async () => {
+  // Arrange
+  const directory = await mkdtemp(join(tmpdir(), 'corelive-draft-page-'))
+  const categoryId = categoryUuid(1)
+  const rowIds: string[] = []
+  rowIds[0] = '00000000-0000-4000-8000-000000000234'
+  rowIds[1023] = '00000000-0000-4000-8000-000000000235'
+  rowIds[1024] = '00000000-0000-4000-8000-000000000236'
+  const workspace = await initializeDeviceWorkspace(directory, {
+    notes: { 1: '😀' + '日'.repeat(200_000) + '\n'.repeat(2048) },
+    rowIds: { 1: rowIds },
+  })
+  const storedRows = workspace.drafts[categoryId]!.rows
+  const client = new WorkspaceWorkerClient({
+    directory,
+    ownerId: DEVICE_OWNER_ID,
+    script: new URL('./workspace-worker.ts', import.meta.url),
+    execArgv: ['--import', 'tsx'],
+  })
+  onTestFinished(async () => {
+    await client.close()
+    await rm(directory, { recursive: true })
+  })
+  const read = async (offset: number, limit: number) => {
+    const result = await client.call('draftPage', {
+      categoryId,
+      page: { offset, limit, expectedRevision: 0 },
+    })
+    if (result.status !== 'page') throw new Error(result.status)
+    return result.page
+  }
+
+  // Act
+  const first = await read(0, 1)
+  const emptyLines = await read(200_002, 65_536)
+  const last = await read(201_026, 65_536)
+
+  // Assert
+  expect(first).toMatchObject({
+    text: '😀',
+    offset: 0,
+    nextOffset: 2,
+    revision: 0,
+    totalLength: 202_050,
+    rowSpans: [
+      {
+        id: '00000000-0000-4000-8000-000000000234',
+        startOffset: 0,
+        endOffset: 200_002,
+      },
+    ],
+  })
+  expect(emptyLines).toMatchObject({
+    text: '\n'.repeat(1024),
+    offset: 200_002,
+    nextOffset: 201_026,
+  })
+  expect(last).toMatchObject({
+    text: '\n'.repeat(1024),
+    offset: 201_026,
+    nextOffset: null,
+  })
+  const spans = [...emptyLines.rowSpans, ...last.rowSpans]
+  expect(spans.map(({ id }) => id)).toEqual(storedRows.map(({ id }) => id))
+  expect(emptyLines.rowSpans.at(-1)).toMatchObject({
+    id: '00000000-0000-4000-8000-000000000235',
+    startOffset: 201_025,
+    endOffset: 201_025,
+  })
+  expect(last.rowSpans[0]).toMatchObject({
+    id: '00000000-0000-4000-8000-000000000236',
+    startOffset: 201_026,
+    endOffset: 201_026,
+  })
+  expect(spans.at(-1)).toMatchObject({
+    startOffset: 202_050,
+    endOffset: 202_050,
+  })
+})
 
 test('the actual storage worker persists commands and returns a bounded projection across restart', async () => {
   // Arrange
@@ -258,12 +439,26 @@ test('a corrupt device workspace can export its exact damaged file and validated
   }
 })
 
-test('an archived completion survives a restart and travels with the export', async () => {
-  // Arrange: a five-year-old completion that the idle roll moves out of the keep-path file.
+/**
+ * Moves an old completion out of the workspace using the real worker, then opens a fresh worker for export tests.
+ * @example const { client } = await createArchivedWorkspace()
+ */
+async function createArchivedWorkspace() {
   const directory = await mkdtemp(join(tmpdir(), 'corelive-worker-archive-'))
+  const options = {
+    directory,
+    ownerId: DEVICE_OWNER_ID,
+    script: new URL('./workspace-worker.ts', import.meta.url),
+    execArgv: ['--import', 'tsx'],
+  }
+  const first = new WorkspaceWorkerClient(options)
+  onTestFinished(async () => {
+    await first.close()
+    await rm(directory, { recursive: true })
+  })
   const id = randomUUID()
   const old = Date.now() - 5 * 365 * 24 * 60 * 60 * 1000
-  const workspace = buildDeviceWorkspace({ categoryCount: 1 })
+  const workspace = buildDeviceWorkspace({ notes: { 1: 'Current writing' } })
   workspace.completions[id] = {
     id,
     categoryId: categoryUuid(1),
@@ -289,32 +484,184 @@ test('an archived completion survives a restart and travels with the export', as
     fileName: DEVICE_WORKSPACE_FILE_NAME,
     parse: OfflineWorkspaceSchema.parse,
   }).initialize(workspace)
-  const options = {
-    directory,
-    ownerId: 'device' as const,
-    script: new URL('./workspace-worker.ts', import.meta.url),
-    execArgv: ['--import', 'tsx'],
-  }
-  const first = new WorkspaceWorkerClient(options)
-  try {
-    await first.call('open', null)
+  const { archived } = await first.call('archive', null)
+  expect(archived).toBe(1)
+  await first.close()
+  const client = new WorkspaceWorkerClient(options)
+  onTestFinished(async () => client.close())
+  return { client, directory, id }
+}
+
+test('an archived completion survives a restart and travels with the export', async () => {
+  // Arrange
+  const { client, id } = await createArchivedWorkspace()
+
+  // Act
+  const exported = JSON.parse(await client.call('export', null)) as unknown
+
+  // Assert
+  expect(exported).not.toHaveProperty(['completions', id])
+  expect(exported).toHaveProperty(
+    ['archive', 'completions', id, 'title'],
+    'Five years ago',
+  )
+})
+
+test('an export of a damaged workspace includes the surviving archive and recovery files together', async () => {
+  // Arrange
+  const { client, directory, id } = await createArchivedWorkspace()
+  const path = join(directory, 'device.json')
+  const recoveryPath = join(directory, 'device.recovery.json')
+  const recovery = await readFile(recoveryPath)
+  await writeFile(path, Buffer.from([0x7b, 0x00, 0xff]))
+
+  // Act
+  const exported = JSON.parse(await client.call('export', null)) as unknown
+
+  // Assert
+  expect(exported).toMatchObject({
+    format: 'corelive-recovery-files',
+    version: 1,
+    ownerId: 'device',
+    files: [
+      { name: 'workspace.json', contentBase64: 'ewD/', integrity: 'invalid' },
+      {
+        name: 'recovery.json',
+        contentBase64: recovery.toString('base64'),
+        integrity: 'valid',
+      },
+    ],
+    archive: { completions: { [id]: { title: 'Five years ago' } } },
+  })
+})
+
+test.each([
+  { primary: 'missing', damagedBytes: null, rawFiles: [] },
+  {
+    primary: 'corrupt',
+    damagedBytes: Buffer.from([0x7b, 0x00, 0xff]),
+    rawFiles: [
+      { name: 'workspace.json', contentBase64: 'ewD/', integrity: 'invalid' },
+    ],
+  },
+])(
+  'export includes exact archive recovery bytes when the primary archive is $primary',
+  async ({ damagedBytes, rawFiles }) => {
+    // Arrange
+    const { client, directory } = await createArchivedWorkspace()
+    const path = join(directory, `${DEVICE_ARCHIVE_FILE_NAME}.json`)
+    const recoveryPath = join(
+      directory,
+      `${DEVICE_ARCHIVE_FILE_NAME}.recovery.json`,
+    )
+    await rename(path, recoveryPath)
+    const recovery = await readFile(recoveryPath)
+    if (damagedBytes) await writeFile(path, damagedBytes)
 
     // Act
-    const { archived } = await first.call('archive', null)
-    await first.close()
-    const second = new WorkspaceWorkerClient(options)
-    const exported = JSON.parse(await second.call('export', null)) as {
-      completions: Record<string, unknown>
-      archive: { completions: Record<string, { title: string }> }
-    }
-    await second.close()
+    const exported = JSON.parse(await client.call('export', null)) as unknown
 
     // Assert
-    expect(archived).toBe(1)
-    expect(exported.completions[id]).toBeUndefined()
-    expect(exported.archive.completions[id]?.title).toBe('Five years ago')
-  } finally {
-    await first.close()
-    await rm(directory, { recursive: true })
-  }
+    expect(exported).toMatchObject({
+      version: 2,
+      archiveRecoveryFiles: {
+        format: 'corelive-recovery-files',
+        version: 1,
+        ownerId: 'device',
+        files: [
+          ...rawFiles,
+          {
+            name: 'recovery.json',
+            contentBase64: recovery.toString('base64'),
+            integrity: 'valid',
+          },
+        ],
+      },
+    })
+    expect(exported).not.toHaveProperty('archive')
+    expect(await readFile(recoveryPath)).toEqual(recovery)
+  },
+)
+
+test.each([
+  { suffix: '.json', excluded: 'workspace.json', ownerInPayload: false },
+  { suffix: '.recovery.json', excluded: 'recovery.json', ownerInPayload: true },
+])(
+  'valid writing exports with an exclusion notice when only a foreign $excluded archive exists',
+  async ({ suffix, excluded, ownerInPayload }) => {
+    // Arrange
+    const { client, directory } = await createArchivedWorkspace()
+    await rename(
+      join(directory, `${DEVICE_ARCHIVE_FILE_NAME}.json`),
+      join(directory, 'unused-fixture.json'),
+    )
+    const foreign = JSON.stringify(
+      ownerInPayload
+        ? {
+            ownerId: 'device',
+            payload: JSON.stringify({
+              ownerId: 'account-b',
+              text: 'Foreign archive data',
+            }),
+          }
+        : { ownerId: 'account-b', payload: 'Foreign archive data' },
+    )
+    await writeFile(join(directory, DEVICE_ARCHIVE_FILE_NAME + suffix), foreign)
+
+    // Act
+    const writing = await client.call('export', null)
+
+    // Assert
+    expect(JSON.parse(writing) as unknown).toMatchObject({
+      version: 2,
+      drafts: {
+        '00000000-0000-4000-8000-000000000001': {
+          rows: [{ text: 'Current writing' }],
+        },
+      },
+      archiveRecoveryFiles: {
+        format: 'corelive-recovery-files',
+        version: 1,
+        ownerId: 'device',
+        files: [],
+        excluded: [excluded],
+      },
+    })
+    expect(writing).not.toContain('Foreign archive data')
+    expect(writing).not.toContain(Buffer.from(foreign).toString('base64'))
+  },
+)
+
+test('export refuses a foreign workspace even when this device has an owned archive', async () => {
+  // Arrange
+  const { client, directory } = await createArchivedWorkspace()
+  const foreign = JSON.stringify({ ownerId: 'account-b' })
+  await writeFile(
+    join(directory, `${DEVICE_WORKSPACE_FILE_NAME}.json`),
+    foreign,
+  )
+  await writeFile(
+    join(directory, `${DEVICE_WORKSPACE_FILE_NAME}.recovery.json`),
+    foreign,
+  )
+
+  // Act + Assert
+  await expect(client.call('export', null)).rejects.toMatchObject({
+    reason: 'recovery-missing',
+  })
+})
+
+test('an I/O error reading archive recovery stays a storage failure during export', async () => {
+  // Arrange
+  const { client, directory } = await createArchivedWorkspace()
+  await rename(
+    join(directory, `${DEVICE_ARCHIVE_FILE_NAME}.json`),
+    join(directory, 'unused-fixture.json'),
+  )
+  await mkdir(join(directory, `${DEVICE_ARCHIVE_FILE_NAME}.recovery.json`))
+
+  // Act + Assert
+  await expect(client.call('export', null)).rejects.toMatchObject({
+    reason: 'storage-failed',
+  })
 })

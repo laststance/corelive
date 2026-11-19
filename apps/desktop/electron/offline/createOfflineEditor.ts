@@ -6,7 +6,10 @@ import type { ConfigManager } from '../ConfigManager'
 import { log } from '../logger'
 import type { WindowManager } from '../WindowManager'
 
-import { createSyncTransport } from './createSyncTransport'
+import {
+  createMcpAccountClient,
+  createSyncTransport,
+} from './createSyncTransport'
 import { endLocalSession } from './localSessionEnd'
 import { OfflineEditorController } from './OfflineEditorController'
 import { OfflineEditorIPC } from './OfflineEditorIPC'
@@ -32,6 +35,7 @@ export function createOfflineEditor(
     workerScript: join(mainDirectory, 'workspace-worker.cjs'),
     broker,
     transport: (token) => createSyncTransport(origin, token),
+    mcpClient: (token) => createMcpAccountClient(origin, token),
     legacyNotes: () =>
       config.get<Record<string, string>>('liveEditor.notes', {}),
     requestFlush: async (generation) => ipc.flush(generation),

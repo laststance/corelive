@@ -6,9 +6,12 @@
   "entry": [
     ".pnpmfile.cjs",
     "apps/desktop/electron/dev-runner.ts",
+    // The signed Mac launcher starts this separately bundled stdio entry.
+    "apps/desktop/electron/mcp/stdio.ts",
     // Standalone sandbox entry bundled by scripts/build-offline-preloads.mjs.
     "apps/desktop/electron/preload-offline-editor.ts",
     "apps/desktop/electron/preload-settings.ts",
+    "apps/desktop/electron/preload-activity.ts",
     // Second bundled renderer document (D5), loaded by corelive-editor://app/settings.html.
     "apps/desktop/renderer/settings/main.tsx",
     "apps/desktop/scripts/after-build.js",

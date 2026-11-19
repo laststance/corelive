@@ -1,23 +1,46 @@
+import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import type { OfflineEditorAPI } from '@corelive/desktop-contract/offline-editor-api'
 import type { CompletionSyncTransport } from '@corelive/desktop-contract/offline-sync'
+import { DraftRowSchema } from '@corelive/desktop-contract/offline-workspace'
 import {
   DEVICE_OWNER_ID,
   DEVICE_WORKSPACE_FILE_NAME,
   OfflineWorkspaceSchema,
   type OfflineEditorSnapshot,
 } from '@corelive/desktop-contract/offline-workspace-v2'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
-import { afterEach, expect, onTestFinished, test, vi } from 'vitest'
+import {
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  onTestFinished,
+  test,
+  vi,
+} from 'vitest'
 
 import { DurableEditorStore } from '../../renderer/editor/DurableEditorStore'
+import { createAppActions } from '../mcp/appActions'
+import { startMcpOwner } from '../mcp/bridgeOwner'
+import { createEditorDispatcher } from '../mcp/editorActions'
+import { mcpSuccess } from '../mcp/result'
+import { parseMcpCall } from '../mcp/tools'
 import type { WindowManager } from '../WindowManager'
 
 import { AtomicWorkspaceFile } from './AtomicWorkspaceFile'
+import {
+  createMcpAccountClient,
+  type McpAccountClient,
+} from './createSyncTransport'
 import {
   buildDeviceWorkspace,
   categoryUuid,
@@ -36,7 +59,7 @@ vi.mock('electron', () => ({
 }))
 
 type Options = ConstructorParameters<typeof OfflineEditorController>[0]
-const cleanups: (() => Promise<void>)[] = []
+const cleanups: (() => void | Promise<void>)[] = []
 const serverCategory = {
   id: 1,
   name: 'General',
@@ -113,6 +136,7 @@ function syncCalls(transport: Transport): number {
 async function createFixture(
   input: {
     existing?: boolean
+    categoryNames?: string[]
     bound?: string
     attached?: boolean
     signOutPending?: boolean
@@ -127,6 +151,7 @@ async function createFixture(
   if (input.existing ?? true) {
     await initializeDeviceWorkspace(workspaces, {
       notes: { 1: 'Writing survives offline startup' },
+      categoryNames: input.categoryNames,
       boundAccountId: input.bound,
       displayEmail: input.bound ? 'bound@example.com' : null,
     })
@@ -215,6 +240,137 @@ async function createFixture(
 
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) await cleanup()
+})
+
+/** Reads the prompt as an account client would before responding to it.
+ * @example const promptId = pendingPromptId(controller)
+ */
+function pendingPromptId(controller: OfflineEditorController): string {
+  const prompt = controller.accountStatus().pendingConnect
+  if (!prompt) throw new Error('Expected a pending account connection')
+  return prompt.promptId
+}
+
+test('a scoped account read revokes all previously retained pages when the broker reports a different account', async () => {
+  // Arrange
+  const fixture = await createFixture({
+    bound: 'account-a',
+    attached: true,
+    override: {
+      mcpClient: (token) => createMcpAccountClient('http://127.0.0.1', token),
+    },
+  })
+  await fixture.controller.initialize()
+  const original = fixture.controller.mcpAccountBinding()!
+  const callback = vi.fn(async () => 'verified')
+  fixture.broker.acquire.mockImplementation(
+    async (expectedAccountId, generation) => ({
+      status: 'ready',
+      credential: {
+        status: 'ready',
+        requestId: randomUUID(),
+        expectedAccountId,
+        generation,
+        accountId: 'account-b',
+        token: 'synthetic',
+      },
+    }),
+  )
+
+  // Act and Assert
+  await expect(
+    fixture.controller.withMcpAccount(callback),
+  ).rejects.toMatchObject({ code: 'account-changed', dispatched: false })
+  expect(original.signal.aborted).toBe(true)
+  expect(callback).not.toHaveBeenCalled()
+})
+
+test('a known refusal and an interrupted account mutation have different redacted write outcomes', async () => {
+  // Arrange
+  const fixture = await createFixture({
+    bound: 'account-a',
+    attached: true,
+    override: {
+      mcpClient: (token) => createMcpAccountClient('http://127.0.0.1', token),
+    },
+  })
+  await fixture.controller.initialize()
+  const refused = async () =>
+    Promise.reject(
+      Object.assign(new Error('private provider detail'), {
+        code: 'NOT_FOUND',
+      }),
+    )
+  const interrupted = async () =>
+    Promise.reject(new Error('private network detail'))
+
+  // Act and Assert
+  await expect(
+    fixture.controller.withMcpAccount(refused),
+  ).rejects.toMatchObject({
+    code: 'record-unavailable',
+    message: 'record-unavailable',
+    dispatched: true,
+    definiteRefusal: true,
+  })
+  await expect(
+    fixture.controller.withMcpAccount(interrupted),
+  ).rejects.toMatchObject({
+    code: 'account-unavailable',
+    message: 'account-unavailable',
+    dispatched: true,
+    definiteRefusal: false,
+  })
+})
+
+test('sign-out that is still saving the editor prevents a verified account mutation from being sent', async () => {
+  // Arrange
+  const mcpClient = vi.fn((token: string) =>
+    createMcpAccountClient('http://127.0.0.1', token),
+  )
+  const fixture = await createFixture({
+    bound: 'account-a',
+    attached: true,
+    override: { mcpClient },
+  })
+  await fixture.controller.initialize()
+  const verifying = deferred()
+  const verified = deferred()
+  fixture.transport.whoami.mockImplementation(async (signal) => {
+    if (signal) {
+      verifying.resolve()
+      await verified.promise
+    }
+    return { clerkId: 'account-a', email: 'me@example.com' }
+  })
+  const saving = deferred()
+  const saved = deferred()
+  fixture.requestFlush.mockImplementationOnce(async () => {
+    saving.resolve()
+    await saved.promise
+    return true
+  })
+  const send = vi.fn(async () => 'updated')
+
+  // Act
+  const mutation = fixture.controller.withMcpAccount(send)
+  await verifying.promise
+  const signingOut = fixture.controller.signOut()
+  await saving.promise
+  verified.resolve()
+
+  // Assert
+  try {
+    await expect(mutation).rejects.toMatchObject({
+      code: 'account-changed',
+      dispatched: false,
+    })
+    expect(mcpClient).not.toHaveBeenCalled()
+    expect(send).not.toHaveBeenCalled()
+  } finally {
+    saved.resolve()
+    await signingOut
+  }
 })
 
 /** Holds a specific worker boundary until a concurrency test releases it.
@@ -703,6 +859,7 @@ test('the pending Connect prompt survives a relaunch', async () => {
   const first = await createFixture()
   await first.controller.initialize()
   await first.controller.authenticated('account-a')
+  const oldPrompt = pendingPromptId(first.controller)
   await first.controller.shutdown()
   const relaunched = new OfflineEditorController({
     ...first.options,
@@ -713,9 +870,10 @@ test('the pending Connect prompt survives a relaunch', async () => {
   await relaunched.initialize()
 
   // Assert
-  expect(relaunched.accountStatus().pendingConnect).toEqual({
+  expect(relaunched.accountStatus().pendingConnect).toMatchObject({
     displayEmail: 'me@example.com',
   })
+  expect(pendingPromptId(relaunched)).not.toBe(oldPrompt)
   await relaunched.shutdown()
 })
 
@@ -742,7 +900,7 @@ test('connecting a Mac with no pending keeps shows no first-upload notice', asyn
   await fixture.controller.authenticated('account-a')
 
   // Act
-  await fixture.controller.connect()
+  await fixture.controller.connect(pendingPromptId(fixture.controller))
 
   // Assert
   expect(fixture.controller.accountStatus().firstUpload).toBeNull()
@@ -762,7 +920,9 @@ test('Connect this Mac binds the account, uploads and reports the Mac as synced'
   await fixture.controller.authenticated('account-a')
 
   // Act
-  const accepted = await fixture.controller.connect()
+  const accepted = await fixture.controller.connect(
+    pendingPromptId(fixture.controller),
+  )
 
   // Assert
   expect(accepted).toBe(true)
@@ -790,7 +950,9 @@ test('Not now ends the session locally and keeps the Mac unbound', async () => {
   await fixture.controller.authenticated('account-a')
 
   // Act
-  const result = await fixture.controller.notNow()
+  const result = await fixture.controller.notNow(
+    pendingPromptId(fixture.controller),
+  )
 
   // Assert
   expect(result).toEqual({ status: 'signed-out' })
@@ -801,6 +963,395 @@ test('Not now ends the session locally and keeps the Mac unbound', async () => {
   })
   expect((await readDevice(fixture.workspaces)).binding).toBeNull()
   expect(syncCalls(fixture.transport)).toBe(0)
+})
+
+test('a decline queued while Connect is saving keeps the accepted account attached', async () => {
+  // Arrange
+  const fixture = await createFixture()
+  await fixture.controller.initialize()
+  await fixture.controller.authenticated('account-a')
+  const promptId = pendingPromptId(fixture.controller)
+  const saving = deferred()
+  const saved = deferred()
+  const update = fixture.registry.update.bind(fixture.registry)
+  vi.spyOn(fixture.registry, 'update').mockImplementationOnce(async (patch) => {
+    saving.resolve()
+    await saved.promise
+    return update(patch)
+  })
+  const connecting = fixture.controller.connect(promptId)
+  await saving.promise
+
+  // Act
+  const refused = expect(
+    fixture.controller.notNow(promptId),
+  ).rejects.toMatchObject({ reason: 'connection-not-pending' })
+  saved.resolve()
+
+  // Assert
+  await expect(connecting).resolves.toBe(true)
+  await refused
+  expect(fixture.controller.accountStatus().state).toBe('attached')
+  expect(fixture.controller.accountStatus().pendingConnect).toBeNull()
+  expect(fixture.endLocalSession).not.toHaveBeenCalled()
+})
+
+test('a receipt lookup queued before Connect is refused when the workspace becomes attached', async () => {
+  // Arrange
+  const fixture = await createFixture()
+  const { controller, directory } = fixture
+  const { actionsFor } = deviceMcpFixture(directory)
+  const actions = await actionsFor(controller)
+  const { generation } = controller.getSnapshot()
+  const operationId = '00000000-0000-4000-8000-000000000230'
+  await controller.appendMcpTask(generation, {
+    operationId,
+    title: 'Written on this Mac',
+  })
+  const savedReceipt = await actions.call(
+    'client',
+    'get_task_addition_result',
+    {
+      operationId,
+    },
+  )
+  expect(savedReceipt.structuredContent).toMatchObject({
+    status: 'saved',
+    title: 'Written on this Mac',
+  })
+  await controller.authenticated('account-a')
+  const saving = deferred()
+  const saved = deferred()
+  const update = fixture.registry.update.bind(fixture.registry)
+  vi.spyOn(fixture.registry, 'update').mockImplementationOnce(async (patch) => {
+    saving.resolve()
+    await saved.promise
+    return update(patch)
+  })
+  const connecting = controller.connect(pendingPromptId(controller))
+  await saving.promise
+  const reading = vi.spyOn(controller, 'findMcpTask')
+
+  // Act
+  const lookup = actions.call('client', 'get_task_addition_result', {
+    operationId,
+  })
+  try {
+    await vi.waitFor(() => expect(reading).toHaveBeenCalledOnce())
+  } finally {
+    saved.resolve()
+  }
+
+  // Assert
+  expect(await lookup).toMatchObject({
+    isError: true,
+    structuredContent: { code: 'account-changed', effect: 'none' },
+  })
+  await expect(connecting).resolves.toBe(true)
+  expect(controller.getSnapshot().generation).toBe(generation)
+})
+
+test('a receipt already being read is withheld when its account session expires', async () => {
+  // Arrange
+  const { controller } = await createFixture({
+    bound: 'account-a',
+    attached: true,
+  })
+  await controller.initialize()
+  const { generation } = controller.getSnapshot()
+  const operationId = '00000000-0000-4000-8000-000000000231'
+  await controller.appendMcpTask(generation, {
+    operationId,
+    title: 'Saved while attached',
+  })
+  const reading = deferred()
+  const read = deferred()
+  const call = WorkspaceWorkerClient.prototype.call
+  const worker = vi
+    .spyOn(WorkspaceWorkerClient.prototype, 'call')
+    .mockImplementation(async function (
+      this: WorkspaceWorkerClient,
+      type,
+      input,
+    ) {
+      const result = await call.call(this, type, input)
+      if (type === 'findTaskAddition') {
+        reading.resolve()
+        await read.promise
+      }
+      return result
+    })
+  onTestFinished(() => worker.mockRestore())
+
+  // Act
+  const lookup = controller.findMcpTask(generation, operationId)
+  await reading.promise
+  controller.sessionUnavailable()
+  read.resolve()
+
+  // Assert
+  await expect(lookup).rejects.toMatchObject({ reason: 'account-changed' })
+  expect(controller.getSnapshot().generation).toBe(generation)
+})
+
+test('a committed addition reports an unknown result when its account expires before the reply', async () => {
+  // Arrange
+  const { controller, directory, workspaces } = await createFixture({
+    bound: 'account-a',
+    attached: true,
+  })
+  const { actionsFor } = deviceMcpFixture(directory)
+  const actions = await actionsFor(controller)
+  const operationId = '00000000-0000-4000-8000-000000000233'
+  const committed = deferred()
+  const reply = deferred()
+  const call = WorkspaceWorkerClient.prototype.call
+  const appended = vi.fn()
+  const worker = vi
+    .spyOn(WorkspaceWorkerClient.prototype, 'call')
+    .mockImplementation(async function (
+      this: WorkspaceWorkerClient,
+      type,
+      input,
+    ) {
+      const result = await call.call(this, type, input)
+      if (type === 'appendTask') {
+        appended()
+        committed.resolve()
+        await reply.promise
+      }
+      return result
+    })
+  onTestFinished(() => worker.mockRestore())
+
+  // Act
+  const addition = actions.call('client', 'append_unfinished_task', {
+    operationId,
+    title: 'Keep the original row',
+  })
+  await committed.promise
+  controller.sessionUnavailable()
+  reply.resolve()
+  const result = await addition
+  const receipt = await actions.call('client', 'get_task_addition_result', {
+    operationId,
+  })
+
+  // Assert
+  expect(result).toMatchObject({
+    isError: true,
+    structuredContent: {
+      code: 'result-unknown',
+      effect: 'unknown',
+      operationId: '00000000-0000-4000-8000-000000000233',
+      nextAction: expect.stringContaining('get_task_addition_result'),
+    },
+  })
+  expect(receipt).toMatchObject({
+    isError: false,
+    structuredContent: {
+      status: 'saved',
+      operationId: '00000000-0000-4000-8000-000000000233',
+      title: 'Keep the original row',
+    },
+  })
+  expect(appended).toHaveBeenCalledOnce()
+  const saved = await readDevice(workspaces)
+  expect(saved.drafts[categoryUuid(1)]?.rows.map((row) => row.text)).toEqual([
+    'Writing survives offline startup',
+    '- [ ] Keep the original row',
+  ])
+})
+
+test('a restored prompt cannot end another account while its sign-in is being verified', async () => {
+  // Arrange
+  const identity = { clerkId: 'account-b', email: 'b@example.com' }
+  const fixture = await createFixture({ identity })
+  const { controller } = fixture
+  await fixture.registry.update({
+    pendingConnect: { accountId: 'account-a', displayEmail: 'a@example.com' },
+  })
+  await controller.initialize()
+  const oldPrompt = pendingPromptId(controller)
+  const verifying = deferred()
+  const verified = deferred()
+  fixture.transport.whoami.mockImplementationOnce(async () => {
+    verifying.resolve()
+    await verified.promise
+    return identity
+  })
+  const signingIn = controller.authenticated('account-b')
+  await verifying.promise
+
+  // Act and assert
+  try {
+    await expect(controller.notNow(oldPrompt)).rejects.toMatchObject({
+      reason: 'connection-not-pending',
+    })
+    await expect(controller.connect(oldPrompt)).resolves.toBe(false)
+    expect(fixture.requestFlush).not.toHaveBeenCalled()
+    expect(fixture.endLocalSession).not.toHaveBeenCalled()
+  } finally {
+    verified.resolve()
+    await signingIn
+  }
+  expect(controller.accountStatus()).toMatchObject({
+    state: 'never-attached',
+    pendingConnect: { displayEmail: 'b@example.com' },
+  })
+})
+
+test('a decline stops before clearing the session when another account signs in during its editor flush', async () => {
+  // Arrange
+  const fixture = await createFixture({
+    identity: { clerkId: 'account-b', email: 'b@example.com' },
+  })
+  const { controller } = fixture
+  await fixture.registry.update({
+    pendingConnect: { accountId: 'account-a', displayEmail: 'a@example.com' },
+  })
+  await controller.initialize()
+  const oldPrompt = pendingPromptId(controller)
+  const saving = deferred()
+  const saved = deferred()
+  fixture.requestFlush.mockImplementationOnce(async () => {
+    saving.resolve()
+    await saved.promise
+    return true
+  })
+  const declining = controller.notNow(oldPrompt)
+  await saving.promise
+
+  // Act
+  const signingIn = controller.authenticated('account-b')
+  saved.resolve()
+
+  // Assert
+  try {
+    await expect(declining).rejects.toMatchObject({
+      reason: 'connection-not-pending',
+    })
+  } finally {
+    await signingIn
+  }
+  expect(fixture.endLocalSession).not.toHaveBeenCalled()
+  expect(controller.accountStatus().pendingConnect).toMatchObject({
+    displayEmail: 'b@example.com',
+  })
+})
+
+test.each([
+  { previous: 'a stale prompt rejection', replaced: true, flushes: 2 },
+  { previous: 'a successful decline', replaced: false, flushes: 1 },
+])(
+  'explicit sign-out completes with one session teardown after $previous',
+  async ({ replaced, flushes }) => {
+    // Arrange
+    const fixture = await createFixture({
+      identity: replaced
+        ? { clerkId: 'account-b', email: 'b@example.com' }
+        : { clerkId: 'account-a', email: 'a@example.com' },
+    })
+    const { controller } = fixture
+    await fixture.registry.update({
+      pendingConnect: { accountId: 'account-a', displayEmail: 'a@example.com' },
+    })
+    await controller.initialize()
+    const saving = deferred()
+    const saved = deferred()
+    fixture.requestFlush.mockImplementationOnce(async () => {
+      saving.resolve()
+      await saved.promise
+      return true
+    })
+    const declining = controller.notNow(pendingPromptId(controller))
+    await saving.promise
+
+    // Act
+    const settled = Promise.allSettled([
+      declining,
+      controller.signOut(),
+      controller.signOut(),
+    ])
+    const signingIn = replaced
+      ? controller.authenticated('account-b')
+      : Promise.resolve()
+    saved.resolve()
+    const [prompt, ...signOuts] = await settled
+    await signingIn
+
+    // Assert
+    if (replaced)
+      expect(prompt).toMatchObject({
+        status: 'rejected',
+        reason: { reason: 'connection-not-pending' },
+      })
+    else
+      expect(prompt).toEqual({
+        status: 'fulfilled',
+        value: { status: 'signed-out' },
+      })
+    expect(signOuts).toEqual([
+      { status: 'fulfilled', value: { status: 'signed-out' } },
+      { status: 'fulfilled', value: { status: 'signed-out' } },
+    ])
+    expect(fixture.requestFlush).toHaveBeenCalledTimes(flushes)
+    expect(fixture.endLocalSession).toHaveBeenCalledOnce()
+    expect(controller.accountStatus().pendingConnect).toBeNull()
+  },
+)
+
+test('account actions require the displayed prompt and cannot act on a replacement account', async () => {
+  // Arrange
+  const identity = { clerkId: 'account-a', email: 'me@example.com' }
+  const transport = createTransport(identity)
+  transport.whoami.mockImplementation(async () => ({ ...identity }))
+  const fixture = await createFixture({ identity, transport })
+  const { actionsFor } = deviceMcpFixture(fixture.directory)
+  const actions = await actionsFor(fixture.controller)
+  await fixture.controller.authenticated('account-a')
+  const oldPromptId = pendingPromptId(fixture.controller)
+  const first = await actions.call('client-a', 'read_account_status', {})
+  expect(first.structuredContent).toMatchObject({
+    pendingConnect: { displayEmail: 'me@example.com', promptId: oldPromptId },
+  })
+  identity.clerkId = 'account-b'
+  identity.email = 'b@example.com'
+  await fixture.controller.authenticated('account-b')
+  const currentPromptId = pendingPromptId(fixture.controller)
+
+  // Act and Assert
+  for (const action of ['connect_account', 'defer_account_connection']) {
+    const missing = await actions.call('client-a', action, {})
+    expect(missing.structuredContent).toMatchObject({
+      code: 'invalid-input',
+      effect: 'none',
+      nextAction: expect.stringContaining('read_account_status'),
+    })
+    const stale = await actions.call('client-a', action, {
+      promptId: oldPromptId,
+    })
+    expect(stale.structuredContent).toMatchObject({
+      code: 'connection-not-pending',
+      effect: 'none',
+      nextAction: expect.stringContaining('read_account_status'),
+    })
+  }
+  const current = await actions.call('client-b', 'read_account_status', {})
+  expect(current.structuredContent).toMatchObject({
+    state: 'never-attached',
+    pendingConnect: {
+      displayEmail: 'b@example.com',
+      promptId: currentPromptId,
+    },
+  })
+  expect(fixture.endLocalSession).not.toHaveBeenCalled()
+  expect(syncCalls(transport)).toBe(0)
+  const declined = await actions.call('client-b', 'defer_account_connection', {
+    promptId: currentPromptId,
+  })
+  expect(declined.structuredContent).toMatchObject({ status: 'signed-out' })
+  expect(fixture.endLocalSession).toHaveBeenCalledOnce()
 })
 
 test('a different account signed in over the bound one stays detached, sends nothing and keeps editing', async () => {
@@ -1350,6 +1901,802 @@ test('a sign-out whose final detach write fails still finishes and keeps the jou
   expect(fixture.controller.accountStatus().state).toBe('signed-out')
 })
 
+const desktop = fileURLToPath(new URL('../../', import.meta.url))
+
+/** Starts isolated clients and supplies the ordinary app dispatcher for a test device workspace.
+ * @example const {actionsFor,connect} = deviceMcpFixture(directory)
+ */
+function deviceMcpFixture(directory: string) {
+  const noWindows = {
+    getLiveEditorWindow: () => null,
+    getSettingsWindow: () => null,
+    setLoginWindowObserver: vi.fn(),
+  } as unknown as WindowManager
+  const actionsFor = async (device: OfflineEditorController) => {
+    await device.initialize()
+    const ipc = new OfflineEditorIPC(noWindows, device, {
+      signOutDevice: async (run) => run(),
+      isOnline: () => false,
+    })
+    return createAppActions({
+      runtime: { controller: device, ipc },
+      profileDirectory: directory,
+      native: async () => undefined,
+      signOutDevice: async (run) => run(),
+    })
+  }
+  const connect = async () => {
+    const client = new Client({
+      name: 'CoreLive integration',
+      version: '1',
+    })
+    cleanups.unshift(async () => client.close())
+    await client.connect(
+      new StdioClientTransport({
+        command: process.execPath,
+        args: [
+          join(desktop, 'dist-electron/mcp-runtime/stdio.cjs'),
+          '--user-data-dir=' + directory,
+        ],
+        stderr: 'pipe',
+      }),
+    )
+    return client
+  }
+  return { actionsFor, connect }
+}
+
+describe('MCP operations in the device workspace', () => {
+  test('editing another line preserves the completed row returned by read_draft', async () => {
+    // Arrange
+    const { controller } = await createFixture()
+    await controller.initialize()
+    const snapshot = controller.getSnapshot()
+    if (snapshot.phase !== 'ready')
+      throw new Error('Expected an editable workspace')
+    const categoryId = snapshot.workspace.selectedCategoryId
+    const dispatch = createEditorDispatcher(controller, {
+      flush: async () => true,
+      shown: () => {},
+    })
+    const rowId = snapshot.workspace.draft.rows[0]!.id
+    await dispatch(
+      parseMcpCall('complete_draft_line', {
+        categoryId,
+        rowId,
+        baseRevision: 0,
+      }),
+    )
+    const read = await dispatch(parseMcpCall('read_draft', { categoryId }))
+    const rows = DraftRowSchema.array().parse(read.rows)
+
+    // Act
+    await dispatch(
+      parseMcpCall('edit_draft', {
+        categoryId,
+        baseRevision: read.revision,
+        rows: [
+          ...rows,
+          { id: '00000000-0000-4000-8000-000000000228', text: 'New note' },
+        ],
+      }),
+    )
+
+    // Assert
+    const saved = await controller.draft(snapshot.generation, categoryId)
+    expect(rows[0]?.completionId).toEqual(expect.any(String))
+    expect(saved.draft.rows[0]).toEqual(rows[0])
+    expect(saved.draft.rows[1]?.text).toBe('New note')
+  })
+
+  test('a stale edit stays rejected when the current revision cannot be read', async () => {
+    // Arrange
+    const { controller } = await createFixture()
+    await controller.initialize()
+    const categoryId = categoryUuid(1)
+    const dispatch = createEditorDispatcher(controller, {
+      flush: async () => true,
+      shown: () => {},
+    })
+    const id = '00000000-0000-4000-8000-000000000118'
+    const change = async (text: string) =>
+      dispatch(
+        parseMcpCall('edit_draft', {
+          categoryId,
+          baseRevision: 0,
+          rows: [{ id, text }],
+        }),
+      )
+    await change('Saved writing')
+    vi.spyOn(controller, 'draft').mockRejectedValueOnce(
+      new Error('worker-exit'),
+    )
+
+    // Act
+    const stale = change('Stale writing')
+
+    // Assert
+    await expect(stale).rejects.toMatchObject({
+      code: 'revision-conflict',
+      effect: 'none',
+      detail: { categoryId, expectedRevision: 0 },
+    })
+    await expect(change('Stale retry')).rejects.toMatchObject({
+      code: 'revision-conflict',
+      effect: 'none',
+      detail: { categoryId, expectedRevision: 0, currentRevision: 1 },
+    })
+    await expect(
+      dispatch(parseMcpCall('read_draft', { categoryId })),
+    ).resolves.toMatchObject({ text: 'Saved writing', revision: 1 })
+  })
+
+  test('a resident app uses the current Mac time zone for each new dashboard day request', async () => {
+    // Arrange
+    const dayDetail = vi
+      .fn<McpAccountClient['completed']['dayDetail']>()
+      .mockResolvedValueOnce({
+        date: '2026-11-19',
+        count: 1,
+        tasks: [
+          {
+            source: 'completed',
+            id: 19,
+            title: 'Filed the report',
+            completedAt: new Date('2026-11-18T22:30:00.000Z'),
+            category: null,
+          },
+        ],
+        categories: [],
+      })
+      .mockResolvedValueOnce({
+        date: '2026-11-19',
+        count: 0,
+        tasks: [],
+        categories: [],
+      })
+    const fixture = await createFixture({
+      bound: 'account-a',
+      attached: true,
+      override: {
+        mcpClient: () =>
+          ({ completed: { dayDetail } }) as unknown as ReturnType<
+            typeof createMcpAccountClient
+          >,
+      },
+    })
+    await fixture.controller.initialize()
+    const runtime = {
+      controller: fixture.controller,
+      ipc: {} as OfflineEditorIPC,
+    }
+    const actions = createAppActions({
+      runtime,
+      profileDirectory: fixture.directory,
+      native: async () => undefined,
+      signOutDevice: async (run) => run(),
+    })
+    const options = Intl.DateTimeFormat().resolvedOptions()
+    const zone = vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions')
+    onTestFinished(() => zone.mockRestore())
+
+    // Act
+    zone.mockReturnValue({ ...options, timeZone: 'Asia/Tokyo' })
+    const tokyo = await actions.call('one-session', 'read_activity_day', {
+      day: '2026-11-19',
+    })
+    zone.mockReturnValue({ ...options, timeZone: 'America/Los_Angeles' })
+    const losAngeles = await actions.call('one-session', 'read_activity_day', {
+      day: '2026-11-19',
+    })
+
+    // Assert
+    expect(dayDetail).toHaveBeenNthCalledWith(
+      1,
+      { date: '2026-11-19', timezone: 'Asia/Tokyo' },
+      { signal: expect.any(AbortSignal) },
+    )
+    expect(tokyo.isError).toBe(false)
+    expect(tokyo.structuredContent).toEqual({
+      date: '2026-11-19',
+      count: 1,
+      tasks: [
+        {
+          source: 'completed',
+          id: 19,
+          title: 'Filed the report',
+          completedAt: new Date('2026-11-18T22:30:00.000Z'),
+          category: null,
+        },
+      ],
+      categories: [],
+    })
+    expect(losAngeles.isError).toBe(false)
+    expect(losAngeles.structuredContent).toEqual({
+      date: '2026-11-19',
+      count: 0,
+      tasks: [],
+      categories: [],
+    })
+    expect(dayDetail).toHaveBeenNthCalledWith(
+      2,
+      { date: '2026-11-19', timezone: 'America/Los_Angeles' },
+      { signal: expect.any(AbortSignal) },
+    )
+  })
+
+  test('another category change preserves the revision needed for the next draft or preferences update', async () => {
+    // Arrange
+    const { controller } = await createFixture({
+      categoryNames: ['Work', 'Personal'],
+    })
+    await controller.initialize()
+    const dispatch = createEditorDispatcher(controller, {
+      flush: async () => true,
+      shown: () => {},
+    })
+    const work = categoryUuid(1)
+    const rows = [
+      { id: '00000000-0000-4000-8000-000000000118', text: 'First line' },
+    ]
+    await dispatch(
+      parseMcpCall('select_category', { categoryId: categoryUuid(2) }),
+    )
+
+    // Act
+    const edited = await dispatch(
+      parseMcpCall('edit_draft', { categoryId: work, baseRevision: 0, rows }),
+    )
+    const completed = await dispatch(
+      parseMcpCall('complete_draft_line', {
+        categoryId: work,
+        baseRevision: edited.revision,
+        rowId: rows[0]!.id,
+      }),
+    )
+    const preference = await dispatch(
+      parseMcpCall('update_editor_preferences', {
+        expectedRevision: 0,
+        patch: { showTodayEmber: true },
+      }),
+    )
+    const secondPreference = await dispatch(
+      parseMcpCall('update_editor_preferences', {
+        expectedRevision: preference.revision,
+        patch: { showTodayEmber: false },
+      }),
+    )
+
+    // Assert
+    expect(edited.revision).toBe(1)
+    expect(completed.revision).toBe(2)
+    expect(preference.revision).toBe(1)
+    expect(secondPreference.revision).toBe(2)
+  })
+})
+
+describe('MCP over macOS stdio', () => {
+  // The helper builds two native slices, which need a separate budget on cold runners.
+  beforeAll(() => {
+    if (process.platform !== 'darwin') return
+    execFileSync(process.execPath, ['scripts/build-mcp.mjs'], {
+      cwd: desktop,
+      timeout: 55_000,
+    })
+  }, 60_000)
+
+  test.runIf(process.platform === 'darwin')(
+    'a standard stdio client reads a nine-megabyte draft and pages a larger note at one revision',
+    async () => {
+      // Arrange
+      const { directory, controller } = await createFixture({ existing: false })
+      const inlineText = '日'.repeat(750_000)
+      const huge = '🌸' + '本'.repeat(930_000)
+      await initializeDeviceWorkspace(join(directory, 'workspaces'), {
+        categoryCount: 2,
+        notes: { 1: inlineText, 2: huge },
+        rowIds: { 2: ['00000000-0000-4000-8000-000000000232'] },
+      })
+      const { actionsFor, connect } = deviceMcpFixture(directory)
+      onTestFinished(
+        await startMcpOwner(directory, await actionsFor(controller)),
+      )
+      const client = await connect()
+      const categoryId = categoryUuid(2)
+      const read = async (args: Record<string, unknown>) =>
+        client.callTool({ name: 'read_draft', arguments: args })
+
+      // Act
+      const full = await read({ categoryId: categoryUuid(1) })
+      const refused = await read({ categoryId })
+      const selected = await read({ textPage: { offset: 0, limit: 2 } })
+      const first = await read({
+        categoryId,
+        textPage: { offset: 0, limit: 1 },
+      })
+      const page = CallToolResultSchema.parse(first).structuredContent
+      const next = await read({
+        categoryId: page?.categoryId,
+        textPage: {
+          offset: page?.nextOffset,
+          limit: 2,
+          expectedRevision: page?.revision,
+        },
+      })
+      const last = await read({
+        categoryId,
+        textPage: { offset: huge.length - 1, expectedRevision: 0 },
+      })
+      const stale = await read({
+        categoryId,
+        textPage: { offset: 2, expectedRevision: 1 },
+      })
+      const missingRevision = await read({
+        categoryId,
+        textPage: { offset: 2 },
+      })
+      const missingCategory = await read({
+        textPage: { offset: 2, expectedRevision: 0 },
+      })
+      const splitEmoji = await read({
+        categoryId,
+        textPage: { offset: 1, limit: 1, expectedRevision: 0 },
+      })
+      const [row] = DraftRowSchema.pick({ id: true })
+        .array()
+        .parse(page?.rowSpans)
+      const edit = await client.callTool({
+        name: 'edit_draft',
+        arguments: {
+          categoryId: page?.categoryId,
+          baseRevision: page?.revision,
+          rows: [{ id: row?.id, text: huge.slice(0, -1) + '語' }],
+        },
+      })
+      const edited = await read({
+        categoryId,
+        textPage: { offset: 930_001, expectedRevision: 1 },
+      })
+
+      // Assert
+      expect(full.structuredContent).toMatchObject({ text: inlineText })
+      expect(full.structuredContent).not.toHaveProperty('rowSpans')
+      expect(refused.structuredContent).toMatchObject({
+        code: 'result-too-large',
+        categoryId,
+        revision: 0,
+        nextAction: expect.stringContaining('textPage'),
+      })
+      expect(selected.structuredContent).toMatchObject({
+        categoryId: categoryUuid(1),
+        text: '日日',
+        nextOffset: 2,
+        revision: 0,
+      })
+      expect(first.structuredContent).toMatchObject({
+        text: '🌸',
+        nextOffset: 2,
+        revision: 0,
+        rowSpans: [
+          {
+            id: '00000000-0000-4000-8000-000000000232',
+            startOffset: 0,
+            endOffset: 930_002,
+          },
+        ],
+      })
+      expect(next.structuredContent).toMatchObject({
+        text: '本本',
+        nextOffset: 4,
+      })
+      expect(last.structuredContent).toMatchObject({
+        text: '本',
+        nextOffset: null,
+      })
+      expect(stale.structuredContent).toMatchObject({
+        code: 'revision-conflict',
+        currentRevision: 0,
+      })
+      for (const invalid of [missingRevision, missingCategory, splitEmoji]) {
+        expect(invalid.isError).toBe(true)
+        expect(invalid.structuredContent).toMatchObject({
+          code: 'invalid-input',
+          effect: 'none',
+        })
+      }
+      expect(edit.structuredContent).toMatchObject({
+        status: 'saved',
+        revision: 1,
+      })
+      expect(edited.structuredContent).toMatchObject({
+        text: '語',
+        revision: 1,
+        rowSpans: [{ id: '00000000-0000-4000-8000-000000000232' }],
+      })
+    },
+    30_000,
+  )
+
+  test.runIf(process.platform === 'darwin')(
+    'a large workspace can be saved byte-for-byte after an inline export refusal on the same stdio connection',
+    async () => {
+      // Arrange
+      const { directory, controller } = await createFixture({ existing: false })
+      const journal = '日'.repeat(6 * 1024 * 1024)
+      await initializeDeviceWorkspace(join(directory, 'workspaces'), {
+        notes: { 1: journal },
+      })
+      const { actionsFor, connect } = deviceMcpFixture(directory)
+      const actions = await actionsFor(controller)
+      const sessions = new Set<string>()
+      const stop = await startMcpOwner(directory, {
+        ...actions,
+        call: async (session, name, args) => {
+          sessions.add(session)
+          return actions.call(session, name, args)
+        },
+      })
+      onTestFinished(stop)
+      const client = await connect()
+      const expected = await controller.export(
+        controller.getSnapshot().generation,
+      )
+
+      // Act
+      const inline = await client.callTool({ name: 'export_workspace' })
+      const path = join(directory, 'Exports', 'complete.json')
+      await expect(readFile(path)).rejects.toMatchObject({ code: 'ENOENT' })
+      const saved = await client.callTool({
+        name: 'save_workspace_backup',
+        arguments: { filename: 'complete.json' },
+      })
+      const categories = await client.callTool({ name: 'list_categories' })
+
+      // Assert
+      const actualBytes = Buffer.byteLength(
+        JSON.stringify(mcpSuccess({ format: 'json', writing: expected })),
+      )
+      expect(actualBytes).toBeGreaterThan(32 * 1024 * 1024)
+      expect(inline.isError).toBe(true)
+      expect(inline.structuredContent).toMatchObject({
+        code: 'result-too-large',
+        effect: 'none',
+        limitBytes: 10_481_664,
+        resultBytes: actualBytes,
+        backupBytes: Buffer.byteLength(expected),
+        nextAction: expect.stringContaining('save_workspace_backup'),
+      })
+      expect(saved.structuredContent).toEqual({ path })
+      expect((await readFile(path)).equals(Buffer.from(expected))).toBe(true)
+      expect(expected.includes(journal)).toBe(true)
+      expect(categories.isError).toBe(false)
+      expect(sessions.size).toBe(1)
+    },
+    30_000,
+  )
+
+  test.runIf(process.platform === 'darwin')(
+    'losing an implicit addition reply cannot claim the receipt of an earlier explicit category request',
+    async () => {
+      // Arrange
+      const { directory, controller } = await createFixture({
+        categoryNames: ['Work', 'Personal'],
+      })
+      const { actionsFor, connect } = deviceMcpFixture(directory)
+      const actions = await actionsFor(controller)
+      const operationId = '00000000-0000-4000-8000-000000000220'
+      const title = 'Use the intended category'
+      let additions = 0
+      let replacement: (() => void) | undefined
+      onTestFinished(() => replacement?.())
+      const stop = await startMcpOwner(directory, {
+        ...actions,
+        call: async (session, name, args) => {
+          const result = await actions.call(session, name, args)
+          if (name === 'append_unfinished_task' && ++additions === 2) {
+            stop()
+            replacement = await startMcpOwner(directory, actions)
+          }
+          return result
+        },
+      })
+      onTestFinished(stop)
+      const client = await connect()
+      const saved = await client.callTool({
+        name: 'append_unfinished_task',
+        arguments: { operationId, title, categoryId: categoryUuid(1) },
+      })
+
+      // Act
+      const interrupted = await client.callTool({
+        name: 'append_unfinished_task',
+        arguments: { operationId, title },
+      })
+      const receipt = await client.callTool({
+        name: 'get_task_addition_result',
+        arguments: { operationId },
+      })
+      const exact = await client.callTool({
+        name: 'get_task_addition_result',
+        arguments: {
+          operationId,
+          original: { categoryId: categoryUuid(1), title },
+        },
+      })
+      const conflict = await client.callTool({
+        name: 'get_task_addition_result',
+        arguments: { operationId, original: { title } },
+      })
+
+      // Assert
+      expect(saved.isError).toBe(false)
+      expect(interrupted.isError).toBe(true)
+      expect(interrupted.structuredContent).toMatchObject({
+        effect: 'unknown',
+        operationId,
+      })
+      expect(receipt.structuredContent).toEqual(saved.structuredContent)
+      expect(exact.structuredContent).toEqual(saved.structuredContent)
+      expect(conflict.structuredContent).toMatchObject({
+        code: 'command-conflict',
+        effect: 'none',
+      })
+      expect(additions).toBe(2)
+    },
+  )
+
+  test.runIf(process.platform === 'darwin')(
+    'two independent stdio sessions read the note, add to the original category and recover the saved result after an app-owner restart',
+    async () => {
+      // Arrange
+      const fixture = await createFixture({
+        categoryNames: ['Work', 'Personal'],
+      })
+      const { directory, controller, options } = fixture
+      const { actionsFor, connect } = deviceMcpFixture(directory)
+      const close = await startMcpOwner(directory, await actionsFor(controller))
+      cleanups.unshift(close)
+      const first = await connect(),
+        second = await connect()
+      const operationId = '00000000-0000-4000-8000-000000000109'
+      const work = categoryUuid(1),
+        personal = categoryUuid(2)
+
+      // Act
+      const before = await first.callTool({ name: 'read_draft', arguments: {} })
+      await second.callTool({
+        name: 'select_category',
+        arguments: { categoryId: personal },
+      })
+      const saved = await first.callTool({
+        name: 'append_unfinished_task',
+        arguments: {
+          operationId,
+          categoryId:
+            CallToolResultSchema.parse(before).structuredContent?.categoryId,
+          title: 'Send the invoice',
+        },
+      })
+      await first.callTool({
+        name: 'record_completed_task',
+        arguments: { categoryId: work, title: 'Filed the report' },
+      })
+      const history = await first.callTool({
+        name: 'list_completions',
+        arguments: {},
+      })
+      await Promise.all([first.close(), second.close()])
+      close()
+      await controller.shutdown()
+      const restarted = new OfflineEditorController(options)
+      // Shut down the restarted controller before the shared fixture closes its workers and removes its files.
+      cleanups.unshift(async () => {
+        await restarted.shutdown()
+      })
+      const closeRestarted = await startMcpOwner(
+        directory,
+        await actionsFor(restarted),
+      )
+      cleanups.unshift(closeRestarted)
+      const reconnected = await connect()
+      const recovered = await reconnected.callTool({
+        name: 'get_task_addition_result',
+        arguments: { operationId },
+      })
+      const original = await reconnected.callTool({
+        name: 'read_draft',
+        arguments: { categoryId: work },
+      })
+      const other = await reconnected.callTool({
+        name: 'read_draft',
+        arguments: {},
+      })
+
+      // Assert
+      expect(before.structuredContent).toMatchObject({
+        categoryId: work,
+        categoryPath: 'Work',
+        text: 'Writing survives offline startup',
+      })
+      expect(saved.isError).toBe(false)
+      expect(recovered.structuredContent).toEqual(saved.structuredContent)
+      expect(CallToolResultSchema.parse(original).structuredContent?.text).toBe(
+        'Writing survives offline startup\n- [ ] Send the invoice',
+      )
+      expect(other.structuredContent).toMatchObject({
+        categoryId: personal,
+        text: '',
+      })
+      expect(history.structuredContent).toMatchObject({
+        scope: 'device',
+        total: 1,
+        entries: [{ title: 'Filed the report' }],
+      })
+    },
+    30000,
+  )
+})
+
+describe('MCP additions in the device workspace', () => {
+  test('adding a task keeps pending typing in Work and a later category switch cannot redirect it to Personal', async () => {
+    // Arrange
+    const { controller } = await createFixture({
+      categoryNames: ['Work', 'Personal'],
+    })
+    await controller.initialize()
+    const work = categoryUuid(1),
+      personal = categoryUuid(2)
+    const operationId = '00000000-0000-4000-8000-000000000101'
+    const shown = vi.fn()
+    let pending = true
+    const flush = vi.fn(async (generation: number) => {
+      if (pending) {
+        pending = false
+        const { draft } = await controller.draft(generation, work)
+        await controller.command(generation, {
+          type: 'save',
+          commandId: randomUUID(),
+          categoryId: work,
+          baseRevision: draft.revision,
+          rows: [{ id: draft.rows[0]!.id, text: 'Typing still in the editor' }],
+        })
+      }
+      return true
+    })
+    const dispatch = createEditorDispatcher(controller, { flush, shown })
+    // Act
+    const before = await dispatch(parseMcpCall('read_draft', {}))
+    await dispatch(parseMcpCall('select_category', { categoryId: personal }))
+    const added = await dispatch(
+      parseMcpCall('append_unfinished_task', {
+        title: 'Send the invoice',
+        operationId,
+        categoryId: before.categoryId,
+      }),
+    )
+    const after = await dispatch(
+      parseMcpCall('read_draft', { categoryId: work }),
+    )
+    const elsewhere = await dispatch(parseMcpCall('read_draft', {}))
+    // Assert
+    expect(before).toMatchObject({
+      text: 'Typing still in the editor',
+      categoryId: work,
+    })
+    expect(added).toMatchObject({
+      status: 'saved',
+      categoryId: work,
+      title: 'Send the invoice',
+    })
+    expect(after.text).toBe(
+      'Typing still in the editor\n- [ ] Send the invoice',
+    )
+    expect(elsewhere.categoryId).toBe(personal)
+    expect(elsewhere.text).not.toContain('Send the invoice')
+    expect(shown).toHaveBeenCalledTimes(5)
+  })
+
+  test('two real worker writes preserve both intentions; reconnection returns the original category name and row', async () => {
+    // Arrange
+    const { controller } = await createFixture({
+      categoryNames: ['Work', 'Personal'],
+    })
+    await controller.initialize()
+    const makeClient = () =>
+      createEditorDispatcher(controller, {
+        flush: async () => true,
+        shown: () => undefined,
+      })
+    const first = makeClient(),
+      second = makeClient(),
+      categoryId = categoryUuid(2)
+    const firstId = '00000000-0000-4000-8000-000000000102',
+      secondId = '00000000-0000-4000-8000-000000000103'
+    const add = (operationId: string) =>
+      parseMcpCall('append_unfinished_task', {
+        title: 'Repeated title',
+        operationId,
+        categoryId,
+      })
+    // Act
+    const [firstSave, secondSave] = await Promise.all([
+      first(add(firstId)),
+      second(add(secondId)),
+    ])
+    await second(
+      parseMcpCall('rename_category', { categoryId, name: 'Renamed' }),
+    )
+    const fresh = makeClient()
+    const saved = await fresh(
+      parseMcpCall('get_task_addition_result', { operationId: firstId }),
+    )
+    const replay = await fresh(add(firstId))
+    const draft = await fresh(parseMcpCall('read_draft', { categoryId }))
+    // Assert
+    expect(saved).toEqual(firstSave)
+    expect(replay).toEqual(firstSave)
+    expect(firstSave.rowId).not.toBe(secondSave.rowId)
+    expect(saved.categoryPath).toBe('Personal')
+    expect(String(draft.text).split('- [ ] Repeated title').length - 1).toBe(2)
+  })
+
+  test('a failed typing flush leaves the saved draft unchanged and confirms no task addition', async () => {
+    // Arrange
+    const { controller } = await createFixture()
+    await controller.initialize()
+    const { generation } = controller.getSnapshot()
+    const categoryId = categoryUuid(1)
+    const before = await controller.draft(generation, categoryId)
+    const flush = vi.fn(async () => false)
+    const dispatch = createEditorDispatcher(controller, {
+      flush,
+      shown: () => undefined,
+    })
+    const operationId = '00000000-0000-4000-8000-000000000104'
+    // Act / Assert
+    await expect(
+      dispatch(
+        parseMcpCall('append_unfinished_task', {
+          title: 'New task',
+          operationId,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'flush-failed', effect: 'none' })
+    expect(flush).toHaveBeenCalledTimes(2)
+    await expect(
+      dispatch(parseMcpCall('get_task_addition_result', { operationId })),
+    ).rejects.toMatchObject({ code: 'result-unknown', effect: 'unknown' })
+    expect(flush).toHaveBeenCalledTimes(2)
+    expect(await controller.draft(generation, categoryId)).toEqual(before)
+  })
+
+  test('direct completion enters history once and leaves the unfinished draft untouched', async () => {
+    // Arrange
+    const { controller } = await createFixture()
+    await controller.initialize()
+    const dispatch = createEditorDispatcher(controller, {
+      flush: async () => true,
+      shown: () => undefined,
+    })
+    const before = await dispatch(parseMcpCall('read_draft', {}))
+    // Act
+    const recorded = await dispatch(
+      parseMcpCall('record_completed_task', { title: 'Already delivered' }),
+    )
+    const after = await dispatch(parseMcpCall('read_draft', {}))
+    const undo = await controller.undoHistory(
+      controller.getSnapshot().generation,
+      0,
+      10,
+    )
+    // Assert
+    expect(after).toEqual(before)
+    expect(undo.completions).toMatchObject([
+      { id: recorded.completionId, title: 'Already delivered' },
+    ])
+  })
+})
+
 // Regression: /ship exception review round 3 (Claude adversarial) 2026-11-03 — after a deferred detach
 // the editor kept showing a synced state while Settings said signed out.
 test('after a sign-out whose detach was deferred the editor shows local-only sync', async () => {
@@ -1402,7 +2749,9 @@ test('Connect attaches nothing when a newer sign-in replaced the prompt while it
       return realCall.call(this, type, input)
     })
   onTestFinished(() => callSpy.mockRestore())
-  const connecting = fixture.controller.connect()
+  const connecting = fixture.controller.connect(
+    pendingPromptId(fixture.controller),
+  )
   await vi.waitFor(() => expect(totalAsked).toHaveBeenCalledOnce())
   fixture.broker.acquire.mockImplementation(
     async (expectedAccountId, generation) => ({
@@ -1548,7 +2897,7 @@ test('another account signing in right after Connect, before the binding exists,
     async () => new Promise<never>(() => undefined),
   )
   await fixture.controller.authenticated('account-a')
-  await fixture.controller.connect()
+  await fixture.controller.connect(pendingPromptId(fixture.controller))
   // The identity check asks with no expected account; a woken sync loop asks for account-a.
   fixture.broker.acquire.mockImplementation(
     async (expectedAccountId, generation) => ({
@@ -1576,7 +2925,7 @@ test('another account signing in right after Connect, before the binding exists,
     attachedAccountId: null,
     pendingConnect: { accountId: 'account-b' },
   })
-  expect(fixture.controller.accountStatus().pendingConnect).toEqual({
+  expect(fixture.controller.accountStatus().pendingConnect).toMatchObject({
     displayEmail: 'b@example.com',
   })
 })

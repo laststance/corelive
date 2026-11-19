@@ -6,6 +6,7 @@ import type { ReactNode } from 'react'
 import { CodeInspectorClient } from '@/components/code-inspector/CodeInspectorClient'
 import { Toaster } from '@/components/ui/sonner'
 import { ElectronAuthProvider } from '@/lib/orpc/electron-auth-provider'
+import { DashboardAppearanceProvider } from '@/providers/DashboardAppearanceProvider'
 import { QueryClientProvider } from '@/providers/QueryClientProvider'
 import { ThemeProvider } from '@/providers/ThemeProvider'
 
@@ -18,11 +19,18 @@ import { ThemeProvider } from '@/providers/ThemeProvider'
 export function ApplicationProviders({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   if (pathname === '/desktop-auth') return <>{children}</>
+  // A desktop sign-in window has a separate browser store. Only a dashboard screen may import a legacy theme.
+  const dashboard = ['/home', '/skill-tree', '/settings'].includes(pathname)
+  const content = <ElectronAuthProvider>{children}</ElectronAuthProvider>
   return (
     <ThemeProvider>
       <CodeInspectorClient />
       <QueryClientProvider>
-        <ElectronAuthProvider>{children}</ElectronAuthProvider>
+        {dashboard ? (
+          <DashboardAppearanceProvider>{content}</DashboardAppearanceProvider>
+        ) : (
+          content
+        )}
         <Toaster />
       </QueryClientProvider>
     </ThemeProvider>

@@ -412,12 +412,15 @@ test('Settings sign-out and Not now run through the one shared sign-out implemen
   )
   await fixture.handler('settings-window-account-not-now')(
     fixture.settingsEvent,
+    '00000000-0000-4000-8000-000000000001',
   )
 
   // Assert
   expect(fixture.signOutDevice).toHaveBeenCalledTimes(2)
   expect(fixture.controller.signOut).toHaveBeenCalledOnce()
-  expect(fixture.controller.notNow).toHaveBeenCalledOnce()
+  expect(fixture.controller.notNow).toHaveBeenCalledExactlyOnceWith(
+    '00000000-0000-4000-8000-000000000001',
+  )
 })
 
 test('Settings sign-in opens the login window and Connect attaches the pending account', async () => {
@@ -430,10 +433,14 @@ test('Settings sign-in opens the login window and Connect attaches the pending a
   )
   const connected = await fixture.handler('settings-window-account-connect')(
     fixture.settingsEvent,
+    '00000000-0000-4000-8000-000000000001',
   )
 
   // Assert
   expect(fixture.windows.showLoginWindow).toHaveBeenCalledOnce()
+  expect(fixture.controller.connect).toHaveBeenCalledExactlyOnceWith(
+    '00000000-0000-4000-8000-000000000001',
+  )
   expect(connected).toBe(true)
 })
 
@@ -535,6 +542,58 @@ test('a missing flush reply cancels an ordinary exit rather than acknowledging l
 
   // Assert
   await expect(flush).resolves.toBe(false)
+})
+
+test('a timed-out reload sends the release ID of the expired challenge even when a fresh save has started', async () => {
+  // Arrange
+  vi.useFakeTimers()
+  const { ipc, event, editor, handler } = createFixture()
+  const send = editor.webContents.send
+  const reloading = ipc.flushForReload(1)
+  const expiredRequest: unknown = send.mock.calls[0]?.[1]
+  await vi.advanceTimersByTimeAsync(15_000)
+  const saving = ipc.flush(1)
+  const currentRequest: unknown = send.mock.calls[1]?.[1]
+
+  // Act
+  const { saved, release } = await reloading
+  release()
+
+  // Assert
+  expect(saved).toBe(false)
+  const releasedId: unknown = send.mock.calls[2]?.[1]
+  expect(send).toHaveBeenNthCalledWith(
+    3,
+    'offline-editor-shown',
+    expect.any(String),
+  )
+  expect(expiredRequest).toMatchObject({ requestId: releasedId })
+  expect(currentRequest).not.toMatchObject({ requestId: releasedId })
+  await expect(
+    handler('offline-editor-flush-result')(event, currentRequest, true),
+  ).resolves.toBe(true)
+  await expect(saving).resolves.toBe(true)
+})
+
+test('a reload refused after a shared save leaves an ordinary native hide barrier in place', async () => {
+  // Arrange
+  const { ipc, event, editor, handler } = createFixture()
+  const reloading = ipc.flushForReload(1)
+  const hiding = ipc.flush(1)
+  const request: unknown = editor.webContents.send.mock.calls[0]?.[1]
+  await handler('offline-editor-flush-result')(event, request, true)
+
+  // Act
+  const { saved, release } = await reloading
+  release()
+
+  // Assert
+  expect(saved).toBe(true)
+  await expect(hiding).resolves.toBe(true)
+  expect(editor.webContents.send).toHaveBeenCalledExactlyOnceWith(
+    'offline-editor-flush',
+    request,
+  )
 })
 
 test('a crashed editor permits quitting or updating without waiting for an unreachable flush reply', async () => {

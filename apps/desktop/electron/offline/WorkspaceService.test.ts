@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -941,6 +941,81 @@ describe('offline writing and completion transactions', () => {
     ])
     expect(Object.values(state.outbox)).toEqual([])
     expect(await freeze(service)).toHaveLength(2)
+  })
+
+  test('recording a completed task preserves existing writing, completion history and in-flight uploads', async () => {
+    // Arrange
+    const { file, service } = await createWorkspace()
+    await service.execute(completionCommand(await file.read()))
+    expect(await freeze(service)).toHaveLength(1)
+    const before = await file.read()
+
+    // Act
+    await service.execute({
+      type: 'recordCompletedTask',
+      commandId: randomUUID(),
+      completionId: completionB,
+      categoryId: category1,
+      title: 'Delivered outside LiveEditor',
+      completedAt: instant,
+      timezone: 'Asia/Tokyo',
+    })
+
+    // Assert
+    const saved = await file.read()
+    expect(saved.drafts).toEqual(before.drafts)
+    expect(saved.completions[completionA]).toEqual(
+      before.completions[completionA],
+    )
+    expect(saved.completions[completionB]).toMatchObject({
+      title: 'Delivered outside LiveEditor',
+      revision: 1,
+      cleared: true,
+    })
+    expect(saved.outbox).toEqual(before.outbox)
+  })
+
+  test('directly recording completed work leaves a newly synced draft unchanged at the same revision', async () => {
+    // Arrange
+    const { file, service } = await createWorkspace()
+    const synced = await service.reconcileCategories({
+      accountId,
+      displayEmail: null,
+      categories: [
+        serverCategory(1),
+        serverCategory(2),
+        serverCategory(3),
+        serverCategory(4, { name: 'New dashboard category' }),
+      ],
+      deletions: [],
+    })
+    const categoryId = synced.categories.find(
+      ({ name }) => name === 'New dashboard category',
+    )?.id
+    if (!categoryId) throw new Error('Expected the newly synced category')
+    const before = (await file.read()).drafts[categoryId]!
+    expect(before).not.toHaveProperty('inputLimit')
+
+    // Act
+    await service.execute({
+      type: 'recordCompletedTask',
+      commandId: randomUUID(),
+      completionId: completionA,
+      categoryId,
+      title: 'Completed before typing a note',
+      completedAt: instant,
+      timezone: 'Asia/Tokyo',
+    })
+
+    // Assert
+    const saved = await file.read()
+    expect(saved.drafts[categoryId]).toEqual(before)
+    expect(saved.completions[completionA]).toMatchObject({
+      categoryId,
+      title: 'Completed before typing a note',
+      lineIndex: 1,
+      previousRowId: before.rows[0]!.id,
+    })
   })
 
   test('reusing a command identity with different text fails without overwriting writing', async () => {
@@ -2125,5 +2200,284 @@ describe('keep mode leaves finished lines in place', () => {
       '- [x] Write notes',
       'Later',
     ])
+  })
+})
+
+describe('durable task-addition receipts', () => {
+  test('a fresh owner can confirm an original addition only in its saving account and cannot reuse its UUID for different writing', async () => {
+    // Arrange
+    const { file, service, options } = await createWorkspace()
+    const operationId = '00000000-0000-4000-8000-000000000201'
+    const request = {
+      operationId,
+      accountId,
+      categoryId: category2,
+      title: 'Send the invoice',
+    }
+    // Act
+    await service.appendTask(request)
+    const reopened = new WorkspaceService(new AtomicWorkspaceFile(options))
+    const original = await reopened.findTaskAddition({ operationId, accountId })
+    const other = await reopened.findTaskAddition({
+      operationId,
+      accountId: 'account-b',
+    })
+    const detached = await reopened.findTaskAddition({
+      operationId,
+      accountId: null,
+    })
+    // Assert
+    const state = await file.read()
+    const rows = state.drafts[category2]?.rows
+    expect(rows?.map((row) => row.text)).toEqual([
+      'Target writing',
+      '- [ ] Send the invoice',
+    ])
+    expect(original).toEqual({
+      accountId: 'account-a',
+      deviceId: state.deviceId,
+      categoryId: '00000000-0000-4000-8000-000000000002',
+      categoryPath: 'Category 2',
+      rowId: rows?.[1]?.id,
+      title: 'Send the invoice',
+    })
+    expect(other).toBeNull()
+    expect(detached).toBeNull()
+    if (!original) throw new Error('Expected the durable receipt')
+    original.title = 'Changed by the lookup caller'
+    await expect(
+      reopened.findTaskAddition({ operationId, accountId }),
+    ).resolves.toMatchObject({ title: 'Send the invoice' })
+    await expect(
+      reopened.appendTask({ ...request, title: 'Different task' }),
+    ).rejects.toMatchObject({ reason: 'command-conflict' })
+    expect(await file.read()).toEqual(state)
+  })
+
+  test('an interrupted task addition is only confirmed after the directory barrier succeeds without another write', async () => {
+    // Arrange
+    const { options } = await createWorkspace()
+    const writer = new WorkspaceService(
+      new AtomicWorkspaceFile({
+        ...options,
+        onStage(stage) {
+          if (stage === 'replaced') throw new Error('Interrupted after rename')
+        },
+      }),
+    )
+    const request = {
+      operationId: '00000000-0000-4000-8000-000000000204',
+      accountId,
+      categoryId: category2,
+      title: 'Keep the original addition',
+    }
+    await expect(writer.appendTask(request)).rejects.toThrow(
+      'Interrupted after rename',
+    )
+    let barrierAvailable = false
+    let writeAttempts = 0
+    const file = new AtomicWorkspaceFile({
+      ...options,
+      onStage(stage) {
+        if (stage === 'before-write') writeAttempts++
+        if (stage === 'directory-flushed' && !barrierAvailable)
+          throw new Error('Directory barrier failed')
+      },
+    })
+    const reopened = new WorkspaceService(file)
+    const lookup = {
+      operationId: request.operationId,
+      accountId,
+      original: { title: request.title, categoryId: category2 },
+    }
+    const primary = await readFile(file.path)
+    const recovery = await readFile(file.recoveryPath)
+
+    // Act / Assert
+    await expect(reopened.findTaskAddition(lookup)).rejects.toThrow(
+      'Directory barrier failed',
+    )
+    expect(writeAttempts).toBe(0)
+    barrierAvailable = true
+    await expect(reopened.findTaskAddition(lookup)).resolves.toMatchObject({
+      title: 'Keep the original addition',
+      categoryId: '00000000-0000-4000-8000-000000000002',
+    })
+    expect(writeAttempts).toBe(0)
+    expect(await readFile(file.path)).toEqual(primary)
+    expect(await readFile(file.recoveryPath)).toEqual(recovery)
+    expect(
+      (await file.read()).drafts[category2]?.rows.map((row) => row.text),
+    ).toEqual(['Target writing', '- [ ] Keep the original addition'])
+  })
+
+  test.each(['current', 'legacy'] as const)(
+    'a %s task receipt still prevents duplicate writing after 2,000 ordinary commands and a restart',
+    async (format) => {
+      // Arrange
+      const { file, service, options } = await createWorkspace()
+      const operationId = '00000000-0000-4000-8000-000000000205'
+      const request = {
+        operationId,
+        accountId,
+        categoryId: category2,
+        title: 'Keep exactly one task',
+      }
+      await service.appendTask(request)
+      await file.update((state) => {
+        const next = structuredClone(state)
+        if (format === 'legacy') {
+          const receipt =
+            next.taskAdditionReceipts[operationId] ??
+            next.commandReceipts[operationId]
+          if (!receipt) throw new Error('Missing saved task receipt')
+          next.commandReceipts[operationId] = {
+            ...receipt,
+            revision: 1,
+          }
+          delete next.taskAdditionReceipts[operationId]
+        }
+        // Seed the receipts from the earlier commits; a real command advances the pruning window.
+        for (let index = 1; index < 2_000; index++) {
+          next.revision++
+          next.commandReceipts[randomUUID()] = {
+            digest: 'ordinary-command-' + index,
+            revision: next.revision,
+          }
+        }
+        return next
+      })
+      await service.execute({
+        type: 'select',
+        commandId: randomUUID(),
+        categoryId: category1,
+      })
+      const reopened = new WorkspaceService(new AtomicWorkspaceFile(options))
+
+      // Act
+      const receipt = await reopened.findTaskAddition({
+        operationId,
+        accountId,
+      })
+      await reopened.appendTask(request)
+
+      // Assert
+      expect(receipt).toMatchObject({
+        accountId: 'account-a',
+        categoryId: '00000000-0000-4000-8000-000000000002',
+        title: 'Keep exactly one task',
+      })
+      const persisted = await file.read()
+      expect(persisted.revision).toBe(2_001)
+      expect(persisted.drafts[category2]?.rows.map((row) => row.text)).toEqual([
+        'Target writing',
+        '- [ ] Keep exactly one task',
+      ])
+      await expect(
+        reopened.execute({
+          type: 'select',
+          commandId: operationId,
+          categoryId: category1,
+        }),
+      ).rejects.toMatchObject({ reason: 'command-conflict' })
+    },
+  )
+
+  test('looking up an absent or legacy command receipt leaves the saved writing and workspace revision intact', async () => {
+    // Arrange
+    const { file, service } = await createWorkspace()
+    const legacy = '00000000-0000-4000-8000-000000000202'
+    const expired = '00000000-0000-4000-8000-000000000203'
+    await service.appendTask({
+      operationId: expired,
+      title: 'Keep this writing',
+      categoryId: category1,
+      accountId,
+    })
+    await file.update((state) => {
+      const next = structuredClone(state)
+      delete next.commandReceipts[expired]
+      delete next.taskAdditionReceipts[expired]
+      next.commandReceipts[legacy] = {
+        digest: 'old-command-digest',
+        revision: next.revision,
+      }
+      return next
+    })
+    const before = await file.read()
+    // Act
+    const missing = await service.findTaskAddition({
+      operationId: expired,
+      accountId,
+    })
+    const older = await service.findTaskAddition({
+      operationId: legacy,
+      accountId,
+    })
+    // Assert
+    expect(missing).toBeNull()
+    expect(older).toBeNull()
+    expect(await file.read()).toEqual(before)
+  })
+
+  test('deleting the selected target before an agent commits cannot divert a new task or completion into another category', async () => {
+    // Arrange
+    const { file, service } = await createWorkspace()
+    const selected = await service.execute({
+      type: 'select',
+      commandId: randomUUID(),
+      categoryId: category2,
+    })
+    expect(selected.selectedCategoryId).toBe(category2)
+    await service.execute({
+      type: 'categoryDelete',
+      commandId: randomUUID(),
+      categoryId: category2,
+      destinationId: category1,
+    })
+    const before = await file.read()
+    expect(before.selectedCategoryId).toBe(category1)
+
+    // Act
+    const results = await Promise.allSettled([
+      service.appendTask({
+        operationId: randomUUID(),
+        title: 'Stay in the original selection',
+        selectedAtStart: category2,
+        accountId,
+      }),
+      service.appendTask({
+        operationId: randomUUID(),
+        title: 'Stay in Work',
+        categoryId: category2,
+        accountId,
+      }),
+      service.execute({
+        type: 'recordCompletedTask',
+        commandId: randomUUID(),
+        completionId: completionA,
+        categoryId: category2,
+        title: 'Completed in Work',
+        completedAt: instant,
+        timezone: 'Asia/Tokyo',
+      }),
+    ])
+
+    // Assert
+    expect(results).toEqual([
+      {
+        status: 'rejected',
+        reason: expect.objectContaining({ reason: 'category-unavailable' }),
+      },
+      {
+        status: 'rejected',
+        reason: expect.objectContaining({ reason: 'category-unavailable' }),
+      },
+      {
+        status: 'rejected',
+        reason: expect.objectContaining({ reason: 'category-unavailable' }),
+      },
+    ])
+    expect(await file.read()).toEqual(before)
   })
 })

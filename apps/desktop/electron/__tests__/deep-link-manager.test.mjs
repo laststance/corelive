@@ -490,6 +490,15 @@ describe('DeepLinkManager', () => {
       expect(mockWindowManager.restoreFromTray).toHaveBeenCalledTimes(1)
     })
 
+    test('leaves LiveEditor hidden when an MCP helper wakes the running owner', () => {
+      // Arrange
+      const args = ['/Applications/CoreLive.app', '--corelive-mcp-background']
+      // Act
+      deepLinkManager.handleSecondInstance(args, '/')
+      // Assert
+      expect(mockWindowManager.restoreFromTray).not.toHaveBeenCalled()
+    })
+
     test('keeps LiveEditor hidden when a second launch carries the OAuth callback', async () => {
       // Arrange
       const mockOAuthManager = {

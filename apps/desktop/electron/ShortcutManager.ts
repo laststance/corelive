@@ -953,6 +953,18 @@ export class ShortcutManager {
     }
   }
 
+  /** Persists each requested slot before its accelerator is registered. A failed save still allows later slots to be written.
+   * @example const saved = this.persistShortcuts(newShortcuts)
+   */
+  private persistShortcuts(changes: ShortcutConfig): boolean {
+    if (!this.configManager) return true
+    let saved = true
+    for (const [key, value] of Object.entries(changes)) {
+      if (!this.configManager.set(`shortcuts.${key}`, value)) saved = false
+    }
+    return saved
+  }
+
   /**
    * Update shortcuts with new configuration.
    *
@@ -969,7 +981,7 @@ export class ShortcutManager {
    * Called by {@link applyShortcutRebind} when the user saves a shortcut in Settings.
    * @param options.retryNativeTap - Allows an explicit native-key save to retry
    *   after an unfinished start. Startup and rollback must keep this disabled.
-   * @returns Whether every requested shortcut registered successfully.
+   * @returns Whether settings were saved and every requested shortcut registered successfully.
    * @example
    * manager.updateShortcuts({ toggleLiveEditorSecondary: 'lone-modifier:rightOption' }, { retryNativeTap: true })
    */
@@ -1002,13 +1014,8 @@ export class ShortcutManager {
         this.isEnabled = newShortcuts.enabled
       }
 
-      this.shortcuts = { ...this.shortcuts, ...newShortcuts }
-
-      if (this.configManager) {
-        for (const [key, value] of Object.entries(newShortcuts)) {
-          this.configManager.set(`shortcuts.${key}`, value)
-        }
-      }
+      this.shortcuts = mergedShortcuts
+      const persisted = this.persistShortcuts(newShortcuts)
 
       // Track whether every requested global accelerator actually bound;
       // a conflicting accelerator silently dropping would otherwise look
@@ -1018,7 +1025,7 @@ export class ShortcutManager {
       // Saving the master switch off releases every binding immediately, including focused-window keys.
       if (!this.isEnabled) {
         this.unregisterAllShortcuts()
-        return true
+        return persisted
       }
 
       this.unregisterChangedShortcuts(newShortcuts)
@@ -1062,7 +1069,7 @@ export class ShortcutManager {
       allRegistered =
         allRegistered && contextualResults.every((result) => result.success)
 
-      return allRegistered
+      return persisted && allRegistered
     } catch (error) {
       log.error('Error updating shortcuts:', error)
       return false
