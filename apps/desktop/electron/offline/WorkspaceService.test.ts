@@ -975,6 +975,49 @@ describe('offline writing and completion transactions', () => {
     expect(saved.outbox).toEqual(before.outbox)
   })
 
+  test('directly recording completed work leaves a newly synced draft unchanged at the same revision', async () => {
+    // Arrange
+    const { file, service } = await createWorkspace()
+    const synced = await service.reconcileCategories({
+      accountId,
+      displayEmail: null,
+      categories: [
+        serverCategory(1),
+        serverCategory(2),
+        serverCategory(3),
+        serverCategory(4, { name: 'New dashboard category' }),
+      ],
+      deletions: [],
+    })
+    const categoryId = synced.categories.find(
+      ({ name }) => name === 'New dashboard category',
+    )?.id
+    if (!categoryId) throw new Error('Expected the newly synced category')
+    const before = (await file.read()).drafts[categoryId]!
+    expect(before).not.toHaveProperty('inputLimit')
+
+    // Act
+    await service.execute({
+      type: 'recordCompletedTask',
+      commandId: randomUUID(),
+      completionId: completionA,
+      categoryId,
+      title: 'Completed before typing a note',
+      completedAt: instant,
+      timezone: 'Asia/Tokyo',
+    })
+
+    // Assert
+    const saved = await file.read()
+    expect(saved.drafts[categoryId]).toEqual(before)
+    expect(saved.completions[completionA]).toMatchObject({
+      categoryId,
+      title: 'Completed before typing a note',
+      lineIndex: 1,
+      previousRowId: before.rows[0]!.id,
+    })
+  })
+
   test('reusing a command identity with different text fails without overwriting writing', async () => {
     // Arrange
     const { file, service } = await createWorkspace()
@@ -2307,6 +2350,12 @@ describe('durable task-addition receipts', () => {
   test('deleting the selected target before an agent commits cannot divert a new task or completion into another category', async () => {
     // Arrange
     const { file, service } = await createWorkspace()
+    const selected = await service.execute({
+      type: 'select',
+      commandId: randomUUID(),
+      categoryId: category2,
+    })
+    expect(selected.selectedCategoryId).toBe(category2)
     await service.execute({
       type: 'categoryDelete',
       commandId: randomUUID(),
@@ -2314,16 +2363,22 @@ describe('durable task-addition receipts', () => {
       destinationId: category1,
     })
     const before = await file.read()
-    // Act / Assert
-    await expect(
+    expect(before.selectedCategoryId).toBe(category1)
+
+    // Act
+    const results = await Promise.allSettled([
+      service.appendTask({
+        operationId: randomUUID(),
+        title: 'Stay in the original selection',
+        selectedAtStart: category2,
+        accountId,
+      }),
       service.appendTask({
         operationId: randomUUID(),
         title: 'Stay in Work',
         categoryId: category2,
         accountId,
       }),
-    ).rejects.toMatchObject({ reason: 'category-unavailable' })
-    await expect(
       service.execute({
         type: 'recordCompletedTask',
         commandId: randomUUID(),
@@ -2333,7 +2388,23 @@ describe('durable task-addition receipts', () => {
         completedAt: instant,
         timezone: 'Asia/Tokyo',
       }),
-    ).rejects.toMatchObject({ reason: 'category-unavailable' })
+    ])
+
+    // Assert
+    expect(results).toEqual([
+      {
+        status: 'rejected',
+        reason: expect.objectContaining({ reason: 'category-unavailable' }),
+      },
+      {
+        status: 'rejected',
+        reason: expect.objectContaining({ reason: 'category-unavailable' }),
+      },
+      {
+        status: 'rejected',
+        reason: expect.objectContaining({ reason: 'category-unavailable' }),
+      },
+    ])
     expect(await file.read()).toEqual(before)
   })
 })

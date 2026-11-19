@@ -63,7 +63,7 @@ export async function renderActivityCard(
         if (!trusted(event) || typeof payload !== 'string') fail()
         else resolve(payload)
       })
-      void contents.loadFile(html).catch(fail)
+      void contents.loadURL(expectedUrl).catch(fail)
     })
   } finally {
     clearTimeout(timeout)

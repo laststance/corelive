@@ -124,7 +124,16 @@ Paste this request into the agent chat.
 
 ### Read and edit a long note
 
-When `read_draft` reports `result-too-large`, call it with `{"textPage":{"offset":0}}`. For each subsequent page, pass the first page’s `categoryId` and `revision` as `categoryId` and `textPage.expectedRevision`. Pass the last page’s `nextOffset` as `textPage.offset`. For example, if the revision is 0 and the next offset is 2, call `read_draft` with the following arguments.
+When `read_draft` reports `result-too-large`, copy the error’s `categoryId` and `revision` into the retry at offset zero. This keeps the read on the original note even if the selected category changes. For example, for revision 0, call `read_draft` with these arguments.
+
+```json
+{
+  "categoryId": "10000000-0000-4000-8000-000000000001",
+  "textPage": { "offset": 0, "expectedRevision": 0 }
+}
+```
+
+For each subsequent page, keep the same `categoryId` and `textPage.expectedRevision`. Pass the last page’s `nextOffset` as `textPage.offset`. If the next offset is 2, call `read_draft` again with the following arguments.
 
 ```json
 {
@@ -145,7 +154,7 @@ Join the pages' text in order. Each distinct `rowSpans` ID represents one row, e
 }
 ```
 
-If the revision changes, read again from offset zero before editing.
+If the revision changes, read the same `categoryId` again from offset zero. Omit `expectedRevision` on this first page to get the new revision, then use it for the remaining pages and the edit.
 
 ## If a request fails
 

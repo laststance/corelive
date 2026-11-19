@@ -36,6 +36,11 @@ export type BindingInfo = Pick<
   'accountId' | 'displayEmail' | 'lastSyncedAt'
 >
 
+/** A storage milestone or an operation that finished and has already attempted to send its reply. */
+export type WorkspaceWorkerActivity =
+  | { activity: 'storage-progress' }
+  | { activity: 'request-settled'; requestId: string }
+
 export interface WorkspaceWorkerCalls {
   open: { input: null; output: WorkspaceView }
   mcpCompletionHistory: { input: CompletionRange; output: DeviceHistory }

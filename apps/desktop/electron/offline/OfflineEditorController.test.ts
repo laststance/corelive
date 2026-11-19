@@ -37,7 +37,10 @@ import { parseMcpCall } from '../mcp/tools'
 import type { WindowManager } from '../WindowManager'
 
 import { AtomicWorkspaceFile } from './AtomicWorkspaceFile'
-import { createMcpAccountClient } from './createSyncTransport'
+import {
+  createMcpAccountClient,
+  type McpAccountClient,
+} from './createSyncTransport'
 import {
   buildDeviceWorkspace,
   categoryUuid,
@@ -1091,6 +1094,75 @@ test('a receipt already being read is withheld when its account session expires'
   expect(controller.getSnapshot().generation).toBe(generation)
 })
 
+test('a committed addition reports an unknown result when its account expires before the reply', async () => {
+  // Arrange
+  const { controller, directory, workspaces } = await createFixture({
+    bound: 'account-a',
+    attached: true,
+  })
+  const { actionsFor } = deviceMcpFixture(directory)
+  const actions = await actionsFor(controller)
+  const operationId = '00000000-0000-4000-8000-000000000233'
+  const committed = deferred()
+  const reply = deferred()
+  const call = WorkspaceWorkerClient.prototype.call
+  const appended = vi.fn()
+  const worker = vi
+    .spyOn(WorkspaceWorkerClient.prototype, 'call')
+    .mockImplementation(async function (
+      this: WorkspaceWorkerClient,
+      type,
+      input,
+    ) {
+      const result = await call.call(this, type, input)
+      if (type === 'appendTask') {
+        appended()
+        committed.resolve()
+        await reply.promise
+      }
+      return result
+    })
+  onTestFinished(() => worker.mockRestore())
+
+  // Act
+  const addition = actions.call('client', 'append_unfinished_task', {
+    operationId,
+    title: 'Keep the original row',
+  })
+  await committed.promise
+  controller.sessionUnavailable()
+  reply.resolve()
+  const result = await addition
+  const receipt = await actions.call('client', 'get_task_addition_result', {
+    operationId,
+  })
+
+  // Assert
+  expect(result).toMatchObject({
+    isError: true,
+    structuredContent: {
+      code: 'result-unknown',
+      effect: 'unknown',
+      operationId: '00000000-0000-4000-8000-000000000233',
+      nextAction: expect.stringContaining('get_task_addition_result'),
+    },
+  })
+  expect(receipt).toMatchObject({
+    isError: false,
+    structuredContent: {
+      status: 'saved',
+      operationId: '00000000-0000-4000-8000-000000000233',
+      title: 'Keep the original row',
+    },
+  })
+  expect(appended).toHaveBeenCalledOnce()
+  const saved = await readDevice(workspaces)
+  expect(saved.drafts[categoryUuid(1)]?.rows.map((row) => row.text)).toEqual([
+    'Writing survives offline startup',
+    '- [ ] Keep the original row',
+  ])
+})
+
 test('a restored prompt cannot end another account while its sign-in is being verified', async () => {
   // Arrange
   const identity = { clerkId: 'account-b', email: 'b@example.com' }
@@ -1167,6 +1239,67 @@ test('a decline stops before clearing the session when another account signs in 
     displayEmail: 'b@example.com',
   })
 })
+
+test.each([
+  { previous: 'a stale prompt rejection', replaced: true, flushes: 2 },
+  { previous: 'a successful decline', replaced: false, flushes: 1 },
+])(
+  'explicit sign-out completes with one session teardown after $previous',
+  async ({ replaced, flushes }) => {
+    // Arrange
+    const fixture = await createFixture({
+      identity: replaced
+        ? { clerkId: 'account-b', email: 'b@example.com' }
+        : { clerkId: 'account-a', email: 'a@example.com' },
+    })
+    const { controller } = fixture
+    await fixture.registry.update({
+      pendingConnect: { accountId: 'account-a', displayEmail: 'a@example.com' },
+    })
+    await controller.initialize()
+    const saving = deferred()
+    const saved = deferred()
+    fixture.requestFlush.mockImplementationOnce(async () => {
+      saving.resolve()
+      await saved.promise
+      return true
+    })
+    const declining = controller.notNow(pendingPromptId(controller))
+    await saving.promise
+
+    // Act
+    const settled = Promise.allSettled([
+      declining,
+      controller.signOut(),
+      controller.signOut(),
+    ])
+    const signingIn = replaced
+      ? controller.authenticated('account-b')
+      : Promise.resolve()
+    saved.resolve()
+    const [prompt, ...signOuts] = await settled
+    await signingIn
+
+    // Assert
+    if (replaced)
+      expect(prompt).toMatchObject({
+        status: 'rejected',
+        reason: { reason: 'connection-not-pending' },
+      })
+    else
+      expect(prompt).toEqual({
+        status: 'fulfilled',
+        value: { status: 'signed-out' },
+      })
+    expect(signOuts).toEqual([
+      { status: 'fulfilled', value: { status: 'signed-out' } },
+      { status: 'fulfilled', value: { status: 'signed-out' } },
+    ])
+    expect(fixture.requestFlush).toHaveBeenCalledTimes(flushes)
+    expect(fixture.endLocalSession).toHaveBeenCalledOnce()
+    expect(controller.accountStatus().pendingConnect).toBeNull()
+  },
+)
 
 test('account actions require the displayed prompt and cannot act on a replacement account', async () => {
   // Arrange
@@ -1900,7 +2033,28 @@ describe('MCP operations in the device workspace', () => {
 
   test('a resident app uses the current Mac time zone for each new dashboard day request', async () => {
     // Arrange
-    const dayDetail = vi.fn(async () => ({}))
+    const dayDetail = vi
+      .fn<McpAccountClient['completed']['dayDetail']>()
+      .mockResolvedValueOnce({
+        date: '2026-11-19',
+        count: 1,
+        tasks: [
+          {
+            source: 'completed',
+            id: 19,
+            title: 'Filed the report',
+            completedAt: new Date('2026-11-18T22:30:00.000Z'),
+            category: null,
+          },
+        ],
+        categories: [],
+      })
+      .mockResolvedValueOnce({
+        date: '2026-11-19',
+        count: 0,
+        tasks: [],
+        categories: [],
+      })
     const fixture = await createFixture({
       bound: 'account-a',
       attached: true,
@@ -1927,12 +2081,14 @@ describe('MCP operations in the device workspace', () => {
     onTestFinished(() => zone.mockRestore())
 
     // Act
-    for (const timeZone of ['Asia/Tokyo', 'America/Los_Angeles']) {
-      zone.mockReturnValue({ ...options, timeZone })
-      await actions.call('one-session', 'read_activity_day', {
-        day: '2026-11-19',
-      })
-    }
+    zone.mockReturnValue({ ...options, timeZone: 'Asia/Tokyo' })
+    const tokyo = await actions.call('one-session', 'read_activity_day', {
+      day: '2026-11-19',
+    })
+    zone.mockReturnValue({ ...options, timeZone: 'America/Los_Angeles' })
+    const losAngeles = await actions.call('one-session', 'read_activity_day', {
+      day: '2026-11-19',
+    })
 
     // Assert
     expect(dayDetail).toHaveBeenNthCalledWith(
@@ -1940,6 +2096,28 @@ describe('MCP operations in the device workspace', () => {
       { date: '2026-11-19', timezone: 'Asia/Tokyo' },
       { signal: expect.any(AbortSignal) },
     )
+    expect(tokyo.isError).toBe(false)
+    expect(tokyo.structuredContent).toEqual({
+      date: '2026-11-19',
+      count: 1,
+      tasks: [
+        {
+          source: 'completed',
+          id: 19,
+          title: 'Filed the report',
+          completedAt: new Date('2026-11-18T22:30:00.000Z'),
+          category: null,
+        },
+      ],
+      categories: [],
+    })
+    expect(losAngeles.isError).toBe(false)
+    expect(losAngeles.structuredContent).toEqual({
+      date: '2026-11-19',
+      count: 0,
+      tasks: [],
+      categories: [],
+    })
     expect(dayDetail).toHaveBeenNthCalledWith(
       2,
       { date: '2026-11-19', timezone: 'America/Los_Angeles' },

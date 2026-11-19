@@ -138,6 +138,98 @@ await import(${JSON.stringify(workerURL)});
   },
 )
 
+test('a progressing file write and the queued write behind it both finish past the idle threshold', async () => {
+  // Arrange
+  const directory = await mkdtemp(join(tmpdir(), 'corelive-worker-progress-'))
+  const script = join(directory, 'progress.mjs')
+  const workspaceFile = new URL('./AtomicWorkspaceFile.ts', import.meta.url)
+    .href
+  await writeFile(
+    script,
+    `import { parentPort, workerData } from 'node:worker_threads';
+import { setTimeout as delay } from 'node:timers/promises';
+import { AtomicWorkspaceFile } from ${JSON.stringify(workspaceFile)};
+let writing = false;
+const progress = () => parentPort.postMessage({ activity: 'storage-progress' });
+const file = new AtomicWorkspaceFile({
+  directory: workerData.directory,
+  ownerId: workerData.ownerId,
+  fileName: 'progress',
+  parse: value => value,
+  onOperationStart: progress,
+  onStage: async () => {
+    progress();
+    if (writing) await delay(450);
+  },
+});
+parentPort.on('message', async ({ requestId, type }) => {
+  if (type === 'archive') writing = true;
+  const state = type === 'open'
+    ? await file.initialize({ count: 0 })
+    : await file.update(current => ({ count: current.count + 1 }));
+  parentPort.postMessage({ requestId, ok: true, result: { archived: state.count } });
+  parentPort.postMessage({ requestId, activity: 'request-settled' });
+});
+`,
+  )
+  const client = new WorkspaceWorkerClient({
+    directory,
+    ownerId: 'device',
+    script,
+    execArgv: ['--import', 'tsx'],
+    idleTimeoutMs: 1_200,
+  })
+  onTestFinished(async () => {
+    await client.close()
+    await rm(directory, { recursive: true })
+  })
+  await client.call('open', null)
+
+  // Act
+  const began = performance.now()
+  const first = client.call('archive', null)
+  const second = client.call('archive', null)
+
+  // Assert
+  await expect(first).resolves.toEqual({ archived: 1 })
+  expect(performance.now() - began).toBeGreaterThan(1_200)
+  await expect(second).resolves.toEqual({ archived: 2 })
+}, 20_000)
+
+test('a completed operation whose reply was lost releases its waiter without restarting a healthy worker', async () => {
+  // Arrange
+  const directory = await mkdtemp(join(tmpdir(), 'corelive-worker-settled-'))
+  const script = join(directory, 'lost-reply.mjs')
+  await writeFile(
+    script,
+    `import { parentPort } from 'node:worker_threads';
+let count = 0;
+parentPort.on('message', ({ requestId, type }) => {
+  if (type === 'clearDue') count++;
+  else parentPort.postMessage({ requestId, ok: true, result: { archived: count } });
+  parentPort.postMessage({ requestId, activity: 'request-settled' });
+});
+`,
+  )
+  const client = new WorkspaceWorkerClient({
+    directory,
+    ownerId: 'device',
+    script,
+  })
+  onTestFinished(async () => {
+    await client.close()
+    await rm(directory, { recursive: true })
+  })
+
+  // Act
+  const missing = client.call('clearDue', null)
+  const next = client.call('archive', null)
+
+  // Assert
+  await expect(missing).rejects.toMatchObject({ reason: 'worker-unavailable' })
+  await expect(next).resolves.toEqual({ archived: 1 })
+})
+
 test('draft pages bound worker replies and retain every row identity across a long line and empty lines', async () => {
   // Arrange
   const directory = await mkdtemp(join(tmpdir(), 'corelive-draft-page-'))

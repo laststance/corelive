@@ -1041,7 +1041,8 @@ export class WorkspaceService {
     state: OfflineWorkspace,
     command: Extract<WorkspaceCommand, { type: 'recordCompletedTask' }>,
   ): void {
-    const draft = this.draft(state, command.categoryId)
+    const rows = state.drafts[command.categoryId]?.rows
+    if (!rows) throw new WorkspaceCommandError('category-unavailable')
     if (
       state.completions[command.completionId] ||
       state.retiredCompletions[command.completionId]
@@ -1055,8 +1056,8 @@ export class WorkspaceService {
       title: command.title,
       rawText: command.title,
       lineId: this.nextId(),
-      lineIndex: draft.rows.length,
-      previousRowId: draft.rows.at(-1)?.id,
+      lineIndex: rows.length,
+      previousRowId: rows.at(-1)?.id,
       completedAt: command.completedAt,
       originalCompletedAt: command.completedAt,
       timezone: command.timezone,

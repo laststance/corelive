@@ -38,6 +38,7 @@ interface Connection {
 interface QueuedCall {
   deadline: number
   timeout: AbortSignal
+  stopped: AbortSignal
   signal?: AbortSignal
   dispatched: boolean
   timeoutResult: () => McpResult
@@ -146,11 +147,15 @@ export function createMcpClient(
   let ended = false
   let previous: Promise<unknown> = Promise.resolve()
 
-  async function connect(callDeadline: number): Promise<Connection> {
+  async function connect(
+    callDeadline: number,
+    signal: AbortSignal,
+  ): Promise<Connection> {
     const binding = loadPeerBinding()
     const deadline = Math.min(callDeadline, Date.now() + startTimeoutMs)
     let requestedLaunch = false
-    while (!ended && Date.now() < deadline) {
+    let launchFailed = false
+    while (!ended && !signal.aborted && Date.now() < deadline) {
       // The app can create the profile with canonical spelling during a cold launch.
       const endpoint = peerEndpoint(profile)
       let socket: Socket
@@ -164,27 +169,31 @@ export function createMcpClient(
           !hasCode(error, 'EAGAIN')
         )
           throw error
+        if (launchFailed) throw new Error('owner-unavailable')
         if (!requestedLaunch) {
           requestedLaunch = true
-          await Promise.race([
-            wake(),
-            delay(Math.max(0, deadline - Date.now()), undefined, {
-              ref: false,
-            }).then(() => {
-              throw new Error('owner-unavailable')
-            }),
-          ])
+          // Poll availability even if the launch callback has not completed.
+          void wake().catch(() => {
+            launchFailed = true
+          })
         }
-        await delay(Math.min(100, Math.max(0, deadline - Date.now())))
+        await delay(
+          Math.min(100, Math.max(0, deadline - Date.now())),
+          undefined,
+          {
+            signal,
+          },
+        )
         continue
       }
       opening = socket
       const frames = readFrames(socket)
       // Absolute deadline also bounds a live but hung owner that trickles incomplete bytes.
-      const timer = setTimeout(
-        () => socket.destroy(),
-        Math.max(1, deadline - Date.now()),
-      )
+      const closeOpening = (): void => {
+        socket.destroy()
+      }
+      signal.addEventListener('abort', closeOpening, { once: true })
+      const timer = setTimeout(closeOpening, Math.max(1, deadline - Date.now()))
       try {
         await writeFrame(
           socket,
@@ -197,7 +206,8 @@ export function createMcpClient(
         const ready = ReadyFrame.safeParse((await frames.next()).value)
         if (!ready.success || ready.data.profile !== endpoint.identity)
           throw new Error('incompatible-owner')
-        if (ended || socket.destroyed) throw new Error('owner-unavailable')
+        if (ended || signal.aborted || socket.destroyed)
+          throw new Error('owner-unavailable')
         const fresh = { socket, frames }
         connection = fresh
         return fresh
@@ -206,6 +216,7 @@ export function createMcpClient(
         throw error
       } finally {
         opening = undefined
+        signal.removeEventListener('abort', closeOpening)
         clearTimeout(timer)
       }
     }
@@ -272,9 +283,10 @@ export function createMcpClient(
       active =
         connection && !connection.socket.destroyed
           ? connection
-          : await connect(deadline)
+          : await connect(deadline, state.stopped)
     } catch (error) {
-      if (expired()) return state.timeoutResult()
+      const stoppedOpening = stopped()
+      if (stoppedOpening) return stoppedOpening
       const reason =
         error instanceof Error && error.message === 'incompatible-owner'
           ? 'incompatible-owner'
@@ -318,10 +330,14 @@ export function createMcpClient(
       if (signal?.aborted || ended) return cancelledResult(call, false)
       // Spend one budget on queueing, startup, dispatch and any receipt lookup.
       const timeout = new AbortController()
+      const stop = signal
+        ? AbortSignal.any([signal, timeout.signal])
+        : timeout.signal
       let failure: McpResult | undefined
       const state: QueuedCall = {
         deadline: Date.now() + callTimeoutMs,
         timeout: timeout.signal,
+        stopped: stop,
         signal,
         dispatched: false,
         timeoutResult: () => (failure ??= expiredCall(call, state.dispatched)),
@@ -329,9 +345,6 @@ export function createMcpClient(
       const timer = setTimeout(() => timeout.abort(), callTimeoutMs)
       const result = previous.then(async () => execute(call, state))
       previous = result.catch(() => undefined)
-      const stop = signal
-        ? AbortSignal.any([signal, timeout.signal])
-        : timeout.signal
       return new Promise<McpResult>((resolve, reject) => {
         const stopWaiting = (): void => {
           resolve(

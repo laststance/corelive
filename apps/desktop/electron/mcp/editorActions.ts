@@ -50,6 +50,7 @@ export function workspaceRefusal(
   detail: Record<string, unknown> = {},
 ) {
   const interrupted = [
+    'result-unknown',
     'storage-failed',
     'worker-unavailable',
     'worker-crashed',

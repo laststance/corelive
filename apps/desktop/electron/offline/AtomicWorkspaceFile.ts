@@ -47,6 +47,8 @@ type WorkspaceFileOptions<T> = {
    * v1 layout, which hashes the owner id into the path.
    */
   fileName?: string
+  /** Reports when an operation leaves the serialized file queue and starts running. */
+  onOperationStart?: () => void
   /** Fault injection and timing observations; never receives writing or credentials. */
   onStage?: (stage: WorkspaceWriteStage) => void | Promise<void>
 }
@@ -78,6 +80,7 @@ export class AtomicWorkspaceFile<T> {
   private readonly ownerId: string
   private readonly parse: (value: unknown) => T
   private readonly validateChange: WorkspaceFileOptions<T>['validateChange']
+  private readonly onOperationStart: WorkspaceFileOptions<T>['onOperationStart']
   private readonly onStage: WorkspaceFileOptions<T>['onStage']
   private tail: Promise<void> = Promise.resolve()
   private committedBytes: string | undefined
@@ -94,6 +97,7 @@ export class AtomicWorkspaceFile<T> {
     this.ownerId = options.ownerId
     this.parse = options.parse
     this.validateChange = options.validateChange
+    this.onOperationStart = options.onOperationStart
     this.onStage = options.onStage
     if (
       options.fileName !== undefined &&
@@ -345,7 +349,10 @@ export class AtomicWorkspaceFile<T> {
    * @example return this.serialize(async () => this.readPrimary())
    */
   private async serialize<R>(operation: () => Promise<R>): Promise<R> {
-    const result = this.tail.then(operation)
+    const result = this.tail.then(async () => {
+      this.onOperationStart?.()
+      return operation()
+    })
     this.tail = result.then(
       () => undefined,
       () => undefined,

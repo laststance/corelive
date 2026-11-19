@@ -28,6 +28,7 @@ import {
   workspaceView,
   type WorkspaceView,
   type WorkspaceWorkerRequest,
+  type WorkspaceWorkerActivity,
   type WorkspaceWorkerCalls,
 } from './workspace-worker-protocol'
 import { checkpointIdentities } from './workspaceCounts'
@@ -40,9 +41,20 @@ import {
 const options = z
   .object({ directory: z.string(), ownerId: z.literal(DEVICE_OWNER_ID) })
   .parse(workerData as unknown)
+/** Gives main evidence of actual storage progress while an operation owns the file queue.
+ * @example progress()
+ */
+function progress(): void {
+  parentPort?.postMessage({
+    activity: 'storage-progress',
+  } satisfies WorkspaceWorkerActivity)
+}
+
 const file = new AtomicWorkspaceFile({
   directory: options.directory,
   ownerId: options.ownerId,
+  onOperationStart: progress,
+  onStage: progress,
   fileName: DEVICE_WORKSPACE_FILE_NAME,
   parse: (value) => {
     const state = OfflineWorkspaceSchema.parse(value)
@@ -57,6 +69,8 @@ const file = new AtomicWorkspaceFile({
 const archive = new AtomicWorkspaceFile({
   directory: options.directory,
   ownerId: options.ownerId,
+  onOperationStart: progress,
+  onStage: progress,
   fileName: DEVICE_ARCHIVE_FILE_NAME,
   parse: WorkspaceArchiveSchema.parse,
 })
@@ -507,27 +521,35 @@ async function readDetails(
 
 // The serialized file queue orders state changes; replies contain projections instead of the full history.
 parentPort?.on('message', (request: WorkspaceWorkerRequest) => {
-  void dispatch(request).then(
-    (result) =>
+  void dispatch(request)
+    .then(
+      (result) =>
+        parentPort?.postMessage({
+          requestId: request.requestId,
+          ok: true,
+          result,
+        }),
+      (error: unknown) => {
+        const reason =
+          error instanceof WorkspaceFileError ||
+          error instanceof WorkspaceCommandError
+            ? error.reason
+            : 'storage-failed'
+        parentPort?.postMessage({
+          requestId: request.requestId,
+          ok: false,
+          reason,
+          ...(error instanceof WorkspaceCommandError && error.detail
+            ? { detail: error.detail }
+            : {}),
+        })
+      },
+    )
+    .finally(() => {
+      // Port ordering lets main distinguish a lost reply from still-running work.
       parentPort?.postMessage({
+        activity: 'request-settled',
         requestId: request.requestId,
-        ok: true,
-        result,
-      }),
-    (error: unknown) => {
-      const reason =
-        error instanceof WorkspaceFileError ||
-        error instanceof WorkspaceCommandError
-          ? error.reason
-          : 'storage-failed'
-      parentPort?.postMessage({
-        requestId: request.requestId,
-        ok: false,
-        reason,
-        ...(error instanceof WorkspaceCommandError && error.detail
-          ? { detail: error.detail }
-          : {}),
-      })
-    },
-  )
+      } satisfies WorkspaceWorkerActivity)
+    })
 })

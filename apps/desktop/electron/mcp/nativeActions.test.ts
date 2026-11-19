@@ -25,11 +25,24 @@ vi.mock('electron', () => ({
 vi.mock('../logger', () => ({ log: { error: vi.fn() } }))
 
 test.each([
-  ['hides', true],
-  ['refuses to hide', false],
+  [
+    'hides',
+    true,
+    async (closing: ReturnType<typeof runNativeAction>): Promise<void> =>
+      expect(closing).resolves.toEqual({ status: 'hidden', window: 'editor' }),
+  ],
+  [
+    'refuses to hide',
+    false,
+    async (closing: ReturnType<typeof runNativeAction>): Promise<void> =>
+      expect(closing).rejects.toMatchObject({
+        code: 'flush-failed',
+        effect: 'none',
+      }),
+  ],
 ] as const)(
   'closing LiveEditor %s without releasing a pending reload input barrier',
-  async (_outcome, hidden) => {
+  async (_outcome, hidden, expectClose) => {
     // Arrange
     const shown = vi.fn()
     const reload = vi.fn()
@@ -68,12 +81,7 @@ test.each([
     })
 
     // Assert
-    if (hidden)
-      await expect(closing).resolves.toEqual({
-        status: 'hidden',
-        window: 'editor',
-      })
-    else await expect(closing).rejects.toMatchObject({ code: 'flush-failed' })
+    await expectClose(closing)
     expect(closeLiveEditor).toHaveBeenCalledOnce()
     expect(reload).not.toHaveBeenCalled()
     expect(shown).not.toHaveBeenCalled()
@@ -359,7 +367,16 @@ test('saving opacity with no editor window reports a saved preference only', asy
     opacity: 0.3,
     applied: false,
   })
-  expect(() => parseMcpCall('set_editor_opacity', { opacity: 0.1 })).toThrow()
+})
+
+test('MCP rejects window opacity lower than 0.3', () => {
+  // Arrange
+  const input = { opacity: 0.1 }
+
+  // Act + Assert
+  expect(() => parseMcpCall('set_editor_opacity', input)).toThrow(
+    expect.objectContaining({ code: 'invalid-input', effect: 'none' }),
+  )
 })
 
 test.each([

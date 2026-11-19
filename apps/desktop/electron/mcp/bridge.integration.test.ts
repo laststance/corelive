@@ -30,7 +30,12 @@ import { startMcpOwner } from './bridgeOwner'
 import type { EditorRuntime } from './editorActions'
 import { createCompletionHistory } from './history'
 import { McpAccountError } from './historyAuthority'
-import { adoptPeer, loadPeerBinding, peerEndpoint } from './peer'
+import {
+  adoptPeer,
+  checkPeerDirectory,
+  loadPeerBinding,
+  peerEndpoint,
+} from './peer'
 import { BRIDGE_VERSION, encodeFrame, readFrames, writeFrame } from './protocol'
 import { publishExportFile } from './publishExportFile'
 import { mcpSuccess } from './result'
@@ -484,6 +489,7 @@ parentPort.on('message', (request) => {
 });
 const send = parentPort.postMessage.bind(parentPort);
 parentPort.postMessage = (reply) => {
+  if (reply.requestId === appendId && reply.activity === 'request-settled') return;
   if (reply.requestId === appendId && reply.ok) {
     writeFileSync(join(workerData.directory, 'append-committed'), 'committed');
     return;
@@ -498,7 +504,7 @@ await import(${JSON.stringify(workerURL)});
       directory,
       ownerId: 'device',
       execArgv: ['--import', 'tsx'],
-      replyTimeoutMs: 4_000,
+      idleTimeoutMs: 4_000,
     })
     const controller = new OfflineEditorController({
       directory: profile,
@@ -690,6 +696,105 @@ globalThis.setTimeout = (callback, ms, ...args) => schedule(callback,
     expect(read.structuredContent).toEqual({ name: 'read_draft' })
     expect(received).toEqual(['append_unfinished_task', 'read_draft'])
   })
+
+  test('canceling a cold wake releases the queue while its launch callback is still pending', async () => {
+    // Arrange
+    const profile = isolatedProfile()
+    const signals = new EventEmitter()
+    const launched = once(signals, 'launched')
+    const wake = vi.fn(async () => {
+      signals.emit('launched')
+      await new Promise<void>(() => undefined)
+    })
+    const client = createMcpClient(profile, wake, 5_000)
+    cleanup.push(() => client.close())
+    const cancellation = new AbortController()
+    const pending = client.call(
+      parseMcpCall('read_draft', {}),
+      cancellation.signal,
+    )
+    await launched
+
+    // Act
+    cancellation.abort()
+    const read = client.call(parseMcpCall('read_draft', {}))
+    const call = vi.fn(async () => mcpSuccess({ text: 'CoreLive is ready' }))
+    cleanup.push(await startMcpOwner(profile, { call, closeSession: vi.fn() }))
+
+    // Assert
+    expect((await pending).structuredContent).toMatchObject({
+      code: 'cancelled',
+      effect: 'none',
+    })
+    expect((await read).structuredContent).toEqual({
+      text: 'CoreLive is ready',
+    })
+    expect(call).toHaveBeenCalledExactlyOnceWith(
+      expect.any(String),
+      'read_draft',
+      {},
+    )
+  }, 3_000)
+
+  test('canceling an unfinished handshake closes only its connection before dispatch', async () => {
+    // Arrange
+    const profile = isolatedProfile()
+    const endpoint = peerEndpoint(profile)
+    checkPeerDirectory(endpoint, true)
+    const peer = loadPeerBinding()
+    const signals = new EventEmitter()
+    const hello = once(signals, 'hello')
+    const closed = once(signals, 'closed')
+    const listener = peer.listen(endpoint.path, (fd) => {
+      const socket = adoptPeer(fd)
+      if (!socket) return undefined
+      cleanup.push(() => {
+        socket.destroy()
+      })
+      socket.once('close', () => signals.emit('closed'))
+      void readFrames(socket)
+        .next()
+        .then(() => signals.emit('hello'))
+      return socket
+    })
+    cleanup.push(() => {
+      peer.close(listener)
+      if (existsSync(endpoint.path)) unlinkSync(endpoint.path)
+    })
+    const client = createMcpClient(
+      profile,
+      async () => {
+        throw new Error('Unexpected wake')
+      },
+      5_000,
+    )
+    cleanup.push(() => client.close())
+    const cancellation = new AbortController()
+    const pending = client.call(
+      parseMcpCall('read_draft', {}),
+      cancellation.signal,
+    )
+    await hello
+
+    // Act
+    cancellation.abort()
+    const result = await pending
+    await closed
+    peer.close(listener)
+    unlinkSync(endpoint.path)
+    const call = vi.fn(async () => mcpSuccess({ text: 'Second connection' }))
+    cleanup.push(await startMcpOwner(profile, { call, closeSession: vi.fn() }))
+
+    // Assert
+    expect(result.structuredContent).toMatchObject({
+      code: 'cancelled',
+      effect: 'none',
+    })
+    expect(
+      (await client.call(parseMcpCall('read_draft', {}))).structuredContent,
+    ).toEqual({ text: 'Second connection' })
+    expect(call).toHaveBeenCalledOnce()
+  }, 3_000)
 
   test('connection startup shares the call deadline and releases the helper queue', async () => {
     // Arrange
@@ -895,12 +1000,12 @@ globalThis.setTimeout = (callback, ms, ...args) => schedule(callback,
   test('a saved addition is confirmed by its receipt when the owner drops the original reply', async () => {
     // Arrange
     const profile = isolatedProfile()
-    const operationId = randomUUID()
+    const operationId = '00000000-0000-4000-8000-000000000001'
     const saved = {
       status: 'saved',
       operationId,
       title: 'Verify this write',
-      rowId: randomUUID(),
+      rowId: '00000000-0000-4000-8000-000000000002',
     }
     const lookup = vi.fn(async () => mcpSuccess(saved))
     const write = vi.fn(async () => {
@@ -929,7 +1034,12 @@ globalThis.setTimeout = (callback, ms, ...args) => schedule(callback,
     )
 
     // Assert
-    expect(result.structuredContent).toEqual(saved)
+    expect(result.structuredContent).toEqual({
+      status: 'saved',
+      operationId: '00000000-0000-4000-8000-000000000001',
+      title: 'Verify this write',
+      rowId: '00000000-0000-4000-8000-000000000002',
+    })
     expect(write).toHaveBeenCalledTimes(1)
     expect(lookup).toHaveBeenCalledExactlyOnceWith(
       expect.any(String),

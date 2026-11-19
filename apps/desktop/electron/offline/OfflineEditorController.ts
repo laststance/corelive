@@ -313,29 +313,43 @@ export class OfflineEditorController {
     return this.snapshot
   }
 
+  /** Pins a task receipt to the workspace generation and account that issued the request.
+   * @example const scope = this.captureMcpTaskScope(generation)
+   */
+  private captureMcpTaskScope(generation: number) {
+    const accountId = this.mcpAccountBinding()?.accountId ?? null
+    const epoch = this.mcpEpoch
+    return {
+      accountId,
+      isCurrent: () =>
+        !this.sessionEnding &&
+        this.generation === generation &&
+        this.mcpEpoch === epoch &&
+        (this.mcpAccountBinding()?.accountId ?? null) === accountId,
+    }
+  }
+
   /** Commits an agent's addition under the session lock, then publishes the new revision to LiveEditor.
+   * @throws {@link WorkspaceWorkerError} with an unknown result if the account changes after the write.
    * @example await controller.appendMcpTask(generation, {operationId, title, categoryId})
    */
   async appendMcpTask(
     generation: number,
     input: Omit<WorkspaceWorkerCalls['appendTask']['input'], 'accountId'>,
   ) {
-    const binding = this.mcpAccountBinding()
+    const scope = this.captureMcpTaskScope(generation)
     return this.withSessionLock(async () => {
       const context = this.requireContext(generation)
-      if (
-        this.sessionEnding ||
-        binding?.signal.aborted ||
-        (binding?.epoch ?? null) !== (this.mcpAccountBinding()?.epoch ?? null)
-      )
-        throw new WorkspaceWorkerError('account-changed')
+      if (!scope.isCurrent()) throw new WorkspaceWorkerError('account-changed')
       this.pendingCommands++
       try {
         const { view, addition } = await context.worker.call('appendTask', {
           ...input,
-          accountId: binding?.accountId ?? null,
+          accountId: scope.accountId,
         })
         this.publishView(view, generation)
+        // The local write already committed. A changed account can only make its reply uncertain.
+        if (!scope.isCurrent()) throw new WorkspaceWorkerError('result-unknown')
         return addition
       } finally {
         this.finishCommand()
@@ -352,15 +366,9 @@ export class OfflineEditorController {
     operationId: string,
     original?: WorkspaceWorkerCalls['findTaskAddition']['input']['original'],
   ) {
-    const binding = this.mcpAccountBinding()
-    const epoch = this.mcpEpoch
+    const scope = this.captureMcpTaskScope(generation)
     const assertCurrent = (): void => {
-      if (
-        this.sessionEnding ||
-        this.mcpEpoch !== epoch ||
-        this.mcpAccountBinding()?.accountId !== binding?.accountId
-      )
-        throw new WorkspaceWorkerError('account-changed')
+      if (!scope.isCurrent()) throw new WorkspaceWorkerError('account-changed')
     }
     return this.withSessionLock(async () => {
       const context = this.requireContext(generation)
@@ -368,7 +376,7 @@ export class OfflineEditorController {
       try {
         return await context.worker.call('findTaskAddition', {
           operationId,
-          accountId: binding?.accountId ?? null,
+          accountId: scope.accountId,
           original,
         })
       } finally {
@@ -727,6 +735,18 @@ export class OfflineEditorController {
     // finish, then sign out. Concurrent sign-outs share one run.
     const clearing = this.clearRun
     if (clearing) await clearing.catch(() => undefined)
+    while (this.signOutRun) {
+      try {
+        return await this.signOutRun
+      } catch (error) {
+        // A stale Not now prompt can refuse its own request before clearing any session.
+        if (
+          !(error instanceof WorkspaceWorkerError) ||
+          error.reason !== 'connection-not-pending'
+        )
+          throw error
+      }
+    }
     return this.startSignOut(async (generation) =>
       this.withSessionLock(async () => this.endSession(generation)),
     )

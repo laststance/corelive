@@ -47,8 +47,35 @@ describe('theme registry', () => {
       'graphite-light',
       'graphite-dark',
     ])
-    expect(DashboardThemeSchema.options).toEqual(['system', ...THEME_IDS])
-    expect(DashboardThemeSchema.safeParse('default-dark').success).toBe(false)
+  })
+
+  test('Dashboard appearance accepts System and all shipped themes and rejects the retired default-dark ID', () => {
+    // Arrange
+    const retiredPreference = 'default-dark'
+
+    // Act
+    const preferences = DashboardThemeSchema.options
+    const retired = DashboardThemeSchema.safeParse(retiredPreference)
+
+    // Assert
+    expect(preferences).toEqual([
+      'system',
+      'light',
+      'dark',
+      'cathedral-light',
+      'cathedral-dark',
+      'harbor-light',
+      'harbor-dark',
+      'grove-light',
+      'grove-dark',
+      'rose-tea-light',
+      'rose-tea-dark',
+      'iris-light',
+      'iris-dark',
+      'graphite-light',
+      'graphite-dark',
+    ])
+    expect(retired.success).toBe(false)
   })
 
   test('pairs a light and a dark theme for every family', () => {

@@ -283,10 +283,10 @@ test('each helper finishes its original snapshot, a fresh read sees later rows, 
   ).rejects.toMatchObject({ code: 'history-cursor-unavailable' })
 })
 
-test('an IDE can finish a long frozen read while newer first pages evict its least recently read history', async () => {
+test('an IDE finishes its multi-page history read after a newer request evicts its abandoned cursor', async () => {
   // Arrange
-  const rows = Array.from({ length: 100 }, (_, index) =>
-    remoteRow(index + 1, null, 'Completed work'),
+  const rows = [5, 17, 11, 33, 9, 1, 19].map((id) =>
+    remoteRow(id, null, 'Completed work'),
   )
   const { history, historyRange } = historyFixture(
     async () => emptyDevice,
@@ -297,7 +297,10 @@ test('an IDE can finish a long frozen read while newer first pages evict its lea
   const abandoned = await history.list('ide', firstPage)
 
   // Act
-  const secondPage = await history.list('ide', { cursor: longRead.nextCursor! })
+  const secondPage = await history.list('ide', {
+    cursor: longRead.nextCursor!,
+    pageSize: 1,
+  })
   await history.list('ide', firstPage)
   await expect(
     history.list('ide', { cursor: abandoned.nextCursor! }),
@@ -305,15 +308,15 @@ test('an IDE can finish a long frozen read while newer first pages evict its lea
   const received = [...longRead.entries, ...secondPage.entries]
   let cursor = secondPage.nextCursor
   while (cursor) {
-    const next = await history.list('ide', { cursor, pageSize: 7 })
+    const next = await history.list('ide', { cursor, pageSize: 2 })
     received.push(...next.entries)
     cursor = next.nextCursor
   }
 
   // Assert
-  expect(received.map((row) => row.accountRow?.id)).toEqual(
-    Array.from({ length: 100 }, (_, index) => 100 - index),
-  )
+  expect(received.map((row) => row.accountRow?.id)).toEqual([
+    33, 19, 17, 11, 9, 5, 1,
+  ])
   expect(historyRange).toHaveBeenCalledTimes(3)
 })
 
