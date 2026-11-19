@@ -1061,7 +1061,7 @@ export class WindowManager {
   }
 
   /** Saves the live draft before hiding; a failed save leaves recovery actions visible.
-   * @returns Whether the window was hidden or is already absent.
+   * @returns True if the window was absent at the start or this request finished hiding it.
    * @example await windowManager.hideLiveEditor()
    */
   async hideLiveEditor(): Promise<boolean> {

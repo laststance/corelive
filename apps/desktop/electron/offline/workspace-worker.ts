@@ -369,7 +369,7 @@ async function readHistoryArchive() {
 }
 
 /** Combines workspace writing and settled history for export, recovering raw files independently.
- * @throws Storage failures, or {@link WorkspaceFileError} if no workspace files can be exported.
+ * @throws Storage errors, including {@link WorkspaceFileError} when a damaged partition has no readable owned files.
  * @example const json = await exportWriting()
  */
 async function exportWriting(): Promise<string> {
@@ -379,7 +379,7 @@ async function exportWriting(): Promise<string> {
     if (!recovery) throw new WorkspaceFileError('recovery-missing')
     return recovery
   })
-  // The archive roll writes history to the archive before removing it from the workspace.
+  // Read the workspace first so a completion moved into the archive during export is still included.
   const history = await exportArchive()
   return JSON.stringify({ ...workspace, ...history }, null, 2)
 }

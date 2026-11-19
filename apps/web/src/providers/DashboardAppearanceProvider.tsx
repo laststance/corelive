@@ -107,7 +107,7 @@ function BoundAppearance({
     } catch {
       /* Browser storage is optional. */
     }
-    // A storage event from another tab already applied its theme. Only an account change writes back.
+    // next-themes handles storage events. Apply changes to the account or its selected theme here.
     applyAccountTheme(visibleTheme)
   }, [userId, visibleTheme])
 

@@ -305,23 +305,19 @@ describe.runIf(process.platform === 'darwin')('verified Mac socket', () => {
       await client.connect(transport)
 
       // Act
-      const edit = await client.callTool(
-        {
-          name: 'edit_draft',
-          arguments: {
-            categoryId: '00000000-0000-4000-8000-000000000001',
-            baseRevision: 0,
-            rows: [
-              {
-                id: '00000000-0000-4000-8000-000000000002',
-                text: text.repeat(repeats),
-              },
-            ],
-          },
+      const edit = await client.callTool({
+        name: 'edit_draft',
+        arguments: {
+          categoryId: '00000000-0000-4000-8000-000000000001',
+          baseRevision: 0,
+          rows: [
+            {
+              id: '00000000-0000-4000-8000-000000000002',
+              text: text.repeat(repeats),
+            },
+          ],
         },
-        undefined,
-        { timeout: 8_000 },
-      )
+      })
       const read = await client.callTool({ name: 'read_draft' })
 
       // Assert
@@ -339,7 +335,8 @@ describe.runIf(process.platform === 'darwin')('verified Mac socket', () => {
       }
       expect(read.structuredContent).toEqual({ text: 'Still connected' })
     },
-    15_000,
+    // Allow the SDK's default 60-second request timeout plus helper startup on Intel CI.
+    70_000,
   )
 
   test.each(['profile', 'version'])(

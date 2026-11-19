@@ -213,7 +213,7 @@ export function createMcpClient(
     }
     if (signal?.aborted || ended) return cancelledResult(call, state.dispatched)
     let drainTimeout: ReturnType<typeof setTimeout> | undefined
-    // Keep the serial slot until this ID's reply is drained. A stalled owner cannot hold the slot forever.
+    // After cancellation, drain the pending reply or close the stalled connection.
     const boundDrain = (): void => {
       drainTimeout = setTimeout(() => active.socket.destroy(), timeoutMs)
     }

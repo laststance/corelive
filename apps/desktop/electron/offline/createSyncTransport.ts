@@ -222,7 +222,6 @@ async function fetchAccountHistory(
       clearDeadline()
       return response
     }
-    // Header receipt starts the first body deadline. Any incoming bytes refresh it.
     timer.refresh()
     const traffic = new TransformStream<Uint8Array, Uint8Array>({
       transform(bytes, stream) {
