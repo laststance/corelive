@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { fork, execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { once } from 'node:events'
-import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { mkdtempSync, readdirSync, realpathSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir, userInfo } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -80,6 +80,9 @@ async function verifyBundle(bundle, hostedColdStart) {
   const executable = join(bundle, 'Contents/MacOS/CoreLive')
   const command = join(bundle, 'Contents/Helpers/corelive-mcp')
   const profile = mkdtempSync(join(tmpdir(), 'corelive-package-qa-'))
+  // Launch Services receives the canonical profile even when macOS provides /var via TMPDIR.
+  const ownerProfileArgument =
+    ' --user-data-dir=' + realpathSync.native(profile) + ' '
   let fixture
   let client
   // Identify only the background main process launched for this fresh hosted profile.
@@ -93,7 +96,7 @@ async function verifyBundle(bundle, hostedColdStart) {
         return match &&
           match[2].startsWith(executable + ' ') &&
           match[2].includes('--corelive-mcp-background') &&
-          match[2].includes('--user-data-dir=' + profile)
+          (' ' + match[2] + ' ').includes(ownerProfileArgument)
           ? [Number(match[1])]
           : []
       })
