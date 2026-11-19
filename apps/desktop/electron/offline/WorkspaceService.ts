@@ -46,7 +46,7 @@ import {
   noteReceiptQuery,
   parkOperations,
 } from './categoryReceipts'
-import { clearMarker, type CategoryContext } from './categoryState'
+import { clearMarker, pathOf, type CategoryContext } from './categoryState'
 import {
   buildOperation,
   selectUploads,
@@ -55,6 +55,7 @@ import {
 } from './completionUpload'
 import { effectiveCategory } from './effectiveCategory'
 import { applySyncDetailAction, buildSyncDetails } from './syncDetails'
+import type { WorkspaceWorkerCalls } from './workspace-worker-protocol'
 import { WorkspaceCommandError } from './WorkspaceCommandError'
 
 export { WorkspaceCommandError, effectiveCategory }
@@ -211,6 +212,12 @@ export class WorkspaceService {
           command.type === 'save' || command.type === 'complete'
             ? forkWorkspace(current)
             : structuredClone(current)
+        if (
+          ('requireActiveCategory' in command &&
+            command.requireActiveCategory) ||
+          command.type === 'recordCompletedTask'
+        )
+          this.requireActiveCategory(state, command.categoryId)
         this.apply(state, command)
         // Trusted reducers can preserve larger documents; normal saves cannot grant themselves capacity.
         for (const [id, draft] of Object.entries(state.drafts)) {
@@ -231,6 +238,103 @@ export class WorkspaceService {
       },
       { shared: true },
     )
+  }
+
+  /** Refuses a retired category at commit time so simultaneous deletion cannot redirect an agent's edit.
+   * @example this.requireActiveCategory(state, categoryId)
+   */
+  private requireActiveCategory(
+    state: OfflineWorkspace,
+    categoryId: string,
+  ): void {
+    if (
+      !state.categories.some(
+        (category) =>
+          category.id === categoryId &&
+          !category.removed &&
+          !category.historical,
+      )
+    )
+      throw new WorkspaceCommandError('category-unavailable')
+  }
+
+  /**
+   * Appends to the latest committed draft and writes its durable answer in the same transaction.
+   * The main process supplies the verified account. Only a lookup may resolve an interrupted call.
+   * @example await service.appendTask({ operationId, title: 'Send the invoice', accountId: null })
+   */
+  async appendTask(input: WorkspaceWorkerCalls['appendTask']['input']) {
+    const { operationId, categoryId: requested, accountId, title } = input
+    const intent = digest(
+      JSON.stringify(['appendTask', accountId, requested ?? null, title]),
+    )
+    const state = await this.file.update(
+      (current) => {
+        const receipt = current.commandReceipts[operationId]
+        if (receipt) {
+          if (
+            receipt.digest !== intent ||
+            !receipt.taskAddition ||
+            receipt.taskAddition.deviceId !== current.deviceId
+          )
+            throw new WorkspaceCommandError('command-conflict')
+          return current
+        }
+        const categoryId =
+          requested ?? input.selectedAtStart ?? current.selectedCategoryId
+        // Deleted categories may redirect ordinary editor commands; an explicit MCP target must never redirect.
+        this.requireActiveCategory(current, categoryId)
+        const state = forkWorkspace(current)
+        const draft = this.draft(state, categoryId)
+        const blank =
+          draft.rows.length === 1 && draft.rows[0]?.text === ''
+            ? draft.rows[0]
+            : undefined
+        const row = { id: blank?.id ?? this.nextId(), text: '- [ ] ' + title }
+        const rows = blank ? [row] : [...draft.rows, row]
+        this.saveDraft(state, {
+          type: 'save',
+          commandId: operationId,
+          categoryId,
+          baseRevision: draft.revision,
+          rows,
+        })
+        draft.inputLimit = getDraftInputLimit(draft)
+        state.revision++
+        state.commandReceipts[operationId] = {
+          digest: intent,
+          revision: state.revision,
+          taskAddition: {
+            accountId,
+            deviceId: state.deviceId,
+            categoryId,
+            categoryPath: pathOf(state, categoryId),
+            rowId: row.id,
+            title,
+          },
+        }
+        pruneCommandReceipts(state)
+        return state
+      },
+      { shared: true },
+    )
+    const addition = state.commandReceipts[operationId]?.taskAddition
+    if (!addition) throw new WorkspaceCommandError('command-conflict')
+    return { state, addition }
+  }
+
+  /** Looks up a durable addition without resubmitting it or matching draft text.
+   * @example await service.findTaskAddition({ operationId, accountId: null })
+   */
+  async findTaskAddition({
+    operationId,
+    accountId,
+  }: WorkspaceWorkerCalls['findTaskAddition']['input']) {
+    const state = await this.file.read()
+    const saved = state.commandReceipts[operationId]?.taskAddition
+    return saved?.deviceId === state.deviceId && saved.accountId === accountId
+      ? saved
+      : null
   }
 
   /**
@@ -881,6 +985,8 @@ export class WorkspaceService {
         return this.saveDraft(state, command)
       case 'complete':
         return this.completeLine(state, command)
+      case 'recordCompletedTask':
+        return this.recordCompletedTask(state, command)
       case 'undo':
         return this.undoCompletion(state, command)
       case 'clear':
@@ -917,6 +1023,45 @@ export class WorkspaceService {
       case 'restoreRecovery':
         return this.restoreRecoveryCopy(state, command)
     }
+  }
+
+  /** Records completed work directly in history while preserving the current unfinished draft.
+   * @example this.recordCompletedTask(state, command)
+   */
+  private recordCompletedTask(
+    state: OfflineWorkspace,
+    command: Extract<WorkspaceCommand, { type: 'recordCompletedTask' }>,
+  ): void {
+    const draft = this.draft(state, command.categoryId)
+    if (
+      state.completions[command.completionId] ||
+      state.retiredCompletions[command.completionId]
+    )
+      throw new WorkspaceCommandError('command-conflict')
+    // A directly recorded completion has no visible draft row; Undo can restore its captured text.
+    const completion: OfflineCompletion = {
+      id: command.completionId,
+      categoryId: command.categoryId,
+      originalCategoryId: command.categoryId,
+      title: command.title,
+      rawText: command.title,
+      lineId: this.nextId(),
+      lineIndex: draft.rows.length,
+      previousRowId: draft.rows.at(-1)?.id,
+      completedAt: command.completedAt,
+      originalCompletedAt: command.completedAt,
+      timezone: command.timezone,
+      revision: 1,
+      undoUntil:
+        this.now() + state.preferences.settings.liveEditorToastDurationMs,
+      cancelled: false,
+      restored: false,
+      remote: null,
+      clearAfter: null,
+      cleared: true,
+    }
+    state.completions[completion.id] = completion
+    this.supersedeUnsent(state, completion)
   }
 
   /** Applies the save command inside the account's durable transaction.

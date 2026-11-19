@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createRoot } from 'react-dom/client'
 
 import { AppearanceSettings } from '@/components/settings/AppearanceSettings'
+import { DashboardAppearanceProvider } from '@/providers/DashboardAppearanceProvider'
 import { ThemeProvider } from '@/providers/ThemeProvider'
 import '@/globals.css'
 
@@ -22,7 +23,9 @@ createRoot(document.getElementById('root')!).render(
       {view === 'home' && installHomeFixture(parameters).element}
       {view === 'appearance' && (
         <main className="mx-auto max-w-2xl space-y-12 px-4 py-6 sm:px-6">
-          <AppearanceSettings />
+          <DashboardAppearanceProvider>
+            <AppearanceSettings />
+          </DashboardAppearanceProvider>
         </main>
       )}
       {view === null && (

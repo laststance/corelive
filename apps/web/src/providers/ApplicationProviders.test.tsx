@@ -16,6 +16,12 @@ vi.mock('@/lib/orpc/electron-auth-provider', () => ({
     return <>{children}</>
   },
 }))
+vi.mock('@/providers/DashboardAppearanceProvider', () => ({
+  DashboardAppearanceProvider: ({ children }: { children: ReactNode }) => {
+    state.mounted('appearance')
+    return <>{children}</>
+  },
+}))
 vi.mock('@/providers/QueryClientProvider', () => ({
   QueryClientProvider: ({ children }: { children: ReactNode }) => (
     <>{children}</>
@@ -60,6 +66,6 @@ describe('broker route isolation', () => {
 
     // Assert
     expect(screen.getByText('Home page')).toBeVisible()
-    expect(state.mounted.mock.calls).toEqual([['auth']])
+    expect(state.mounted.mock.calls).toEqual([['appearance'], ['auth']])
   })
 })

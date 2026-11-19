@@ -61,6 +61,7 @@ const rendererReadableConfigPathSchema = z
  */
 export const IPC_ARG_SCHEMAS: Record<IPCChannel, z.ZodTypeAny> = {
   ...OFFLINE_IPC_ARGUMENT_SCHEMAS,
+  'activity-card-input': z.tuple([]),
   // Scoped broker handlers validate the full discriminated result and sender themselves.
   'offline-auth-ready': z.tuple([]),
   'offline-auth-result': z.tuple([z.unknown()]),

@@ -87,7 +87,7 @@ export function isTrustedAuthSender(
 export class OfflineEditorIPC {
   private pending: PendingFlush | null = null
   private snapshotReaders = 0
-  private readonly signIn: SignInCoordinator
+  readonly signIn: SignInCoordinator
 
   constructor(
     private readonly windows: WindowManager,
@@ -428,7 +428,7 @@ export class OfflineEditorIPC {
   /** The controller's account status plus the login window's progress (DA6).
    * @example const account = this.accountStatus()
    */
-  private accountStatus(): AccountStatus {
+  accountStatus(): AccountStatus {
     return { ...this.controller.accountStatus(), signIn: this.signIn.state }
   }
 

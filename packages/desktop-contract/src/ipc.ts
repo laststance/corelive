@@ -18,6 +18,14 @@ import type {
 } from './offline-editor-api'
 import type { OfflineEditorSnapshot } from './offline-workspace-v2'
 
+/** Three display fields sent from the authenticated owner to its bundled activity-card renderer. */
+export interface ActivityCardInput {
+  /** Selected YYYY-MM-DD in the Mac's local time zone. */
+  isoDate: string
+  totalCompleted: number
+  topCategoryName?: string | null
+}
+
 /**
  * Auth user payload exchanged on auth IPC channels.
  *
@@ -153,6 +161,7 @@ export interface UpdaterDownloadProgress {
  * ```
  */
 export interface IPCChannels extends OfflineIPCChannels {
+  'activity-card-input': { request: void; response: ActivityCardInput }
   'offline-auth-ready': { request: void; response: OfflineAuthRequest | null }
   'offline-auth-result': { request: OfflineAuthResult; response: boolean }
   // ──────────────────────────────────────────────────────────────────────────

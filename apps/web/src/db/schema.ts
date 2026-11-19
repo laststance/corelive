@@ -10,6 +10,7 @@
  * @module db/schema
  */
 import type { SyncOutcome } from '@corelive/desktop-contract/category-sync'
+import type { DashboardTheme } from '@corelive/desktop-contract/dashboard-appearance'
 import type { CompletionSyncReceipt } from '@corelive/desktop-contract/offline-workspace'
 import { sql } from 'drizzle-orm'
 import {
@@ -97,6 +98,24 @@ export const userTable = pgTable(
   (table) => [
     uniqueIndex('User_clerkId_key').on(table.clerkId),
     uniqueIndex('User_email_key').on(table.email),
+  ],
+)
+
+/** One confirmed dashboard preference per authenticated owner; absence preserves a never-initialized account. */
+export const dashboardAppearanceTable = pgTable(
+  'DashboardAppearance',
+  {
+    userId: integer('userId').primaryKey(),
+    theme: text('theme').$type<DashboardTheme>().notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.userId],
+      foreignColumns: [userTable.id],
+      name: 'DashboardAppearance_userId_fkey',
+    })
+      .onUpdate('cascade')
+      .onDelete('cascade'),
   ],
 )
 

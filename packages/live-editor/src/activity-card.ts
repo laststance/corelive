@@ -3,7 +3,16 @@
  * still letting the lazy loader stay strongly typed against the module's
  * public API.
  */
+import type { ActivityCardInput } from '@corelive/desktop-contract/ipc'
 import type * as HtmlToImage from 'html-to-image'
+
+export {
+  getActivityCardInput,
+  getDayCategoryTotals,
+  rollupCategoryTotals,
+  type HeatmapCategory,
+  type RootCategoryTotal,
+} from './activity-day'
 
 /**
  * Hardcoded sRGB palette mirroring the OKLCH design tokens in DESIGN.md.
@@ -42,17 +51,7 @@ const SHARE_COLORS = {
  *   topCategoryName: 'writing',
  * })
  */
-export type ExportDayInput = {
-  /** YYYY-MM-DD UTC date string the share card is anchored on. */
-  isoDate: string
-  /** Total completions on that day. */
-  totalCompleted: number
-  /**
-   * Optional top-category name; omitted when the day has zero categorized
-   * activity — the share card just shows the count + "shown up" line.
-   */
-  topCategoryName?: string | null
-}
+export type ExportDayInput = ActivityCardInput
 
 /**
  * Lazy reference to the html-to-image module so it is excluded from the

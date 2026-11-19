@@ -12,6 +12,7 @@ const desktopDirectory = fileURLToPath(new URL('../', import.meta.url))
  */
 async function buildOfflinePreloads() {
   for (const name of [
+    'preload-activity',
     'preload-offline-auth',
     'preload-offline-editor',
     'preload-settings',

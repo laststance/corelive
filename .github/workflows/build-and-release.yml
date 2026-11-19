@@ -37,6 +37,35 @@ jobs:
       - name: Run Electron tests
         run: pnpm test:electron --run
 
+  packaged-mcp-intel:
+    name: Packaged MCP (Intel)
+    if: github.event_name == 'pull_request'
+    runs-on: macos-26-intel
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Prepare environment
+        uses: ./.github/actions/prepare
+
+      - name: Verify native Intel peer credentials
+        run: |
+          node -e "require('node:assert/strict').equal(process.arch, 'x64')"
+          pnpm --filter @corelive/desktop exec vitest run --config vitest.config.electron.ts electron/mcp/bridge.integration.test.ts
+
+      - name: Package the Intel app with an ad-hoc signature
+        # PRs exercise the embedded runtime without a release certificate or notarization credentials.
+        run: |
+          pnpm build:icons
+          pnpm electron:build:ts
+          pnpm exec node scripts/electron-builder.mjs --dir --mac --x64 --publish never --config.mac.identity=- --config.mac.timestamp=none --config.mac.notarize=false
+
+      - name: Verify packaged Intel discovery, device writes and reconnection
+        run: pnpm --filter @corelive/desktop qa:mcp-package dist/mac/CoreLive.app --hosted-cold-start
+
   build:
     needs: test
     runs-on: macos-latest
@@ -92,6 +121,9 @@ jobs:
       - name: Build Electron app (macOS) — unsigned PR check
         if: "!(github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))"
         run: pnpm electron:build:dir
+
+      - name: Verify bundled MCP discovery, device writes and reconnection
+        run: pnpm --filter @corelive/desktop qa:mcp-package
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

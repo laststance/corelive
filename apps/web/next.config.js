@@ -38,28 +38,11 @@ const nextConfig = {
   transpilePackages: ['@corelive/desktop-contract', '@corelive/live-editor'],
   images: { unoptimized: true },
   /**
-   * Redirects retired URLs (the removed web LiveEditor routes and the pre-rename Electron routes) to their canonical replacement.
-   * LiveEditor routes use temporary redirects so a cached 308 never outlives a future route.
-   * @returns {Promise<Array<{source: string, destination: string, permanent: boolean}>>} Compatibility redirects.
-   * @example (await nextConfig.redirects())[3] // => { source: '/floating-navigator', destination: '/login-shell', permanent: true }
+   * Sends earlier Electron clients to the current sign-in window.
+   * @example (await nextConfig.redirects())[0].destination // '/login-shell'
    */
   async redirects() {
     return [
-      {
-        source: '/braindump',
-        destination: '/home',
-        permanent: false,
-      },
-      {
-        source: '/write',
-        destination: '/home',
-        permanent: false,
-      },
-      {
-        source: '/live-editor',
-        destination: '/home',
-        permanent: false,
-      },
       {
         source: '/floating-navigator',
         destination: '/login-shell',

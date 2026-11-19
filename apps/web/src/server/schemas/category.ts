@@ -6,15 +6,14 @@
  *
  * @module server/schemas/category
  */
-import {
-  CategoryColorSchema,
-  CategorySchema,
-} from '@corelive/desktop-contract/category'
+import { CategoryColorSchema } from '@corelive/desktop-contract/category'
 import { z } from 'zod'
 
 export {
   CATEGORY_COLORS,
   DEFAULT_CATEGORY_SEED,
+  CategoryListResponseSchema,
+  type CategoryWithCount,
   CategorySchema,
   type Category,
   type CategoryColor,
@@ -56,23 +55,4 @@ export const UpdateCategorySchema = z.object({
   name: z.string().trim().min(1).max(30).optional(),
   parentId: z.number().int().positive().nullable().optional(),
   color: CategoryColorSchema.optional(),
-})
-
-/**
- * Category with todo count, returned from the list endpoint.
- */
-const CategoryWithCountSchema = CategorySchema.extend({
-  recordCount: z.number().int().min(0),
-  _count: z.object({
-    todos: z.number().int().min(0),
-  }),
-})
-
-export type CategoryWithCount = z.infer<typeof CategoryWithCountSchema>
-
-/**
- * Response schema for the list categories endpoint.
- */
-export const CategoryListResponseSchema = z.object({
-  categories: z.array(CategoryWithCountSchema),
 })

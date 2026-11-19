@@ -1,5 +1,10 @@
 'use client'
 
+import {
+  exportDayAsImage,
+  getActivityCardInput,
+  getDayCategoryTotals,
+} from '@corelive/live-editor/activity-card'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, ImageDown } from 'lucide-react'
 import { type RefObject, useRef, useState } from 'react'
@@ -16,7 +21,6 @@ import {
 import { useClerkQueryReady } from '@/hooks/useClerkQueryReady'
 import { useKeyboardNav } from '@/hooks/useKeyboardNav'
 import { getColorDotClass } from '@/lib/category-colors'
-import { exportDayAsImage } from '@/lib/export-day-as-image'
 import { formatClockTime } from '@/lib/formatClockTime'
 import { getLocalTodayIsoDate } from '@/lib/getLocalTodayIsoDate'
 import {
@@ -26,13 +30,8 @@ import {
 } from '@/lib/heatmap-intensity'
 import { log } from '@/lib/logger'
 import { orpc } from '@/lib/orpc/client-query'
-import {
-  getCompletionCategoryPath,
-  rollupCategoryTotals,
-  type RootCategoryTotal,
-} from '@/lib/rollupCategoryTotals'
+import { getCompletionCategoryPath } from '@/lib/rollupCategoryTotals'
 import { cn } from '@/lib/utils'
-import type { DayDetailTask } from '@/server/schemas/completed'
 
 import { CategoryTotals } from './CategoryTotals'
 
@@ -139,41 +138,6 @@ function formatDate(isoDate: string): string {
 }
 
 /**
- * Picks the single most-used category name across a day's completed
- * tasks. Used by the share card to render the "mostly <category>" line.
- * Ties broken alphabetically (locale-insensitive 'en') so two days with
- * the same task mix produce identical share cards across machines.
- *
- * @param tasks - The day's completed tasks
- * @returns
- * - Category name with the highest occurrence
- * - `null` when no task carries a category
- * @example
- * getTopCategoryName(day.tasks) // 'Work' when its children have the largest combined count
- */
-function getTopCategoryName(tasks: readonly DayDetailTask[]): string | null {
-  return getDayCategoryTotals(tasks)[0]?.name ?? null
-}
-
-/**
- * Counts day-detail entries by their current root for {@link DayDetailDialog} and sharing.
- *
- * @param tasks - Entries in exactly the selected day's timezone bucket.
- * @returns Ranked root totals including direct and child counts.
- * @example
- * const totals = getDayCategoryTotals(day.tasks)
- */
-function getDayCategoryTotals(
-  tasks: readonly DayDetailTask[],
-): RootCategoryTotal[] {
-  return rollupCategoryTotals(
-    tasks.flatMap((task) =>
-      task.category ? [{ ...task.category, count: 1 }] : [],
-    ),
-  )
-}
-
-/**
  * Day-detail dialog opened from {@link ContributionGraph} or recent activity. Renders the day's
  * level band (paper → terracotta), italic state name, voice line, and a
  * compact list of the day's completed tasks. The cathedral-lit halo (soft
@@ -194,18 +158,21 @@ export const DayDetailDialog = function DayDetailDialog({
   const isClerkQueryReady = useClerkQueryReady()
   const [isSaving, setIsSaving] = useState(false)
   const previousFocusRef = useRef<HTMLElement | null>(null)
-  const { data, isError, isFetching, isPaused, refetch } = useQuery({
-    ...orpc.completed.dayDetail.queryOptions({
-      input: {
-        date: date ?? '1970-01-01',
-        // Bucket the cell's day by the browser's local zone (L3) so the
-        // dialog's entries match the locally-rendered heatmap cell exactly.
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      },
-    }),
-    enabled: isClerkQueryReady && date !== null,
-  })
+  const { data, isError, isFetching, isPaused, isPlaceholderData, refetch } =
+    useQuery({
+      ...orpc.completed.dayDetail.queryOptions({
+        input: {
+          date: date ?? '1970-01-01',
+          // Bucket the cell's day by the browser's local zone (L3) so the
+          // dialog's entries match the locally-rendered heatmap cell exactly.
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        },
+      }),
+      enabled: isClerkQueryReady && date !== null,
+    })
 
+  const shareCard =
+    date && !isPlaceholderData ? getActivityCardInput(date, data) : null
   const isOpen = date !== null
   // Only a response for the selected query key can establish a rest day.
   const state = data ? getDayState(data.count) : null
@@ -236,14 +203,10 @@ export const DayDetailDialog = function DayDetailDialog({
    * (each of which would append its own off-screen card).
    */
   const handleShare = async (): Promise<void> => {
-    if (!date || !data?.count || isSaving) return
+    if (!shareCard || isSaving) return
     setIsSaving(true)
     try {
-      const dataUrl = await exportDayAsImage({
-        isoDate: date,
-        totalCompleted: data.count,
-        topCategoryName: getTopCategoryName(data.tasks),
-      })
+      const dataUrl = await exportDayAsImage(shareCard)
       const anchor = document.createElement('a')
       anchor.href = dataUrl
       anchor.download = `corelive-${date}.png`
@@ -327,7 +290,7 @@ export const DayDetailDialog = function DayDetailDialog({
                     size="icon"
                     className="size-8"
                     onClick={handleShare}
-                    disabled={isSaving || !data?.count}
+                    disabled={isSaving || !shareCard}
                     aria-label="Save as image"
                   >
                     <ImageDown />

@@ -6,6 +6,7 @@ export const useUser = () => ({
 export const useAuth = () => ({
   isLoaded: true,
   isSignedIn: true,
+  userId: 'synthetic-settings-qa',
   getToken: async () => null,
 })
 export const useSignIn = () => ({ isLoaded: true, signIn: null })

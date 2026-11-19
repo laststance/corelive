@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { parentPort, workerData } from 'node:worker_threads'
 
+import { CompletionRangeSchema } from '@corelive/desktop-contract/completion-history'
 import {
   DEVICE_ARCHIVE_FILE_NAME,
   DEVICE_OWNER_ID,
@@ -12,6 +13,8 @@ import {
   type WorkspaceCommand,
 } from '@corelive/desktop-contract/offline-workspace-v2'
 import { z } from 'zod'
+
+import { deviceCompletionHistory } from '../mcp/historyDevice'
 
 import { AtomicWorkspaceFile, WorkspaceFileError } from './AtomicWorkspaceFile'
 import {
@@ -121,7 +124,12 @@ type ReadType =
   | 'details'
   | 'tracked'
 type HistoryType =
-  'recoveryCopies' | 'undoHistory' | 'export' | 'previewRecovery' | 'recover'
+  | 'recoveryCopies'
+  | 'undoHistory'
+  | 'export'
+  | 'previewRecovery'
+  | 'recover'
+  | 'mcpCompletionHistory'
 
 /** Executes trusted main-process requests in the same process's dedicated storage thread.
  * Domain commands and persisted inputs still cross runtime validation boundaries.
@@ -131,6 +139,12 @@ type HistoryType =
  */
 async function dispatch(request: WorkspaceWorkerRequest): Promise<unknown> {
   switch (request.type) {
+    case 'appendTask': {
+      const { state, addition } = await service.appendTask(request.input)
+      return { view: view(state), addition }
+    }
+    case 'findTaskAddition':
+      return service.findTaskAddition(request.input)
     case 'open': {
       // Files written before uploads were derived may hold never-sent entries (#216 D1).
       await service.dropDerivableEntries()
@@ -274,6 +288,13 @@ async function dispatchHistory(
   request: RequestOf<HistoryType>,
 ): Promise<unknown> {
   switch (request.type) {
+    case 'mcpCompletionHistory': {
+      const range = CompletionRangeSchema.parse(request.input)
+      // Capture hot storage before the archive roll can remove its copies. Neither projection mutates it.
+      const state = await file.update((current) => current, { shared: true })
+      const archived = await readHistoryArchive()
+      return deviceCompletionHistory(state, archived, range)
+    }
     case 'recoveryCopies': {
       const { offset, limit } = pageSchema.parse(request.input)
       const state = await file.read()
@@ -319,6 +340,31 @@ async function dispatchHistory(
           ),
         })),
       )
+  }
+}
+
+/** An archive that has never been created is empty. A surviving backup only means its primary is missing.
+ * @example const archived = await readHistoryArchive()
+ */
+async function readHistoryArchive() {
+  try {
+    // The read-only projector needs no clone of the entire multi-year archive.
+    return await archive.update((current) => current, { shared: true })
+  } catch (error) {
+    if (!(error instanceof WorkspaceFileError) || error.reason !== 'missing')
+      throw error
+    const recovery = await archive
+      .previewRecoveryInfo()
+      .catch((cause: unknown) => {
+        if (
+          cause instanceof WorkspaceFileError &&
+          cause.reason === 'recovery-missing'
+        )
+          return null
+        throw cause
+      })
+    if (recovery) throw error
+    return null
   }
 }
 

@@ -18,6 +18,8 @@ import { UserSettingsStateSchema } from '@corelive/desktop-contract/settings'
 import { afterEach, describe, expect, test } from 'vitest'
 import type { z } from 'zod'
 
+import { deviceCompletionHistory } from '../mcp/historyDevice'
+
 import { AtomicWorkspaceFile } from './AtomicWorkspaceFile'
 import { migrateWorkspaceV1, type MigrationStage } from './migrateWorkspaceV1'
 import { REGISTRY_OWNER_ID, registrySchema } from './OfflineAccountRegistry'
@@ -299,6 +301,15 @@ describe('v1 to v2 workspace migration', () => {
     expect(result.registry.attachedAccountId).toBe('user_a')
     expect(result.registry.deviceId).toBe(uid(1))
     expect(workspace.commandReceipts[uid(701)]?.revision).toBe(5)
+    const history = deviceCompletionHistory(workspace, null, {
+      from: NOW,
+      before: NOW + 1,
+    })
+    expect(history.rows.find((row) => row.id === uid(103))).toMatchObject({
+      completedAt: NOW,
+      title: null,
+      boundIdentity: true,
+    })
   })
 
   test('keeps references to categories that no longer exist as historical categories', async () => {

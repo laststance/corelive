@@ -253,6 +253,9 @@ export const MigrationReceiptSchema = z.object({
       completedAt: timestamp,
       originalCategoryId: identity,
       cancelled: z.boolean(),
+      /** Older receipts cannot establish which account or category maps to this marker. */
+      sourceAccountId: z.string().optional(),
+      categoryVerified: z.boolean().optional(),
     }),
   ),
   /** The C34 counts; null before the first migration summary. */
@@ -269,10 +272,22 @@ export const MigrationReceiptSchema = z.object({
 })
 export type MigrationReceipt = z.infer<typeof MigrationReceiptSchema>
 
-/** A durable answer to a replayed command id. */
+/** A task addition's immutable result, retained with its original account scope. */
+export const TaskAdditionSchema = z.object({
+  accountId: z.string().nullable(),
+  deviceId: identity,
+  categoryId: identity,
+  categoryPath: z.string(),
+  rowId: identity,
+  title: z.string().min(1).max(255),
+})
+export type TaskAddition = z.infer<typeof TaskAdditionSchema>
+
+/** A durable answer to a replayed command id. Older receipts lack addition data. */
 export const CommandReceiptSchema = z.object({
   digest: z.string(),
   completionId: identity.optional(),
+  taskAddition: TaskAdditionSchema.optional(),
   revision,
 })
 
@@ -403,16 +418,18 @@ export interface OfflineDraftRecord {
 }
 
 const commandIdentity = z.object({ commandId: identity })
+const categoryCommand = commandIdentity.extend({
+  categoryId: identity,
+  requireActiveCategory: z.literal(true).optional(),
+})
 export const WorkspaceCommandSchema = z.discriminatedUnion('type', [
-  commandIdentity.extend({
+  categoryCommand.extend({
     type: z.literal('save'),
-    categoryId: identity,
     baseRevision: revision,
     rows: z.array(DraftRowSchema),
   }),
-  commandIdentity.extend({
+  categoryCommand.extend({
     type: z.literal('complete'),
-    categoryId: identity,
     baseRevision: revision,
     rowId: identity,
     completionId: identity,
@@ -420,8 +437,21 @@ export const WorkspaceCommandSchema = z.discriminatedUnion('type', [
     timezone: z.string().min(1).max(100),
   }),
   commandIdentity.extend({ type: z.literal('undo'), completionId: identity }),
+  commandIdentity.extend({
+    type: z.literal('recordCompletedTask'),
+    categoryId: identity,
+    completionId: identity,
+    title: z
+      .string()
+      .trim()
+      .min(1)
+      .max(255)
+      .regex(/^[^\r\n\0]+$/),
+    completedAt: timestamp,
+    timezone: z.string().min(1).max(100),
+  }),
   commandIdentity.extend({ type: z.literal('clear'), completionId: identity }),
-  commandIdentity.extend({ type: z.literal('select'), categoryId: identity }),
+  categoryCommand.extend({ type: z.literal('select') }),
   commandIdentity.extend({
     type: z.literal('moveCategory'),
     sourceId: identity,

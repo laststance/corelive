@@ -1,3 +1,4 @@
+import { DashboardThemeSchema } from '@corelive/desktop-contract/dashboard-appearance'
 import { describe, test, expect } from 'vitest'
 
 import {
@@ -46,6 +47,8 @@ describe('theme registry', () => {
       'graphite-light',
       'graphite-dark',
     ])
+    expect(DashboardThemeSchema.options).toEqual(['system', ...THEME_IDS])
+    expect(DashboardThemeSchema.safeParse('default-dark').success).toBe(false)
   })
 
   test('pairs a light and a dark theme for every family', () => {

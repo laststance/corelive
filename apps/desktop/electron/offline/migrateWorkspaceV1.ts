@@ -1192,6 +1192,8 @@ function importOlderFile(
     if (holdsCompletionIdentity(next, archivedIds, id)) continue
     next.migration.dashboardOnly[id] = {
       completedAt: retired.completedAt,
+      sourceAccountId: workspace.ownerId,
+      categoryVerified: reverse.has(retired.originalCategoryId),
       originalCategoryId:
         reverse.get(retired.originalCategoryId) ?? defaultCategoryId,
       cancelled: retired.cancelled,

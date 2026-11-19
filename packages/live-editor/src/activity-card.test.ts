@@ -1,6 +1,7 @@
+// @vitest-environment happy-dom
 import { describe, expect, test } from 'vitest'
 
-import { buildShareCard } from './export-day-as-image'
+import { buildShareCard } from './activity-card'
 
 /**
  * Regression guards for the html-to-image blank-PNG bug.

@@ -305,24 +305,42 @@ export class AutoUpdater {
       })
 
       if (result.response === 0) {
-        this.sendDownloadProgress({
-          percent: UPDATE_PROGRESS_PERCENT_MIN,
-          bytesPerSecond: 0,
-          transferred: 0,
-          total: 0,
-        })
-        // Handle async rejection from downloadUpdate Promise
-        void autoUpdater.downloadUpdate().catch((error) => {
-          log.error('Failed to download update:', error)
-          this.clearDownloadProgress()
-          this.logUpdaterStatus('Failed to download update')
-        })
+        this.startDownload()
       } else {
         this.logUpdaterStatus('Update postponed')
       }
     } finally {
       this.updatePromptPending = false
     }
+  }
+
+  /** Starts the update selected from the Mac tool or its native download prompt exactly once.
+   * @example updater.startAvailableDownload()
+   */
+  startAvailableDownload(): boolean {
+    if (!this.updateAvailable || this.updateDownloaded || this.downloadProgress)
+      return false
+    this.startDownload()
+    return true
+  }
+
+  /** Begins the updater transfer after a user-authorized download and publishes its progress.
+   * @example this.startDownload()
+   */
+  private startDownload(): void {
+    // The native prompt can resolve after the same transfer was started from a client.
+    if (this.downloadProgress || this.updateDownloaded) return
+    this.sendDownloadProgress({
+      percent: UPDATE_PROGRESS_PERCENT_MIN,
+      bytesPerSecond: 0,
+      transferred: 0,
+      total: 0,
+    })
+    void autoUpdater.downloadUpdate().catch((error) => {
+      log.error('Failed to download update:', error)
+      this.clearDownloadProgress()
+      this.logUpdaterStatus('Failed to download update')
+    })
   }
 
   /**

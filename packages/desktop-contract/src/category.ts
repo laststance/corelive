@@ -52,3 +52,22 @@ export const CategorySchema = z.object({
 })
 
 export type Category = z.infer<typeof CategorySchema>
+
+/**
+ * Category with todo count, returned from the list endpoint.
+ */
+const CategoryWithCountSchema = CategorySchema.extend({
+  recordCount: z.number().int().min(0),
+  _count: z.object({
+    todos: z.number().int().min(0),
+  }),
+})
+
+export type CategoryWithCount = z.infer<typeof CategoryWithCountSchema>
+
+/**
+ * Response schema for the list categories endpoint.
+ */
+export const CategoryListResponseSchema = z.object({
+  categories: z.array(CategoryWithCountSchema),
+})

@@ -1,4 +1,5 @@
 import type { SyncOutcome } from '@corelive/desktop-contract/category-sync'
+import type { CompletionRange } from '@corelive/desktop-contract/completion-history'
 import type { OfflineRecoveryPreview } from '@corelive/desktop-contract/offline-editor-api'
 import type {
   CountCheckpoint,
@@ -12,8 +13,11 @@ import type {
   OfflineWorkspace,
   OfflineWorkspaceView as WorkspaceView,
   OutboxEntry,
+  TaskAddition,
   WorkspaceCommand,
 } from '@corelive/desktop-contract/offline-workspace-v2'
+
+import type { DeviceHistory } from '../mcp/historyDevice'
 
 import { waitingCompletionCount } from './completionUpload'
 import {
@@ -33,6 +37,21 @@ export type BindingInfo = Pick<
 
 export interface WorkspaceWorkerCalls {
   open: { input: null; output: WorkspaceView }
+  mcpCompletionHistory: { input: CompletionRange; output: DeviceHistory }
+  appendTask: {
+    input: {
+      operationId: string
+      categoryId?: string
+      selectedAtStart?: string
+      title: string
+      accountId: string | null
+    }
+    output: { view: WorkspaceView; addition: TaskAddition }
+  }
+  findTaskAddition: {
+    input: { operationId: string; accountId: string | null }
+    output: TaskAddition | null
+  }
   command: {
     input: WorkspaceCommand
     output: WorkspaceView & { writtenDraft: OfflineDraftRecord }

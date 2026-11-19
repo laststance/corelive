@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@corelive/desktop-contract": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "@tailwindcss/postcss": "^4.3.5",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
@@ -52,13 +53,15 @@
     "vitest": "catalog:"
   },
   "scripts": {
+    "qa:mcp-package": "node scripts/qa-mcp-package.mjs",
+    "qa:mcp-activity": "electron ./qa-activity.mjs",
     "benchmark:offline": "tsx scripts/benchmark-offline-workspace.ts",
     "test:electron": "vitest run --config vitest.config.electron.ts",
     "test:electron:watch": "vitest --watch --config vitest.config.electron.ts",
     "coverage:unit:electron": "vitest run --config vitest.config.electron.ts --coverage",
     "electron": "electron .",
     "electron:dev": "node scripts/dev.js",
-    "electron:build:ts": "electron-vite build && node scripts/build-offline-preloads.mjs",
+    "electron:build:ts": "electron-vite build && node scripts/build-offline-preloads.mjs && node scripts/build-mcp.mjs",
     "electron:build:mac": "pnpm electron:build:ts && node ../../scripts/with-apple-secrets.mjs node ../../scripts/electron-builder.mjs --mac --publish never && node ../../scripts/with-apple-secrets.mjs node scripts/finalize-mac-release-artifacts.js",
     "electron:build:dir": "pnpm electron:build:ts && node ../../scripts/with-apple-secrets.mjs node ../../scripts/electron-builder.mjs --dir",
     "electron:publish": "pnpm electron:build:ts && node ../../scripts/with-apple-secrets.mjs node ../../scripts/electron-builder.mjs --publish=always",

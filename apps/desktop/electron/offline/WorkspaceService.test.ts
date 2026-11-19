@@ -2127,3 +2127,108 @@ describe('keep mode leaves finished lines in place', () => {
     ])
   })
 })
+
+describe('durable task-addition receipts', () => {
+  test('a fresh owner can confirm an original addition only in its saving account and cannot reuse its UUID for different writing', async () => {
+    // Arrange
+    const { file, service, options } = await createWorkspace()
+    const operationId = '00000000-0000-4000-8000-000000000201'
+    const request = {
+      operationId,
+      accountId,
+      categoryId: category2,
+      title: 'Send the invoice',
+    }
+    // Act
+    const { addition } = await service.appendTask(request)
+    const reopened = new WorkspaceService(new AtomicWorkspaceFile(options))
+    const original = await reopened.findTaskAddition({ operationId, accountId })
+    const other = await reopened.findTaskAddition({
+      operationId,
+      accountId: 'account-b',
+    })
+    const detached = await reopened.findTaskAddition({
+      operationId,
+      accountId: null,
+    })
+    // Assert
+    expect(original).toEqual(addition)
+    expect(other).toBeNull()
+    expect(detached).toBeNull()
+    await expect(
+      reopened.appendTask({ ...request, title: 'Different task' }),
+    ).rejects.toMatchObject({ reason: 'command-conflict' })
+    expect(
+      (await file.read()).drafts[category2]?.rows.map((row) => row.text),
+    ).toEqual(['Target writing', '- [ ] Send the invoice'])
+  })
+
+  test('looking up an expired or legacy receipt leaves both the saved writing and the workspace revision intact', async () => {
+    // Arrange
+    const { file, service } = await createWorkspace()
+    const legacy = '00000000-0000-4000-8000-000000000202'
+    const expired = '00000000-0000-4000-8000-000000000203'
+    await service.appendTask({
+      operationId: expired,
+      title: 'Keep this writing',
+      categoryId: category1,
+      accountId,
+    })
+    await file.update((state) => {
+      const next = structuredClone(state)
+      delete next.commandReceipts[expired]
+      next.commandReceipts[legacy] = {
+        digest: 'old-command-digest',
+        revision: next.revision,
+      }
+      return next
+    })
+    const before = await file.read()
+    // Act
+    const missing = await service.findTaskAddition({
+      operationId: expired,
+      accountId,
+    })
+    const older = await service.findTaskAddition({
+      operationId: legacy,
+      accountId,
+    })
+    // Assert
+    expect(missing).toBeNull()
+    expect(older).toBeNull()
+    expect(await file.read()).toEqual(before)
+  })
+
+  test('deleting the selected target before an agent commits cannot divert a new task or completion into another category', async () => {
+    // Arrange
+    const { file, service } = await createWorkspace()
+    await service.execute({
+      type: 'categoryDelete',
+      commandId: randomUUID(),
+      categoryId: category2,
+      destinationId: category1,
+    })
+    const before = await file.read()
+    // Act / Assert
+    await expect(
+      service.appendTask({
+        operationId: randomUUID(),
+        title: 'Stay in Work',
+        categoryId: category2,
+        accountId,
+      }),
+    ).rejects.toMatchObject({ reason: 'category-unavailable' })
+    await expect(
+      service.execute({
+        type: 'recordCompletedTask',
+        commandId: randomUUID(),
+        completionId: completionA,
+        categoryId: category2,
+        title: 'Completed in Work',
+        completedAt: instant,
+        timezone: 'Asia/Tokyo',
+      }),
+    ).rejects.toMatchObject({ reason: 'category-unavailable' })
+    expect(await file.read()).toEqual(before)
+  })
+})

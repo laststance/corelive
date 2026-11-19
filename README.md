@@ -13,6 +13,8 @@ Use **CoreLive for Mac** to write and check off tasks in LiveEditor, even offlin
 
 The design system (typography, color, motion, voice) is in **[`DESIGN.md`](DESIGN.md)**. The product roadmap is in [`docs/ROADMAP.md`](docs/ROADMAP.md), and per-feature design notes live under [`docs/design/`](docs/design/) and [`docs/designs/`](docs/designs/) (including the [offline-first desktop editor](docs/designs/offline-first-desktop-editor.md) design, #216). See [`docs/settings-audit.md`](docs/settings-audit.md) for settings consumers, and [`AGENTS.md`](AGENTS.md) for development and same-PR resolution rules. Release changes are recorded in [`CHANGELOG.md`](CHANGELOG.md).
 
+Connect your local AI agent to CoreLive on the same Mac to read and edit notes, manage tasks and categories, inspect completion history, or export a day’s activity card. Dashboard Appearance follows the connected account across browsers. Follow the steps for your client in [Use CoreLive from an AI agent](docs/mcp.md).
+
 Categories organize writing and completed history in two levels:
 
 - Create a main category or choose a main category as its parent to create a subcategory, such as `Work / CoreLive`. The sidebar shows both levels; Manage categories lets you rename, recolor, move, or promote them. A main category with children must have those children moved or promoted before it can become a subcategory. The default `General` category stays a main category and cannot be deleted.

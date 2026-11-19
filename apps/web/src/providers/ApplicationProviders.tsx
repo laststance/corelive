@@ -6,6 +6,7 @@ import type { ReactNode } from 'react'
 import { CodeInspectorClient } from '@/components/code-inspector/CodeInspectorClient'
 import { Toaster } from '@/components/ui/sonner'
 import { ElectronAuthProvider } from '@/lib/orpc/electron-auth-provider'
+import { DashboardAppearanceProvider } from '@/providers/DashboardAppearanceProvider'
 import { QueryClientProvider } from '@/providers/QueryClientProvider'
 import { ThemeProvider } from '@/providers/ThemeProvider'
 
@@ -22,7 +23,9 @@ export function ApplicationProviders({ children }: { children: ReactNode }) {
     <ThemeProvider>
       <CodeInspectorClient />
       <QueryClientProvider>
-        <ElectronAuthProvider>{children}</ElectronAuthProvider>
+        <DashboardAppearanceProvider>
+          <ElectronAuthProvider>{children}</ElectronAuthProvider>
+        </DashboardAppearanceProvider>
         <Toaster />
       </QueryClientProvider>
     </ThemeProvider>

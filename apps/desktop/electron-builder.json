@@ -12,6 +12,7 @@
   "buildDependenciesFromSource": false,
   "files": [
     "dist-electron/**/*",
+    "!dist-electron/mcp-runtime/**/*",
     "!electron/**/*.ts",
     "!electron/**/*.tsx",
     "!electron/**/tsconfig*.json",
@@ -36,7 +37,21 @@
     "!**/node_modules/**/*.d.ts",
     "!**/node_modules/**/*.map"
   ],
+  "extraFiles": [
+    {
+      "from": "dist-electron/mcp-runtime/corelive-mcp",
+      "to": "Helpers/corelive-mcp"
+    }
+  ],
+  "electronFuses": {
+    "runAsNode": true
+  },
   "extraResources": [
+    {
+      "from": "dist-electron/mcp-runtime",
+      "to": "mcp",
+      "filter": ["stdio.cjs", "peer.node"]
+    },
     {
       "from": "public",
       "to": "public",

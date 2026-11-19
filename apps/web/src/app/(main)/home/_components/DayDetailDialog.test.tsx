@@ -1,3 +1,4 @@
+import { exportDayAsImage } from '@corelive/live-editor/activity-card'
 import {
   onlineManager,
   QueryClient,
@@ -58,6 +59,10 @@ vi.mock('@/lib/orpc/client-query', () => ({
 vi.mock('@/hooks/useClerkQueryReady', () => ({
   useClerkQueryReady: vi.fn(),
 }))
+vi.mock(import('@corelive/live-editor/activity-card'), async (load) => ({
+  ...(await load()),
+  exportDayAsImage: vi.fn(),
+}))
 
 function QueryWrapper({ children }: PropsWithChildren) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -78,6 +83,34 @@ afterEach(() => {
   cleanup()
   client.clear()
   onlineManager.setOnline(true)
+  vi.restoreAllMocks()
+})
+
+test('sharing downloads the selected day with its full count and rollup category', async () => {
+  // Arrange
+  vi.mocked(exportDayAsImage).mockResolvedValue('data:image/png;base64,abc=')
+  const downloaded: Array<{ filename: string; url: string }> = []
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+    this: HTMLAnchorElement,
+  ) {
+    downloaded.push({ filename: this.download, url: this.href })
+  })
+  render(<DayDetailDialog date="2026-05-11" onOpenChange={vi.fn()} />, {
+    wrapper: QueryWrapper,
+  })
+
+  // Act
+  await userEvent.click(screen.getByRole('button', { name: 'Save as image' }))
+
+  // Assert
+  expect(exportDayAsImage).toHaveBeenCalledWith({
+    isoDate: '2026-05-11',
+    totalCompleted: 7,
+    topCategoryName: 'Work',
+  })
+  expect(downloaded).toEqual([
+    { filename: 'corelive-2026-05-11.png', url: 'data:image/png;base64,abc=' },
+  ])
 })
 
 test('day details group seven entries into Work six and General one with full child paths', () => {
@@ -300,6 +333,7 @@ test('moving to an uncached day clears the previous day and keeps focus on the n
   expect(screen.getByText('May 12, 2026')).toBeVisible()
   expect(screen.getByRole('heading', { name: 'Day details' })).toBeVisible()
   expect(screen.getByText('Loading day details…')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Save as image' })).toBeDisabled()
   expect(screen.queryByText('Win 1')).toBeNull()
   expect(nextDay).toHaveFocus()
 

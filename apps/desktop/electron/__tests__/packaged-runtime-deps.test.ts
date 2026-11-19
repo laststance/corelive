@@ -82,3 +82,32 @@ describe('packaged Electron bundles the leaf deps electron-builder+pnpm would dr
     expect(declaredUiohookRange).toBeTruthy()
   })
 })
+
+test('a Mac build is verified through the bundled MCP launcher before its artifacts are uploaded', () => {
+  // Arrange
+  const workflow = readFileSync(
+    new URL(
+      '../../../../.github/workflows/build-and-release.yml',
+      import.meta.url,
+    ),
+    'utf8',
+  )
+  const buildJob =
+    workflow.split(/^  build:\s*$/m)[1]?.split(/^  [\w-]+:\s*$/m)[0] ?? ''
+  const steps = buildJob.split(/^      - name: /m)
+  // Act
+  const build = steps.findIndex((step) =>
+    step.includes('run: pnpm electron:build:dir'),
+  )
+  const check = steps.findIndex((step) =>
+    step.includes('run: pnpm --filter @corelive/desktop qa:mcp-package'),
+  )
+  const upload = steps.findIndex((step) =>
+    step.startsWith('Upload build artifacts'),
+  )
+  // Assert
+  expect(build).toBeGreaterThan(-1)
+  expect(check).toBeGreaterThan(build)
+  expect(upload).toBeGreaterThan(check)
+  expect(steps[check]).not.toMatch(/^        (?:if|continue-on-error):/m)
+})

@@ -1,7 +1,9 @@
+import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import type { OfflineEditorAPI } from '@corelive/desktop-contract/offline-editor-api'
 import type { CompletionSyncTransport } from '@corelive/desktop-contract/offline-sync'
@@ -11,13 +13,21 @@ import {
   OfflineWorkspaceSchema,
   type OfflineEditorSnapshot,
 } from '@corelive/desktop-contract/offline-workspace-v2'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
-import { afterEach, expect, onTestFinished, test, vi } from 'vitest'
+import { afterEach, describe, expect, onTestFinished, test, vi } from 'vitest'
 
 import { DurableEditorStore } from '../../renderer/editor/DurableEditorStore'
+import { createAppActions } from '../mcp/appActions'
+import { startMcpOwner } from '../mcp/bridgeOwner'
+import { createEditorDispatcher } from '../mcp/editorActions'
+import { parseMcpCall } from '../mcp/tools'
 import type { WindowManager } from '../WindowManager'
 
 import { AtomicWorkspaceFile } from './AtomicWorkspaceFile'
+import { createMcpAccountClient } from './createSyncTransport'
 import {
   buildDeviceWorkspace,
   categoryUuid,
@@ -113,6 +123,7 @@ function syncCalls(transport: Transport): number {
 async function createFixture(
   input: {
     existing?: boolean
+    categoryNames?: string[]
     bound?: string
     attached?: boolean
     signOutPending?: boolean
@@ -127,6 +138,7 @@ async function createFixture(
   if (input.existing ?? true) {
     await initializeDeviceWorkspace(workspaces, {
       notes: { 1: 'Writing survives offline startup' },
+      categoryNames: input.categoryNames,
       boundAccountId: input.bound,
       displayEmail: input.bound ? 'bound@example.com' : null,
     })
@@ -215,6 +227,78 @@ async function createFixture(
 
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) await cleanup()
+})
+
+test('a scoped account read revokes all previously retained pages when the broker reports a different account', async () => {
+  // Arrange
+  const fixture = await createFixture({
+    bound: 'account-a',
+    attached: true,
+    override: {
+      mcpClient: (token) => createMcpAccountClient('http://127.0.0.1', token),
+    },
+  })
+  await fixture.controller.initialize()
+  const original = fixture.controller.mcpAccountBinding()!
+  const callback = vi.fn(async () => 'verified')
+  fixture.broker.acquire.mockImplementation(
+    async (expectedAccountId, generation) => ({
+      status: 'ready',
+      credential: {
+        status: 'ready',
+        requestId: randomUUID(),
+        expectedAccountId,
+        generation,
+        accountId: 'account-b',
+        token: 'synthetic',
+      },
+    }),
+  )
+
+  // Act and Assert
+  await expect(
+    fixture.controller.withMcpAccount(callback),
+  ).rejects.toMatchObject({ code: 'account-changed', dispatched: false })
+  expect(original.signal.aborted).toBe(true)
+  expect(callback).not.toHaveBeenCalled()
+})
+
+test('a known refusal and an interrupted account mutation have different redacted write outcomes', async () => {
+  // Arrange
+  const fixture = await createFixture({
+    bound: 'account-a',
+    attached: true,
+    override: {
+      mcpClient: (token) => createMcpAccountClient('http://127.0.0.1', token),
+    },
+  })
+  await fixture.controller.initialize()
+  const refused = async () =>
+    Promise.reject(
+      Object.assign(new Error('private provider detail'), {
+        code: 'NOT_FOUND',
+      }),
+    )
+  const interrupted = async () =>
+    Promise.reject(new Error('private network detail'))
+
+  // Act and Assert
+  await expect(
+    fixture.controller.withMcpAccount(refused),
+  ).rejects.toMatchObject({
+    code: 'record-unavailable',
+    message: 'record-unavailable',
+    dispatched: true,
+    definiteRefusal: true,
+  })
+  await expect(
+    fixture.controller.withMcpAccount(interrupted),
+  ).rejects.toMatchObject({
+    code: 'account-unavailable',
+    message: 'account-unavailable',
+    dispatched: true,
+    definiteRefusal: false,
+  })
 })
 
 /** Holds a specific worker boundary until a concurrency test releases it.
@@ -1348,6 +1432,289 @@ test('a sign-out whose final detach write fails still finishes and keeps the jou
   expect(fixture.log).toHaveBeenCalledWith('SIGNOUT_DETACH_DEFERRED')
   expect((await fixture.registry.read()).signOutPending).toBe(true)
   expect(fixture.controller.accountStatus().state).toBe('signed-out')
+})
+
+describe('MCP operations in the device workspace', () => {
+  test.runIf(process.platform === 'darwin')(
+    'two independent stdio sessions read the note, add to the original category and recover the saved result after an app-owner restart',
+    async () => {
+      // Arrange
+      const fixture = await createFixture({
+        categoryNames: ['Work', 'Personal'],
+      })
+      const { directory, controller, options } = fixture
+      const desktop = fileURLToPath(new URL('../../', import.meta.url))
+      execFileSync(process.execPath, ['scripts/build-mcp.mjs'], {
+        cwd: desktop,
+      })
+      const noWindows = {
+        getLiveEditorWindow: () => null,
+        getSettingsWindow: () => null,
+        setLoginWindowObserver: vi.fn(),
+      } as unknown as WindowManager
+      const serve = async (device: OfflineEditorController) => {
+        await device.initialize()
+        const ipc = new OfflineEditorIPC(noWindows, device, {
+          signOutDevice: async (run) => run(),
+          isOnline: () => false,
+        })
+        const actions = createAppActions({
+          runtime: { controller: device, ipc },
+          profileDirectory: directory,
+          native: async () => undefined,
+          signOutDevice: async (run) => run(),
+        })
+        return startMcpOwner(directory, actions)
+      }
+      const connect = async () => {
+        const client = new Client({
+          name: 'CoreLive integration',
+          version: '1',
+        })
+        await client.connect(
+          new StdioClientTransport({
+            command: process.execPath,
+            args: [
+              join(desktop, 'dist-electron/mcp-runtime/stdio.cjs'),
+              '--user-data-dir=' + directory,
+            ],
+            stderr: 'pipe',
+          }),
+        )
+        onTestFinished(async () => client.close())
+        return client
+      }
+      const close = await serve(controller)
+      onTestFinished(close)
+      const first = await connect(),
+        second = await connect()
+      const operationId = '00000000-0000-4000-8000-000000000109'
+      const work = categoryUuid(1),
+        personal = categoryUuid(2)
+
+      // Act
+      const before = await first.callTool({ name: 'read_draft', arguments: {} })
+      await second.callTool({
+        name: 'select_category',
+        arguments: { categoryId: personal },
+      })
+      const saved = await first.callTool({
+        name: 'append_unfinished_task',
+        arguments: {
+          operationId,
+          categoryId:
+            CallToolResultSchema.parse(before).structuredContent?.categoryId,
+          title: 'Send the invoice',
+        },
+      })
+      await first.callTool({
+        name: 'record_completed_task',
+        arguments: { categoryId: work, title: 'Filed the report' },
+      })
+      const history = await first.callTool({
+        name: 'list_completions',
+        arguments: {},
+      })
+      await Promise.all([first.close(), second.close()])
+      close()
+      await controller.shutdown()
+      const restarted = new OfflineEditorController(options)
+      onTestFinished(async () => {
+        await restarted.shutdown()
+      })
+      const closeRestarted = await serve(restarted)
+      onTestFinished(closeRestarted)
+      const reconnected = await connect()
+      const recovered = await reconnected.callTool({
+        name: 'get_task_addition_result',
+        arguments: { operationId },
+      })
+      const original = await reconnected.callTool({
+        name: 'read_draft',
+        arguments: { categoryId: work },
+      })
+      const other = await reconnected.callTool({
+        name: 'read_draft',
+        arguments: {},
+      })
+
+      // Assert
+      expect(before.structuredContent).toMatchObject({
+        categoryId: work,
+        categoryPath: 'Work',
+        text: 'Writing survives offline startup',
+      })
+      expect(saved.isError).toBe(false)
+      expect(recovered.structuredContent).toEqual(saved.structuredContent)
+      expect(CallToolResultSchema.parse(original).structuredContent?.text).toBe(
+        'Writing survives offline startup\n- [ ] Send the invoice',
+      )
+      expect(other.structuredContent).toMatchObject({
+        categoryId: personal,
+        text: '',
+      })
+      expect(history.structuredContent).toMatchObject({
+        scope: 'device',
+        total: 1,
+        entries: [{ title: 'Filed the report' }],
+      })
+    },
+    30000,
+  )
+
+  test('adding a task keeps pending typing in Work and a later category switch cannot redirect it to Personal', async () => {
+    // Arrange
+    const { controller } = await createFixture({
+      categoryNames: ['Work', 'Personal'],
+    })
+    await controller.initialize()
+    const work = categoryUuid(1),
+      personal = categoryUuid(2)
+    const operationId = '00000000-0000-4000-8000-000000000101'
+    const shown = vi.fn()
+    let pending = true
+    const flush = vi.fn(async (generation: number) => {
+      if (pending) {
+        pending = false
+        const { draft } = await controller.draft(generation, work)
+        await controller.command(generation, {
+          type: 'save',
+          commandId: randomUUID(),
+          categoryId: work,
+          baseRevision: draft.revision,
+          rows: [{ id: draft.rows[0]!.id, text: 'Typing still in the editor' }],
+        })
+      }
+      return true
+    })
+    const dispatch = createEditorDispatcher(controller, { flush, shown })
+    // Act
+    const before = await dispatch(parseMcpCall('read_draft', {}))
+    await dispatch(parseMcpCall('select_category', { categoryId: personal }))
+    const added = await dispatch(
+      parseMcpCall('append_unfinished_task', {
+        title: 'Send the invoice',
+        operationId,
+        categoryId: before.categoryId,
+      }),
+    )
+    const after = await dispatch(
+      parseMcpCall('read_draft', { categoryId: work }),
+    )
+    const elsewhere = await dispatch(parseMcpCall('read_draft', {}))
+    // Assert
+    expect(before).toMatchObject({
+      text: 'Typing still in the editor',
+      categoryId: work,
+    })
+    expect(added).toMatchObject({
+      status: 'saved',
+      categoryId: work,
+      title: 'Send the invoice',
+    })
+    expect(after.text).toBe(
+      'Typing still in the editor\n- [ ] Send the invoice',
+    )
+    expect(elsewhere.categoryId).toBe(personal)
+    expect(elsewhere.text).not.toContain('Send the invoice')
+    expect(shown).toHaveBeenCalledTimes(5)
+  })
+
+  test('two real worker writes preserve both intentions; reconnection returns the original category name and row', async () => {
+    // Arrange
+    const { controller } = await createFixture({
+      categoryNames: ['Work', 'Personal'],
+    })
+    await controller.initialize()
+    const makeClient = () =>
+      createEditorDispatcher(controller, {
+        flush: async () => true,
+        shown: () => undefined,
+      })
+    const first = makeClient(),
+      second = makeClient(),
+      categoryId = categoryUuid(2)
+    const firstId = '00000000-0000-4000-8000-000000000102',
+      secondId = '00000000-0000-4000-8000-000000000103'
+    const add = (operationId: string) =>
+      parseMcpCall('append_unfinished_task', {
+        title: 'Repeated title',
+        operationId,
+        categoryId,
+      })
+    // Act
+    const [firstSave, secondSave] = await Promise.all([
+      first(add(firstId)),
+      second(add(secondId)),
+    ])
+    await second(
+      parseMcpCall('rename_category', { categoryId, name: 'Renamed' }),
+    )
+    const fresh = makeClient()
+    const saved = await fresh(
+      parseMcpCall('get_task_addition_result', { operationId: firstId }),
+    )
+    const replay = await fresh(add(firstId))
+    const draft = await fresh(parseMcpCall('read_draft', { categoryId }))
+    // Assert
+    expect(saved).toEqual(firstSave)
+    expect(replay).toEqual(firstSave)
+    expect(firstSave.rowId).not.toBe(secondSave.rowId)
+    expect(saved.categoryPath).not.toBe('Renamed')
+    expect(String(draft.text).split('- [ ] Repeated title').length - 1).toBe(2)
+  })
+
+  test('an unresolved save never follows a category rename or a failed typing flush with a second write', async () => {
+    // Arrange
+    const { controller } = await createFixture()
+    await controller.initialize()
+    const flush = vi.fn(async () => false)
+    const dispatch = createEditorDispatcher(controller, {
+      flush,
+      shown: () => undefined,
+    })
+    const operationId = '00000000-0000-4000-8000-000000000104'
+    // Act / Assert
+    await expect(
+      dispatch(
+        parseMcpCall('append_unfinished_task', {
+          title: 'New task',
+          operationId,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'flush-failed', effect: 'none' })
+    expect(flush).toHaveBeenCalledTimes(2)
+    await expect(
+      dispatch(parseMcpCall('get_task_addition_result', { operationId })),
+    ).rejects.toMatchObject({ code: 'result-unknown', effect: 'unknown' })
+    expect(flush).toHaveBeenCalledTimes(2)
+  })
+
+  test('direct completion enters history once and leaves the unfinished draft untouched', async () => {
+    // Arrange
+    const { controller } = await createFixture()
+    await controller.initialize()
+    const dispatch = createEditorDispatcher(controller, {
+      flush: async () => true,
+      shown: () => undefined,
+    })
+    const before = await dispatch(parseMcpCall('read_draft', {}))
+    // Act
+    const recorded = await dispatch(
+      parseMcpCall('record_completed_task', { title: 'Already delivered' }),
+    )
+    const after = await dispatch(parseMcpCall('read_draft', {}))
+    const undo = await controller.undoHistory(
+      controller.getSnapshot().generation,
+      0,
+      10,
+    )
+    // Assert
+    expect(after).toEqual(before)
+    expect(undo.completions).toMatchObject([
+      { id: recorded.completionId, title: 'Already delivered' },
+    ])
+  })
 })
 
 // Regression: /ship exception review round 3 (Claude adversarial) 2026-11-03 — after a deferred detach

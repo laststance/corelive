@@ -23,6 +23,7 @@ import type { App, MessageBoxOptions } from 'electron'
 import { app as electronApp, dialog } from 'electron'
 
 import { log } from './logger'
+import { MCP_BACKGROUND_SWITCH } from './mcp/protocol'
 import type { NotificationManager } from './NotificationManager'
 import type { OAuthManager } from './OAuthManager'
 import { claimDefaultProtocolClient } from './utils/claimDefaultProtocolClient'
@@ -219,6 +220,8 @@ export class DeepLinkManager {
    * Handle second instance launch.
    */
   handleSecondInstance(commandLine: string[], _workingDirectory: string): void {
+    // A helper waking the lock holder must keep the agent's keyboard focus.
+    if (commandLine.includes(MCP_BACKGROUND_SWITCH)) return
     const urlArg = commandLine.find((arg) =>
       arg.startsWith(`${this.protocol}://`),
     )

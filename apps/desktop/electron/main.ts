@@ -45,6 +45,8 @@ import { registerAuthHandlers } from './ipc/registerAuthHandlers'
 import { typedHandle } from './ipc/typedHandle'
 import { lazyLoadManager } from './LazyLoadManager'
 import { log } from './logger'
+import { registerNativeSetting } from './mcp/nativeSettings'
+import { MCP_BACKGROUND_SWITCH } from './mcp/protocol'
 import { memoryProfiler } from './MemoryProfiler'
 import type { MenuManager as MenuManagerType } from './MenuManager'
 import type { NotificationManager as NotificationManagerType } from './NotificationManager'
@@ -163,6 +165,7 @@ let configManager: ConfigManager
 let windowStateManager: WindowStateManager
 let windowManager: WindowManager
 let offlineEditor: ReturnType<typeof createOfflineEditor> | null = null
+let mcpOwner: Promise<(() => void) | undefined> | undefined
 let quitAllowed = false
 let quitPending = false
 let quitPreparation: Promise<boolean> | null = null
@@ -640,6 +643,39 @@ async function loadDeepLinkStack(): Promise<void> {
   }, 1000)
 }
 
+/** Starts the verified local listener against the ordinary Electron workspace owner.
+ * @example await openMcpOwner(runtime,windows,config)
+ */
+async function openMcpOwner(
+  runtime: ReturnType<typeof createOfflineEditor>,
+  windows: WindowManager,
+  config: ConfigManager,
+) {
+  const [{ startMcpOwner }, { createAppActions }, { runNativeAction }] =
+    await Promise.all([
+      import('./mcp/bridgeOwner'),
+      import('./mcp/appActions'),
+      import('./mcp/nativeActions'),
+    ])
+  const profileDirectory = app.getPath('userData')
+  const native = {
+    windows,
+    config,
+    menu: () => menuManager,
+    updater: () => autoUpdater,
+    prepareQuit: prepareForQuit,
+  }
+  return startMcpOwner(
+    profileDirectory,
+    createAppActions({
+      profileDirectory,
+      runtime,
+      native: async (call) => runNativeAction(native, runtime, call),
+      signOutDevice,
+    }),
+  )
+}
+
 /**
  * The one sign-out implementation (C23): `auth-logout` (login window) and the Settings
  * `account.signOut` / `account.notNow` capabilities all run D3 steps 1-4 through here.
@@ -660,7 +696,7 @@ async function signOutDevice(
   return result
 }
 
-async function createWindow(): Promise<void> {
+async function createWindow(background = false): Promise<void> {
   // Monitor memory in both development and packaged runs.
   memoryProfiler.startMonitoring()
 
@@ -709,7 +745,19 @@ async function createWindow(): Promise<void> {
     setupIPCHandlers()
     // Local readiness is read from disk; optional authentication/sync never blocks startup.
     await offlineEditor.controller.initialize()
-    windowManager.openStartupPanel()
+    if (process.platform === 'darwin') {
+      // Startup and activation can overlap. Both callers share a single socket listener.
+      mcpOwner ??= openMcpOwner(
+        offlineEditor,
+        windowManager,
+        configManager,
+      ).catch(() => {
+        log.warn('CoreLive MCP could not open its local connection')
+        return undefined
+      })
+      await mcpOwner
+    }
+    if (!background) windowManager.openStartupPanel()
 
     return { dashboardUrl }
   }
@@ -1001,7 +1049,7 @@ function setupIPCHandlers(): void {
     return configManager.get<string>('shortcuts.toggleLiveEditor', '') ?? ''
   })
 
-  typedHandle('live-editor-config-set-shortcut', (_event, accelerator) =>
+  registerNativeSetting('live-editor-config-set-shortcut', (accelerator) =>
     setLiveEditorShortcutSlot('toggleLiveEditor', accelerator),
   )
 
@@ -1012,9 +1060,9 @@ function setupIPCHandlers(): void {
     )
   })
 
-  typedHandle(
+  registerNativeSetting(
     'live-editor-config-set-shortcut-secondary',
-    (_event, accelerator) =>
+    (accelerator) =>
       setLiveEditorShortcutSlot('toggleLiveEditorSecondary', accelerator),
   )
 
@@ -1147,7 +1195,7 @@ function setupIPCHandlers(): void {
 
   // Security: path is resolved from ConfigManager only — renderer cannot supply
   // an arbitrary filesystem target (same rule as config-export/import).
-  typedHandle('config-open', async () => {
+  registerNativeSetting('config-open', async () => {
     if (!configManager) {
       return false
     }
@@ -1173,7 +1221,7 @@ function setupIPCHandlers(): void {
   })
 
   // Hide App Icon (Dock visibility) IPC handler - macOS only
-  typedHandle('settings:setHideAppIcon', (_event, hide) => {
+  registerNativeSetting('settings:setHideAppIcon', (hide) => {
     try {
       // This API is macOS-only - check platform first
       if (process.platform !== 'darwin') {
@@ -1216,7 +1264,7 @@ function setupIPCHandlers(): void {
   // Show in Menu Bar IPC handler — shows/hides the tray (menu-bar) icon and persists the
   // choice in `behavior.showInMenuBar`; boot hides the freshly created tray again when the
   // stored value is false (resolveShowInMenuBar). See SystemTrayManager.setMenuBarVisible.
-  typedHandle('settings:setShowInMenuBar', async (_event, show) => {
+  registerNativeSetting('settings:setShowInMenuBar', async (show) => {
     try {
       if (!systemTrayManager) {
         log.warn('settings:setShowInMenuBar - systemTrayManager not available')
@@ -1224,11 +1272,13 @@ function setupIPCHandlers(): void {
       }
       const didApply = await systemTrayManager.setMenuBarVisible(show)
       // Persist only a choice that actually applied, so the toggle stays truthful after a restart.
-      if (didApply) configManager?.set(SHOW_IN_MENU_BAR_CONFIG_PATH, show)
+      const didSave =
+        didApply &&
+        configManager?.set(SHOW_IN_MENU_BAR_CONFIG_PATH, show) === true
       log.info(
-        `settings:setShowInMenuBar - Menu bar ${show ? 'shown' : 'hidden'}: ${didApply}`,
+        `settings:setShowInMenuBar - Menu bar ${show ? 'shown' : 'hidden'}: ${didSave}`,
       )
-      return didApply
+      return didSave
     } catch (error) {
       log.error(
         'settings:setShowInMenuBar - Failed to change menu bar visibility:',
@@ -1239,7 +1289,7 @@ function setupIPCHandlers(): void {
   })
 
   // Start at Login IPC handler
-  typedHandle('settings:setStartAtLogin', (_event, startAtLogin) => {
+  registerNativeSetting('settings:setStartAtLogin', (startAtLogin) => {
     try {
       app.setLoginItemSettings({
         openAtLogin: startAtLogin,
@@ -1269,7 +1319,7 @@ function setupIPCHandlers(): void {
   })
 
   // Reset the Settings popover to default size and re-anchor to the tray.
-  typedHandle('settings:resetPopoverSize', () => {
+  registerNativeSetting('settings:resetPopoverSize', () => {
     try {
       if (windowManager) {
         windowManager.resetSettingsPopoverSize()
@@ -1417,7 +1467,7 @@ if (!gotTheLock) {
       )
 
       // Boot the Electron companion (auxiliary panels only; main is retired).
-      await createWindow()
+      await createWindow(process.argv.includes(MCP_BACKGROUND_SWITCH))
 
       /**
        * macOS-specific: 'activate' event.
@@ -1546,6 +1596,7 @@ async function prepareForQuit(): Promise<boolean> {
  * @example cleanupForQuit()
  */
 function cleanupForQuit(): void {
+  void mcpOwner?.then((close) => close?.())
   // Stop performance monitoring first
   memoryProfiler.stopMonitoring()
 
@@ -1553,15 +1604,8 @@ function cleanupForQuit(): void {
   // This ensures dependencies are available during cleanup
 
   // User-facing features (can fail without critical impact)
-  if (autoUpdater) {
-    autoUpdater.cleanup()
-  }
-  if (oauthManager) {
-    oauthManager.cleanup()
-  }
-  if (deepLinkManager) {
-    deepLinkManager.cleanup()
-  }
+  for (const manager of [autoUpdater, oauthManager, deepLinkManager])
+    manager?.cleanup()
   if (systemTrayManager) {
     systemTrayManager.setQuitting(true)
   }
