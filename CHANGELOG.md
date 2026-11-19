@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.32.0] - 2026-11-20
+
+### Added
+
+- Connect a local AI client to CoreLive for Mac through the bundled MCP server. Its 99 tools can read LiveEditor drafts, add a task to its original category, browse completed work, export activity cards, and control the app. The [setup guide](docs/mcp.md) includes the command for each supported client.
+- The Dashboard saves your appearance preference to your account and applies it across tabs and devices.
+
+### Changed
+
+- Desktop releases now ship for Macs with Apple Silicon. The installer and automatic update are both built for arm64.
+- LiveEditor is available in the Mac app. Use the Dashboard to explore the work you complete.
+
 ## [0.31.0] - 2026-11-19
 
 ### Changed
