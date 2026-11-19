@@ -953,6 +953,18 @@ export class ShortcutManager {
     }
   }
 
+  /** Persists each requested slot before its accelerator is registered. A failed save still allows later slots to be written.
+   * @example const saved = this.persistShortcuts(newShortcuts)
+   */
+  private persistShortcuts(changes: ShortcutConfig): boolean {
+    if (!this.configManager) return true
+    let saved = true
+    for (const [key, value] of Object.entries(changes)) {
+      if (!this.configManager.set(`shortcuts.${key}`, value)) saved = false
+    }
+    return saved
+  }
+
   /**
    * Update shortcuts with new configuration.
    *
@@ -1002,15 +1014,8 @@ export class ShortcutManager {
         this.isEnabled = newShortcuts.enabled
       }
 
-      this.shortcuts = { ...this.shortcuts, ...newShortcuts }
-
-      let persisted = true
-      if (this.configManager) {
-        for (const [key, value] of Object.entries(newShortcuts)) {
-          if (!this.configManager.set(`shortcuts.${key}`, value))
-            persisted = false
-        }
-      }
+      this.shortcuts = mergedShortcuts
+      const persisted = this.persistShortcuts(newShortcuts)
 
       // Track whether every requested global accelerator actually bound;
       // a conflicting accelerator silently dropping would otherwise look
