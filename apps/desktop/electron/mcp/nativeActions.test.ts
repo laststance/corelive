@@ -3,6 +3,7 @@ import { expect, test, vi } from 'vitest'
 import type { EditorRuntime } from './editorActions'
 import { runNativeAction, type NativeActionContext } from './nativeActions'
 import { registerNativeSetting } from './nativeSettings'
+import { parseMcpCall } from './tools'
 
 vi.mock('electron', () => ({
   app: {},
@@ -166,10 +167,11 @@ test('saving opacity with no editor window reports a saved preference only', asy
   } as unknown as NativeActionContext
 
   // Act
-  const change = runNativeAction(context, {} as EditorRuntime, {
-    name: 'set_editor_opacity',
-    args: { opacity: 0.1 },
-  })
+  const change = runNativeAction(
+    context,
+    {} as EditorRuntime,
+    parseMcpCall('set_editor_opacity', { opacity: 0.3 }),
+  )
 
   // Assert
   await expect(change).resolves.toEqual({
@@ -177,6 +179,7 @@ test('saving opacity with no editor window reports a saved preference only', asy
     opacity: 0.3,
     applied: false,
   })
+  expect(() => parseMcpCall('set_editor_opacity', { opacity: 0.1 })).toThrow()
 })
 
 test.each([

@@ -13,7 +13,7 @@ Use **CoreLive for Mac** to write and check off tasks in LiveEditor, even offlin
 
 The design system (typography, color, motion, voice) is in **[`DESIGN.md`](DESIGN.md)**. The product roadmap is in [`docs/ROADMAP.md`](docs/ROADMAP.md), and per-feature design notes live under [`docs/design/`](docs/design/) and [`docs/designs/`](docs/designs/) (including the [offline-first desktop editor](docs/designs/offline-first-desktop-editor.md) design, #216). See [`docs/settings-audit.md`](docs/settings-audit.md) for settings consumers, and [`AGENTS.md`](AGENTS.md) for development and same-PR resolution rules. Release changes are recorded in [`CHANGELOG.md`](CHANGELOG.md).
 
-Connect your local AI agent to CoreLive on the same Mac to read and edit notes, manage tasks and categories, inspect completion history, or export a day’s activity card. Dashboard Appearance follows the connected account across browsers. Follow the steps for your client in [Use CoreLive from an AI agent](docs/mcp.md).
+Connect your local AI agent to CoreLive on the same Mac to read and edit notes, manage tasks and categories, inspect completion history, or export a day’s activity card. Dashboard Appearance follows the connected account across browsers. Follow the steps for your client in [Use CoreLive from an AI agent](docs/mcp.md). The [glossary](GLOSSARY.md) defines drafts and completions, the [design decision](docs/adr/0001-same-mac-mcp.md) explains how edits are saved, and the [QA report](docs/qa/same-mac-mcp.md) lists the checks run for each client.
 
 Categories organize writing and completed history in two levels:
 
@@ -220,7 +220,7 @@ CoreLive bundles LiveEditor and Settings locally under `corelive-editor://`. The
 
 - **LiveEditor** — a bundled freeform capture window that saves writing in a device workspace on the Mac, with no account needed; see the [offline LiveEditor guide](docs/offline-liveeditor.md).
 - **Login window** — a small fixed-size sign-in shell (`/login-shell`) opened by **Sign in** in Settings ▸ Account; after OAuth sign-in it closes and Settings asks you to **Connect this Mac**. If the sign-in page cannot be reached, Account says so and offers **Try again**.
-- **Startup** — the app opens the bundled LiveEditor at launch, always writable: there is no account gate and sign-out never locks the editor. Existing config migration removes retired keys (`window.floating`, the retired `shortcuts.*` toggles, `liveEditor.syncMode` / `lastCategoryId`) from `config.json`; it preserves the unused `behavior.startup` values for older builds after a downgrade.
+- **Startup** — opening CoreLive normally shows LiveEditor, which stays writable after sign-out. When a local agent makes its first data request while CoreLive is closed, the app starts in the background. Existing config migration removes retired keys (`window.floating`, the retired `shortcuts.*` toggles, `liveEditor.syncMode` / `lastCategoryId`) from `config.json` and preserves the unused `behavior.startup` values for older builds after a downgrade.
 - **Settings** — a bundled native settings window; Account is the last section and holds Sign in, Connect this Mac, Sign out and the Sync details page
 - **System tray** — menu-bar access and quick toggles
 - **Always-on-top** — keep LiveEditor above other windows (off by default)

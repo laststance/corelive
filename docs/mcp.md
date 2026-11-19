@@ -115,11 +115,12 @@ Paste this request into the agent chat.
 ## Everyday requests
 
 - “Show the draft in Work / CoreLive, then add ‘Check the invoice’ to that category.”
+- A long note can be read in parts. When `read_draft` reports `result-too-large`, request `textPage` with offset zero. Carry the returned category ID, revision and next offset into each later call. A changed revision asks the agent to start again.
 - “Create a category called Planning under Work.”
 - “Save a complete backup of my workspace to corelive-backup.json.” The app returns the saved file's path. Use `save_workspace_backup` when an inline export reports `result-too-large`.
 - “Set my dashboard appearance to Harbor dark.” This changes the connected account. Other browsers load the saved theme when you open or refocus the dashboard. LiveEditor keeps its own appearance.
 - “Show this week's completed tasks in Work, including tasks from child categories.”
-- “Save today's activity card as activity.png.” A filename alone goes under the active profile's `Exports`. A standard installation uses `~/Library/Application Support/CoreLive/Exports`. You can also give an absolute path. The answer includes the actual path after saving. An occupied filename requires an explicit overwrite instruction.
+- “Save today's activity card as activity.png.” Choose a day with completed activity on the connected Dashboard. A filename alone goes under the active profile's `Exports`. A standard installation uses `~/Library/Application Support/CoreLive/Exports`. You can also give an absolute path. The answer includes the actual path after saving. An occupied filename requires an explicit overwrite instruction.
 
 ## If a request fails
 
@@ -130,5 +131,5 @@ Paste this request into the agent chat.
 | `category-unavailable`                | List categories and choose the intended destination.                                                                                                                     |
 | `revision-conflict` or `flush-failed` | Finish editing, read the current draft and keep any intervening changes.                                                                                                 |
 | `result-unknown` after adding a task  | Have the agent look up the original operation UUID with `get_task_addition_result`. If the lookup is inconclusive, report the unknown result and leave the draft intact. |
-| History says `device`                 | The answer covers records available on this Mac. Connect the account and make a fresh request to include other devices.                                                  |
+| History says `device`                 | The answer covers this Mac. For `not-connected`, connect the account. For `account-unavailable`, retry when the account is reachable. Start a fresh history request.     |
 | `file-exists`                         | The existing file was preserved. Choose a different filename or explicitly request replacement.                                                                          |

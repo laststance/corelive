@@ -47,9 +47,11 @@ function stdioResult(name: string, result: McpResult): McpResult {
   const next =
     name === 'export_workspace'
       ? 'Request save_workspace_backup with a JSON filename to save the complete workspace on this Mac.'
-      : readOnly
-        ? 'Narrow the range or request a smaller page.'
-        : 'Inspect the saved state before repeating this operation.'
+      : name === 'read_draft'
+        ? 'Read the same category using textPage with offset 0. Continue with nextOffset and the first revision.'
+        : readOnly
+          ? 'Narrow the range or request a smaller page.'
+          : 'Inspect the saved state before repeating this operation.'
   return mcpFailure(
     name,
     'result-too-large',
@@ -57,6 +59,12 @@ function stdioResult(name: string, result: McpResult): McpResult {
     next,
     {
       limitBytes: MAX_MCP_RESULT_BYTES,
+      ...(name === 'read_draft'
+        ? {
+            categoryId: result.structuredContent.categoryId,
+            revision: result.structuredContent.revision,
+          }
+        : {}),
       ...(resultBytes === undefined ? {} : { resultBytes }),
       ...(name === 'export_workspace' && typeof writing === 'string'
         ? { backupBytes: Buffer.byteLength(writing) }

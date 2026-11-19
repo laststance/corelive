@@ -77,6 +77,39 @@ function additionResult(operationId: string, saved: TaskAddition) {
   }
 }
 
+/** Returns a bounded portion of one saved note, using UTF-16 offsets that keep Unicode pairs together.
+ * The revision from the first page lets a client detect edits before continuing.
+ * @example draftTextPage(text, 3, { offset: 0, limit: 32768 })
+ */
+function draftTextPage(
+  text: string,
+  revision: number,
+  page: NonNullable<
+    Extract<McpCall, { name: 'read_draft' }>['args']['textPage']
+  >,
+) {
+  if (page.expectedRevision !== undefined && revision !== page.expectedRevision)
+    throw workspaceRefusal('revision-conflict', {
+      expectedRevision: page.expectedRevision,
+      currentRevision: revision,
+    })
+  if (page.offset > text.length)
+    throw new McpActionError(
+      'invalid-input',
+      'Use a nextOffset from a previous page, or start at zero.',
+    )
+  let end = Math.min(text.length, page.offset + page.limit)
+  // Include the trailing unit of a surrogate pair when the nominal boundary falls inside it.
+  const nextUnit = text.charCodeAt(end)
+  if (nextUnit >= 0xdc00 && nextUnit <= 0xdfff) end++
+  return {
+    text: text.slice(page.offset, end),
+    offset: page.offset,
+    nextOffset: end < text.length ? end : null,
+    totalLength: text.length,
+  }
+}
+
 /** Executes a single editor or category operation against one flushed snapshot and the ordinary storage actor.
  * @example await runEditorAction(runtime, snapshot, parseMcpCall('read_draft',{}))
  */
@@ -145,12 +178,14 @@ async function runEditorAction(
       const { categoryId, draft } = await controller.draft(generation, id)
       if (id !== categoryId)
         throw workspaceRefusal('category-unavailable', { categoryId: id })
+      const text = draft.rows.map((row) => row.text).join('\n')
       return {
         categoryId,
         categoryPath: paths.get(id),
         revision: draft.revision,
-        text: draft.rows.map((row) => row.text).join('\n'),
-        rows: draft.rows,
+        ...(args.textPage
+          ? draftTextPage(text, draft.revision, args.textPage)
+          : { text, rows: draft.rows }),
       }
     },
     append_unfinished_task: async (args) =>

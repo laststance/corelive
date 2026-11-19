@@ -38,9 +38,13 @@ function stdioClient(profile: string) {
   return { client, transport }
 }
 
+// On a cold Intel runner, compiling both native slices can exceed Vitest's default hook budget.
 beforeAll(() => {
-  execFileSync(process.execPath, ['scripts/build-mcp.mjs'], { cwd: desktop })
-})
+  execFileSync(process.execPath, ['scripts/build-mcp.mjs'], {
+    cwd: desktop,
+    timeout: 55_000,
+  })
+}, 60_000)
 
 afterEach(async () => {
   for (const close of cleanup.splice(0).reverse()) await close()

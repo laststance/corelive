@@ -81,9 +81,18 @@ function tool<S extends z.ZodObject>(
 
 export const coreLiveTools = {
   read_draft: tool(
-    'Read saved text, row IDs, revision and full category path on this Mac, including pending typing. Defaults to the selected category.',
+    'Read saved text, row IDs, revision and category path, including pending typing. For a large note request textPage starting at offset 0. Continue with its categoryId, nextOffset and expectedRevision.',
     true,
-    z.strictObject(selected),
+    z.strictObject({
+      ...selected,
+      textPage: z
+        .strictObject({
+          offset: revision,
+          limit: positiveId.max(65536).default(32768),
+          expectedRevision: revision.optional(),
+        })
+        .optional(),
+    }),
   ),
   append_unfinished_task: tool(
     'Append one unfinished task to the draft. Generate a fresh UUID for this request. Keep it for get_task_addition_result after an interrupted response. Pass the categoryId from read_draft for a combined request.',

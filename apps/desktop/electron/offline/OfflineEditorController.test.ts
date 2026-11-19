@@ -1643,6 +1643,75 @@ describe('MCP operations in the device workspace', () => {
   })
 
   test.runIf(process.platform === 'darwin')(
+    'a standard stdio client reads a nine-megabyte draft and pages a larger note at one revision',
+    async () => {
+      // Arrange
+      const { directory, controller } = await createFixture({ existing: false })
+      const inlineText = '日'.repeat(750_000)
+      const huge = '🌸' + '本'.repeat(930_000)
+      await initializeDeviceWorkspace(join(directory, 'workspaces'), {
+        categoryCount: 2,
+        notes: { 1: inlineText, 2: huge },
+      })
+      const { actionsFor, connect } = deviceMcpFixture(directory)
+      onTestFinished(
+        await startMcpOwner(directory, await actionsFor(controller)),
+      )
+      const client = await connect()
+      const categoryId = categoryUuid(2)
+      const read = async (args: Record<string, unknown>) =>
+        client.callTool({ name: 'read_draft', arguments: args })
+
+      // Act
+      const full = await read({ categoryId: categoryUuid(1) })
+      const refused = await read({ categoryId })
+      const first = await read({
+        categoryId,
+        textPage: { offset: 0, limit: 1 },
+      })
+      const next = await read({
+        categoryId,
+        textPage: { offset: 2, limit: 2, expectedRevision: 0 },
+      })
+      const last = await read({
+        categoryId,
+        textPage: { offset: huge.length - 1, expectedRevision: 0 },
+      })
+      const stale = await read({
+        categoryId,
+        textPage: { offset: 2, expectedRevision: 1 },
+      })
+
+      // Assert
+      expect(full.structuredContent).toMatchObject({ text: inlineText })
+      expect(refused.structuredContent).toMatchObject({
+        code: 'result-too-large',
+        categoryId,
+        revision: 0,
+        nextAction: expect.stringContaining('textPage'),
+      })
+      expect(first.structuredContent).toMatchObject({
+        text: '🌸',
+        nextOffset: 2,
+        revision: 0,
+      })
+      expect(next.structuredContent).toMatchObject({
+        text: '本本',
+        nextOffset: 4,
+      })
+      expect(last.structuredContent).toMatchObject({
+        text: '本',
+        nextOffset: null,
+      })
+      expect(stale.structuredContent).toMatchObject({
+        code: 'revision-conflict',
+        currentRevision: 0,
+      })
+    },
+    30_000,
+  )
+
+  test.runIf(process.platform === 'darwin')(
     'a large workspace can be saved byte-for-byte after an inline export refusal on the same stdio connection',
     async () => {
       // Arrange
@@ -1686,7 +1755,7 @@ describe('MCP operations in the device workspace', () => {
       expect(inline.structuredContent).toMatchObject({
         code: 'result-too-large',
         effect: 'none',
-        limitBytes: 8 * 1024 * 1024,
+        limitBytes: 10_481_664,
         resultBytes: actualBytes,
         backupBytes: Buffer.byteLength(expected),
         nextAction: expect.stringContaining('save_workspace_backup'),
