@@ -126,18 +126,21 @@ function PreparedEditor({
     refreshWindow,
     reportWindowError,
   )
+  const focusWriting = useEffectEvent(() => {
+    // Details owns its focus until the user returns to writing.
+    if (!details) textarea.current?.focus({ preventScroll: true })
+  })
   const onNativeShown = useEffectEvent((requestId?: string) => {
     if (requestId !== undefined) return
     refreshWindow()
-    // Revealing writing restores its caret; an open Details panel retains its own focus.
-    if (!details) textarea.current?.focus({ preventScroll: true })
+    focusWriting()
   })
   // eslint-disable-next-line react-you-might-not-need-an-effect/no-pass-data-to-parent -- native event subscription, not a notification to a parent component
   useEffect(() => store.host.onShown(onNativeShown), [store])
   useLayoutEffect(() => {
-    // The first prepared render is ready for immediate shortcut-to-writing capture.
-    textarea.current?.focus({ preventScroll: true })
-  }, [])
+    // Focus after the first render and after a matching flush release re-enables the DOM field.
+    if (!state.exitPending) focusWriting()
+  }, [state.exitPending])
   const { workspace } = main
   const { settings } = workspace.preferences
   const online =
