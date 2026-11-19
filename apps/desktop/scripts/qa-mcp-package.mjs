@@ -273,6 +273,12 @@ async function verifyBundle(bundle, hostedColdStart) {
 if (process.argv[2] === '--fixture') {
   await serveFixture(process.argv[3])
 } else {
+  assert.equal(process.platform, 'darwin', 'packaged MCP QA requires macOS')
+  assert.equal(
+    process.arch,
+    'arm64',
+    'packaged MCP QA requires Apple Silicon Node.js',
+  )
   const hostedColdStart = process.argv.includes('--hosted-cold-start')
   if (hostedColdStart) {
     assert.equal(
@@ -288,19 +294,21 @@ if (process.argv[2] === '--fixture') {
   }
   const app = resolve(
     process.argv[2] ??
-      join(
-        dirname(script),
-        '..',
-        'dist',
-        process.arch === 'arm64' ? 'mac-arm64' : 'mac',
-        'CoreLive.app',
-      ),
+      join(dirname(script), '..', 'dist', 'mac-arm64', 'CoreLive.app'),
   )
-  // The current host must be able to execute this bundle. Other slices have separate QA results.
-  execFileSync('/usr/bin/lipo', [
-    join(app, 'Contents/MacOS/CoreLive'),
-    '-verify_arch',
-    process.arch === 'arm64' ? 'arm64' : 'x86_64',
-  ])
+  for (const binary of [
+    'Contents/MacOS/CoreLive',
+    'Contents/Helpers/corelive-mcp',
+    'Contents/Resources/mcp/peer.node',
+  ]) {
+    const slices = execFileSync(
+      '/usr/bin/lipo',
+      ['-archs', join(app, binary)],
+      {
+        encoding: 'utf8',
+      },
+    ).trim()
+    assert.equal(slices, 'arm64', binary + ' must contain only an arm64 slice')
+  }
   await verifyBundle(app, hostedColdStart)
 }

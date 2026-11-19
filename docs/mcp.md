@@ -1,6 +1,6 @@
 # Use CoreLive from an AI agent on your Mac
 
-Install the CoreLive Mac app that includes the MCP helper. Keep it in Applications so its registered command stays valid after app updates. If you install it elsewhere, substitute the actual app bundle location in the instructions below. These steps register CoreLive once per agent and apply across projects.
+You need an Apple Silicon Mac with macOS 13 or later. Download `CoreLive-<version>-arm64.dmg` from [CoreLive releases](https://github.com/laststance/corelive/releases) and drag `CoreLive.app` into Applications. Keep it there so the registered command stays valid after app updates. If you install it elsewhere, use the actual app bundle path in the commands below. These steps register CoreLive once per agent and apply across projects.
 
 Drafts and device history work offline. A connected account adds dashboard data, skills and activity-card export. CoreLive starts in the background on the first data call. Your agent manages tool approvals. A chat that runs entirely on a remote computer cannot reach this Mac’s device workspace.
 

@@ -131,11 +131,10 @@ function getFileSize(filePath) {
 /**
  * Notarize, staple, and assess one DMG so manual downloads satisfy Gatekeeper.
  * @param {string} filePath
- * @param {string[]} notaryArgs
  * @returns {void}
- * @example finalizeDmg('/tmp/CoreLive-0.8.4.dmg', buildNotaryArgs())
+ * @example finalizeDmg('/tmp/CoreLive-0.8.4-arm64.dmg')
  */
-function finalizeDmg(filePath, notaryArgs) {
+function finalizeDmg(filePath) {
   if (hasStapledTicket(filePath)) {
     writeInfo(
       `[finalize-mac] Skipping ${path.basename(filePath)} because a stapled ticket is already present.`,
@@ -148,7 +147,7 @@ function finalizeDmg(filePath, notaryArgs) {
     'notarytool',
     'submit',
     filePath,
-    ...notaryArgs,
+    ...buildNotaryArgs(),
     '--wait',
     '--output-format',
     'json',
@@ -164,37 +163,31 @@ function finalizeDmg(filePath, notaryArgs) {
 }
 
 /**
- * Delete DMG blockmaps because stapling mutates the DMG bytes after blockmap generation.
- * @param {string[]} dmgPaths
+ * Deletes the installer blockmap because stapling changes the bytes it describes.
+ * @param {string} dmgPath
  * @returns {void}
- * @example removeDmgBlockmaps(['/tmp/CoreLive-0.8.4.dmg'])
+ * @example removeDmgBlockmap('/tmp/CoreLive-0.8.4-arm64.dmg')
  */
-function removeDmgBlockmaps(dmgPaths) {
-  for (const dmgPath of dmgPaths) {
-    const blockmapPath = `${dmgPath}.blockmap`
-    if (fs.existsSync(blockmapPath)) {
-      fs.unlinkSync(blockmapPath)
-    }
-  }
+function removeDmgBlockmap(dmgPath) {
+  fs.rmSync(`${dmgPath}.blockmap`, { force: true })
 }
 
 /**
- * Rewrite `latest-mac.yml` so ZIP + DMG metadata reflects the post-staple bytes.
- * @param {string[]} artifactPaths
+ * Writes the finalized ARM64 files to `latest-mac.yml` with the updater ZIP as its primary.
+ * @param {string} zipPath - The ARM64 updater archive.
+ * @param {string} dmgPath - The already stapled ARM64 installer.
  * @returns {void}
- * @example rewriteLatestMacYaml(['/tmp/CoreLive-0.8.4-mac.zip'])
+ * @example rewriteLatestMacYaml('dist/CoreLive-0.8.4-arm64-mac.zip', 'dist/CoreLive-0.8.4-arm64.dmg')
  */
-function rewriteLatestMacYaml(artifactPaths) {
+function rewriteLatestMacYaml(zipPath, dmgPath) {
   const latestMacPath = path.join(distDir, 'latest-mac.yml')
-  const files = artifactPaths.map((artifactPath) => ({
+  const files = [zipPath, dmgPath].map((artifactPath) => ({
     name: path.basename(artifactPath),
     sha512: getSha512Base64(artifactPath),
     size: getFileSize(artifactPath),
   }))
 
-  const primaryZip =
-    files.find((file) => file.name === `CoreLive-${version}-mac.zip`) ??
-    files[0]
+  const [primaryZip] = files
 
   const yaml = [
     `version: ${version}`,
@@ -216,12 +209,11 @@ function rewriteLatestMacYaml(artifactPaths) {
 /** Rewrite `checksums.json` from the exact publishable files after stapling changes their bytes.
  * @param {string[]} releaseArtifactPaths - ZIP/DMG paths uploaded to the GitHub Release.
  * @returns {void}
- * @example rewriteChecksumsJson(['/tmp/CoreLive-0.20.2.dmg'])
+ * @example rewriteChecksumsJson(['/tmp/CoreLive-0.20.2-arm64.dmg'])
  */
 function rewriteChecksumsJson(releaseArtifactPaths) {
   const checksums = {}
 
-  // Hash only the four files the release job uploads as app distributions.
   for (const filePath of releaseArtifactPaths) {
     const file = path.basename(filePath)
     const stats = fs.statSync(filePath)
@@ -251,29 +243,17 @@ function main() {
     return
   }
 
-  const notaryArgs = buildNotaryArgs()
-  const x64DmgPath = path.join(distDir, `CoreLive-${version}.dmg`)
   const arm64DmgPath = path.join(distDir, `CoreLive-${version}-arm64.dmg`)
-  const x64ZipPath = path.join(distDir, `CoreLive-${version}-mac.zip`)
   const arm64ZipPath = path.join(distDir, `CoreLive-${version}-arm64-mac.zip`)
-  const dmgPaths = [x64DmgPath, arm64DmgPath]
-  const releaseArtifactPaths = [
-    x64ZipPath,
-    arm64ZipPath,
-    x64DmgPath,
-    arm64DmgPath,
-  ]
+  const releaseArtifactPaths = [arm64ZipPath, arm64DmgPath]
 
   for (const artifactPath of releaseArtifactPaths) {
     assertFileExists(artifactPath)
   }
 
-  for (const dmgPath of dmgPaths) {
-    finalizeDmg(dmgPath, notaryArgs)
-  }
-
-  removeDmgBlockmaps(dmgPaths)
-  rewriteLatestMacYaml(releaseArtifactPaths)
+  finalizeDmg(arm64DmgPath)
+  removeDmgBlockmap(arm64DmgPath)
+  rewriteLatestMacYaml(arm64ZipPath, arm64DmgPath)
   rewriteChecksumsJson(releaseArtifactPaths)
 
   writeInfo(

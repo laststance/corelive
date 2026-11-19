@@ -82,14 +82,15 @@
   ],
   "mac": {
     "category": "public.app-category.productivity",
+    "artifactName": "${productName}-${version}-${arch}-mac.${ext}",
     "target": [
       {
         "target": "dmg",
-        "arch": ["x64", "arm64"]
+        "arch": ["arm64"]
       },
       {
         "target": "zip",
-        "arch": ["x64", "arm64"]
+        "arch": ["arm64"]
       }
     ],
     "hardenedRuntime": true,
@@ -102,6 +103,7 @@
     "icon": "build/icons/icon.icns"
   },
   "dmg": {
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
     "sign": true,
     "contents": [
       {

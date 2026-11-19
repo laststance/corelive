@@ -112,7 +112,7 @@ test('a Mac build is verified through the bundled MCP launcher before its artifa
   expect(steps[check]).not.toMatch(/^        (?:if|continue-on-error):/m)
 })
 
-test('tag publication waits for an Intel runner to open the signed archive from that same build', () => {
+test('tag publication waits for an Apple Silicon runner to open the signed archive from that same build', () => {
   // Arrange
   const workflow = readFileSync(
     new URL(
@@ -122,7 +122,7 @@ test('tag publication waits for an Intel runner to open the signed archive from 
     'utf8',
   )
   const signedJob = workflow
-    .split('  signed-intel-package:\n')[1]
+    .split('  signed-mac-package:\n')[1]
     ?.split('\n  release:\n')[0]
 
   // Act
@@ -132,8 +132,9 @@ test('tag publication waits for an Intel runner to open the signed archive from 
 
   // Assert
   expect(signedJob).toContain('needs: build')
-  expect(signedJob).toContain('runs-on: macos-26-intel')
+  expect(signedJob).toContain('runs-on: macos-26\n')
   expect(signedJob).toContain('name: electron-app-macos')
+  expect(signedJob).toContain('CoreLive-${GITHUB_REF_NAME#v}-arm64-mac.zip')
   expect(signedJob).toContain('qa:mcp-package "$app" --hosted-cold-start')
-  expect(release).toContain('needs: [build, signed-intel-package]')
+  expect(release).toContain('needs: [build, signed-mac-package]')
 })

@@ -44,7 +44,9 @@ import { parseMcpCall } from './tools'
 vi.mock('./activityExport', () => ({ exportActivityPng: vi.fn() }))
 
 const desktop = fileURLToPath(new URL('../../', import.meta.url))
-const stdio = join(desktop, 'dist-electron/mcp-runtime/stdio.cjs')
+const runtime = join(desktop, 'dist-electron/mcp-runtime')
+const stdio = join(runtime, 'stdio.cjs')
+const appleSilicon = process.platform === 'darwin' && process.arch === 'arm64'
 const cleanup: Array<() => void | Promise<void>> = []
 
 vi.mock(import('node:fs/promises'), async (importOriginal) => {
@@ -69,7 +71,7 @@ function stdioClient(profile: string) {
   return { client, transport }
 }
 
-// On a cold Intel runner, compiling both native slices can exceed Vitest's default hook budget.
+// Allow the cold helper bundle and native build to finish before stdio tests start.
 beforeAll(() => {
   execFileSync(process.execPath, ['scripts/build-mcp.mjs'], {
     cwd: desktop,
@@ -184,7 +186,22 @@ test('an overlong unknown tool name receives a bounded error and the helper stay
   expect(tools.tools.map((tool) => tool.name)).toContain('read_draft')
 })
 
-describe.runIf(process.platform === 'darwin')('verified Mac socket', () => {
+describe.runIf(appleSilicon)('verified Mac socket', () => {
+  test('the built launcher and peer addon contain only an arm64 slice', () => {
+    // Arrange
+    const binaries = ['corelive-mcp', 'peer.node']
+
+    // Act
+    const slices = binaries.map((binary) =>
+      execFileSync('/usr/bin/lipo', ['-archs', join(runtime, binary)], {
+        encoding: 'utf8',
+      }).trim(),
+    )
+
+    // Assert
+    expect(slices).toEqual(['arm64', 'arm64'])
+  })
+
   test('exports on a volume without hard links publish complete bytes once and preserve an occupied name', async () => {
     // Arrange
     const profile = isolatedProfile()
@@ -994,7 +1011,7 @@ globalThis.setTimeout = (callback, ms, ...args) => schedule(callback,
       }
       expect(read.structuredContent).toEqual({ text: 'Still connected' })
     },
-    // Allow the SDK's default 60-second request timeout plus helper startup on Intel CI.
+    // Allow the SDK's default 60-second request timeout plus helper startup.
     70_000,
   )
 

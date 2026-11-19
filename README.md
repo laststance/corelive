@@ -26,7 +26,7 @@ Categories organize writing and completed history in two levels:
 ## Platform Support
 
 - **CoreLive Dashboard** runs in the browser at [corelive.app](https://www.corelive.app/).
-- **CoreLive** runs on macOS 13 or later.
+- **CoreLive Desktop** runs on Apple Silicon Macs with macOS 13 or later.
 
 ## Getting Started
 
@@ -212,7 +212,7 @@ The same three checks run for pull requests and pushes to `main` in `.github/wor
 Need ngrok to recive create.user event [webhook](https://clerk.com/docs/webhooks/overview) from Clerk in local.  
 like `ngrok http --domain=foo.bar-ngrok.app 4991`
 
-## Desktop Application (Electron - macOS 13+)
+## Desktop Application (Apple Silicon, macOS 13+)
 
 CoreLive bundles LiveEditor and Settings locally under `corelive-editor://`. The sign-in window loads from the Dashboard server. **Open Dashboard in browser** in the menu bar opens `/home` in the default browser.
 
@@ -243,26 +243,24 @@ pnpm electron:build:ts && pnpm electron
 
 ### Electron Build Commands
 
-| Command                   | Purpose                                             |
-| ------------------------- | --------------------------------------------------- |
-| `pnpm electron:build:mac` | Production release (DMG + ZIP + signed + notarized) |
-| `pnpm electron:build:dir` | Local production testing (unpacked .app only)       |
+| Command                   | Purpose                                      |
+| ------------------------- | -------------------------------------------- |
+| `pnpm electron:build:mac` | Signed, notarized Apple Silicon DMG and ZIP  |
+| `pnpm electron:build:dir` | Unpacked Apple Silicon app for local testing |
 
 ```bash
 # Local production testing (connects to corelive.app)
 pnpm electron:build:dir
-# Transfer apps/desktop/dist/mac-arm64/CoreLive.app to the QA VM (dist/mac/ on Intel).
+# Transfer apps/desktop/dist/mac-arm64/CoreLive.app to the Apple Silicon QA VM.
 # Launch and exercise it inside the guest; see docs/headless-development.md.
 
 # Production release
 pnpm electron:build:mac
 ```
 
-The built macOS applications (DMG and ZIP) will be available in `apps/desktop/dist/`.
+The Apple Silicon installer (`CoreLive-<version>-arm64.dmg`) and update archive (`CoreLive-<version>-arm64-mac.zip`) are available in `apps/desktop/dist/`.
 
-For a GitHub release, first commit the new `version` in `apps/desktop/package.json`. Tag that commit with `v` followed by that exact version. For example, package version `1.2.3` uses tag `v1.2.3`. The tag workflow builds both Mac packages and verifies the signed Intel archive before publication.
-
-> **Note**: Only macOS builds are supported. Windows and Linux builds have been removed.
+For a GitHub release, first commit the new `version` in `apps/desktop/package.json`. Tag that commit with `v` followed by that exact version. For example, package version `1.2.3` uses tag `v1.2.3`. Before publishing, the tag workflow extracts the signed Apple Silicon ZIP and checks the app's architecture, signature, and bundled MCP behavior. [Same-Mac MCP verification](docs/qa/same-mac-mcp.md#release-archive-check)
 
 ### Migration verification
 

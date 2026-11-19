@@ -21,8 +21,6 @@ if (process.platform === 'darwin') {
     'clang',
     '-arch',
     'arm64',
-    '-arch',
-    'x86_64',
     '-mmacosx-version-min=13.0',
     '-Os',
     '-Wall',
