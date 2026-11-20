@@ -1380,13 +1380,8 @@ export class WorkspaceService {
   ): void {
     const completion = this.completion(state, command.completionId)
 
-    if (
-      completion.cleared ||
-      completion.cancelled ||
-      completion.clearAfter === null ||
-      this.now() < completion.clearAfter
-    )
-      return
+    // An explicit clear always removes the line; {@link clearDue} is the only caller that paces by clearAfter.
+    if (completion.cleared || completion.cancelled) return
 
     const draft = this.draft(
       state,
@@ -1555,7 +1550,7 @@ export class WorkspaceService {
     const category = state.categories.find(
       (entry) => entry.id === categoryId && !entry.removed,
     )
-    if (!category) throw new WorkspaceCommandError('not-found')
+    if (!category) throw new WorkspaceCommandError('category-unavailable')
     if (command.type === 'categoryRename') {
       const name = this.judgeCategory(state, {
         type: 'rename',

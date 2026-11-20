@@ -53,6 +53,7 @@
     "vitest": "catalog:"
   },
   "scripts": {
+    "qa:mcp-all": "node scripts/qa-mcp-all.mjs",
     "qa:mcp-package": "node scripts/qa-mcp-package.mjs",
     "qa:mcp-activity": "electron ./qa-activity.mjs",
     "benchmark:offline": "tsx scripts/benchmark-offline-workspace.ts",

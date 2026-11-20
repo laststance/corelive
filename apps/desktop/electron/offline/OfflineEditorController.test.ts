@@ -2173,6 +2173,111 @@ describe('MCP operations in the device workspace', () => {
     expect(preference.revision).toBe(1)
     expect(secondPreference.revision).toBe(2)
   })
+
+  test('a font-size preference patch reaches the stored liveEditorFontSize setting', async () => {
+    // Arrange
+    const { controller } = await createFixture({
+      categoryNames: ['Work'],
+    })
+    await controller.initialize()
+    const dispatch = createEditorDispatcher(controller, {
+      flush: async () => true,
+      shown: () => {},
+    })
+
+    // Act
+    const updated = await dispatch(
+      parseMcpCall('update_editor_preferences', {
+        expectedRevision: 0,
+        patch: { liveEditorFontSizePx: 22 },
+      }),
+    )
+    const snap = controller.getSnapshot()
+
+    // Assert
+    expect(updated.revision).toBe(1)
+    expect(snap.phase).toBe('ready')
+    if (snap.phase === 'ready')
+      expect(snap.workspace.preferences.settings.liveEditorFontSize).toBe(22)
+  })
+
+  test('clearing a finished line drops it from the draft while keeping history', async () => {
+    // Arrange
+    const { controller } = await createFixture({
+      categoryNames: ['Work'],
+    })
+    await controller.initialize()
+    const dispatch = createEditorDispatcher(controller, {
+      flush: async () => true,
+      shown: () => {},
+    })
+    const categoryId = categoryUuid(1)
+    const rowId = '00000000-0000-4000-8000-000000000118'
+    await dispatch(
+      parseMcpCall('edit_draft', {
+        categoryId,
+        baseRevision: 0,
+        rows: [{ id: rowId, text: 'Finished line' }],
+      }),
+    )
+    const completed = await dispatch(
+      parseMcpCall('complete_draft_line', {
+        categoryId,
+        baseRevision: 1,
+        rowId,
+      }),
+    )
+
+    // Act
+    await dispatch(
+      parseMcpCall('clear_completed_line', {
+        completionId: completed.completionId,
+      }),
+    )
+    const draft = await dispatch(parseMcpCall('read_draft', { categoryId }))
+    const snap = controller.getSnapshot()
+
+    // Assert
+    const rows = DraftRowSchema.array().parse(draft.rows)
+    expect(rows.some((row) => row.id === rowId)).toBe(false)
+    expect(snap.phase).toBe('ready')
+    if (snap.phase === 'ready')
+      expect(
+        snap.workspace.recentUndo.some(
+          (completion) => completion.id === completed.completionId,
+        ),
+      ).toBe(true)
+  })
+
+  test('renaming a category removed by a move reports category-unavailable', async () => {
+    // Arrange
+    const { controller } = await createFixture({
+      categoryNames: ['Work', 'Personal'],
+    })
+    await controller.initialize()
+    const dispatch = createEditorDispatcher(controller, {
+      flush: async () => true,
+      shown: () => {},
+    })
+    const removed = categoryUuid(2)
+    await dispatch(
+      parseMcpCall('move_removed_category_writing', {
+        sourceId: removed,
+        destinationId: categoryUuid(1),
+      }),
+    )
+
+    // Act
+    const renamed = dispatch(
+      parseMcpCall('rename_category', { categoryId: removed, name: 'Gone' }),
+    )
+
+    // Assert
+    await expect(renamed).rejects.toMatchObject({
+      code: 'category-unavailable',
+      effect: 'none',
+    })
+  })
 })
 
 describe('MCP over macOS stdio', () => {

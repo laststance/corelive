@@ -299,8 +299,15 @@ async function runEditorAction(
       command({ type: 'categoryDelete', ...args }, args),
     move_removed_category_writing: async (args) =>
       command({ type: 'moveCategory', ...args }, args),
-    update_editor_preferences: async (args) =>
-      command({ type: 'preferences', ...args }),
+    update_editor_preferences: async (args) => {
+      // The agent-facing key carries the px unit; the stored preference key does not.
+      const { liveEditorFontSizePx, ...stored } = args.patch
+      const patch =
+        liveEditorFontSizePx === undefined
+          ? stored
+          : { ...stored, liveEditorFontSize: liveEditorFontSizePx }
+      return command({ type: 'preferences', ...args, patch })
+    },
     retry_completion_sync: async (args) =>
       command({ type: 'retrySync', ...args }, args),
     resolve_completion_conflict: async (args) =>

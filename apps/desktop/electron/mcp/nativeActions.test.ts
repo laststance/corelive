@@ -21,8 +21,11 @@ import { parseMcpCall } from './tools'
 vi.mock('electron', () => ({
   app: {
     getPath: vi.fn(),
+    getName: () => 'CoreLive',
     getVersion: () => '1.0.0',
     getLoginItemSettings: () => ({ openAtLogin: false }),
+    setAboutPanelOptions: vi.fn(),
+    showAboutPanel: vi.fn(),
   },
   ipcMain: { handle: vi.fn() },
   Menu: {},
@@ -571,3 +574,55 @@ test.each([
     })
   },
 )
+
+test('open_about shows the non-modal About panel, not the blocking menu dialog', async () => {
+  // Arrange
+  const showAboutDialog = vi.fn()
+  const context = {
+    menu: () => ({ showAboutDialog }),
+    windows: {},
+  } as unknown as NativeActionContext
+
+  // Act
+  const opened = runNativeAction(
+    context,
+    {} as EditorRuntime,
+    parseMcpCall('open_about', {}),
+  )
+
+  // Assert — a parentless message box runs a nested modal loop on macOS and
+  // freezes bridge replies until dismissed; the About panel stays responsive.
+  await expect(opened).resolves.toEqual({ status: 'opened' })
+  expect(app.showAboutPanel).toHaveBeenCalledOnce()
+  expect(showAboutDialog).not.toHaveBeenCalled()
+})
+
+test('show_keyboard_shortcuts hosts its dialog on a visible window', async () => {
+  // Arrange — nothing is visible, so the action opens Settings as the sheet host.
+  const showKeyboardShortcuts = vi.fn()
+  let settingsWindow: {
+    isDestroyed: () => boolean
+    isVisible: () => boolean
+  } | null = null
+  const context = {
+    menu: () => ({ showKeyboardShortcuts }),
+    windows: {
+      getLiveEditorWindow: () => null,
+      getSettingsWindow: () => settingsWindow,
+      openSettings: () => {
+        settingsWindow = { isDestroyed: () => false, isVisible: () => true }
+      },
+    },
+  } as unknown as NativeActionContext
+
+  // Act
+  const opened = runNativeAction(
+    context,
+    {} as EditorRuntime,
+    parseMcpCall('show_keyboard_shortcuts', {}),
+  )
+
+  // Assert
+  await expect(opened).resolves.toEqual({ status: 'opened' })
+  expect(showKeyboardShortcuts).toHaveBeenCalledWith(settingsWindow)
+})

@@ -393,25 +393,34 @@ export class MenuManager {
    * @example
    * this.showMenuMessageBox({ type: 'info', message: 'About', buttons: ['OK'] })
    */
-  private showMenuMessageBox(options: MessageBoxOptions): void {
-    const focusedWindow = BrowserWindow.getFocusedWindow()
-    if (focusedWindow) {
-      dialog.showMessageBox(focusedWindow, options)
+  private showMenuMessageBox(
+    options: MessageBoxOptions,
+    hostWindow?: BrowserWindow,
+  ): void {
+    // A supplied host makes the dialog a sheet; a parentless message box runs a
+    // nested modal loop on macOS and freezes MCP bridge replies until dismissed.
+    const parent =
+      hostWindow && !hostWindow.isDestroyed()
+        ? hostWindow
+        : BrowserWindow.getFocusedWindow()
+    if (parent) {
+      dialog.showMessageBox(parent, options)
     } else {
       dialog.showMessageBox(options)
     }
   }
 
-  showAboutDialog(): void {
+  showAboutDialog(hostWindow?: BrowserWindow): void {
     const version = app.getVersion()
     const electronVersion = process.versions.electron
     const nodeVersion = process.versions.node
 
-    this.showMenuMessageBox({
-      type: 'info',
-      title: `About ${app.getName()}`,
-      message: `${app.getName()} ${version}`,
-      detail: `Write tasks in LiveEditor, check them off, and see every finished line on your Activity Heatmap.
+    this.showMenuMessageBox(
+      {
+        type: 'info',
+        title: `About ${app.getName()}`,
+        message: `${app.getName()} ${version}`,
+        detail: `Write tasks in LiveEditor, check them off, and see every finished line on your Activity Heatmap.
 
 Built with:
 • Electron ${electronVersion}
@@ -419,12 +428,14 @@ Built with:
 • Next.js & React
 
 Copyright © 2025 CoreLive`,
-      buttons: ['OK'],
-      defaultId: 0,
-    })
+        buttons: ['OK'],
+        defaultId: 0,
+      },
+      hostWindow,
+    )
   }
 
-  showKeyboardShortcuts(): void {
+  showKeyboardShortcuts(hostWindow?: BrowserWindow): void {
     const shortcuts = [
       'Ctrl/Cmd + N: New Task',
       'Ctrl/Cmd + M: Minimize Window',
@@ -442,14 +453,17 @@ Copyright © 2025 CoreLive`,
       '* Shortcut defaults can be changed from Settings > Keyboard Shortcuts',
     ]
 
-    this.showMenuMessageBox({
-      type: 'info',
-      title: 'Keyboard Shortcuts',
-      message: 'Available Keyboard Shortcuts',
-      detail: shortcuts.join('\n'),
-      buttons: ['OK'],
-      defaultId: 0,
-    })
+    this.showMenuMessageBox(
+      {
+        type: 'info',
+        title: 'Keyboard Shortcuts',
+        message: 'Available Keyboard Shortcuts',
+        detail: shortcuts.join('\n'),
+        buttons: ['OK'],
+        defaultId: 0,
+      },
+      hostWindow,
+    )
   }
 
   destroy(): void {

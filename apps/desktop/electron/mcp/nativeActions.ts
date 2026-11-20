@@ -4,6 +4,7 @@ import {
   isShortcutOpenSoundSelection,
 } from '@corelive/desktop-contract/constants'
 import { app, Menu, shell } from 'electron'
+import type { BrowserWindow } from 'electron'
 
 import type { AutoUpdater } from '../AutoUpdater'
 import type { ConfigManager } from '../ConfigManager'
@@ -339,11 +340,21 @@ export async function runNativeAction(
       return { status: 'restart-requested' }
     },
     open_about: () => {
-      menu().showAboutDialog()
+      // The non-modal About panel is used here; the menu's parentless message
+      // box enters a nested modal runloop on macOS and would freeze the bridge.
+      app.setAboutPanelOptions({
+        applicationName: app.getName(),
+        applicationVersion: app.getVersion(),
+        version: `Electron ${process.versions.electron}, Node.js ${process.versions.node}`,
+        copyright: 'Copyright © 2025 CoreLive',
+        credits:
+          'Write tasks in LiveEditor, check them off, and see every finished line on your Activity Heatmap.',
+      })
+      app.showAboutPanel()
       return { status: 'opened' }
     },
     show_keyboard_shortcuts: () => {
-      menu().showKeyboardShortcuts()
+      menu().showKeyboardShortcuts(dialogHost(deps))
       return { status: 'opened' }
     },
     open_documentation: async () =>
@@ -370,6 +381,27 @@ export async function runNativeAction(
     bring_windows_to_front: () => sendMenuAction('arrangeInFront:'),
   }
   return dispatchMcpAction(actions, call)
+}
+
+/** Resolves a visible window that can host a sheet, opening Settings when none is up.
+ * A parentless macOS message box runs a nested modal loop that blocks bridge replies,
+ * so MCP-triggered dialogs always anchor to a real window.
+ * @example menu().showKeyboardShortcuts(dialogHost(deps))
+ */
+function dialogHost(deps: NativeActionContext): BrowserWindow {
+  const usable = (win: BrowserWindow | null): BrowserWindow | null =>
+    win && !win.isDestroyed() && win.isVisible() ? win : null
+  const existing =
+    usable(deps.windows.getLiveEditorWindow()) ??
+    usable(deps.windows.getSettingsWindow())
+  if (existing) return existing
+  deps.windows.openSettings()
+  const settings = deps.windows.getSettingsWindow()
+  if (settings && !settings.isDestroyed()) return settings
+  throw new McpActionError(
+    'window-unavailable',
+    'Open a CoreLive window first.',
+  )
 }
 
 /** Opens one of the project links offered by the Mac Help menu.
