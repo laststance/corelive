@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.32.1] - 2026-11-20
+
+### Fixed
+
+- The MCP `update_editor_preferences` tool applies the LiveEditor font size again instead of answering `invalid-command`.
+- Renaming a category that a move already removed now answers `category-unavailable` instead of `not-found`, and `clear_completed_line` always clears the completed draft on demand.
+- `open_about` and `show_keyboard_shortcuts` no longer freeze the MCP bridge: About uses the non-modal panel and the shortcuts dialog is attached to a visible window.
+
 ## [0.32.0] - 2026-11-20
 
 ### Added
